@@ -19,6 +19,7 @@ const turn = (text: string, prose: string, notes: string[]): T => ({
   input: { text },
   read: [],
   beats: [],
+  answers: {},
   end: "end",
   brief: { must: [], may: [] },
   prose,

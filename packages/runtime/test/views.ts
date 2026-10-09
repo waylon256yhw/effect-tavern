@@ -111,7 +111,19 @@ const run = (
         ? (yield* ask("check", render(card, path, "check", cur))).split(",").filter(Boolean)
         : []
     const notes = [yield* ask("record", render(card, path, "record", cur))]
-    return journal.save({ parent, input, read, beats, end: "end", brief: cur.brief, prose, fired, violated, notes })
+    return journal.save({
+      parent,
+      input,
+      read,
+      beats,
+      answers: {},
+      end: "end",
+      brief: cur.brief,
+      prose,
+      fired,
+      violated,
+      notes,
+    })
   })
 
 // Scripted answers in call order; each block carries a distinctive marker (TONE#k, PROSE#k, NOTE#k) so views can be

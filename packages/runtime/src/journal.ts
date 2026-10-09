@@ -17,6 +17,7 @@ export interface Turn<B> {
   input: Input
   read: readonly Disclosure[] // lore delivered by lookup
   beats: readonly B[] // decide + seed, settled by code on replay
+  answers: Readonly<Record<string, string>> // readout id → option id, chosen at record; settled by code on replay
   end: "end" | "over" | "cap"
   brief: Brief
   prose: string // non-authoritative

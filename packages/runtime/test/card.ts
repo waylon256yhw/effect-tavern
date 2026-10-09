@@ -123,5 +123,51 @@ const skilled = makeCard(
 assert.equal(skilled.fold(skilled.initial, [{ next: "try", seed: 7 }]).s.wins, 1) // skill 1 → always hits
 assert.equal(skilled.fold({ skill: 0, wins: 0 }, [{ next: "try", seed: 7 }]).s.wins, 0)
 
+// ───────── Readouts: asked after the prose, answered by enum, settled by code; `when` gates the question ─────────
+const bond = makeCard(
+  decodeRules({
+    fields: [
+      { path: "bond", type: "int", min: -30, max: 100, initial: 0 },
+      { path: "met", type: "boolean", initial: false },
+    ],
+    actions: [],
+    readouts: [
+      {
+        id: "warmth",
+        text: "how she treated the player",
+        options: [
+          { id: "cold", text: "cold", do: [{ path: "bond", add: -5 }] },
+          { id: "warm", text: "warm", do: [{ path: "bond", add: 4 }] },
+        ],
+      },
+      {
+        id: "met",
+        text: "did they meet",
+        when: { path: "met", is: false },
+        options: [
+          { id: "no", text: "no", do: [] },
+          { id: "yes", text: "yes", do: [{ path: "met", set: true }, { event: "met" }] },
+        ],
+      },
+    ],
+  }),
+)
+assert.deepEqual(
+  bond.asked(bond.initial).map((q) => q.id),
+  ["warmth", "met"],
+)
+const b = bond.settleReadouts(bond.initial, { warmth: "warm", met: "yes" })
+assert.deepEqual([b.s.bond, b.s.met, b.events], [4, true, ["met"]])
+assert.deepEqual(
+  bond.asked(b.s).map((q) => q.id),
+  ["warmth"],
+) // answered once, never asked again
+assert.equal(bond.settleReadouts({ bond: -28, met: true }, { warmth: "cold" }).s.bond, -30) // bounds clamp
+assert.throws(() => bond.settleReadouts(bond.initial, { warmth: "hot" }), /not a readout option/)
+assert.ok(Schema.decodeUnknownSync(bond.readoutSchema(b.s)!)({ warmth: "warm" }))
+assert.throws(() => Schema.decodeUnknownSync(bond.readoutSchema(b.s)!)({})) // every asked question is answered
+assert.throws(() => Schema.decodeUnknownSync(bond.readoutSchema(b.s)!)({ warmth: "hot" }))
+assert.equal(tavern.readoutSchema(tavern.initial), undefined) // nothing declared → nothing asked
+
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")

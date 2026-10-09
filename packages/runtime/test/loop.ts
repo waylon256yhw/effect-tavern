@@ -25,7 +25,7 @@ import {
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import { deliveredOn, makeJournal, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
-import { decodeRules, makeCard, type Beat, type State } from "../src/card.ts"
+import { decodeRules, makeCard, type Answers, type Beat, type State } from "../src/card.ts"
 import { holds, type Cond } from "../src/cond.ts"
 
 // ───────── Card: all data (§22). Settlement rules, lore gates and windows are Cond / effects, not code. ─────────
@@ -34,6 +34,19 @@ const rpg = makeCard(
     fields: [
       { path: "hp", type: "int", min: 0, max: 100, initial: 40 },
       { path: "foe", type: "int", min: 0, initial: 30 },
+      { path: "bond", type: "int", min: -30, max: 100, initial: 0 }, // a readout: never settled before the prose
+    ],
+    readouts: [
+      {
+        id: "warmth",
+        text: "how A treated the player this turn",
+        options: [
+          { id: "cold", text: "cold", do: [{ path: "bond", add: -5 }] },
+          { id: "flat", text: "indifferent", do: [] },
+          { id: "warm", text: "warm", do: [{ path: "bond", add: 4 }] },
+          { id: "close", text: "intimate", do: [{ path: "bond", add: 8 }, { event: "warmth:close" }] },
+        ],
+      },
     ],
     actions: [
       {
@@ -73,6 +86,7 @@ interface Card {
   frame: readonly Fragment[]
   character: readonly Fragment[]
   actions: boolean
+  readouts: boolean
   lore: boolean
   director: boolean
   rules: readonly string[]
@@ -89,22 +103,28 @@ const Check = (open: readonly string[], rules: readonly string[]) =>
   Schema.Struct({ fired: Schema.Array(Schema.Literals(open)), violated: Schema.Array(Schema.Literals(rules)) })
 const Notes = Schema.Struct({ notes: Schema.Array(Schema.String) })
 
-const { fold } = rpg
+const { fold, settleReadouts } = rpg
 
 // ───────── Journal (src/journal) and derived facts ─────────
 type Turn = TurnOf<Beat>
 const journal = makeJournal<Beat>()
 const { chain } = journal
-const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => fold(s, t.beats).s, initial)
-const eventsOf = (path: readonly Turn[], t: Turn) => fold(stateAt(path.slice(0, path.indexOf(t))), t.beats).events
+// A turn's state: beats settle before the prose, readout answers after it. Both are code folds over recorded outputs.
+const settleTurn = (s: State, t: Turn) => {
+  const b = fold(s, t.beats)
+  const r = settleReadouts(b.s, t.answers)
+  return { s: r.s, events: [...b.events, ...r.events] }
+}
+const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, initial)
+const eventsOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t).events
 
 // ───────── Views (src/fragment + src/history), as provider messages ─────────
 type PMsg = Prompt.MessageEncoded
 const toP = (m: Msg): PMsg => ({ role: m.role, content: m.text }) as PMsg
 const sys = (content: string): PMsg => ({ role: "system", content })
 const usr = (content: string): PMsg => ({ role: "user", content })
-const head = (p: Player, c: Card, stage: "narrate" | "direct") =>
-  headOf(stage === "narrate" ? [...frame(p, c), ...c.character] : frame(p, c)).map(toP)
+const head = (p: Player, c: Card, stage: "narrate" | "direct", state: State) =>
+  headOf(stage === "narrate" ? [...frame(p, c), ...c.character] : frame(p, c), { state }).map(toP)
 const summaries = makeSummaries<Beat>(L.text)
 const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when a real tokenizer is in the loop
 const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
@@ -176,7 +196,7 @@ const run = (
           break
         }
         const d = yield* obj("decide", rpg.decideSchema(s), [
-          ...head(player, card, "direct"),
+          ...head(player, card, "direct", s),
           ...history(path, "direct"),
           sys(`State: ${JSON.stringify(s)}\nActions: ${rpg.menu(s).join(" | ")}\nSo far: ${events.join(",") || "-"}`),
           usr(input.text),
@@ -200,7 +220,7 @@ const run = (
         ? base!.brief
         : card.director && open.length
           ? yield* obj("direct", BriefOf(openIds), [
-              ...head(player, card, "direct"),
+              ...head(player, card, "direct", s1),
               ...card.rules.map((r) => sys(`Rule: ${r}`)),
               ...history(path, "direct"),
               sys(`Open: ${open.map((d) => `${d.id}=${L.text(d)}`).join(" | ")}\nEvents: ${events.join(",")}`),
@@ -220,7 +240,7 @@ const run = (
     const narrate = (correction?: string) =>
       Effect.gen(function* () {
         const msgs = [
-          ...head(player, card, "narrate"),
+          ...head(player, card, "narrate", s1),
           ...history(path, "narrate"),
           ...tail,
           ...(correction ? [sys(correction)] : []),
@@ -255,16 +275,41 @@ const run = (
       fired = open.filter((d) => c.fired.includes(d.id))
       violated = [...c.violated]
     }
-    const { notes } = yield* obj("record", Notes, [
+    // record: notes, plus the readout questions when the card declares any. The model sees the prose and the
+    // questions, never the numbers; the chosen options settle by code, so replay never asks again.
+    const qs = card.readouts ? rpg.readoutSchema(s1) : undefined
+    const recMsgs = [
       sys(`Known: ${path.flatMap((t) => t.notes).join("; ")}`),
+      ...(qs ? [sys(`Questions: ${rpg.questions(s1).join("\n")}`)] : []),
       usr(`${input.text}\n${prose}`),
-    ])
-    return journal.save({ parent, input, read: disclosures, beats, end, brief, prose, fired, violated, notes })
+    ]
+    let answers: Answers = {}
+    let notes: readonly string[]
+    if (qs) {
+      const rec = yield* obj("record", Schema.Struct({ notes: Schema.Array(Schema.String), answers: qs }), recMsgs)
+      notes = rec.notes
+      answers = rec.answers as Answers
+    } else notes = (yield* obj("record", Notes, recMsgs)).notes
+    settleReadouts(s1, answers) // validate now, not on the first replay
+    return journal.save({
+      parent,
+      input,
+      read: disclosures,
+      beats,
+      answers,
+      end,
+      brief,
+      prose,
+      fired,
+      violated,
+      notes,
+    })
   })
 const reword = (card: Card, player: Player, t: Turn) => run(card, player, t.parent, t.input, "narrate", t)
 
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut"> = []
+const warmths: string[] = [] // scripted readout answers; default "flat"
 let n = 0
 const FakeModel = Layer.effect(
   LanguageModel.LanguageModel,
@@ -307,9 +352,19 @@ const FakeModel = Layer.effect(
             })
             break
           }
-          case "record":
-            out = JSON.stringify({ notes: [`NOTE#${n}`] })
+          case "record": {
+            // Questions arrive as "<id>: <text> [<opt>: <text> | ...]" lines; answer each from the script, else "flat".
+            const qs = [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)]
+            const answers = Object.fromEntries(
+              qs.map(([, id, opts]) => {
+                const ids = opts.split(" | ").map((o) => o.split(":")[0].trim())
+                const want = warmths.shift() ?? "flat"
+                return [id, ids.includes(want) ? want : ids[0]]
+              }),
+            )
+            out = JSON.stringify(qs.length ? { notes: [`NOTE#${n}`], answers } : { notes: [`NOTE#${n}`] })
             break
+          }
           default: {
             if (last.role === "assistant") {
               out = " …and the rest."
@@ -338,13 +393,19 @@ const player: Player = { global: frags([{ id: "language", text: "Write in Chines
 const chat: Card = {
   id: "wuxia",
   frame: frags([{ id: "setting", text: "Frame: wuxia" }]),
-  character: frags([{ id: "a", text: "A: swordsman" }]),
+  // Bands of the readout are `when` fragments: the narrator reads the band's text, never the number.
+  character: frags([
+    { id: "a", text: "A: swordsman" },
+    { id: "a-cool", text: "A keeps the player at arm's length.", when: { path: "bond", op: "lt", value: 8 } },
+    { id: "a-warm", text: "A trusts the player.", when: { path: "bond", op: "gte", value: 8 } },
+  ]),
   actions: false,
+  readouts: false,
   lore: false,
   director: false,
   rules: [],
 }
-const full: Card = { ...chat, actions: true, lore: true, director: true, rules: ["B does not die"] }
+const full: Card = { ...chat, actions: true, readouts: true, lore: true, director: true, rules: ["B does not die"] }
 const since = (i: number) => calls.slice(i)
 const lastNarr = () => prompts.narrate.at(-1)!
 
@@ -352,17 +413,26 @@ const program = Effect.gen(function* () {
   const c0 = yield* run(chat, player, null, { text: "hello" })
   assert.deepEqual(calls, ["narrate", "record"])
   assert.deepEqual([c0.read, c0.beats, c0.brief, c0.fired], [[], [], { must: [], may: [] }, []])
+  assert.deepEqual(c0.answers, {}) // no readouts declared: record only takes notes
+  assert.ok(!/Questions/.test(str(prompts.record[0])))
 
   let i = calls.length
   const t1 = yield* run(full, player, null, { text: "ask about li" })
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t1.read, [{ id: "li", layer: 1 }])
   assert.ok(str(lastNarr()).includes(L.entries[0].layers[0]) && !str(lastNarr()).includes("B is Li"))
+  // Readout: asked at record, answered by enum, no number anywhere the prose stages can see.
+  assert.deepEqual(t1.answers, { warmth: "flat" })
+  const rec1 = str(prompts.record.at(-1)!)
+  assert.ok(/Questions: warmth: how A treated/.test(rec1) && !/bond|State:/.test(rec1))
+  assert.ok(str(lastNarr()).includes("arm's length") && !/bond/.test(str(lastNarr())))
 
   // Turn 2: lookup picks nothing new (li#1 already on the path), strikes settle, window opens, director, reveal fired.
   i = calls.length
   narrations.push("fire")
+  warmths.push("warm")
   const t2 = yield* run(full, player, t1.id, { text: "strike B", aside: "ASIDE#2" })
+  assert.deepEqual([t2.answers, stateAt(chain(t2.id)).bond], [{ warmth: "warm" }, 4])
   assert.deepEqual(since(i), ["decide", "decide", "decide", "direct", "narrate", "check", "record"]) // li#1 already on the path: nothing to look up
   assert.deepEqual(t2.read, [])
   assert.equal(t2.beats.length, 2)
@@ -388,10 +458,13 @@ const program = Effect.gen(function* () {
 
   // Turn 3: history carries both lore layers; the previous aside and tone are gone; head is byte-identical.
   i = calls.length
+  warmths.push("warm")
   const t3 = yield* run(full, player, t2.id, { text: "speak" })
   const v3 = str(lastNarr())
   assert.ok(v3.includes("B is Li") && v3.includes(L.entries[0].layers[0]) && v3.includes(t2.prose))
   assert.ok(!v3.includes("ASIDE#2") && !v3.includes(t2.brief.tone!))
+  assert.ok(v3.includes("arm's length")) // bond was 4 when this head was built; the answer lands after the prose
+  assert.equal(stateAt(chain(t3.id)).bond, 8)
   assert.deepEqual(prompts.narrate.at(-1)!.content.slice(0, 3), prompts.narrate.at(-2)!.content.slice(0, 3))
   assert.deepEqual(prompts.narrate.at(-1)!.content.slice(0, 3).map(msgText), [
     "Write in Chinese.",
@@ -414,12 +487,20 @@ const program = Effect.gen(function* () {
   // Guardrail: a draft that kills B is re-asked once with the broken rule in the tail; the correction never enters history.
   i = calls.length
   narrations.push("kill", "plain")
+  warmths.push("close")
   const t5 = yield* run(full, player, t3.id, { text: "finish him" })
   assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "check", "record"])
   assert.ok(str(prompts.narrate.at(-1)!).includes('Previous draft broke: rule "B does not die"'))
   assert.deepEqual(t5.violated, [])
+  // The band switched: bond reached 8 at t3's record, so t5's head reads the warm fragment and not the cool one.
+  const v5 = str(lastNarr())
+  assert.ok(v5.includes("A trusts the player.") && !v5.includes("arm's length"))
+  assert.deepEqual(prompts.narrate.at(-1)!.content.slice(0, 3), prompts.narrate.at(-3)!.content.slice(0, 3)) // prefix intact
   const t6 = yield* run(full, player, t5.id, { text: "rest" })
   assert.ok(!str(lastNarr()).includes("Previous draft broke"))
+  // A readout option can emit an event; it shows in the ledger the structured stages read next turn.
+  assert.ok(eventsOf(chain(t5.id), t5).includes("warmth:close") && /warmth:close/.test(str(prompts.decide.at(-1)!)))
+  assert.equal(stateAt(chain(t6.id)).bond, 16)
 
   // Compression in the loop: at 4 turns on the path, the first block (t1, t2) is folded.
   const v6 = str(lastNarr())
