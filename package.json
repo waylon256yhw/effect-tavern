@@ -1,0 +1,14 @@
+{
+  "name": "effect-tavern",
+  "private": true,
+  "scripts": {
+    "verify": "pnpm -r verify"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.11.1"
+}

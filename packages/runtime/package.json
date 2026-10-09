@@ -1,0 +1,16 @@
+{
+  "name": "@effect-tavern/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "tsc && node test/lore.ts && node test/views.ts && node test/assemble.ts && node test/loop.ts && node test/card.ts"
+  },
+  "dependencies": {
+    "effect": "4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2"
+  }
+}

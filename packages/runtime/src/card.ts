@@ -1,0 +1,136 @@
+// §22: the RPG half of a card as DATA. Fields with bounds, actions whose only branch is the die, effects that are
+// mutations (set / add / event), a termination condition and a beat cap. Every node is a GUI control, a structured-
+// output target (the NL compile step) and directly evaluable — §16.4's admission test.
+// The LLM's only entry into settlement is a probability: `chance: { judge }` is answered inside the decide call and
+// recorded on the beat, so `reroll` keeps the GM's difficulty and re-rolls the die (§7.1).
+// Ceilings (developer modules, same `settle` signature): parameterised actions over tables, formulas beyond one path
+// reference, dynamic entities, time. Fields are flat paths for now.
+import { Effect, Random, Schema } from "effect"
+import { Cond, holds } from "./cond.ts"
+
+const Num = Schema.Number
+export const Field = Schema.Struct({
+  path: Schema.String,
+  type: Schema.Literals(["int", "number", "boolean"]),
+  min: Schema.optionalKey(Num),
+  max: Schema.optionalKey(Num),
+  initial: Schema.Union([Num, Schema.Boolean]),
+})
+export const Chance = Schema.Union([
+  Num,
+  Schema.Struct({ path: Schema.String }),
+  Schema.Struct({ judge: Schema.String }),
+])
+export const Effect_ = Schema.Union([
+  Schema.Struct({ path: Schema.String, set: Schema.Union([Num, Schema.Boolean]) }),
+  Schema.Struct({ path: Schema.String, add: Schema.Union([Num, Schema.Struct({ path: Schema.String })]) }),
+  Schema.Struct({ event: Schema.String }), // `{path}` interpolates the post-effect state; feeds narrator and ledger
+])
+export const Action = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String, // what the model sees as the option
+  when: Schema.optionalKey(Cond), // availability gate: an unavailable action is not a decodable answer
+  roll: Schema.optionalKey(Chance),
+  hit: Schema.optionalKey(Schema.Array(Effect_)),
+  miss: Schema.optionalKey(Schema.Array(Effect_)),
+  do: Schema.optionalKey(Schema.Array(Effect_)),
+})
+export const Rules = Schema.Struct({
+  fields: Schema.Array(Field),
+  actions: Schema.Array(Action),
+  over: Schema.optionalKey(Cond), // code-decided ending; `end` stays the model's, `cap` the harness's
+  cap: Schema.optionalKey(Schema.Int),
+})
+export type Rules = typeof Rules.Type
+export type Action = typeof Action.Type
+export type State = Record<string, number | boolean>
+export interface Beat {
+  next: string
+  chance?: number
+  seed: number
+} // next = action id; chance only when the roll is a judge
+
+export const decodeRules = Schema.decodeUnknownSync(Rules)
+export const rollOf = (seed: number) => Effect.runSync(Random.next.pipe(Random.withSeed(seed)))
+
+export const makeCard = (r: Rules) => {
+  const fields = new Map(r.fields.map((f) => [f.path, f]))
+  const initial: State = Object.fromEntries(r.fields.map((f) => [f.path, f.initial]))
+  const fieldSchema = (f: typeof Field.Type) => {
+    if (f.type === "boolean") return Schema.Boolean
+    const base = f.type === "int" ? Schema.Int : Num
+    const lo = f.min === undefined ? undefined : Schema.isGreaterThanOrEqualTo(f.min)
+    const hi = f.max === undefined ? undefined : Schema.isLessThanOrEqualTo(f.max)
+    return lo && hi ? base.check(lo, hi) : lo ? base.check(lo) : hi ? base.check(hi) : base
+  }
+  const stateSchema = Schema.Struct(Object.fromEntries(r.fields.map((f) => [f.path, fieldSchema(f)])))
+  const validate = Schema.decodeUnknownSync(stateSchema)
+  const num = (s: State, path: string) => {
+    const v = s[path]
+    if (typeof v !== "number") throw new Error(`${path} is not a number`)
+    return v
+  }
+  const available = (s: State) => r.actions.filter((a) => !a.when || holds(a.when, s))
+  const apply = (s: State, effects: readonly (typeof Effect_.Type)[]) => {
+    let out = { ...s }
+    const events: string[] = []
+    for (const e of effects) {
+      if ("set" in e) out[e.path] = e.set
+      else if ("add" in e) {
+        const f = fields.get(e.path)
+        const v = num(out, e.path) + (typeof e.add === "number" ? e.add : num(out, e.add.path))
+        out[e.path] = Math.min(f?.max ?? Infinity, Math.max(f?.min ?? -Infinity, v)) // bounds clamp (§4.2)
+      } else events.push(e.event.replace(/\{(\w+)\}/g, (_, p) => String(out[p])))
+    }
+    return { s: validate(out) as State, events }
+  }
+  const chanceOf = (s: State, a: Action, b: Beat) => {
+    if (a.roll === undefined) return undefined
+    if (typeof a.roll === "number") return a.roll
+    if ("path" in a.roll) return num(s, a.roll.path)
+    if (b.chance === undefined) throw new Error(`${a.id}: judge chance missing on the beat`)
+    return b.chance
+  }
+  const settle = (s: State, b: Beat) => {
+    const a = available(s).find((x) => x.id === b.next)
+    if (!a) throw new Error(`${b.next}: not an available action`)
+    const p = chanceOf(s, a, b)
+    const effects = p === undefined ? (a.do ?? []) : rollOf(b.seed) < p ? (a.hit ?? []) : (a.miss ?? [])
+    return apply(s, effects)
+  }
+  const fold = (s: State, beats: readonly Beat[]) =>
+    beats.reduce<{ s: State; events: string[] }>(
+      (acc, b) => {
+        const r = settle(acc.s, b)
+        return { s: r.s, events: [...acc.events, ...r.events] }
+      },
+      { s, events: [] },
+    )
+  /** Decide schema for the current state: the enum is the gate; `chance` exists only when some available action is judged. */
+  const decideSchema = (s: State) => {
+    const acts = available(s)
+    const judged = acts.some((a) => a.roll !== undefined && typeof a.roll === "object" && "judge" in a.roll)
+    const next = Schema.Literals([...acts.map((a) => a.id), "end"])
+    return judged
+      ? Schema.Struct({ next, chance: Schema.optionalKey(Num.check(Schema.isBetween({ minimum: 0, maximum: 1 }))) })
+      : Schema.Struct({ next })
+  }
+  const menu = (s: State) =>
+    available(s).map(
+      (a) =>
+        `${a.id}: ${a.text}${a.roll && typeof a.roll === "object" && "judge" in a.roll ? ` (estimate chance: ${a.roll.judge})` : ""}`,
+    )
+  return {
+    rules: r,
+    initial,
+    validate,
+    available,
+    settle,
+    fold,
+    decideSchema,
+    menu,
+    over: (s: State) => (r.over ? holds(r.over, s) : false),
+    cap: r.cap ?? Infinity,
+  }
+}
+export type Card = ReturnType<typeof makeCard>
