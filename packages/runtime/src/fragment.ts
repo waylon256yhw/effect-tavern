@@ -5,13 +5,9 @@ import { Cond, holds, type State } from "./cond.ts"
 
 export const Fragment = Schema.Struct({
   id: Schema.String, // in the frame, the id is the slot
-  text: Schema.optionalKey(Schema.String), // absent = pure anchor
+  text: Schema.optionalKey(Schema.String), // absent = a slot the player may fill
   role: Schema.optionalKey(Schema.Literals(["system", "user", "assistant"])),
-  at: Schema.optionalKey(
-    Schema.Union([Schema.Struct({ before: Schema.String }), Schema.Struct({ after: Schema.String })]),
-  ),
   enabled: Schema.optionalKey(Schema.Boolean),
-  order: Schema.optionalKey(Schema.Number),
   when: Schema.optionalKey(Cond),
   mode: Schema.optionalKey(Schema.Literals(["override", "yield", "both"])), // player fragments only: vs the card's same slot
 })
@@ -47,27 +43,12 @@ export const frame = (player: Player, card: FrameSource): Fragment[] => {
   return [...playerZone, ...cardZone]
 }
 
-/** Head messages: anchors resolved, `when` evaluated, every stable fragment before every state-dependent one. */
+/** Head messages: `enabled`/options and `when` evaluated, in zone then document order. Order is the author's; a
+ * `when` flip costs one cache miss on a rare event, not a reordering of the document. */
 export const head = (
   layers: readonly Fragment[],
   { state = {} as State, options = {} as Record<string, boolean> } = {},
-): Msg[] => {
-  const anchors = new Set(layers.filter((f) => !f.at).map((f) => f.id))
-  for (const f of layers) {
-    const a = f.at && ("before" in f.at ? f.at.before : f.at.after)
-    if (a && !anchors.has(a)) throw new Error(`${f.id}: unknown anchor ${a}`)
-  }
-  const active = layers.filter((f) => (options[f.id] ?? f.enabled ?? true) && (!f.when || holds(f.when, state)))
-  const msg = (f: Fragment): Msg[] => (f.text ? [{ role: f.role ?? "system", text: f.text }] : [])
-  const hang = (pick: (at: NonNullable<Fragment["at"]>) => boolean) =>
-    active.filter((f) => f.at && pick(f.at)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  const expand = (f: Fragment) => [
-    ...hang((at) => "before" in at && at.before === f.id).flatMap(msg),
-    ...msg(f),
-    ...hang((at) => "after" in at && at.after === f.id).flatMap(msg),
-  ]
-  const inline = active.filter((f) => !f.at)
-  const volatile = (f: Fragment) =>
-    !!f.when || hang((at) => ("before" in at ? at.before : at.after) === f.id).some((h) => h.when)
-  return [...inline.filter((f) => !volatile(f)), ...inline.filter(volatile)].flatMap(expand)
-}
+): Msg[] =>
+  layers
+    .filter((f) => (options[f.id] ?? f.enabled ?? true) && (!f.when || holds(f.when, state)))
+    .flatMap((f) => (f.text ? [{ role: f.role ?? "system", text: f.text }] : []))

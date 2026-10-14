@@ -1,6 +1,6 @@
 // Tests for src/fragment.ts (+ history over Turn[]): §8's `assemble` re-done over layers + Turn[] + stage.
 // Head = player layer → card frame → character; audience per stage comes from the layer, not from a per-fragment field.
-// Dropped from Fragment: keys, trigger, depth, scan. Kept: when, before/after, anchors, enabled/options, order.
+// Dropped from Fragment: keys, trigger, depth, scan, before/after anchors, order. Kept: when, enabled/options.
 import assert from "node:assert/strict"
 import { decodeFragments as frags, frame, head, type Fragment, type Msg, type Player } from "../src/fragment.ts"
 import { ledger, narratorHistory } from "../src/history.ts"
@@ -64,12 +64,11 @@ const card: Card = {
     { id: "setting", text: "Late Ming, no firearms." },
     { id: "length", text: "One paragraph." },
     { id: "tone", text: "Terse." },
-    { id: "cot" }, // pure anchor placed by the frame
+    { id: "cot", text: "Think before you write." },
   ]),
   character: frags([
     { id: "a", text: "A: wandering swordsman." },
     { id: "a-trust", text: "A trusts the player.", when: { path: "a.trust", op: "gte", value: 50 } },
-    { id: "think", text: "Think before you write.", at: { after: "cot" } },
   ]),
 }
 const other: Card = { id: "other", frame: frags([{ id: "setting", text: "Space station." }]), character: [] }
@@ -113,23 +112,29 @@ assert.ok(texts(v).some((t) => t.startsWith("Ledger:") && t.includes("NOTE#0")))
 v = assemble(player, card, path, "narrate", "go", { state: s0 })
 assert.ok(texts(v).includes("PROSE#0"))
 
-// Cache: head prefix is byte-identical when only state changes; volatile fragments land after it, in zone order.
+// Order is the document's: a `when` fragment appears where the author put it, not moved to the end for the cache.
 const a = assemble(player, card, path, "narrate", "go", { state: s0 })
 const b = assemble(player, card, path, "narrate", "go", { state: { player: { tired: true }, a: { trust: 80 } } })
-const stable = a.findIndex((m) => m.text === "hello")
-assert.deepEqual(
-  a.slice(0, stable),
-  a.slice(0, stable).filter((m) => !["Keep it gentle today.", "A trusts the player."].includes(m.text)),
-)
-assert.deepEqual(b.slice(0, stable), a.slice(0, stable)) // same stable prefix…
-assert.deepEqual(texts(b).slice(stable, stable + 2), ["Keep it gentle today.", "A trusts the player."]) // …then volatile, player first
+assert.ok(!texts(a).includes("Keep it gentle today.") && !texts(a).includes("A trusts the player."))
+assert.deepEqual(texts(b).slice(0, 5), [
+  "Write in Chinese.",
+  "Long, four paragraphs.",
+  "Player: a sword student.",
+  "Keep it gentle today.", // global `when` fragment, in its own place in the player zone
+  "Warm underneath.",
+])
+assert.deepEqual(texts(b).slice(-5, -2), ["A: wandering swordsman.", "A trusts the player.", "hello"]) // character zone, then history
 assert.equal(b.length, a.length + 2)
 
-// Anchors: hanging on a missing anchor is an error, a disabled anchor hides its passengers.
-assert.throws(() => assemble(player, { ...card, frame: card.frame.filter((f) => f.id !== "cot") }, [], "narrate", "go"))
+// Options: a disabled fragment vanishes; an empty-text fragment is a slot and emits nothing.
 assert.ok(
   !texts(assemble(player, card, [], "narrate", "go", { state: s0, options: { cot: false } })).includes(
     "Think before you write.",
+  ),
+)
+assert.ok(
+  !texts(assemble(player, { ...card, frame: frags([{ id: "x" }]) }, [], "narrate", "go", { state: s0 })).includes(
+    undefined as never,
   ),
 )
 
