@@ -17,6 +17,8 @@ export type Part = TextStreamPart<{}>
 
 export type Effort = "off" | "low" | "medium" | "high" | "max"
 export interface CallOptions {
+  /** Stage name; goes out as the schema name on `object` and is what a fake or a trace sees. */
+  name?: string
   maxOutputTokens?: number
   temperature?: number
   effort?: Effort
@@ -102,6 +104,7 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
     generateObject({
       model: m.model,
       schema: standard(schema),
+      schemaName: o.name,
       messages: [...messages],
       abortSignal,
       ...settings(m.format, o),

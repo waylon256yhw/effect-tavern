@@ -209,6 +209,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@effect-tavern/provider':
+        specifier: workspace:*
+        version: link:../provider
       effect:
         specifier: 4.0.0
         version: 4.0.0

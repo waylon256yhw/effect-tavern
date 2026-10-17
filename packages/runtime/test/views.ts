@@ -2,8 +2,8 @@
 // Only the narrator sees the transcript. Structured stages see facts; most see only this turn.
 // Compression is a derived view: a prefix range is replaced by the CODE fold of its notes plus the lore delivered in
 // it, cached by range. Turn nodes are never mutated. record runs every turn: notes are the compression source.
-import { Effect, Layer, Stream } from "effect"
-import { LanguageModel, Prompt } from "effect/ai"
+import { fake, text as generate, type Message } from "@effect-tavern/provider"
+import { Effect } from "effect"
 import assert from "node:assert/strict"
 import type { Msg } from "../src/fragment.ts"
 import { ledger, makeSummaries, narratorHistory } from "../src/history.ts"
@@ -81,9 +81,10 @@ const render = (card: Card, path: readonly Turn[], stage: Stage, cur: Current): 
 // ───────── Turn loop with a scripted model; only the view shapes matter here ─────────
 const calls: Array<{ phase: Stage; msgs: Msg[] }> = []
 const ask = (phase: Stage, msgs: Msg[]) =>
-  LanguageModel.generateText({
-    prompt: Prompt.make(msgs.map((m) => ({ role: m.role, content: m.text }) as Prompt.MessageEncoded)),
-  }).pipe(Effect.map((r) => (calls.push({ phase, msgs }), r.text)))
+  generate(
+    M,
+    msgs.map((m) => ({ role: m.role, content: m.text }) as Message),
+  ).pipe(Effect.map((r) => (calls.push({ phase, msgs }), r.text)))
 
 let n = 0
 const run = (
@@ -136,24 +137,10 @@ const script = (card: Card) =>
     ...(card.rules.length || card.director ? [""] : []),
     "NOTE#",
   )
-const FakeModel = Layer.effect(
-  LanguageModel.LanguageModel,
-  LanguageModel.make({
-    generateText: () =>
-      Effect.sync(() => {
-        const tag = pending.shift()!
-        return [
-          { type: "text" as const, text: tag ? `${tag}${n - 1}` : "" },
-          {
-            type: "finish" as const,
-            reason: "stop" as const,
-            usage: { inputTokens: { total: 0 }, outputTokens: { total: 0 } },
-          },
-        ]
-      }),
-    streamText: () => Stream.empty,
-  }),
-)
+const M = fake(() => {
+  const tag = pending.shift()!
+  return { text: tag ? `${tag}${n - 1}` : "" }
+})
 
 // ───────── Checks ─────────
 const text = (msgs: Msg[]) => msgs.map((m) => m.text).join("\n")
@@ -259,5 +246,5 @@ const program = Effect.gen(function* () {
   console.log(text(v))
 })
 
-Effect.runSync(program.pipe(Effect.provide(FakeModel)))
+await Effect.runPromise(program)
 console.log("ok")

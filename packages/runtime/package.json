@@ -7,6 +7,7 @@
     "verify": "tsc && node test/lore.ts && node test/views.ts && node test/assemble.ts && node test/loop.ts && node test/card.ts"
   },
   "dependencies": {
+    "@effect-tavern/provider": "workspace:*",
     "effect": "4.0.0"
   },
   "devDependencies": {

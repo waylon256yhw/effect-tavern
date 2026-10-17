@@ -3,16 +3,18 @@
 // a window can depend on what this turn produced (the sword cut exposes the tattoo).
 // There is no tool anywhere: lookup is a structured pick over the literal enum of readable ids, actions are the decide
 // stage. The model never drives a loop, so there is no tool definition to gate or to cache (§15.4 items 1–2 dissolve).
-// Truncation: a narrate that finishes with "length" is re-asked once with the partial as a trailing assistant message;
-// the turn records the concatenation once. The fake accepts the prefix because it was written to; providers unverified.
+// Truncation: a narrate that finishes with "length" is re-asked once with the partial as a trailing assistant message
+// when the connection declares `prefill`; the turn records the concatenation once. Current Claude rejects the prefix
+// (docs/provider-reading.md §7), so on such connections the partial stands and recovery is still undecided.
 //
 // Imports the same modules lore.ts / views.ts / assemble.ts test: src/lore, src/journal, src/history, src/fragment.
-// Only settlement (card content) and the scripted model live here.
+// Only settlement (card content) and the scripted model live here. The model is packages/provider's `Model`: the
+// same `object` / `text` calls a real connection answers, here answered by `fake`.
 // Compression (§17.3/§18.4): before each narrate, fold the leading turns in blocks; the summary is a cached code fold,
 // nodes are untouched, and lore dedupe keeps working because deliveries live on the nodes, not in the view.
-// Skipped: swipe kinds other than reword, continue, streaming, persistence.
-import { Effect, Layer, Schema, Stream } from "effect"
-import { LanguageModel, Prompt } from "effect/ai"
+// Skipped: swipe kinds other than reword, continue, streaming, persistence, reasoning parts on the node.
+import { fake, fakeText, object, text, type Message, type Model } from "@effect-tavern/provider"
+import { Effect, Schema } from "effect"
 import assert from "node:assert/strict"
 import {
   decodeFragments as frags,
@@ -119,7 +121,7 @@ const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t
 const eventsOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t).events
 
 // ───────── Views (src/fragment + src/history), as provider messages ─────────
-type PMsg = Prompt.MessageEncoded
+type PMsg = Message
 const toP = (m: Msg): PMsg => ({ role: m.role, content: m.text }) as PMsg
 const sys = (content: string): PMsg => ({ role: "system", content })
 const usr = (content: string): PMsg => ({ role: "user", content })
@@ -132,32 +134,27 @@ const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
   const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
   return narratorHistory(path, L.text, sum).map(toP)
 }
-const msgText = (m: Prompt.Prompt["content"][number]) =>
-  typeof m.content === "string" ? m.content : m.content.map((c) => (c.type === "text" ? c.text : "")).join("")
-const str = (p: Prompt.Prompt) => p.content.map(msgText).join("\n")
+const msgText = (m: PMsg) =>
+  typeof m.content === "string" ? m.content : m.content.map((c) => ("text" in c ? c.text : "")).join("")
+const str = (p: readonly PMsg[]) => p.map(msgText).join("\n")
 
 // ───────── The loop ─────────
+// The connection: one Model for every stage here; a real harness binds stages to connections.
+const M: Model & { prefill: boolean } = { ...fake((o) => script(o)), prefill: true }
 let seeds = 0
 const calls: string[] = []
-const prompts: Record<string, Prompt.Prompt[]> = {}
-const ask = <A>(phase: string, run: Effect.Effect<A, any, LanguageModel.LanguageModel>, p: Prompt.Prompt) =>
+const prompts: Record<string, PMsg[][]> = {}
+const ask = <A, E>(phase: string, run: Effect.Effect<A, E>, p: PMsg[]) =>
   Effect.suspend(() => {
     calls.push(phase)
     ;(prompts[phase] ??= []).push(p)
     return run
   })
-const obj = <S extends Schema.Encoder<Record<string, any>, unknown> & { readonly DecodingServices: never }>(
+const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(
   phase: string,
   schema: S,
   msgs: PMsg[],
-) => {
-  const p = Prompt.make(msgs)
-  return ask(
-    phase,
-    LanguageModel.generateObject({ objectName: phase, schema, prompt: p }).pipe(Effect.map((r) => r.value)),
-    p,
-  )
-}
+) => ask(phase, object(M, schema, msgs, { name: phase }).pipe(Effect.map((r) => r.value)), msgs)
 
 const run = (
   card: Card,
@@ -246,11 +243,10 @@ const run = (
           ...(correction ? [sys(correction)] : []),
           usr(input.text),
         ]
-        const p = Prompt.make(msgs)
-        const r = yield* ask("narrate", LanguageModel.generateText({ prompt: p }), p)
-        if (r.finishReason !== "length") return r.text
-        const p2 = Prompt.make([...msgs, { role: "assistant", content: r.text }]) // resume with the partial as prefix
-        const r2 = yield* ask("narrate", LanguageModel.generateText({ prompt: p2 }), p2)
+        const r = yield* ask("narrate", text(M, msgs, { name: "narrate" }), msgs)
+        if (r.finishReason !== "length" || !M.prefill) return r.text
+        const p2: PMsg[] = [...msgs, { role: "assistant", content: r.text }] // resume with the partial as prefix
+        const r2 = yield* ask("narrate", text(M, p2, { name: "narrate" }), p2)
         return r.text + r2.text
       })
     let prose = yield* narrate()
@@ -311,82 +307,72 @@ const reword = (card: Card, player: Player, t: Turn) => run(card, player, t.pare
 const narrations: Array<"plain" | "fire" | "kill" | "cut"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
 let n = 0
-const FakeModel = Layer.effect(
-  LanguageModel.LanguageModel,
-  LanguageModel.make({
-    generateText: (o) =>
-      Effect.sync(() => {
-        const text = str(o.prompt)
-        const phase = o.responseFormat.type === "json" ? o.responseFormat.objectName : "narrate"
-        const last = o.prompt.content.at(-1)!
-        const want = msgText(last)
-        const open =
-          text
-            .match(/Open: ([\w,=]*)/)?.[1]
-            .split(/[,|]/)
-            .map((x) => x.split("=")[0].trim())
-            .filter(Boolean) ?? []
-        let out: string
-        let reason: "stop" | "length" = "stop"
-        switch (phase) {
-          case "lookup":
-            out = JSON.stringify({
-              read: text
-                .match(/Index: (.*)/)![1]
-                .split(", ")
-                .filter((id) => want.includes(`about ${id}`)),
-            })
-            break
-          case "decide": {
-            const k = (text.match(/So far: (.*)/)![1].match(/strike/g) ?? []).length
-            out = JSON.stringify({ next: /strike/.test(want) && k < 2 ? "strike" : "end" })
-            break
-          }
-          case "direct":
-            out = JSON.stringify({ must: [], may: open, tone: `TONE#${n}` })
-            break
-          case "check": {
-            out = JSON.stringify({
-              fired: /tattoo/.test(want) ? open : [],
-              violated: /KILL/.test(want) ? ["B does not die"] : [],
-            })
-            break
-          }
-          case "record": {
-            // Questions arrive as "<id>: <text> [<opt>: <text> | ...]" lines; answer each from the script, else "flat".
-            const qs = [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)]
-            const answers = Object.fromEntries(
-              qs.map(([, id, opts]) => {
-                const ids = opts.split(" | ").map((o) => o.split(":")[0].trim())
-                const want = warmths.shift() ?? "flat"
-                return [id, ids.includes(want) ? want : ids[0]]
-              }),
-            )
-            out = JSON.stringify(qs.length ? { notes: [`NOTE#${n}`], answers } : { notes: [`NOTE#${n}`] })
-            break
-          }
-          default: {
-            if (last.role === "assistant") {
-              out = " …and the rest."
-              break
-            } // resumed after a cut
-            const how = narrations.shift() ?? "plain"
-            const mayReveal = /MAY reveal|MUST reveal/.test(text)
-            out = `PROSE#${++n}${how === "fire" && mayReveal ? " the sleeve tears, a crane tattoo" : ""}${how === "kill" ? " KILL" : ""}`
-            if (how === "cut") {
-              out += " partial"
-              reason = "length"
-            }
-          }
-        }
-        return [
-          { type: "text" as const, text: out },
-          { type: "finish" as const, reason, usage: { inputTokens: { total: 0 }, outputTokens: { total: 0 } } },
-        ]
-      }),
-    streamText: () => Stream.empty,
-  }),
-)
+function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean } {
+  const text = o.prompt.map(fakeText).join("\n")
+  const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
+  const last = o.prompt.at(-1)!
+  const want = fakeText(last)
+  const open =
+    text
+      .match(/Open: ([\w,=]*)/)?.[1]
+      .split(/[,|]/)
+      .map((x) => x.split("=")[0].trim())
+      .filter(Boolean) ?? []
+  let out: string
+  let reason: "stop" | "length" = "stop"
+  switch (phase) {
+    case "lookup":
+      out = JSON.stringify({
+        read: text
+          .match(/Index: (.*)/)![1]
+          .split(", ")
+          .filter((id) => want.includes(`about ${id}`)),
+      })
+      break
+    case "decide": {
+      const k = (text.match(/So far: (.*)/)![1].match(/strike/g) ?? []).length
+      out = JSON.stringify({ next: /strike/.test(want) && k < 2 ? "strike" : "end" })
+      break
+    }
+    case "direct":
+      out = JSON.stringify({ must: [], may: open, tone: `TONE#${n}` })
+      break
+    case "check": {
+      out = JSON.stringify({
+        fired: /tattoo/.test(want) ? open : [],
+        violated: /KILL/.test(want) ? ["B does not die"] : [],
+      })
+      break
+    }
+    case "record": {
+      // Questions arrive as "<id>: <text> [<opt>: <text> | ...]" lines; answer each from the script, else "flat".
+      const qs = [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)]
+      const answers = Object.fromEntries(
+        qs.map(([, id, opts]) => {
+          const ids = opts.split(" | ").map((o) => o.split(":")[0].trim())
+          const want = warmths.shift() ?? "flat"
+          return [id, ids.includes(want) ? want : ids[0]]
+        }),
+      )
+      out = JSON.stringify(qs.length ? { notes: [`NOTE#${n}`], answers } : { notes: [`NOTE#${n}`] })
+      break
+    }
+    default: {
+      if (last.role === "assistant") {
+        out = " …and the rest."
+        break
+      } // resumed after a cut
+      const how = narrations.shift() ?? "plain"
+      const mayReveal = /MAY reveal|MUST reveal/.test(text)
+      out = `PROSE#${++n}${how === "fire" && mayReveal ? " the sleeve tears, a crane tattoo" : ""}${how === "kill" ? " KILL" : ""}`
+      if (how === "cut") {
+        out += " partial"
+        reason = "length"
+      }
+    }
+  }
+  return { text: out, cut: reason === "length" }
+}
 
 // ───────── Checks ─────────
 const player: Player = { global: frags([{ id: "language", text: "Write in Chinese." }]), forCard: {} }
@@ -465,8 +451,8 @@ const program = Effect.gen(function* () {
   assert.ok(!v3.includes("ASIDE#2") && !v3.includes(t2.brief.tone!))
   assert.ok(v3.includes("arm's length")) // bond was 4 when this head was built; the answer lands after the prose
   assert.equal(stateAt(chain(t3.id)).bond, 8)
-  assert.deepEqual(prompts.narrate.at(-1)!.content.slice(0, 3), prompts.narrate.at(-2)!.content.slice(0, 3))
-  assert.deepEqual(prompts.narrate.at(-1)!.content.slice(0, 3).map(msgText), [
+  assert.deepEqual(prompts.narrate.at(-1)!.slice(0, 3), prompts.narrate.at(-2)!.slice(0, 3))
+  assert.deepEqual(prompts.narrate.at(-1)!.slice(0, 3).map(msgText), [
     "Write in Chinese.",
     "Frame: wuxia",
     "A: swordsman",
@@ -480,7 +466,7 @@ const program = Effect.gen(function* () {
   const t4 = yield* run(chat, player, c0.id, { text: "more" })
   assert.deepEqual(since(i), ["narrate", "narrate", "record"])
   assert.ok(t4.prose.endsWith("partial …and the rest."))
-  const resumed = prompts.narrate.at(-1)!.content.at(-1)!
+  const resumed = prompts.narrate.at(-1)!.at(-1)!
   assert.equal(resumed.role, "assistant")
   assert.equal(journal.size, 5)
 
@@ -495,7 +481,7 @@ const program = Effect.gen(function* () {
   // The band switched: bond reached 8 at t3's record, so t5's head reads the warm fragment and not the cool one.
   const v5 = str(lastNarr())
   assert.ok(v5.includes("A trusts the player.") && !v5.includes("arm's length"))
-  assert.deepEqual(prompts.narrate.at(-1)!.content.slice(0, 3), prompts.narrate.at(-3)!.content.slice(0, 3)) // prefix intact
+  assert.deepEqual(prompts.narrate.at(-1)!.slice(0, 3), prompts.narrate.at(-3)!.slice(0, 3)) // prefix intact
   const t6 = yield* run(full, player, t5.id, { text: "rest" })
   assert.ok(!str(lastNarr()).includes("Previous draft broke"))
   // A readout option can emit an event; it shows in the ledger the structured stages read next turn.
@@ -543,5 +529,5 @@ const program = Effect.gen(function* () {
   console.log(str(lastNarr()))
 })
 
-Effect.runSync(program.pipe(Effect.provide(FakeModel)))
+await Effect.runPromise(program)
 console.log("ok")

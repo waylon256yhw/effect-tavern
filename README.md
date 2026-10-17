@@ -98,7 +98,7 @@ SillyTavern 及其生态（变量框架、世界书、导演类插件、各类 f
 
 尚未接上的：
 
-- **回合循环还在用假模型。** provider 层已能跑真模型，但 `test/loop.ts` 仍以 `effect/ai` 的假模型为接口；换到 `packages/provider` 的调用时，节点上的 `prose: string` 要改成 parts（正文加带签名的推理），这是推理往返的前提。
+- **回合循环没在真模型上跑过。** `test/loop.ts` 与 `test/views.ts` 已经通过 `packages/provider` 的 `object` / `text` 调用模型，自检用它的 `fake`；换成一条真连接只是换掉那一个值，但没跑过。节点上的 `prose: string` 还要改成 parts（正文加带签名的推理），这是推理往返的前提，未做。
 - **持久化。** 日志树只在内存里。
 - **流式输出。** provider 层有，回合循环没接。
 - **编译。** 自然语言到卡数据的那一步没有做，现在卡是手写的数据。
