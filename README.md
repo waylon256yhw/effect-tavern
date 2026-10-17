@@ -142,4 +142,4 @@ Node 24 或更新，直接执行 `.ts`，没有构建步骤。pnpm 钉在 12.11.
 
 `docs/state-harness-research.md` 是搬进来的原型阶段调研记录，按章节编号归档。代码注释里的 `§n` 指向它的章节。它记录的是过程，本文记录的是现状；两者冲突时以本文为准。
 
-`docs/card-reading.md`、`docs/preset-reading.md`、`docs/tavern-helper-reading.md` 是对生态材料的结构化阅读记录：五张卡、一份预设、一个作者自建的运行时。每份末尾的"跨文件的规则"是读出来的结论，待确认后再折进本文。
+`docs/card-reading.md`、`docs/preset-reading.md`、`docs/preset-reading-2.md`、`docs/tavern-helper-reading.md` 是对生态材料的结构化阅读记录：五张卡、两份预设（一份代码化、一份魔咒式）、一个作者自建的运行时。每份末尾的"跨文件的规则"是读出来的结论，待确认后再折进本文。
