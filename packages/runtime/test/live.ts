@@ -77,7 +77,6 @@ useModel({
   prefill: caps.prefill,
   reasoningBack: caps.reasoningBack,
   effort: "low", // narrate thinks, so the reply carries reasoning parts
-  maxOutputTokens: 1200, // Haiku writes long for the big cards; no prefill recovery on Anthropic
 })
 const thinkingSent = (t: Trace | undefined) => {
   const body = t?.body ? (JSON.parse(t.body) as { messages?: Array<{ content?: Array<{ type: string }> }> }) : undefined

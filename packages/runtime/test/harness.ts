@@ -318,7 +318,8 @@ export const run = (
           ...tail,
           ...(correction ? [sys(correction)] : []),
         ]
-        const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens ?? 700, effort: M.effort }
+        // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
+        const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
         const r = yield* ask("narrate", text(M, msgs, opts), msgs)
         if (r.finishReason !== "length" || !M.prefill) return r.parts
         const p2: PMsg[] = [...msgs, { role: "assistant", content: r.text }] // resume with the partial as prefix
