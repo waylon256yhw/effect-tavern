@@ -98,7 +98,7 @@ SillyTavern 及其生态（变量框架、世界书、导演类插件、各类 f
 
 尚未接上的：
 
-- **回合循环已在 Haiku 上跑通五轮**（`test/loop-live.ts`；`test/harness.ts` 是循环本体，`test/loop.ts` 是它的脚本化断言）：全部阶段通、强制 schema 通、分层 lore 的揭示按窗口发生、护栏未触发、读数合理；decide 的问法改过一次才收敛（第一拍读输入的措辞决定要不要多拍，`again`；多拍才进每拍一问的循环），记录在 `docs/provider-reading.md` 第八节。节点已存 parts（`reply`，正文加带签名的推理，`prose(t)` 派生）。推理往返按格式：Anthropic 把 thinking 块绑定到生成时的前缀，重新渲染的历史无法重放，`reasoningBack` 对它默认关，推理只存不发；兼容端点与 Gemini 默认发回，未实测。
+- **回合循环已在 Haiku 上跑通**（`test/live.ts <wuxia|banxing|ri>`；`test/harness.ts` 是循环本体，`test/loop.ts` 是它的脚本化断言，`test/cards/` 是两张真卡的手做编译：伴星纯聊天、青空 理的好感度分段加告白事件，两张都跑通，缓存在真卡上验证成立；记录在 `docs/provider-reading.md` 第十节）：全部阶段通、强制 schema 通、分层 lore 的揭示按窗口发生、护栏未触发、读数合理；decide 的问法改过一次才收敛（第一拍读输入的措辞决定要不要多拍，`again`；多拍才进每拍一问的循环），记录在 `docs/provider-reading.md` 第八节。节点已存 parts（`reply`，正文加带签名的推理，`prose(t)` 派生）。推理往返按格式：Anthropic 把 thinking 块绑定到生成时的前缀，重新渲染的历史无法重放，`reasoningBack` 对它默认关，推理只存不发；兼容端点与 Gemini 默认发回，未实测。
 - **持久化。** 日志树只在内存里。
 - **流式输出。** provider 层有，回合循环没接。
 - **编译。** 自然语言到卡数据的那一步没有做，现在卡是手写的数据。

@@ -27,12 +27,17 @@ import {
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import { deliveredOn, makeJournal, textOf, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
-import { decodeRules, makeCard, type Answers, type Beat, type State } from "../src/card.ts"
+import { decodeRules, makeCard, Rules, type Answers, type Beat, type State } from "../src/card.ts"
 import { holds, type Cond } from "../src/cond.ts"
 
-// ───────── Card: all data (§22). Settlement rules, lore gates and windows are Cond / effects, not code. ─────────
-const rpg = makeCard(
-  decodeRules({
+// ───────── Card data (§22): settlement rules, lore gates and windows are Cond / effects, not code. ─────────
+export interface CardData {
+  rules: typeof Rules.Encoded
+  lore: ReadonlyArray<{ id: string; layers: readonly string[]; unlock: Cond; offer: Cond }>
+}
+/** The self-check card: a wuxia duel with layered lore, a readout and one rule. */
+export const wuxia: CardData = {
+  rules: {
     fields: [
       { path: "hp", type: "int", min: 0, max: 100, initial: 40 },
       { path: "foe", type: "int", min: 0, initial: 30 },
@@ -67,22 +72,35 @@ const rpg = makeCard(
       ],
     },
     cap: 4,
-  }),
-)
-export const initial = rpg.initial
-// Lore gates as data: `unlock` is a Cond over state (visible = layer 1), `offer` a Cond over state + this turn's events.
+  },
+  // Lore gates as data: `unlock` is a Cond over state (visible = layer 1), `offer` a Cond over state + this turn's events.
+  lore: [
+    {
+      id: "li",
+      layers: ["Li: A's lost friend; crane tattoo on the left shoulder.", "B is Li."],
+      unlock: { all: [] },
+      offer: { event: "strike:hit" },
+    },
+    { id: "heir", layers: ["Li was heir to the throne."], unlock: { any: [] }, offer: { all: [] } }, // hidden: never in play
+  ],
+}
 const gate = (unlock: Cond, offer: Cond) => ({
   unlock: (s: State) => (holds(unlock, s) ? 1 : 0),
   offer: (s: State, ev: readonly string[]) => holds(offer, s, ev),
 })
-export const L = makeLore<State, readonly string[]>([
-  {
-    id: "li",
-    layers: ["Li: A's lost friend; crane tattoo on the left shoulder.", "B is Li."],
-    ...gate({ all: [] }, { event: "strike:hit" }),
-  },
-  { id: "heir", layers: ["Li was heir to the throne."], ...gate({ any: [] }, { all: [] }) }, // hidden: never in play
-])
+// The card in play, set once per process with `useCard`. `L`, `initial` and `summaries` are live bindings.
+let rpg = makeCard(decodeRules({ fields: [], actions: [] }))
+export let initial: State = rpg.initial
+export let L = makeLore<State, readonly string[]>([])
+export let summaries = makeSummaries<Beat>(L.text)
+export const useCard = (d: CardData) => {
+  rpg = makeCard(decodeRules(d.rules))
+  initial = rpg.initial
+  L = makeLore<State, readonly string[]>(
+    d.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.unlock, e.offer) })),
+  )
+  summaries = makeSummaries<Beat>(L.text)
+}
 export interface Card {
   id: string
   frame: readonly Fragment[]
@@ -113,16 +131,29 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
 }
 const Notes = Schema.Struct({ notes: Schema.Array(Schema.String) })
 
-const { fold, settleReadouts } = rpg
-
 // ───────── Journal (src/journal) and derived facts ─────────
 export type Turn = TurnOf<Beat>
 export const journal = makeJournal<Beat>()
 export const { chain } = journal
+/** A greeting node: the card's opening as node 0, with no player input. */
+export const greet = (text: string) =>
+  journal.save({
+    parent: null,
+    input: { text: "" },
+    read: [],
+    beats: [],
+    answers: {},
+    end: "end",
+    brief: { must: [], may: [] },
+    reply: [{ type: "text", text }],
+    fired: [],
+    violated: [],
+    notes: [],
+  })
 // A turn's state: beats settle before the prose, readout answers after it. Both are code folds over recorded outputs.
 const settleTurn = (s: State, t: Turn) => {
-  const b = fold(s, t.beats)
-  const r = settleReadouts(b.s, t.answers)
+  const b = rpg.fold(s, t.beats)
+  const r = rpg.settleReadouts(b.s, t.answers)
   return { s: r.s, events: [...b.events, ...r.events] }
 }
 export const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, initial)
@@ -141,7 +172,6 @@ const head = (p: Player, c: Card, stage: "narrate" | "direct", state: State) => 
   const h = headOf(stage === "narrate" ? [...frame(p, c), ...c.character] : frame(p, c), { state }).map(toP)
   return h.length ? [...h.slice(0, -1), breakpoint(h.at(-1)!)] : h
 }
-export const summaries = makeSummaries<Beat>(L.text)
 const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when a real tokenizer is in the loop
 export const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
   if (stage === "direct") return ledger(path, (t) => eventsOf(path, t)).map(toP)
@@ -155,7 +185,7 @@ export const str = (p: readonly PMsg[]) => p.map(msgText).join("\n")
 
 // ───────── The loop ─────────
 // The connection: one Model for every stage here; a real harness binds stages to connections.
-export type LoopModel = Model & { prefill: boolean; reasoningBack?: boolean; effort?: Effort }
+export type LoopModel = Model & { prefill: boolean; reasoningBack?: boolean; effort?: Effort; maxOutputTokens?: number }
 let M: LoopModel
 export const useModel = (m: LoopModel) => {
   M = m
@@ -212,7 +242,7 @@ export const run = (
     let end: Turn["end"] = from === "narrate" ? base!.end : "end"
     if (card.actions && from !== "narrate") {
       for (;;) {
-        const { s, events } = fold(s0, beats)
+        const { s, events } = rpg.fold(s0, beats)
         if (rpg.over(s)) {
           end = "over"
           break
@@ -248,7 +278,7 @@ export const run = (
         }
       }
     }
-    const { s: s1, events } = fold(s0, beats)
+    const { s: s1, events } = rpg.fold(s0, beats)
     // gate: after settlement, on this turn's events; director only if the card has one and something is open
     const open: Disclosure[] = L.offers(s1, deliveredOn(path, disclosures), events).map(({ id, layer }) => ({
       id,
@@ -288,7 +318,7 @@ export const run = (
           ...tail,
           ...(correction ? [sys(correction)] : []),
         ]
-        const opts = { name: "narrate", maxOutputTokens: 700, effort: M.effort }
+        const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens ?? 700, effort: M.effort }
         const r = yield* ask("narrate", text(M, msgs, opts), msgs)
         if (r.finishReason !== "length" || !M.prefill) return r.parts
         const p2: PMsg[] = [...msgs, { role: "assistant", content: r.text }] // resume with the partial as prefix
@@ -326,7 +356,9 @@ export const run = (
     // questions, never the numbers; the chosen options settle by code, so replay never asks again.
     const qs = card.readouts ? rpg.readoutSchema(s1) : undefined
     const recMsgs = [
-      sys(`Known: ${path.flatMap((t) => t.notes).join("; ")}`),
+      sys(
+        `Known: ${path.flatMap((t) => t.notes).join("; ")}\nNotes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.`,
+      ),
       ...(qs ? [sys(`Questions: ${rpg.questions(s1).join("\n")}`)] : []),
       usr(`${input.text}\n${textOf(reply)}`),
     ]
@@ -337,7 +369,7 @@ export const run = (
       notes = rec.notes
       answers = rec.answers as Answers
     } else notes = (yield* obj("record", Notes, recMsgs)).notes
-    settleReadouts(s1, answers) // validate now, not on the first replay
+    rpg.settleReadouts(s1, answers) // validate now, not on the first replay
     return journal.save({
       parent,
       input,

@@ -55,13 +55,11 @@ export const narratorHistory = <B>(
   const start = sum ? path.findIndex((t) => t.id === sum.to) + 1 : 0
   return [
     ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
-    ...path
-      .slice(start)
-      .flatMap((t): Msg[] => [
-        { role: "user", text: t.input.text },
-        ...deliveredIn(t).map((d): Msg => ({ role: "system", text: loreText(d) })),
-        { role: "assistant", text: prose(t), parts: t.reply },
-      ]),
+    ...path.slice(start).flatMap((t): Msg[] => [
+      ...(t.input.text ? [{ role: "user", text: t.input.text } as Msg] : []), // a greeting node has no input
+      ...deliveredIn(t).map((d): Msg => ({ role: "system", text: loreText(d) })),
+      { role: "assistant", text: prose(t), parts: t.reply },
+    ]),
   ]
 }
 

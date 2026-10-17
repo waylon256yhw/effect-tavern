@@ -22,7 +22,9 @@ import {
   stateAt,
   str,
   summaries,
+  useCard,
   useModel,
+  wuxia,
 } from "./harness.ts"
 
 // ───────── Scripted model ─────────
@@ -96,6 +98,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
   return { text: out, cut: reason === "length" }
 }
 
+useCard(wuxia)
 useModel({ ...fake((o) => script(o)), prefill: true })
 const since = (i: number) => calls.slice(i)
 const lastNarr = () => prompts.narrate.at(-1)!
