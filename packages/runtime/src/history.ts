@@ -3,7 +3,7 @@
 // fold of its notes plus the lore text delivered in it, cached by range (ids are unique, so a range names a prefix).
 import type { Disclosure } from "./lore.ts"
 import type { Msg } from "./fragment.ts"
-import { deliveredIn, type Turn } from "./journal.ts"
+import { deliveredIn, prose, type Turn } from "./journal.ts"
 
 export interface Summary {
   from: number
@@ -60,7 +60,7 @@ export const narratorHistory = <B>(
       .flatMap((t): Msg[] => [
         { role: "user", text: t.input.text },
         ...deliveredIn(t).map((d): Msg => ({ role: "system", text: loreText(d) })),
-        { role: "assistant", text: t.prose },
+        { role: "assistant", text: prose(t), parts: t.reply },
       ]),
   ]
 }

@@ -3,6 +3,7 @@
 // Skips without a key. Haiku, small outputs: a few cents per run.
 import { capabilities, compile, localAnthropic, type Trace } from "@effect-tavern/provider"
 import { Effect } from "effect"
+import { prose } from "../src/journal.ts"
 import { chain, chat, eventsOf, full, journal, log, msgText, player, run, stateAt, useModel } from "./harness.ts"
 
 const conn = localAnthropic()
@@ -11,11 +12,19 @@ if (!conn) {
   process.exit(0)
 }
 const traces: Trace[] = []
+const caps = capabilities(conn)
 useModel({
   format: conn.format,
-  model: compile(conn, { onTrace: (t) => traces.push(t) }),
-  prefill: capabilities(conn).prefill,
+  model: compile(conn, { onTrace: (t) => traces.push(t), traceBody: true }),
+  prefill: caps.prefill,
+  reasoningBack: caps.reasoningBack,
+  effort: "low", // narrate thinks, so later turns carry signed reasoning back
 })
+/** Thinking blocks in a request body as Anthropic sees them: the proof that past reasoning went back. */
+const thinkingSent = (t: Trace | undefined) => {
+  const body = t?.body ? (JSON.parse(t.body) as { messages?: Array<{ content?: Array<{ type: string }> }> }) : undefined
+  return body?.messages?.flatMap((m) => m.content ?? []).filter((c) => c.type === "thinking").length ?? 0
+}
 
 const show = (s: unknown) => (typeof s === "string" ? s : JSON.stringify(s))
 const clip = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s).replaceAll("\n", "⏎")
@@ -35,8 +44,13 @@ const program = Effect.gen(function* () {
     const ms = Math.round(performance.now() - t0)
     const path = chain(node.id)
     console.log(`\n━━ turn ${node.id} ← ${t.parent ?? "root"}  "${t.input.text}"  ${ms}ms`)
-    for (const e of log.slice(before)) {
+    for (const [k, e] of log.slice(before).entries()) {
       const u = e.usage
+      const sent = thinkingSent(traces[before + k])
+      if (e.phase === "narrate")
+        console.log(
+          `  narrate carried ${sent} thinking block(s) back; reply has ${node.reply.filter((p) => p.type === "reasoning").length} reasoning part(s)`,
+        )
       const last = e.msgs.at(-1)!
       console.log(
         `  ${e.phase.padEnd(7)} ${String(e.msgs.length).padStart(2)} msgs  in ${String(u.input).padStart(5)} (cache r${u.cacheRead} w${u.cacheWrite})  out ${String(u.output).padStart(4)}`,
@@ -49,7 +63,7 @@ const program = Effect.gen(function* () {
     )
     console.log(`        brief=${show(node.brief)} fired=${show(node.fired)} violated=${show(node.violated)}`)
     console.log(`        answers=${show(node.answers)} state=${show(stateAt(path))} notes=${show(node.notes)}`)
-    console.log(`  prose: ${clip(node.prose, 400)}`)
+    console.log(`  prose: ${clip(prose(node), 400)}`)
   }
   const total = log.reduce(
     (a, e) => ({

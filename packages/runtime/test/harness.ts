@@ -14,7 +14,7 @@
 // Compression (§17.3/§18.4): before each narrate, fold the leading turns in blocks; the summary is a cached code fold,
 // nodes are untouched, and lore dedupe keeps working because deliveries live on the nodes, not in the view.
 // Skipped: swipe kinds other than reword, continue, streaming, persistence, reasoning parts on the node.
-import { breakpoint, object, text, type Message, type Model, type Usage } from "@effect-tavern/provider"
+import { breakpoint, object, text, type Effort, type Message, type Model, type Usage } from "@effect-tavern/provider"
 import { Effect, Schema } from "effect"
 import {
   decodeFragments as frags,
@@ -25,7 +25,7 @@ import {
   type Player,
 } from "../src/fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
-import { deliveredOn, makeJournal, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
+import { deliveredOn, makeJournal, textOf, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
 import { decodeRules, makeCard, type Answers, type Beat, type State } from "../src/card.ts"
 import { holds, type Cond } from "../src/cond.ts"
@@ -131,7 +131,9 @@ export const eventsOf = (path: readonly Turn[], t: Turn) =>
 
 // ───────── Views (src/fragment + src/history), as provider messages ─────────
 export type PMsg = Message
-const toP = (m: Msg): PMsg => ({ role: m.role, content: m.text }) as PMsg
+/** Past assistant turns go back as parts (reasoning with its signature) when the connection takes them; else as text. */
+const toP = (m: Msg): PMsg =>
+  (m.parts && M.reasoningBack ? { role: m.role, content: m.parts } : { role: m.role, content: m.text }) as PMsg
 const sys = (content: string): PMsg => ({ role: "system", content })
 const usr = (content: string): PMsg => ({ role: "user", content })
 /** Head, with a cache breakpoint on its last message: player zone → frame → character is byte-stable across turns. */
@@ -153,8 +155,9 @@ export const str = (p: readonly PMsg[]) => p.map(msgText).join("\n")
 
 // ───────── The loop ─────────
 // The connection: one Model for every stage here; a real harness binds stages to connections.
-let M: Model & { prefill: boolean }
-export const useModel = (m: Model & { prefill: boolean }) => {
+export type LoopModel = Model & { prefill: boolean; reasoningBack?: boolean; effort?: Effort }
+let M: LoopModel
+export const useModel = (m: LoopModel) => {
   M = m
 }
 let seeds = 0
@@ -285,13 +288,14 @@ export const run = (
           ...tail,
           ...(correction ? [sys(correction)] : []),
         ]
-        const r = yield* ask("narrate", text(M, msgs, { name: "narrate", maxOutputTokens: 700 }), msgs)
-        if (r.finishReason !== "length" || !M.prefill) return r.text
+        const opts = { name: "narrate", maxOutputTokens: 700, effort: M.effort }
+        const r = yield* ask("narrate", text(M, msgs, opts), msgs)
+        if (r.finishReason !== "length" || !M.prefill) return r.parts
         const p2: PMsg[] = [...msgs, { role: "assistant", content: r.text }] // resume with the partial as prefix
-        const r2 = yield* ask("narrate", text(M, p2, { name: "narrate", maxOutputTokens: 700 }), p2)
-        return r.text + r2.text
+        const r2 = yield* ask("narrate", text(M, p2, opts), p2)
+        return [...r.parts, ...r2.parts]
       })
-    let prose = yield* narrate()
+    let reply = yield* narrate()
     let fired: Disclosure[] = []
     let violated: string[] = []
     const checked = card.rules.length > 0 || open.length > 0
@@ -307,13 +311,13 @@ export const run = (
             return { fired: r.fired ?? [], violated: r.violated ?? [] }
           }),
         )
-      let c = yield* check(prose)
+      let c = yield* check(textOf(reply))
       const missed = brief.must.filter((id) => !c.fired.includes(id))
       if (c.violated.length || missed.length) {
-        prose = yield* narrate(
+        reply = yield* narrate(
           `Previous draft broke: ${[...c.violated.map((r) => `rule "${r}"`), ...missed.map((m) => `missed MUST ${m}`)].join("; ")}`,
         )
-        c = yield* check(prose)
+        c = yield* check(textOf(reply))
       }
       fired = open.filter((d) => c.fired.includes(d.id))
       violated = [...c.violated]
@@ -324,7 +328,7 @@ export const run = (
     const recMsgs = [
       sys(`Known: ${path.flatMap((t) => t.notes).join("; ")}`),
       ...(qs ? [sys(`Questions: ${rpg.questions(s1).join("\n")}`)] : []),
-      usr(`${input.text}\n${prose}`),
+      usr(`${input.text}\n${textOf(reply)}`),
     ]
     let answers: Answers = {}
     let notes: readonly string[]
@@ -342,7 +346,7 @@ export const run = (
       answers,
       end,
       brief,
-      prose,
+      reply,
       fired,
       violated,
       notes,

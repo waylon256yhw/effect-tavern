@@ -22,7 +22,7 @@ const turn = (text: string, prose: string, notes: string[]): T => ({
   answers: {},
   end: "end",
   brief: { must: [], may: [] },
-  prose,
+  reply: [{ type: "text", text: prose }],
   fired: [],
   violated: [],
   notes,

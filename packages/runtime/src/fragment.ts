@@ -15,9 +15,15 @@ export type Fragment = typeof Fragment.Type
 export type Mode = NonNullable<Fragment["mode"]>
 export const decodeFragments = Schema.decodeUnknownSync(Schema.Array(Fragment))
 
+/** What the model wrote, as parts: the prose, and reasoning carrying whatever the provider needs to take it back. */
+export type Part =
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string; providerOptions?: Record<string, Record<string, unknown>> }
 export interface Msg {
   role: "system" | "user" | "assistant"
   text: string
+  /** A past assistant turn as parts; whether they go back to the model (reasoning included) is the connection's call. */
+  parts?: readonly Part[]
 }
 
 export interface Player {

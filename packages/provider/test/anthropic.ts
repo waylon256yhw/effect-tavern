@@ -56,7 +56,7 @@ const program = Effect.gen(function* () {
   // 1. model listing goes through the format's auth headers, not the SDK
   const models = yield* Effect.promise(() => listModels(conn))
   assert.ok(models.includes(conn.model), `listed: ${models.join(",")}`)
-  assert.deepEqual(capabilities(conn), { prefill: false, structured: "schema", reasoningBack: true })
+  assert.deepEqual(capabilities(conn), { prefill: false, structured: "schema", reasoningBack: false })
 
   // 2. structured stage: a forced shape, decoded through Effect Schema
   const Decide = Schema.Struct({ next: Schema.Literals(["strike", "end"]), p: Schema.Number })
@@ -90,12 +90,11 @@ const program = Effect.gen(function* () {
   // 5. reasoning round trip: turn 1 thinks, turn 2 sends the signed thinking back and is accepted
   const q1 = user("Is 1234567 prime? Think it through, then answer yes or no.")
   const r1 = yield* text(m, [q1], { effort: "low", maxOutputTokens: 2000 })
-  const parts = Array.isArray(r1.message.content) ? r1.message.content : []
   assert.ok(
-    parts.some((p) => p.type === "reasoning"),
-    `turn 1 parts: ${parts.map((p) => p.type).join(",")}`,
+    r1.parts.some((p) => p.type === "reasoning"),
+    `turn 1 parts: ${r1.parts.map((p) => p.type).join(",")}`,
   )
-  const r2 = yield* text(m, [q1, r1.message, user("And 1234569? Think it through.")], {
+  const r2 = yield* text(m, [q1, { role: "assistant", content: r1.parts }, user("And 1234569? Think it through.")], {
     effort: "low",
     maxOutputTokens: 2000,
   })

@@ -3,7 +3,7 @@
 import { fake, fakeText } from "@effect-tavern/provider"
 import { Effect } from "effect"
 import assert from "node:assert/strict"
-import { deliveredOn } from "../src/journal.ts"
+import { deliveredOn, prose } from "../src/journal.ts"
 import {
   L,
   calls,
@@ -152,7 +152,7 @@ const program = Effect.gen(function* () {
   warmths.push("warm")
   const t3 = yield* run(full, player, t2.id, { text: "speak" })
   const v3 = str(lastNarr())
-  assert.ok(v3.includes("B is Li") && v3.includes(L.entries[0].layers[0]) && v3.includes(t2.prose))
+  assert.ok(v3.includes("B is Li") && v3.includes(L.entries[0].layers[0]) && v3.includes(prose(t2)))
   assert.ok(!v3.includes("ASIDE#2") && !v3.includes(t2.brief.tone!))
   assert.ok(v3.includes("arm's length")) // bond was 4 when this head was built; the answer lands after the prose
   assert.equal(stateAt(chain(t3.id)).bond, 8)
@@ -170,7 +170,7 @@ const program = Effect.gen(function* () {
   narrations.push("cut")
   const t4 = yield* run(chat, player, c0.id, { text: "more" })
   assert.deepEqual(since(i), ["narrate", "narrate", "record"])
-  assert.ok(t4.prose.endsWith("partial …and the rest."))
+  assert.ok(prose(t4).endsWith("partial …and the rest."))
   const resumed = prompts.narrate.at(-1)!.at(-1)!
   assert.equal(resumed.role, "assistant")
   assert.equal(journal.size, 5)
@@ -197,10 +197,10 @@ const program = Effect.gen(function* () {
   const v6 = str(lastNarr())
   assert.ok(
     v6.includes("Summary:") &&
-      !v6.includes(t1.prose) &&
-      !v6.includes(t2.prose) &&
-      v6.includes(t3.prose) &&
-      v6.includes(t5.prose),
+      !v6.includes(prose(t1)) &&
+      !v6.includes(prose(t2)) &&
+      v6.includes(prose(t3)) &&
+      v6.includes(prose(t5)),
   )
   assert.ok(v6.includes("B is Li") && v6.includes(L.entries[0].layers[0])) // lore delivered inside the folded range survives in the fold
   const s6 = summaries.summaryFor(chain(t6.id))!
@@ -214,13 +214,13 @@ const program = Effect.gen(function* () {
   const t8 = yield* run(full, player, t7.id, { text: "wait more" })
   const s8 = summaries.summaryFor(chain(t8.id))!
   assert.deepEqual([s8.from, s8.to, summaries.size], [t1.id, t5.id, 2])
-  assert.ok(!str(lastNarr()).includes(t3.prose) && str(lastNarr()).includes(t6.prose))
+  assert.ok(!str(lastNarr()).includes(prose(t3)) && str(lastNarr()).includes(prose(t6)))
   // The view is a function of (path, policy), not of what other branches have cached: re-rendering the shorter path
   // at t6 still folds only the first block, even though a longer summary now sits in the table.
   const again = history(chain(t6.id), "narrate")
     .map((m) => m.content as string)
     .join("\n")
-  assert.ok(again.includes(t3.prose) && again.includes(s6.text) && !again.includes(s8.text))
+  assert.ok(again.includes(prose(t3)) && again.includes(s6.text) && !again.includes(s8.text))
 
   // reword: narrate, check, record only; read/beats/brief kept; sibling under the same parent. Replay calls nothing.
   i = calls.length

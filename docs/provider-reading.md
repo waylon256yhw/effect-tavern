@@ -134,3 +134,15 @@ Deckled 走的是 Vercel ai-sdk 加 Mastra，Effect 只管服务组合、取消�
 - 叙述、record 的 notes、读数（攻击后 warmth 选 cold）、direct 的基调、check 对"B 不死"的遵守，都合理。分层 lore 按设计走：第一轮只拿到第一层，第二轮击中开窗，导演给 must，叙述者揭示"你要找的李就是我"，check 确认 fired。
 - **decide 不收敛，已改问法解决。** 第一次跑，四轮里每一轮都把同一拍重复到上限：问李 → talk×4，拔剑 → strike×4（hp 40→20），停手 → talk×4。模型把每次 decide 当成"玩家这句话是什么动作"来答，不把"So far"当已经发生的事，也不选 end。试了三种措辞的"还有下一拍吗"：要么仍然重复到上限，要么把"直到他倒下为止"也砍成一拍，同一个问题换措辞只是在两个方向之间摆。结论是信息不在那个位置：要不要多拍，写在输入的措辞里，第一拍就能读出来；结果之后要不要停，才是每拍一问的事。改法：第一次 decide 多答一个 `again`（输入的措辞是否要求不止一拍），没有就一拍结束、不进循环；有才进 §10.2 的每拍循环，循环里的问题以继续为默认，看结果决定停。`decideSchema` 加了可选的 `again`，自检卡的脚本把"strike B"当两拍。改后两次跑都收敛：单拍输入一次 decide 就结束，"一剑接一剑地砍，直到他倒下为止"四拍到上限（结构化阶段同时固定 temperature 0，设计第 4 条本来就要求）。研究记录第十节选的 D 做法保住了。
 - **缓存全零**是预期的：这张测试卡的头区几十个 token，远低于 Anthropic 的最小可缓存前缀，断点打了也不写。要验缓存得用一张真卡。
+
+## 9. 节点存 parts，推理往返在 Anthropic 上撞到块绑定（2026-10-17）
+
+`Turn.prose: string` 改成 `Turn.reply: Part[]`（`text` 与带 `providerOptions` 的 `reasoning`），`prose(t)` 是派生读取；`narratorHistory` 渲染过去的 assistant 轮时带上 parts，是否真的发回去由连接的 `reasoningBack` 决定，在 harness 的 `toP` 一处翻译。provider 的 `text()` 返回 `parts`，不再返回整条 ai-sdk 消息。五个自检与 provider 实测都过。
+
+真连接上开 `reasoningBack` 跑，第二轮 400：
+
+> Invalid `signature` in `thinking` block. The block is bound to a different conversation. Remove the block, or set `thinking.block_binding.prefix_mismatch_behavior` to "drop_block" (beta `thinking-binding-controls-2026-08-01`). Content before this block differs from when it was created, first at `messages.0.content.1`.
+
+这是 Deckled ADR-0014 遇到的同一件事，但在本项目里它是设计层面的冲突，不是实现细节：Anthropic 把 thinking 块绑定到它生成时之前的全部内容；我们的历史是按阶段重新渲染的视图，本轮的指令尾巴（送入、结果、MUST / MAY、基调、aside、纠正）按 §13.2 不沉淀，下一轮渲染出的前缀必然和生成时不同。Deckled 的办法是冻结第一次请求的前缀字节级重放，这里做不到，也不该做：压缩会移动前缀，头区会随读数的 `when` 片段切换。`drop_block` 也不解决问题，前缀总是不同，块总是被丢。所以 `anthropic` 的 `reasoningBack` 默认 false：节点照存推理（检查器可见、重放可查），不发回。`openai-compatible`（`reasoning_content`，无绑定）与 `gemini`（`thoughtSignature` 只绑函数调用）默认仍开，未在真连接上验。
+
+改后五轮全过，每轮的 reply 里有一个 reasoning part（最后一轮模型没想），请求里 thinking 块为零。这一条要折进 README 的立场：推理往返是按格式的能力，不是 harness 的承诺。

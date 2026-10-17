@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import assert from "node:assert/strict"
 import type { Msg } from "../src/fragment.ts"
 import { ledger, makeSummaries, narratorHistory } from "../src/history.ts"
-import { deliveredOn, makeJournal, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
+import { deliveredOn, makeJournal, prose, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
 
 // ───────── Card: three authored layers (§16.4 + frame), strings only here ─────────
@@ -105,8 +105,8 @@ const run = (
         may: fired.map((d) => d.id),
         tone: yield* ask("direct", render(card, path, "direct", cur)),
       }
-    const prose = yield* ask("narrate", render(card, path, "narrate", cur))
-    cur.prose = prose
+    const written = yield* ask("narrate", render(card, path, "narrate", cur))
+    cur.prose = written
     const violated =
       card.rules.length || card.director
         ? (yield* ask("check", render(card, path, "check", cur))).split(",").filter(Boolean)
@@ -120,7 +120,7 @@ const run = (
       answers: {},
       end: "end",
       brief: cur.brief,
-      prose,
+      reply: [{ type: "text", text: written }],
       fired,
       violated,
       notes,
@@ -163,7 +163,7 @@ const program = Effect.gen(function* () {
     calls.map((c) => c.phase),
     ["narrate", "record"],
   )
-  assert.deepEqual([c0.prose, c0.notes], ["PROSE#0", ["NOTE#0"]])
+  assert.deepEqual([prose(c0), c0.notes], ["PROSE#0", ["NOTE#0"]])
 
   // Directed card over five turns; turn 1 delivers lore layer 1, turn 2 reveals layer 2, turn 3 carries an aside.
   calls.length = 0
@@ -186,7 +186,7 @@ const program = Effect.gen(function* () {
 
   // Narrator: past input + prose + delivered lore; never past brief/tone, notes, aside. Current tone and aside in tail.
   let v = last("narrate")
-  for (const t of turns.slice(0, 4)) assert.ok(has(v, t.input.text) && has(v, t.prose))
+  for (const t of turns.slice(0, 4)) assert.ok(has(v, t.input.text) && has(v, prose(t)))
   assert.ok(has(v, lore.li[0]) && has(v, lore.li[1]))
   for (const t of turns.slice(0, 4)) assert.ok(!has(v, t.brief.tone!) && !has(v, t.notes[0]))
   assert.ok(!has(v, "ASIDE#3"))
@@ -224,8 +224,8 @@ const program = Effect.gen(function* () {
   const cur: Current = { input: { text: "next" }, beats: [], read: [], brief: { must: [], may: [] } }
   v = render(directed, path, "narrate", cur)
   assert.ok(has(v, sum.text) && has(v, "NOTE#1") && has(v, lore.li[0]) && has(v, lore.li[1]))
-  for (const t of turns.slice(0, 3)) assert.ok(!has(v, t.prose))
-  assert.ok(has(v, turns[3].prose) && has(v, turns[4].prose))
+  for (const t of turns.slice(0, 3)) assert.ok(!has(v, prose(t)))
+  assert.ok(has(v, prose(turns[3])) && has(v, prose(turns[4])))
   assert.deepEqual(
     deliveredOn(path).map((d) => `${d.id}#${d.layer}`),
     ["li#1", "li#2"],

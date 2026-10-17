@@ -5,6 +5,7 @@ import {
   generateText,
   streamText,
   type LanguageModel,
+  type AssistantModelMessage,
   type LanguageModelUsage,
   type ModelMessage,
   type TextStreamPart,
@@ -122,12 +123,23 @@ export const text = (m: Model, messages: readonly Message[], o: CallOptions = {}
     Effect.map((r) => ({
       text: r.text,
       reasoning: r.reasoningText,
-      /** The assistant message as the provider wants it back: text plus reasoning parts with their signatures. */
-      message: r.response.messages[0]!,
+      /** The reply as parts the provider will take back: text, and reasoning with its signature in providerOptions. */
+      parts: replyParts(r.response.messages.find((m) => m.role === "assistant")),
       usage: usage(r.usage),
       finishReason: r.finishReason,
     })),
   )
+
+export type ReplyPart = Extract<
+  Exclude<AssistantModelMessage["content"], string>[number],
+  { type: "text" | "reasoning" }
+>
+const replyParts = (m: AssistantModelMessage | undefined): ReplyPart[] =>
+  m === undefined
+    ? []
+    : typeof m.content === "string"
+      ? [{ type: "text", text: m.content }]
+      : m.content.filter((p): p is ReplyPart => p.type === "text" || p.type === "reasoning")
 
 /** Parts as ai-sdk emits them; the finish part carries usage. Interrupting the stream aborts the request.
  *  Cancelling ai-sdk's iterator early leaves a promise rejecting with `undefined` (ai 7.0.62, verified live), which
