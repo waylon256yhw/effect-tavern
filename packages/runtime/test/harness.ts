@@ -178,7 +178,7 @@ const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder
   schema: S,
   msgs: PMsg[],
 ) =>
-  ask(phase, object(M, schema, msgs, { name: phase, effort: "off", maxOutputTokens: 1024 }), msgs).pipe(
+  ask(phase, object(M, schema, msgs, { name: phase, effort: "off", temperature: 0, maxOutputTokens: 1024 }), msgs).pipe(
     Effect.map((r) => r.value),
   )
 
@@ -218,11 +218,18 @@ export const run = (
           end = "cap"
           break
         }
+        // Two different questions. The first reads the input: which action, and does its wording ask for more
+        // (`again`). Only an input that asked for more enters the per-beat loop, where each later question sees the
+        // outcomes so far (§10.2) and continues by default. Verified on Haiku: one question for both roles answers
+        // the input again every time, whichever way it is worded.
+        const question = beats.length
+          ? `The input asked to keep going. Acted on so far: ${beats.map((b, i) => `${b.next} → ${events[i] ?? "-"}`).join(", ")}. Given these outcomes, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`
+          : `Which card action does the player's input take first? "end" if it takes none of the listed actions. Set "again" to true only if the input's own words ask for more than one beat ("until he falls", "twice", "then …").`
         const d = yield* obj("decide", rpg.decideSchema(s), [
           ...head(player, card, "direct", s),
           ...history(path, "direct"),
           sys(
-            `Pick the next beat the player's input sets off; answer "end" when nothing more happens this turn. One beat per action the input actually takes.\nState: ${JSON.stringify(s)}\nActions: ${rpg.menu(s).join(" | ")}\nSo far: ${events.join(",") || "-"}`,
+            `${question}\nState: ${JSON.stringify(s)}\nActions: ${rpg.menu(s).join(" | ")}\nSo far: ${events.join(",") || "-"}`,
           ),
           usr(input.text),
         ])
@@ -230,7 +237,12 @@ export const run = (
           end = "end"
           break
         }
+        const first = beats.length === 0
         beats.push({ next: d.next, chance: (d as { chance?: number }).chance, seed: ++seeds })
+        if (first && !d.again) {
+          end = "end"
+          break
+        }
       }
     }
     const { s: s1, events } = fold(s0, beats)

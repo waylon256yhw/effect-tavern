@@ -26,6 +26,7 @@ const program = Effect.gen(function* () {
     { card: full, parent: null as number | null, input: { text: "你认识一个叫李的人吗？" } },
     { card: full, parent: 1, input: { text: "我拔剑攻向B。", aside: "写得短一点。" } },
     { card: full, parent: 2, input: { text: "我停手，看着B的肩膀。" } },
+    { card: full, parent: 3, input: { text: "我一剑接一剑地砍，直到他倒下为止。" } }, // the §10 case: the input asks for more
   ]
   for (const t of turns) {
     const before = log.length

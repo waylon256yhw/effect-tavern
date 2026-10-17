@@ -118,14 +118,22 @@ export const makeCard = (r: Rules) => {
       },
       { s, events: [] },
     )
-  /** Decide schema for the current state: the enum is the gate; `chance` exists only when some available action is judged. */
+  /** Decide schema for the current state: the enum is the gate; `chance` exists only when some available action is judged.
+   *  `again` is read on the first beat only: whether the input's own wording asks for more beats after this one
+   *  ("until he falls", "twice"). Without it the turn is one beat and the per-beat loop is never entered; with it the
+   *  loop asks after each outcome (§10.2). A model asked "another?" after every beat answers the input again. */
   const decideSchema = (s: State) => {
     const acts = available(s)
     const judged = acts.some((a) => a.roll !== undefined && typeof a.roll === "object" && "judge" in a.roll)
     const next = Schema.Literals([...acts.map((a) => a.id), "end"])
+    const again = Schema.optionalKey(Schema.Boolean)
     return judged
-      ? Schema.Struct({ next, chance: Schema.optionalKey(Num.check(Schema.isBetween({ minimum: 0, maximum: 1 }))) })
-      : Schema.Struct({ next })
+      ? Schema.Struct({
+          next,
+          again,
+          chance: Schema.optionalKey(Num.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
+        })
+      : Schema.Struct({ next, again })
   }
   const menu = (s: State) =>
     available(s).map(

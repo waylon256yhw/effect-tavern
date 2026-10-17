@@ -53,7 +53,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
       break
     case "decide": {
       const k = (text.match(/So far: (.*)/)![1].match(/strike/g) ?? []).length
-      out = JSON.stringify({ next: /strike/.test(want) && k < 2 ? "strike" : "end" })
+      out = JSON.stringify({ next: /strike/.test(want) && k < 2 ? "strike" : "end", again: true }) // the script's "strike B" means twice
       break
     }
     case "direct":
