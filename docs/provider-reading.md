@@ -118,3 +118,19 @@ Deckled 走的是 Vercel ai-sdk 加 Mastra，Effect 只管服务组合、取消�
 - **ai 7.0.62 提前取消流的迭代器会留下一个以 `undefined` 拒绝的 promise**，Node 默认把它当崩溃。不取消迭代器：中断只 abort 信号，后台把流排干到 ai-sdk 随后发出的 `abort` part 为止。实测 abort 后约 1.2 秒排干，无悬空 promise。
 - **代理是连接上的显式字段，三态。** 起因：本机走系统代理，Node 26 的 fetch 默认不读环境变量里的代理，对 api.anthropic.com 直接 403 "Request not allowed"；Bun 默认读，所以 Deckled 从未遇到。查了一圈现代做法（Node 官方企业网络指南、OpenAI 与 Anthropic 的 TS SDK 文档、Bun / Deno 的 fetch、ai-sdk 的 issue）：运行时层各管各的默认（Bun、Deno 默认读环境，Node 要 `NODE_USE_ENV_PROXY=1` 或 `--use-env-proxy`，v22.21 / v24.5 起），SDK 层一律显式、从不自己读环境（`fetchOptions.dispatcher` / `proxy` / `client`），应用层的单个全局代理（LobeChat `PROXY_URL`、ST `requestProxy`）是老形状。所以 `Connection.proxy` 照 Bun 的三态：不写跟运行时走，`false` 强制直连，URL 显式走它。实现是 undici 的 `ProxyAgent`（或直连的 `Agent`）作 `dispatcher`，必须配 undici 自己的 `fetch`，不能塞给 Node 自带的那个，两份 undici 混用会静默失效；undici 钉 8.x，与 Node 26 自带的同大版本。两个实测教训：undici 的 fetch 不收 Node 全局的 `Request` 对象（"Failed to parse URL from [object Request]"），追踪包装只能透传 `(url, init)`；`listModels` 与生成走同一个 fetch。实测连接把 shell 的 `https_proxy` 显式写进 `proxy`，verify 脚本不再需要 `NODE_USE_ENV_PROXY`。
 - Haiku 5.5 列模型走 GET `/v1/models` 加 `x-api-key` 与 `anthropic-version` 即可，Deckled 的"Anthropic auth token 作 bearer"分支保留但未测（本地只有 api key）。
+
+## 8. 回合循环在真模型上跑了四轮（2026-10-17）
+
+`packages/runtime/test/loop.ts` 拆成了 `harness.ts`（循环本体加一张测试卡，模型由 `useModel` 注入）、`loop.ts`（脚本化模型加断言，不变）、`loop-live.ts`（本机的 Anthropic 连接，四轮，按检查器的样子打印每个阶段的请求、输出、用量）。Haiku 5.5，25 个请求全部 200，11k 输入 2.5k 输出。
+
+跑通之前修的三件事，都是 provider 层之外的：
+
+- **空枚举没有 JSON Schema 类型。** check 阶段在没有开窗时 `fired: Array(Literals([]))` 生成 `{not: {}}`，Anthropic 拒绝。规则：没有选项的问题不问，字段按条件出现在 schema 里。
+- **中途的 system 消息只能紧跟 user。** Anthropic 现在收消息列表里的 system（历史里跟在 user 后面的 lore 送入没问题），但本轮的指令尾巴（送入、结果、MUST / MAY、基调、aside）原来放在历史末尾的 assistant 之后，400。改成放在玩家输入之后，三种格式都能接受这个位置，而且指令离生成更近。
+- 结构化调用显式给 `maxOutputTokens`，否则 ai-sdk 对它不认识的模型名按 128k 发并逐次告警。
+
+跑出来的判断质量：
+
+- 叙述、record 的 notes、读数（攻击后 warmth 选 cold）、direct 的基调、check 对"B 不死"的遵守，都合理。分层 lore 按设计走：第一轮只拿到第一层，第二轮击中开窗，导演给 must，叙述者揭示"你要找的李就是我"，check 确认 fired。
+- **decide 不收敛。** 四轮里每一轮都把同一拍重复到上限：问李 → talk×4，拔剑 → strike×4（hp 40→20），停手 → talk×4。模型把每次 decide 当成"玩家这句话是什么动作"来答，不把"So far"当已经发生的事，也不选 end。加了一句说明没有用。这不是 provider 的事，是请求形状：每拍一问、代码循环的设计在便宜模型上需要不同的问法，候选有一次问出整段拍序列（丢掉"第 k 拍看见前 k 个结果"）、或者第二拍起改问"还有下一拍吗"的是非题。待定。
+- **缓存全零**是预期的：这张测试卡的头区几十个 token，远低于 Anthropic 的最小可缓存前缀，断点打了也不写。要验缓存得用一张真卡。
