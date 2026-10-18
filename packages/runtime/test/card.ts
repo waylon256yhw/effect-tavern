@@ -5,7 +5,7 @@ import { Greeting, decodeCard, decodeRules, makeCard, rollOf, type Beat } from "
 import { full } from "./cards/wuxia.ts"
 import { holds } from "../src/cond.ts"
 
-// ───────── harness.ts as data: fight (judged chance) / rest / talk, gold and hp with bounds ─────────
+// ───────── the session's self-check card as data: fight (judged chance) / rest / talk, gold and hp with bounds ─────────
 const tavern = makeCard(
   decodeRules({
     fields: [

@@ -6,6 +6,7 @@ import {
   streamText,
   type LanguageModel,
   type AssistantModelMessage,
+  type FinishReason,
   type LanguageModelUsage,
   type ModelMessage,
   type TextStreamPart,
@@ -159,31 +160,49 @@ const replyParts = (m: AssistantModelMessage | undefined): ReplyPart[] =>
       ? [{ type: "text", text: m.content }]
       : m.content.filter((p): p is ReplyPart => p.type === "text" || p.type === "reasoning")
 
-/** Parts as ai-sdk emits them; the finish part carries usage. Interrupting the stream aborts the request.
+export interface Reply {
+  text: string
+  parts: ReplyPart[]
+  usage: Usage
+  finishReason: FinishReason
+}
+/** One streaming request with two faces: `parts` as ai-sdk emits them (the finish part carries usage), and `reply`,
+ *  what `text` would have returned, resolved once `parts` is drained. Interrupting `parts` aborts the request.
  *  Cancelling ai-sdk's iterator early leaves a promise rejecting with `undefined` (ai 7.0.62, verified live), which
  *  would crash the process. So the iterator is never cancelled: interruption aborts the signal and the drain runs on
  *  to the `abort` part ai-sdk then emits, which is dropped. */
-export const stream = (m: Model, messages: readonly Message[], o: CallOptions = {}): Stream.Stream<Part, ModelError> =>
-  Stream.callback<Part, ModelError>((queue) =>
-    Effect.gen(function* () {
-      const ac = new AbortController()
-      yield* Effect.addFinalizer(() => Effect.sync(() => ac.abort()))
-      const r = streamText({
-        model: m.model,
-        messages: wire(m.format, messages),
-        abortSignal: ac.signal,
-        ...settings(m.format, o),
-      })
-      void (async () => {
-        try {
-          for await (const p of r.fullStream as AsyncIterable<Part>) {
-            if (p.type === "error") return void (await Effect.runPromise(Queue.fail(queue, fail(p.error))))
-            if (p.type !== "abort") await Effect.runPromise(Queue.offer(queue, p))
+export const streamed = (m: Model, messages: readonly Message[], o: CallOptions = {}) =>
+  Effect.sync(() => {
+    const ac = new AbortController()
+    const r = streamText({
+      model: m.model,
+      messages: wire(m.format, messages),
+      abortSignal: ac.signal,
+      ...settings(m.format, o),
+    })
+    const parts = Stream.callback<Part, ModelError>((queue) =>
+      Effect.gen(function* () {
+        yield* Effect.addFinalizer(() => Effect.sync(() => ac.abort()))
+        void (async () => {
+          try {
+            for await (const p of r.fullStream as AsyncIterable<Part>) {
+              if (p.type === "error") return void (await Effect.runPromise(Queue.fail(queue, fail(p.error))))
+              if (p.type !== "abort") await Effect.runPromise(Queue.offer(queue, p))
+            }
+            await Effect.runPromise(Queue.end(queue))
+          } catch (e) {
+            await Effect.runPromise(Queue.fail(queue, fail(e)))
           }
-          await Effect.runPromise(Queue.end(queue))
-        } catch (e) {
-          await Effect.runPromise(Queue.fail(queue, fail(e)))
-        }
-      })()
-    }),
-  )
+        })()
+      }),
+    )
+    const reply: Effect.Effect<Reply, ModelError> = Effect.tryPromise(async (): Promise<Reply> => ({
+      text: await r.text,
+      parts: replyParts((await r.responseMessages).find((m) => m.role === "assistant") as AssistantModelMessage),
+      usage: usage(await r.usage),
+      finishReason: await r.finishReason,
+    })).pipe(Effect.mapError(fail))
+    return { parts, reply }
+  })
+export const stream = (m: Model, messages: readonly Message[], o: CallOptions = {}): Stream.Stream<Part, ModelError> =>
+  Stream.unwrap(Effect.map(streamed(m, messages, o), (s) => s.parts))
