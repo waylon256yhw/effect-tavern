@@ -223,6 +223,25 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/server:
+    dependencies:
+      '@effect-tavern/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@effect-tavern/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.3
+        version: 26.6.4
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
 packages:
 
   '@ai-sdk/anthropic@4.0.36':

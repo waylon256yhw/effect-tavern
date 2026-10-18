@@ -8,26 +8,16 @@ import { Effect, Stream } from "effect"
 import type { Card } from "../src/card.ts"
 import { prose } from "../src/journal.ts"
 import { makeSession, type Event } from "../src/session.ts"
-import { full, player as wuxiaPlayer } from "./cards/wuxia.ts"
+import { loadCard, player } from "./cards/index.ts"
 
 const which = process.argv[2] ?? "wuxia"
-// The player layer: language, and the point-of-view slot every player sets once. Without the second, Haiku wrote the
-// player's answer to the confession for them (docs/provider-reading.md §10). A card with no player in the fiction
-// (yandao) fills the same slot itself; the player's global `pov` yields to it (fragment.ts defaults).
-const player = {
-  global: [
-    ...wuxiaPlayer.global,
-    { id: "pov", text: "用第二人称写玩家。玩家只做输入里做的事、只说输入里说的话；不替玩家说话，不替玩家做决定。" },
-  ],
-  forCard: {},
-}
-
 type Script = { card: Card; turns: Array<{ parent: number | null; input: { text: string; aside?: string } }> }
 const script = async (): Promise<Script> => {
+  const card = await loadCard(which)
   switch (which) {
     case "wuxia":
       return {
-        card: full,
+        card,
         turns: [
           { parent: null, input: { text: "你好，我是个路过的旅人。" } },
           { parent: null, input: { text: "你认识一个叫李的人吗？" } },
@@ -36,11 +26,8 @@ const script = async (): Promise<Script> => {
           { parent: 3, input: { text: "我一剑接一剑地砍，直到他倒下为止。" } }, // the §10 case
         ],
       }
-    case "banxing":
-    case "ri":
-    case "yandao": {
-      const m = await import(`./cards/${which}.ts`)
-      const card = m.load()
+    default: {
+      const m = (await import(`./cards/${which}.ts`)) as { turns: string[] }
       // Linear: each turn follows the previous node; node 0 is the greeting when the card has one. The card's default
       // channel decides which box the typed text lands in: the client reads `input`, the session takes both.
       const first = card.greetings.length ? 1 : 0
@@ -52,8 +39,6 @@ const script = async (): Promise<Script> => {
         })),
       }
     }
-    default:
-      throw new Error(`unknown card ${which}`)
   }
 }
 

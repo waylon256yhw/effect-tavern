@@ -99,6 +99,7 @@ export const makeCard = (r: Rules) => {
     let out = { ...s }
     const events: string[] = []
     for (const e of effects) {
+      if ("path" in e && !fields.has(e.path)) throw new Error(`${e.path}: not a field`) // state is a closed vocabulary
       if ("set" in e) out[e.path] = e.set
       else if ("add" in e) {
         const f = fields.get(e.path)

@@ -39,7 +39,7 @@ import {
   type Usage,
 } from "@effect-tavern/provider"
 import { Effect, Queue, Schema, Stream } from "effect"
-import { makeCard, type Answers, type Beat, type Card, type Effect_, type Greeting, type State } from "./card.ts"
+import { Effect_, makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
 import { decodeFragments as frags, frame, head as headOf, type Msg, type Player } from "./fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
@@ -605,3 +605,44 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
   }
 }
 export type Session = ReturnType<typeof makeSession>
+
+// ───────── The action vocabulary as data: what a client sends, decoded at the trust boundary ─────────
+const Id = Schema.Int
+export const Action = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("act"),
+    parent: Schema.NullOr(Id),
+    input: Schema.Struct({ text: Schema.String, aside: Schema.optionalKey(Schema.String) }),
+  }),
+  Schema.Struct({ kind: Schema.Literal("swipe"), node: Id }),
+  Schema.Struct({ kind: Schema.Literal("reword"), node: Id }),
+  Schema.Struct({ kind: Schema.Literal("edit"), node: Id, text: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("setField"), node: Id, effects: Schema.Array(Effect_) }),
+  Schema.Struct({ kind: Schema.Literal("pin"), node: Id, id: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("pick"), node: Id, option: Id }),
+  Schema.Struct({ kind: Schema.Literal("demand"), node: Id, product: Schema.String }),
+])
+export type Action = typeof Action.Type
+export const decodeAction = Schema.decodeUnknownSync(Action)
+/** One action, one stream, whatever its kind: the synchronous ones become a single `node` event. */
+export const perform = (s: Session, a: Action): Events =>
+  Stream.suspend(() => {
+    switch (a.kind) {
+      case "act":
+        return s.act(a.parent, a.input)
+      case "swipe":
+        return s.swipe(a.node)
+      case "reword":
+        return s.reword(a.node)
+      case "edit":
+        return s.edit(a.node, a.text)
+      case "setField":
+        return Stream.succeed<Event>({ kind: "node", node: s.setField(a.node, a.effects) })
+      case "pin":
+        return Stream.succeed<Event>({ kind: "node", node: s.pin(a.node, a.id) })
+      case "pick":
+        return s.pick(a.node, a.option)
+      case "demand":
+        return s.demand(a.node, a.product)
+    }
+  })

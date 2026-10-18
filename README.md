@@ -108,7 +108,7 @@ SillyTavern 及其生态（变量框架、世界书、导演类插件、各类 f
 - **回合循环已在 Haiku 上跑通**（`test/live.ts <wuxia|banxing|ri|yandao>`；`src/session.ts` 是循环本体，`test/loop.ts` 是它的脚本化断言，`test/cards/` 是四张卡：wuxia 自检卡、伴星纯聊天、青空 理的好感度分段加告白事件（后两张是真卡的手做编译）、盐道大世界模板（没有 persona，输入默认走 aside，卡自带 pov 槽让玩家层的让位），四张都跑通，缓存在真卡上验证成立；记录在 `docs/provider-reading.md` 第十节）：全部阶段通、强制 schema 通、分层 lore 的揭示按窗口发生、护栏未触发、读数合理；decide 的问法改过一次才收敛（第一拍读输入的措辞决定要不要多拍，`again`；多拍才进每拍一问的循环），记录在 `docs/provider-reading.md` 第八节。节点已存 parts（`reply`，正文加带签名的推理，`prose(t)` 派生）。推理往返按格式：Anthropic 把 thinking 块绑定到生成时的前缀，重新渲染的历史无法重放，`reasoningBack` 对它默认关，推理只存不发；兼容端点与 Gemini 默认发回，未实测。
 - **持久化。** 日志树只在内存里。
 - **流式输出。** 已接：narrate 走 provider 的流式调用，增量作为 `delta` 事件逐 part 发出，结构化阶段与产物整份随 `call` 事件到达（wuxia 五轮 live 验过）。逐 token 的 partial object 是 ceiling。
-- **服务端与客户端。** session 的接口就是协议，线上适配器（每个动作一个请求、事件流用 SSE 送回）与客户端尚未写。
+- **服务端已有，客户端没有。** `packages/server` 是 session 接缝上的线上适配器，不含逻辑：`POST /` 收一个 `Action`（`src/session.ts` 里的数据词表，在这条边界上解码），回这个动作的事件流（SSE，每种事件一个 `event:`，失败是 `error` 事件，响应被关掉就中断动作、中止模型请求）；`GET /nodes` 给全部节点投影。`inspect` 开着 `call` 事件带请求消息（含卡的 fragment 正文），关着只剩阶段、答案、用量。一进程一局，`node src/main.ts <卡> [端口] [开场]` 在本机 Anthropic 连接上起一局；`test/serve.ts` 在真 socket 上用脚本模型断言。wuxia 在 Haiku 上经 HTTP 走过一轮。客户端（检查器）下一步。
 - **编译。** 自然语言到卡数据的那一步没有做，现在卡是手写的数据。
 - **前端协议与编辑器。**
 - 截断恢复依赖 provider 接受末尾的 assistant 前缀。已验证：当前的 Claude 全系拒绝 prefill（400），连接能力 `prefill` 对 anthropic 默认 false；截断恢复在这类连接上要走别的路，尚未定。
@@ -132,7 +132,7 @@ SillyTavern 及其生态（变量框架、世界书、导演类插件、各类 f
 6. 用 token 预算替代回合数作为压缩旋钮。
 7. 开放阶段。到时要定：工具参数的闸门放在 schema（枚举，最强，但每次解锁改变工具定义）还是处理函数（定义整局稳定，新解锁追加告知）；工具定义变化对缓存的处理；节点上通用的调用记录。创作者声明的"工具"（如 NPC 在手机 app 里给玩家发消息）不是模型可自由调用的工具，是卡声明的、带参数 schema 的效果类型：后果限于封闭的效果词表（set、add、event、视图事件），harness 决定在哪个阶段以什么形式问模型。作者扩展的是词表里的条目，不是词表本身。
 
-计划中的包：`runtime`（现有）、服务端（持久化、provider、流式）、前端协议与客户端。
+包：`runtime`、`provider`、`server`（现有），客户端待写；持久化进 `server`。
 
 **demo 的前端要求是什么性质的问题。** 前端与后端同等重要：它要承载后端的表达力，它的实际形态也会塑造我们对后端需要什么服务的认知。但这个要求首先是协议问题，不是样式、技术栈或性能问题。
 
@@ -149,6 +149,7 @@ pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt
 ```
 packages/runtime/   运行时模块与自检
 packages/provider/  provider 层：连接、ai-sdk 编译、三个调用；URL 断言与 Anthropic 实测
+packages/server/    session 接缝上的线上适配器：POST 动作 → SSE 事件流，GET 节点；入口起一局
 docs/               设计记录
 vite.config.ts      格式与 lint 配置（根配置覆盖全部包）
 CLAUDE.md           Vite+ 生成的 agent 说明
