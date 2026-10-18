@@ -117,7 +117,7 @@ export const asks = frags([
   { id: "narrate.correction", text: "Previous draft broke:" },
   {
     id: "input.thought",
-    text: "Text between ⦅ and ⦆ in the player's input is what their character thinks and does not say: no one in the story hears it.",
+    text: "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it.",
   },
 ])
 // The default quick inputs: what the ecosystem's quick-reply lists and input helpers hold, as data (Player `snippets`
@@ -222,6 +222,10 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
   const wording = (id: string) =>
     [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
   const products = resolve(defaults, card.products, player.products)
+  /** A thought in the input is a perception scope inside the fiction (nobody there perceives it), not a channel: it stays
+   *  in history, and every stage that reads the input hears what it is, so decide takes no action from it and narrate
+   *  lets no one react to it. */
+  const thoughtOf = (i: Input) => (/⦅/.test(i.text) ? [sys(wording("input.thought"))] : [])
   const question = (pr: Product) =>
     [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
@@ -429,6 +433,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
             sys(
               `${q}\nState: ${JSON.stringify(s)}\nActions: ${rpg.menu(s).join(" | ")}\nSo far: ${events.join(",") || "-"}`,
             ),
+            ...thoughtOf(input),
             said(input),
           ])
           if (d.next === "end") {
@@ -490,7 +495,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
         ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${textOf(d)}`)),
         ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
         ...asideOf(input),
-        ...(/⦅/.test(input.text) ? [sys(wording("input.thought"))] : []),
+        ...thoughtOf(input),
       ]
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }

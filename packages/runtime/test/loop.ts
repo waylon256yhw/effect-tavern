@@ -384,6 +384,11 @@ const program = Effect.gen(function* () {
   assert.equal(made().at(-2)!.out, prose(t12)) // the narrate call reports what was kept
   const t13 = yield* go(S.act(t12.id, { text: "", aside: "继续。" }))
   assert.ok(str(lastNarr()).includes(prose(t12)) && t13.end === "end")
+  // A thought in the input: decide and narrate both hear what ⦅ ⦆ is; a turn without one carries no such line.
+  const thought = /not said, not done/
+  assert.ok(!thought.test(str(prompts("decide").at(-1)!)) && !thought.test(str(lastNarr())))
+  yield* go(S.act(t13.id, { text: "⦅wait⦆" }))
+  assert.ok(thought.test(str(prompts("decide").at(-1)!)) && thought.test(str(lastNarr())))
 
   // pick: an option recorded on c0 becomes the player's next act, a child of c0 with that text as the input.
   const t11 = yield* go(C.pick(c0.id, 1))
