@@ -25,7 +25,7 @@ const turn = (text: string, prose: string, notes: string[]): T => ({
   reply: [{ type: "text", text: prose }],
   fired: [],
   violated: [],
-  notes,
+  products: { notes },
 })
 
 const assemble = (

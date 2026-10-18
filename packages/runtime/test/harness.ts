@@ -18,10 +18,30 @@ import { breakpoint, object, text, type Effort, type Message, type Model, type U
 import { Effect, Schema } from "effect"
 import { decodeFragments as frags, frame, head as headOf, type Msg, type Player } from "../src/fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
-import { deliveredOn, makeJournal, textOf, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
-import { makeLore, type Disclosure } from "../src/lore.ts"
+import {
+  deliveredOn,
+  makeJournal,
+  notesOf,
+  textOf as proseOf,
+  type Brief,
+  type Input,
+  type Turn as TurnOf,
+} from "../src/journal.ts"
+import { key, makeLore, type Disclosure } from "../src/lore.ts"
 import { makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "../src/card.ts"
 import { holds, type Cond } from "../src/cond.ts"
+import {
+  cap,
+  decodeProducts,
+  entryRef,
+  fold,
+  itemText,
+  recallEntries,
+  render,
+  resolve,
+  shapeSchema,
+  type Product,
+} from "../src/product.ts"
 
 // ───────── The card in play, set once per process with `useCard`. `L`, `initial` and `summaries` are live bindings. ─────────
 const gate = (unlock: Cond, offer: Cond) => ({
@@ -31,14 +51,20 @@ const gate = (unlock: Cond, offer: Cond) => ({
 let rpg = makeCard({ fields: [], actions: [] })
 export let initial: State = rpg.initial
 export let L = makeLore<State, readonly string[]>([])
-export let summaries = makeSummaries<Beat>(L.text)
+export let summaries = makeSummaries<Beat>(textOf)
 export const useCard = (c: Card) => {
   rpg = makeCard(c.rules)
   initial = rpg.initial
   L = makeLore<State, readonly string[]>(
     c.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.unlock, e.offer) })),
   )
-  summaries = makeSummaries<Beat>(L.text)
+  summaries = makeSummaries<Beat>(textOf)
+}
+/** What a disclosure says: a lore layer, or one item of a recall product stored on a node (`<product>@<node>#<i>`). */
+export function textOf(d: Disclosure): string {
+  const ref = entryRef(d.id)
+  if (!ref) return L.text(d)
+  return itemText((journal.get(ref.node).products[ref.product] as unknown[])[ref.index])
 }
 
 // ───────── The harness's own words ─────────
@@ -56,13 +82,50 @@ export const asks = frags([
     text: `The input asked to keep going. Given the outcomes so far, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`,
   },
   { id: "narrate.correction", text: "Previous draft broke:" },
-  {
-    id: "record.notes",
-    text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.",
-  },
 ])
 const wording = (p: Player, c: Card, id: string) =>
   [...(p.asks ?? []), ...(c.asks ?? []), ...asks].find((f) => f.id === id)!.text!
+// The harness's default products (src/product.ts): what record asks for on every card unless the card patches or the
+// player toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
+// overridden like any ask by the fragment id `product.<id>`.
+export const defaults: readonly Product[] = decodeProducts([
+  {
+    id: "notes",
+    text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.",
+    shape: { kind: "list" },
+    feed: true,
+  },
+  {
+    id: "options",
+    text: "Four things the player could do next, each one line in the third person, distinct in kind.",
+    shape: { kind: "list", max: 4 },
+    on: false,
+  },
+  {
+    id: "inner",
+    text: "What the character thought this scene but did not say, one short paragraph.",
+    shape: { kind: "text" },
+    on: false,
+  },
+])
+export const productsOf = (p: Player, c: Card) => resolve(defaults, c.products, p.products)
+const question = (p: Player, c: Card, pr: Product) =>
+  [...(p.asks ?? []), ...(c.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
+/** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
+const known = (ps: readonly Product[], path: readonly Turn[]) => {
+  const feed = ps.filter((p) => p.feed && p.on)
+  const cur = fold(
+    feed,
+    path.map((t) => t.products),
+  )
+  const rest = feed.filter((p) => p.id !== "notes" && cur[p.id] !== undefined)
+  return {
+    known: `Known: ${path.flatMap(notesOf).join("; ")}`,
+    current: rest.length
+      ? `Current: ${rest.map((p) => `${p.id}=${render(p.shape, cur[p.id])}`).join(" | ")}`
+      : undefined,
+  }
+}
 
 const Lookup = (ids: readonly string[]) => Schema.Struct({ read: Schema.Array(Schema.Literals(ids)) })
 const BriefOf = (open: readonly string[]) =>
@@ -81,7 +144,6 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       ? Schema.Struct(fired)
       : Schema.Struct(violated)
 }
-const Notes = Schema.Struct({ notes: Schema.Array(Schema.String) })
 
 // ───────── Journal (src/journal) and derived facts ─────────
 export type Turn = TurnOf<Beat>
@@ -101,7 +163,7 @@ export const greet = (g: Greeting) =>
     reply: [{ type: "text", text: g.text }],
     fired: [],
     violated: [],
-    notes: [],
+    products: {},
   })
 // A turn's state: the opening (a greeting's effects), then beats before the prose, then readout answers after it. All
 // code folds over recorded outputs. `post` is what this turn emitted that no gate of its own could read: a greeting has
@@ -138,7 +200,7 @@ const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when
 export const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
   if (stage === "direct") return ledger(path, (t) => eventsOf(path, t)).map(toP)
   const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
-  const h = narratorHistory(path, L.text, sum).map(toP)
+  const h = narratorHistory(path, textOf, sum).map(toP)
   return sum ? [breakpoint(h[0]!), ...h.slice(1)] : h // the fold is byte-stable until the boundary moves
 }
 export const msgText = (m: PMsg) =>
@@ -172,8 +234,9 @@ const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder
   phase: string,
   schema: S,
   msgs: PMsg[],
+  maxOutputTokens = 1024,
 ) =>
-  ask(phase, object(M, schema, msgs, { name: phase, effort: "off", temperature: 0, maxOutputTokens: 1024 }), msgs).pipe(
+  ask(phase, object(M, schema, msgs, { name: phase, effort: "off", temperature: 0, maxOutputTokens }), msgs).pipe(
     Effect.map((r) => r.value),
   )
 
@@ -189,16 +252,30 @@ export const run = (
     const path = chain(parent)
     const s0 = stateAt(path)
     const seen = deliveredOn(path)
-    // lookup: a structured pick over the literal enum of readable ids; nothing to pick → no call
-    const idx = card.lore.length ? L.readable(s0, seen) : []
+    const products = productsOf(player, card)
+    // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the items
+    // of recall products stored on the path and not yet delivered (model-written memory walks the same road as lore).
+    // Nothing to pick → no call.
+    const seenKeys = new Set(seen.map(key))
+    const recall = products
+      .filter((p) => p.recall !== undefined)
+      .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
+      .filter((e) => !seenKeys.has(`${e.id}#1`))
+    const loreIds = card.lore.length ? L.readable(s0, seen) : []
+    const idx = [...loreIds, ...recall.map((e) => e.id)]
     const readIds =
       from === "narrate"
         ? base!.read.map((d) => d.id)
         : idx.length
-          ? (yield* obj("lookup", Lookup(idx), [sys(`Index: ${idx.join(", ")}`), said(input)])).read
+          ? (yield* obj("lookup", Lookup(idx), [
+              sys(`Index: ${[...loreIds, ...recall.map((e) => `${e.id}=${e.hook}`)].join(", ")}`),
+              said(input),
+            ])).read
           : []
     const disclosures =
-      from === "narrate" ? base!.read : [...new Set(readIds)].flatMap((id) => L.read(s0, seen, id) ?? [])
+      from === "narrate"
+        ? base!.read
+        : [...new Set(readIds)].flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (L.read(s0, seen, id) ?? [])))
     // decide → settle, looping; the k-th decide sees the first k events
     let beats: Beat[] = from === "narrate" ? [...base!.beats] : []
     let end: Turn["end"] = from === "narrate" ? base!.end : "end"
@@ -264,9 +341,12 @@ export const run = (
             ])
           : { must: [], may: openIds }
     // narrate, with truncation recovery and at most one correction rewrite
+    const fed = known(products, path)
     const tail = [
-      ...disclosures.map((d) => sys(L.text(d))),
+      ...disclosures.map((d) => sys(textOf(d))),
       ...(events.length ? [sys(`Outcome: ${events.join(", ")}`)] : []),
+      ...(fed.current ? [sys(fed.current)] : []), // feed products other than notes: where the scene stands, as data
+
       ...open.filter((d) => brief.must.includes(d.id)).map((d) => sys(`MUST reveal: ${L.text(d)}`)),
       ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${L.text(d)}`)),
       ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
@@ -307,32 +387,32 @@ export const run = (
             return { fired: r.fired ?? [], violated: r.violated ?? [] }
           }),
         )
-      let c = yield* check(textOf(reply))
+      let c = yield* check(proseOf(reply))
       const missed = brief.must.filter((id) => !c.fired.includes(id))
       if (c.violated.length || missed.length) {
         reply = yield* narrate(
           `${wording(player, card, "narrate.correction")} ${[...c.violated.map((r) => `rule "${r}"`), ...missed.map((m) => `missed MUST ${m}`)].join("; ")}`,
         )
-        c = yield* check(textOf(reply))
+        c = yield* check(proseOf(reply))
       }
       fired = open.filter((d) => c.fired.includes(d.id))
       violated = [...c.violated]
     }
-    // record: notes, plus the readout questions when the card declares any. The model sees the prose and the
-    // questions, never the numbers; the chosen options settle by code, so replay never asks again.
+    // record: every product that is on and whose `when` holds, plus the readout questions when the card declares any.
+    // One call, one schema: product id → its shape, `answers` → the readout enums. The model sees the prose, Known
+    // (notes so far), Current (other feed products) and the questions, never the numbers; the chosen options settle by
+    // code, so replay never asks again. Caps are applied here, by code.
+    const asked = products.filter((p) => p.on && (!p.when || holds(p.when, s1)))
     const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
-    const recMsgs = [
-      sys(`Known: ${path.flatMap((t) => t.notes).join("; ")}\n${wording(player, card, "record.notes")}`),
-      ...(qs ? [sys(`Questions: ${rpg.questions(s1).join("\n")}`)] : []),
-      usr(`${input.text}\n${textOf(reply)}`),
-    ]
-    let answers: Answers = {}
-    let notes: readonly string[]
-    if (qs) {
-      const rec = yield* obj("record", Schema.Struct({ notes: Schema.Array(Schema.String), answers: qs }), recMsgs)
-      notes = rec.notes
-      answers = rec.answers as Answers
-    } else notes = (yield* obj("record", Notes, recMsgs)).notes
+    const rec = yield* record(
+      player,
+      card,
+      asked,
+      path,
+      `${input.text}\n${proseOf(reply)}`,
+      qs ? { schema: qs, lines: rpg.questions(s1) } : undefined,
+    )
+    const answers = (rec.answers ?? {}) as Answers
     rpg.settleReadouts(s1, answers) // validate now, not on the first replay
     return journal.save({
       parent,
@@ -345,7 +425,51 @@ export const run = (
       reply,
       fired,
       violated,
-      notes,
+      products: rec.products,
     })
   })
 export const reword = (card: Card, player: Player, t: Turn) => run(card, player, t.parent, t.input, "narrate", t)
+
+const record = (
+  player: Player,
+  card: Card,
+  asked: readonly Product[],
+  path: readonly Turn[],
+  scene: string,
+  qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
+) =>
+  Effect.gen(function* () {
+    const fed = known(productsOf(player, card), path)
+    const msgs = [
+      sys(
+        [
+          fed.known,
+          ...(fed.current ? [fed.current] : []),
+          ...asked.map((p) => `${p.id}: ${question(player, card, p)}`),
+        ].join("\n"),
+      ),
+      ...(qs ? [sys(`Questions: ${qs.lines.join("\n")}`)] : []),
+      usr(scene),
+    ]
+    // Built per call from data, so its static type is unknown: the shapes already decode what the model returns.
+    const schema = Schema.Struct({
+      ...Object.fromEntries(asked.map((p) => [p.id, shapeSchema(p.shape)])),
+      ...(qs ? { answers: qs.schema } : {}),
+    }) as unknown as Schema.Codec<Record<string, unknown>>
+    const out = yield* obj("record", schema, msgs, 4096)
+    return {
+      products: Object.fromEntries(asked.map((p) => [p.id, cap(p.shape, out[p.id])])),
+      answers: out.answers as Record<string, string> | undefined,
+    }
+  })
+/** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
+ *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner
+ *  forum" kind of card (docs/card-reading-2.md §2). */
+export const demand = (card: Card, player: Player, nodeId: number, productId: string) =>
+  Effect.gen(function* () {
+    const t = journal.get(nodeId)
+    const p = productsOf(player, card).find((x) => x.id === productId)
+    if (!p) throw new Error(`${productId}: not a product of this card`)
+    const rec = yield* record(player, card, [p], chain(t.parent), `${t.input.text}\n${proseOf(t.reply)}`)
+    return journal.amend(nodeId, { products: { ...t.products, ...rec.products } })
+  })

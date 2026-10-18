@@ -26,8 +26,10 @@ export interface Turn<B> {
   reply: readonly Part[] // the model's output as parts; the prose is `textOf(reply)` and non-authoritative
   fired: readonly Disclosure[] // reveals confirmed by check; count as delivered
   violated: readonly string[]
-  notes: readonly string[]
+  products: Readonly<Record<string, unknown>> // record's answers by product id, shaped by the card (src/product.ts); `notes` is one
 }
+/** The notes product: the list of facts this turn established, the compression source. */
+export const notesOf = <B>(t: Turn<B>): readonly string[] => (t.products.notes as readonly string[] | undefined) ?? []
 
 export const makeJournal = <B>() => {
   const nodes = new Map<number, Turn<B>>()
@@ -35,6 +37,17 @@ export const makeJournal = <B>() => {
     save: (t: Omit<Turn<B>, "id">): Turn<B> => {
       const node = { ...t, id: nodes.size }
       nodes.set(node.id, node)
+      return node
+    },
+    get: (id: number): Turn<B> => {
+      const t = nodes.get(id)
+      if (!t) throw new Error(`no node ${id}`)
+      return t
+    },
+    /** A player action on a node (a demanded product): the node is replaced, its id and place in the tree kept. */
+    amend: (id: number, patch: Partial<Omit<Turn<B>, "id" | "parent">>): Turn<B> => {
+      const node = { ...nodes.get(id)!, ...patch }
+      nodes.set(id, node)
       return node
     },
     chain: (id: number | null): Turn<B>[] => {

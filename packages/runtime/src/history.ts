@@ -3,7 +3,7 @@
 // fold of its notes plus the lore text delivered in it, cached by range (ids are unique, so a range names a prefix).
 import type { Disclosure } from "./lore.ts"
 import type { Msg } from "./fragment.ts"
-import { deliveredIn, prose, type Turn } from "./journal.ts"
+import { deliveredIn, notesOf, prose, type Turn } from "./journal.ts"
 
 export interface Summary {
   from: number
@@ -19,7 +19,7 @@ export const makeSummaries = <B>(loreText: (d: Disclosure) => string) => {
       const k = `${range[0].id}-${range[range.length - 1].id}`
       const hit = table.get(k)
       if (hit) return hit
-      const facts = range.flatMap((t) => [...t.notes, ...deliveredIn(t).map(loreText)])
+      const facts = range.flatMap((t) => [...notesOf(t), ...deliveredIn(t).map(loreText)])
       const s: Summary = { from: range[0].id, to: range[range.length - 1].id, text: `Summary: ${facts.join(" ")}` }
       table.set(k, s)
       return s
@@ -69,7 +69,7 @@ export const ledger = <B>(path: readonly Turn<B>[], eventsOf: (t: Turn<B>) => re
     ? [
         {
           role: "system",
-          text: `Ledger:\n${path.map((t) => `${t.input.text} → ${eventsOf(t).join(",") || "-"}; fired ${t.fired.map((d) => d.id).join(",") || "-"}; ${t.notes.join("; ")}`).join("\n")}`,
+          text: `Ledger:\n${path.map((t) => `${t.input.text} → ${eventsOf(t).join(",") || "-"}; fired ${t.fired.map((d) => d.id).join(",") || "-"}; ${notesOf(t).join("; ")}`).join("\n")}`,
         },
       ]
     : []

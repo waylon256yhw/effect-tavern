@@ -9,12 +9,14 @@ import {
   L,
   calls,
   chain,
+  demand,
   eventsOf,
   greet,
   history,
   initial,
   journal,
   msgText,
+  productsOf,
   prompts,
   reword,
   run,
@@ -44,11 +46,14 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
   let reason: "stop" | "length" = "stop"
   switch (phase) {
     case "lookup":
+      // Index entries are `id` (lore) or `id=hook` (a recall product's item); the script reads "about <hook>".
       out = JSON.stringify({
         read: text
           .match(/Index: (.*)/)![1]
           .split(", ")
-          .filter((id) => want.includes(`about ${id}`)),
+          .map((e) => e.split("="))
+          .filter(([id, hook]) => want.toLowerCase().includes(`about ${(hook ?? id)!.toLowerCase()}`))
+          .map(([id]) => id),
       })
       break
     case "decide": {
@@ -76,7 +81,19 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
           return [id, ids.includes(want) ? want : ids[0]]
         }),
       )
-      out = JSON.stringify(qs.length ? { notes: [`NOTE#${n}`], answers } : { notes: [`NOTE#${n}`] })
+      // Products arrive as "<id>: <question>" lines after Known / Current; the script knows the wuxia card's shapes.
+      const asked = [...text.matchAll(/^(\w+): (?!.*\[)/gm)]
+        .map(([, id]) => id!)
+        .filter((id) => !["Known", "Current", "Questions"].includes(id))
+      const canned: Record<string, unknown> = {
+        notes: [`NOTE#${n}`],
+        options: ["O1", "O2", "O3", "O4", "O5"], // five: the cap cuts to four
+        scene: { place: `P#${n}`, present: [{ name: "B", mood: "calm" }] },
+        people: /^ask about li/i.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
+        inner: `INNER#${n}`,
+      }
+      const products = Object.fromEntries(asked.map((id) => [id, canned[id]]))
+      out = JSON.stringify(qs.length ? { ...products, answers } : products)
       break
     }
     default: {
@@ -105,8 +122,17 @@ const program = Effect.gen(function* () {
   const c0 = yield* run(chat, player, null, { text: "hello" })
   assert.deepEqual(calls, ["narrate", "record"])
   assert.deepEqual([c0.read, c0.beats, c0.brief, c0.fired], [[], [], { must: [], may: [] }, []])
-  assert.deepEqual(c0.answers, {}) // no readouts declared: record only takes notes
+  assert.deepEqual(c0.answers, {}) // no readouts declared: record only takes the products
   assert.ok(!/Questions/.test(str(prompts.record[0])))
+  // Products: the default `inner` stays off; `options` (switched on by the card) is capped by code to four; the feed
+  // record `scene` is stored whole; `people` is an empty table this turn.
+  assert.deepEqual(Object.keys(c0.products).sort(), ["notes", "options", "people", "scene"])
+  assert.deepEqual(c0.products.options, ["O1", "O2", "O3", "O4"])
+  assert.deepEqual(c0.products.scene, { place: "P#1", present: [{ name: "B", mood: "calm" }] })
+  assert.ok(
+    /^notes: Notes are the record/m.test(str(prompts.record[0])) &&
+      /^scene: Where the scene/m.test(str(prompts.record[0])),
+  )
 
   let i = calls.length
   const t1 = yield* run(full, player, null, { text: "ask about li" })
@@ -118,15 +144,20 @@ const program = Effect.gen(function* () {
   const rec1 = str(prompts.record.at(-1)!)
   assert.ok(/Questions: warmth: how A treated/.test(rec1) && !/bond|State:/.test(rec1))
   assert.ok(str(lastNarr()).includes("arm's length") && !/bond/.test(str(lastNarr())))
+  assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
 
-  // Turn 2: lookup picks nothing new (li#1 already on the path), strikes settle, window opens, director, reveal fired.
+  // Turn 2: lookup lists only t1's people row (li#1 already on the path) and the input reads nothing; strikes settle,
+  // window opens, director, reveal fired. The narrator gets the feed record as `Current:` after the outcome.
   i = calls.length
   narrations.push("fire")
   warmths.push("warm")
   const t2 = yield* run(full, player, t1.id, { text: "strike B", aside: "ASIDE#2" })
   assert.deepEqual([t2.answers, stateAt(chain(t2.id)).bond], [{ warmth: "warm" }, 4])
-  assert.deepEqual(since(i), ["decide", "decide", "decide", "direct", "narrate", "check", "record"]) // li#1 already on the path: nothing to look up
+  assert.deepEqual(since(i), ["lookup", "decide", "decide", "decide", "direct", "narrate", "check", "record"])
+  assert.equal(str(prompts.lookup.at(-1)!).split("\n")[0], `Index: people@${t1.id}#0=Li`)
   assert.deepEqual(t2.read, [])
+  assert.ok(/^Current: scene=place: P#2; present: name=B, mood=calm$/m.test(str(lastNarr())))
+  assert.ok(/^Current: scene=/m.test(str(prompts.record.at(-1)!)) && !/^Current/m.test(str(prompts.direct.at(-1)!)))
   assert.equal(t2.beats.length, 2)
   const ev2 = eventsOf(chain(t2.id), t2)
   assert.ok(ev2.includes("strike:hit"))
@@ -148,11 +179,14 @@ const program = Effect.gen(function* () {
   // Director never saw prose; narrator never saw the ledger.
   assert.ok(!/PROSE#/.test(str(prompts.direct.at(-1)!)) && !/Ledger/.test(str(lastNarr())))
 
-  // Turn 3: history carries both lore layers; the previous aside and tone are gone; head is byte-identical.
+  // Turn 3: history carries both lore layers; the previous aside and tone are gone; head is byte-identical. The input
+  // asks about Li: lookup delivers t1's people row like a lore layer, and it lands in the tail as text.
   i = calls.length
   warmths.push("warm")
-  const t3 = yield* run(full, player, t2.id, { text: "speak" })
+  const t3 = yield* run(full, player, t2.id, { text: "speak about Li" })
   const v3 = str(lastNarr())
+  assert.deepEqual(t3.read, [{ id: `people@${t1.id}#0`, layer: 1 }])
+  assert.ok(v3.includes("name=Li, note=N#2"))
   assert.ok(v3.includes("B is Li") && v3.includes(L.entries[0].layers[0]) && v3.includes(prose(t2)))
   assert.ok(!v3.includes("ASIDE#2") && !v3.includes(t2.brief.tone!))
   assert.ok(v3.includes("arm's length")) // bond was 4 when this head was built; the answer lands after the prose
@@ -163,7 +197,7 @@ const program = Effect.gen(function* () {
     "Frame: wuxia",
     "A: swordsman",
   ]) // player zone → frame → fiction
-  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"])
+  assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
 
   // Truncation: one node, prose concatenated, two narrate calls, second prompt ends with the partial as assistant.
@@ -220,6 +254,7 @@ const program = Effect.gen(function* () {
   const t8 = yield* run(full, player, t7.id, { text: "wait more" })
   const s8 = summaries.summaryFor(chain(t8.id))!
   assert.deepEqual([s8.from, s8.to, summaries.size], [t1.id, t5.id, 2])
+  assert.ok(s8.text.includes("name=Li, note=N#2")) // a recalled product row delivered inside the folded range survives like lore
   assert.ok(!str(lastNarr()).includes(prose(t3)) && str(lastNarr()).includes(prose(t6)))
   // The view is a function of (path, policy), not of what other branches have cached: re-rendering the shorter path
   // at t6 still folds only the first block, even though a longer summary now sits in the table.
@@ -231,9 +266,9 @@ const program = Effect.gen(function* () {
   // reword: narrate, check, record only; read/beats/brief kept; sibling under the same parent. Replay calls nothing.
   // The card overrides one of the harness's own asks by id; the rest keep their defaults.
   i = calls.length
-  const w = yield* reword({ ...full, asks: [{ id: "record.notes", text: "ASK#notes" }] }, player, t2)
+  const w = yield* reword({ ...full, asks: [{ id: "product.notes", text: "ASK#notes" }] }, player, t2)
   assert.deepEqual(since(i), ["narrate", "check", "record"])
-  assert.ok(/Known: .*\nASK#notes$/m.test(str(prompts.record.at(-1)!)))
+  assert.ok(/^notes: ASK#notes$/m.test(str(prompts.record.at(-1)!)))
   assert.ok(/Notes are the record/.test(str(prompts.record.at(-2)!)))
   assert.deepEqual([w.parent, w.read, w.beats, w.brief], [t2.parent, t2.read, t2.beats, t2.brief])
 
@@ -250,6 +285,19 @@ const program = Effect.gen(function* () {
   i = calls.length
   for (const t of journal.values()) stateAt(chain(t.id))
   assert.equal(calls.length, i)
+
+  // A player action on a node: demand a product that is off (inner) over t3's scene. One record call, no new node, the
+  // answer kept on t3 beside the turn's own products; the player's toggle alone could have switched it on for every turn.
+  const size = journal.size
+  const d = yield* demand(full, player, t3.id, "inner")
+  assert.deepEqual(since(i), ["record"])
+  assert.ok(/^INNER#\d+$/.test(d.products.inner as string) && d.products.notes !== undefined)
+  assert.equal(journal.size, size)
+  assert.equal(chain(t5.id)[2]!.products.inner, d.products.inner) // the amended node is what the path sees
+  assert.deepEqual(
+    Object.keys(productsOf({ ...player, products: { inner: true } }, full).filter((p) => p.on)).length,
+    5,
+  )
 
   console.log(str(lastNarr()))
 })

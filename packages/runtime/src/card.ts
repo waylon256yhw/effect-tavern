@@ -11,6 +11,7 @@
 import { Effect, Random, Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
+import { ProductPatch } from "./product.ts"
 
 const Num = Schema.Number
 const Scalar = Schema.Union([Num, Schema.Boolean, Schema.String])
@@ -219,6 +220,7 @@ export const Card = Schema.Struct({
   director: Schema.optionalKey(Schema.Boolean),
   input: Schema.optionalKey(Schema.Literals(["act", "aside"])),
   asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id
+  products: Schema.optionalKey(Schema.Array(ProductPatch)), // record products: patches over the harness defaults by id, or new ones
 })
 export type Card = typeof Card.Type
 export type LoreEntry = typeof LoreEntry.Type

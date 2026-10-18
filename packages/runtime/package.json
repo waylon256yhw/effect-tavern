@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "tsc && node test/lore.ts && node test/views.ts && node test/assemble.ts && node test/loop.ts && node test/card.ts"
+    "verify": "tsc && node test/lore.ts && node test/views.ts && node test/assemble.ts && node test/loop.ts && node test/card.ts && node test/product.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",

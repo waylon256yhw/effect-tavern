@@ -7,7 +7,15 @@ import { Effect } from "effect"
 import assert from "node:assert/strict"
 import type { Msg } from "../src/fragment.ts"
 import { ledger, makeSummaries, narratorHistory } from "../src/history.ts"
-import { deliveredOn, makeJournal, prose, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
+import {
+  deliveredOn,
+  makeJournal,
+  notesOf,
+  prose,
+  type Brief,
+  type Input,
+  type Turn as TurnOf,
+} from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
 
 // ───────── Card: three authored layers (§16.4 + frame), strings only here ─────────
@@ -74,7 +82,7 @@ const render = (card: Card, path: readonly Turn[], stage: Stage, cur: Current): 
     case "check":
       return [...card.rules.map((r) => sys(`Rule: ${r}`)), sys(`Brief: ${JSON.stringify(cur.brief)}`), user(cur.prose!)]
     case "record":
-      return [sys(`Known: ${path.flatMap((t) => t.notes).join("; ")}`), user(`${cur.input.text}\n${cur.prose!}`)]
+      return [sys(`Known: ${path.flatMap(notesOf).join("; ")}`), user(`${cur.input.text}\n${cur.prose!}`)]
   }
 }
 
@@ -123,7 +131,7 @@ const run = (
       reply: [{ type: "text", text: written }],
       fired,
       violated,
-      notes,
+      products: { notes },
     })
   })
 
@@ -163,7 +171,7 @@ const program = Effect.gen(function* () {
     calls.map((c) => c.phase),
     ["narrate", "record"],
   )
-  assert.deepEqual([prose(c0), c0.notes], ["PROSE#0", ["NOTE#0"]])
+  assert.deepEqual([prose(c0), notesOf(c0)], ["PROSE#0", ["NOTE#0"]])
 
   // Directed card over five turns; turn 1 delivers lore layer 1, turn 2 reveals layer 2, turn 3 carries an aside.
   calls.length = 0
@@ -188,7 +196,7 @@ const program = Effect.gen(function* () {
   let v = last("narrate")
   for (const t of turns.slice(0, 4)) assert.ok(has(v, t.input.text) && has(v, prose(t)))
   assert.ok(has(v, lore.li[0]) && has(v, lore.li[1]))
-  for (const t of turns.slice(0, 4)) assert.ok(!has(v, t.brief.tone!) && !has(v, t.notes[0]))
+  for (const t of turns.slice(0, 4)) assert.ok(!has(v, t.brief.tone!) && !has(v, notesOf(t)[0]!))
   assert.ok(!has(v, "ASIDE#3"))
   assert.ok(has(v, `Tone: TONE#${k}`))
   const v3 = calls.filter((c) => c.phase === "narrate")[3].msgs

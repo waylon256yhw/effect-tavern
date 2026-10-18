@@ -68,6 +68,46 @@ export const full: Card = {
   ],
   guard: ["B does not die"],
   director: true,
+  // Record products (src/product.ts), one of each flavour: a default switched on (options, capped list), a feed record
+  // with a nested table (scene: read back to the model as `Current:`), and a recall table (people: rows the lookup
+  // stage can deliver later, like lore).
+  products: [
+    { id: "options", on: true },
+    {
+      id: "scene",
+      text: "Where the scene stands now: the place, and who is present with their mood.",
+      shape: {
+        kind: "record",
+        keys: [
+          { key: "place", type: "text" },
+          {
+            key: "present",
+            shape: {
+              kind: "table",
+              columns: [
+                { key: "name", type: "text" },
+                { key: "mood", type: "enum", options: ["calm", "tense"] },
+              ],
+            },
+          },
+        ],
+      },
+      feed: true,
+    },
+    {
+      id: "people",
+      text: "People named this scene who are not in Known, one row each.",
+      shape: {
+        kind: "table",
+        columns: [
+          { key: "name", type: "text" },
+          { key: "note", type: "text" },
+        ],
+        max: 8,
+      },
+      recall: "name",
+    },
+  ],
 }
 export const chat: Card = {
   ...full,

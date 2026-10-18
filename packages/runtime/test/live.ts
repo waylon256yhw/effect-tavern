@@ -117,7 +117,7 @@ const program = Effect.gen(function* () {
       `  node: read=${show(node.read)} beats=${show(node.beats.map((b) => b.next))} end=${node.end} events=${show(eventsOf(path, node))}`,
     )
     console.log(`        brief=${show(node.brief)} fired=${show(node.fired)} violated=${show(node.violated)}`)
-    console.log(`        answers=${show(node.answers)} state=${show(stateAt(path))} notes=${show(node.notes)}`)
+    console.log(`        answers=${show(node.answers)} state=${show(stateAt(path))} products=${show(node.products)}`)
     console.log(`  prose: ${clip(prose(node), 600)}`)
   }
   const total = log.reduce(

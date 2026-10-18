@@ -31,6 +31,7 @@ export interface Player {
   forCard: Record<string, readonly Fragment[]>
   defaults?: { global?: Mode; forCard?: Mode } // harness-level setting, also the player's
   asks?: readonly Fragment[] // the harness's own wording, overridden by id (see harness `asks`)
+  products?: Readonly<Record<string, boolean>> // record products on/off by id: the player's toggle wins over card and defaults
 }
 export interface FrameSource {
   id: string
