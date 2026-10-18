@@ -7,8 +7,8 @@
 // when the connection declares `prefill`; the turn records the concatenation once. Current Claude rejects the prefix
 // (docs/provider-reading.md §7), so on such connections the partial stands and recovery is still undecided.
 //
-// This is the loop itself plus one card, shared by loop.ts (scripted model, assertions) and loop-live.ts (a real
-// connection, printed). The model is packages/provider's `Model`, set once with `useModel`; every stage goes through
+// This is the loop itself, shared by loop.ts (scripted model, assertions) and live.ts (a real connection, printed);
+// cards live in test/cards/. A card is one `Card` (src/card.ts); which stages run is derived from what it declares. The model is packages/provider's `Model`, set once with `useModel`; every stage goes through
 // the same `object` / `text` calls. Cache breakpoints sit where the design says: the end of the head and the folded
 // summary, both stable across turns.
 // Compression (§17.3/§18.4): before each narrate, fold the leading turns in blocks; the summary is a cached code fold,
@@ -16,100 +16,29 @@
 // Skipped: swipe kinds other than reword, continue, streaming, persistence, reasoning parts on the node.
 import { breakpoint, object, text, type Effort, type Message, type Model, type Usage } from "@effect-tavern/provider"
 import { Effect, Schema } from "effect"
-import {
-  decodeFragments as frags,
-  frame,
-  head as headOf,
-  type Fragment,
-  type Msg,
-  type Player,
-} from "../src/fragment.ts"
+import { frame, head as headOf, type Msg, type Player } from "../src/fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import { deliveredOn, makeJournal, textOf, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
-import { decodeRules, makeCard, Rules, type Answers, type Beat, type State } from "../src/card.ts"
+import { makeCard, type Answers, type Beat, type Card, type State } from "../src/card.ts"
 import { holds, type Cond } from "../src/cond.ts"
 
-// ───────── Card data (§22): settlement rules, lore gates and windows are Cond / effects, not code. ─────────
-export interface CardData {
-  rules: typeof Rules.Encoded
-  lore: ReadonlyArray<{ id: string; layers: readonly string[]; unlock: Cond; offer: Cond }>
-}
-/** The self-check card: a wuxia duel with layered lore, a readout and one rule. */
-export const wuxia: CardData = {
-  rules: {
-    fields: [
-      { path: "hp", type: "int", min: 0, max: 100, initial: 40 },
-      { path: "foe", type: "int", min: 0, initial: 30 },
-      { path: "bond", type: "int", min: -30, max: 100, initial: 0 }, // a readout: never settled before the prose
-    ],
-    readouts: [
-      {
-        id: "warmth",
-        text: "how A treated the player this turn",
-        options: [
-          { id: "cold", text: "cold", do: [{ path: "bond", add: -5 }] },
-          { id: "flat", text: "indifferent", do: [] },
-          { id: "warm", text: "warm", do: [{ path: "bond", add: 4 }] },
-          { id: "close", text: "intimate", do: [{ path: "bond", add: 8 }, { event: "warmth:close" }] },
-        ],
-      },
-    ],
-    actions: [
-      {
-        id: "strike",
-        text: "attack B",
-        roll: 0.6,
-        hit: [{ path: "foe", add: -10 }, { event: "strike:hit" }],
-        miss: [{ path: "hp", add: -10 }, { event: "strike:miss" }],
-      },
-      { id: "talk", text: "talk", do: [{ event: "talk" }] },
-    ],
-    over: {
-      any: [
-        { path: "hp", is: 0 },
-        { path: "foe", is: 0 },
-      ],
-    },
-    cap: 4,
-  },
-  // Lore gates as data: `unlock` is a Cond over state (visible = layer 1), `offer` a Cond over state + this turn's events.
-  lore: [
-    {
-      id: "li",
-      layers: ["Li: A's lost friend; crane tattoo on the left shoulder.", "B is Li."],
-      unlock: { all: [] },
-      offer: { event: "strike:hit" },
-    },
-    { id: "heir", layers: ["Li was heir to the throne."], unlock: { any: [] }, offer: { all: [] } }, // hidden: never in play
-  ],
-}
+// ───────── The card in play, set once per process with `useCard`. `L`, `initial` and `summaries` are live bindings. ─────────
 const gate = (unlock: Cond, offer: Cond) => ({
   unlock: (s: State) => (holds(unlock, s) ? 1 : 0),
   offer: (s: State, ev: readonly string[]) => holds(offer, s, ev),
 })
-// The card in play, set once per process with `useCard`. `L`, `initial` and `summaries` are live bindings.
-let rpg = makeCard(decodeRules({ fields: [], actions: [] }))
+let rpg = makeCard({ fields: [], actions: [] })
 export let initial: State = rpg.initial
 export let L = makeLore<State, readonly string[]>([])
 export let summaries = makeSummaries<Beat>(L.text)
-export const useCard = (d: CardData) => {
-  rpg = makeCard(decodeRules(d.rules))
+export const useCard = (c: Card) => {
+  rpg = makeCard(c.rules)
   initial = rpg.initial
   L = makeLore<State, readonly string[]>(
-    d.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.unlock, e.offer) })),
+    c.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.unlock, e.offer) })),
   )
   summaries = makeSummaries<Beat>(L.text)
-}
-export interface Card {
-  id: string
-  frame: readonly Fragment[]
-  character: readonly Fragment[]
-  actions: boolean
-  readouts: boolean
-  lore: boolean
-  director: boolean
-  rules: readonly string[]
 }
 
 const Lookup = (ids: readonly string[]) => Schema.Struct({ read: Schema.Array(Schema.Literals(ids)) })
@@ -167,9 +96,15 @@ const toP = (m: Msg): PMsg =>
   (m.parts && M.reasoningBack ? { role: m.role, content: m.parts } : { role: m.role, content: m.text }) as PMsg
 const sys = (content: string): PMsg => ({ role: "system", content })
 const usr = (content: string): PMsg => ({ role: "user", content })
-/** Head, with a cache breakpoint on its last message: player zone → frame → character is byte-stable across turns. */
+/** This turn's user message. In-fiction text when there is any; otherwise the aside itself (directed prose: the
+ *  player writes to the narrator, not as anyone in the story). Past aside-only turns leave no user message in the
+ *  transcript, so direction never becomes history. */
+const said = (i: Input) => usr(i.text || i.aside || "")
+/** The aside as a system line, only when it accompanies in-fiction text; alone, it is already the user message. */
+const asideOf = (i: Input) => (i.text && i.aside ? [sys(`Player aside: ${i.aside}`)] : [])
+/** Head, with a cache breakpoint on its last message: player zone → frame → fiction is byte-stable across turns. */
 const head = (p: Player, c: Card, stage: "narrate" | "direct", state: State) => {
-  const h = headOf(stage === "narrate" ? [...frame(p, c), ...c.character] : frame(p, c), { state }).map(toP)
+  const h = headOf(stage === "narrate" ? [...frame(p, c), ...c.fiction] : frame(p, c), { state }).map(toP)
   return h.length ? [...h.slice(0, -1), breakpoint(h.at(-1)!)] : h
 }
 const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when a real tokenizer is in the loop
@@ -228,19 +163,19 @@ export const run = (
     const s0 = stateAt(path)
     const seen = deliveredOn(path)
     // lookup: a structured pick over the literal enum of readable ids; nothing to pick → no call
-    const idx = card.lore ? L.readable(s0, seen) : []
+    const idx = card.lore.length ? L.readable(s0, seen) : []
     const readIds =
       from === "narrate"
         ? base!.read.map((d) => d.id)
         : idx.length
-          ? (yield* obj("lookup", Lookup(idx), [sys(`Index: ${idx.join(", ")}`), usr(input.text)])).read
+          ? (yield* obj("lookup", Lookup(idx), [sys(`Index: ${idx.join(", ")}`), said(input)])).read
           : []
     const disclosures =
       from === "narrate" ? base!.read : [...new Set(readIds)].flatMap((id) => L.read(s0, seen, id) ?? [])
     // decide → settle, looping; the k-th decide sees the first k events
     let beats: Beat[] = from === "narrate" ? [...base!.beats] : []
     let end: Turn["end"] = from === "narrate" ? base!.end : "end"
-    if (card.actions && from !== "narrate") {
+    if (card.rules.actions.length && from !== "narrate") {
       for (;;) {
         const { s, events } = rpg.fold(s0, beats)
         if (rpg.over(s)) {
@@ -264,7 +199,7 @@ export const run = (
           sys(
             `${question}\nState: ${JSON.stringify(s)}\nActions: ${rpg.menu(s).join(" | ")}\nSo far: ${events.join(",") || "-"}`,
           ),
-          usr(input.text),
+          said(input),
         ])
         if (d.next === "end") {
           end = "end"
@@ -279,8 +214,16 @@ export const run = (
       }
     }
     const { s: s1, events } = rpg.fold(s0, beats)
-    // gate: after settlement, on this turn's events; director only if the card has one and something is open
-    const open: Disclosure[] = L.offers(s1, deliveredOn(path, disclosures), events).map(({ id, layer }) => ({
+    // gate: after settlement, on this turn's beat events plus the readout events of the turn before. A readout is
+    // answered after the prose, so what it emits can only open a window on the next turn; without the carry it never
+    // opened one at all (found by the yandao card: a readout-only card has no beat events). Director only if the card
+    // has one and something is open.
+    const prev = path.at(-1)
+    const carried = prev
+      ? rpg.settleReadouts(rpg.fold(stateAt(path.slice(0, -1)), prev.beats).s, prev.answers).events
+      : []
+    const gateEvents = [...events, ...carried]
+    const open: Disclosure[] = L.offers(s1, deliveredOn(path, disclosures), gateEvents).map(({ id, layer }) => ({
       id,
       layer,
     }))
@@ -291,11 +234,11 @@ export const run = (
         : card.director && open.length
           ? yield* obj("direct", BriefOf(openIds), [
               ...head(player, card, "direct", s1),
-              ...card.rules.map((r) => sys(`Rule: ${r}`)),
+              ...card.guard.map((r) => sys(`Rule: ${r}`)),
               ...history(path, "direct"),
-              sys(`Open: ${open.map((d) => `${d.id}=${L.text(d)}`).join(" | ")}\nEvents: ${events.join(",")}`),
-              ...(input.aside ? [sys(`Player aside: ${input.aside}`)] : []),
-              usr(input.text),
+              sys(`Open: ${open.map((d) => `${d.id}=${L.text(d)}`).join(" | ")}\nEvents: ${gateEvents.join(",")}`),
+              ...asideOf(input),
+              said(input),
             ])
           : { must: [], may: openIds }
     // narrate, with truncation recovery and at most one correction rewrite
@@ -305,7 +248,7 @@ export const run = (
       ...open.filter((d) => brief.must.includes(d.id)).map((d) => sys(`MUST reveal: ${L.text(d)}`)),
       ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${L.text(d)}`)),
       ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
-      ...(input.aside ? [sys(`Player aside: ${input.aside}`)] : []),
+      ...asideOf(input),
     ]
     const narrate = (correction?: string) =>
       Effect.gen(function* () {
@@ -314,7 +257,7 @@ export const run = (
         const msgs = [
           ...head(player, card, "narrate", s1),
           ...history(path, "narrate"),
-          usr(input.text),
+          said(input),
           ...tail,
           ...(correction ? [sys(correction)] : []),
         ]
@@ -329,11 +272,11 @@ export const run = (
     let reply = yield* narrate()
     let fired: Disclosure[] = []
     let violated: string[] = []
-    const checked = card.rules.length > 0 || open.length > 0
+    const checked = card.guard.length > 0 || open.length > 0
     if (checked) {
       const check = (text: string) =>
-        obj("check", Check(openIds, card.rules), [
-          ...card.rules.map((r) => sys(`Rule: ${r}`)),
+        obj("check", Check(openIds, card.guard), [
+          ...card.guard.map((r) => sys(`Rule: ${r}`)),
           sys(`Open: ${openIds.join(",")}\nMust: ${brief.must.join(",")}`),
           usr(text),
         ]).pipe(
@@ -355,7 +298,7 @@ export const run = (
     }
     // record: notes, plus the readout questions when the card declares any. The model sees the prose and the
     // questions, never the numbers; the chosen options settle by code, so replay never asks again.
-    const qs = card.readouts ? rpg.readoutSchema(s1) : undefined
+    const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
     const recMsgs = [
       sys(
         `Known: ${path.flatMap((t) => t.notes).join("; ")}\nNotes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.`,
@@ -386,28 +329,3 @@ export const run = (
     })
   })
 export const reword = (card: Card, player: Player, t: Turn) => run(card, player, t.parent, t.input, "narrate", t)
-
-export const player: Player = { global: frags([{ id: "language", text: "Write in Chinese." }]), forCard: {} }
-export const chat: Card = {
-  id: "wuxia",
-  frame: frags([{ id: "setting", text: "Frame: wuxia" }]),
-  // Bands of the readout are `when` fragments: the narrator reads the band's text, never the number.
-  character: frags([
-    { id: "a", text: "A: swordsman" },
-    { id: "a-cool", text: "A keeps the player at arm's length.", when: { path: "bond", op: "lt", value: 8 } },
-    { id: "a-warm", text: "A trusts the player.", when: { path: "bond", op: "gte", value: 8 } },
-  ]),
-  actions: false,
-  readouts: false,
-  lore: false,
-  director: false,
-  rules: [],
-}
-export const full: Card = {
-  ...chat,
-  actions: true,
-  readouts: true,
-  lore: true,
-  director: true,
-  rules: ["B does not die"],
-}

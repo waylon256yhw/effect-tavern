@@ -4,18 +4,16 @@ import { fake, fakeText } from "@effect-tavern/provider"
 import { Effect } from "effect"
 import assert from "node:assert/strict"
 import { deliveredOn, prose } from "../src/journal.ts"
+import { chat, full, player } from "./cards/wuxia.ts"
 import {
   L,
   calls,
   chain,
-  chat,
   eventsOf,
-  full,
   history,
   initial,
   journal,
   msgText,
-  player,
   prompts,
   reword,
   run,
@@ -24,7 +22,6 @@ import {
   summaries,
   useCard,
   useModel,
-  wuxia,
 } from "./harness.ts"
 
 // ───────── Scripted model ─────────
@@ -98,7 +95,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
   return { text: out, cut: reason === "length" }
 }
 
-useCard(wuxia)
+useCard(full)
 useModel({ ...fake((o) => script(o)), prefill: true })
 const since = (i: number) => calls.slice(i)
 const lastNarr = () => prompts.narrate.at(-1)!
@@ -164,9 +161,9 @@ const program = Effect.gen(function* () {
     "Write in Chinese.",
     "Frame: wuxia",
     "A: swordsman",
-  ]) // player zone → frame → character
+  ]) // player zone → frame → fiction
   assert.deepEqual(since(i), ["decide", "narrate", "check", "record"])
-  assert.deepEqual(t3.brief, { must: [], may: [] }) // li at its last layer: no more windows
+  assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
 
   // Truncation: one node, prose concatenated, two narrate calls, second prompt ends with the partial as assistant.
   i = calls.length
@@ -190,10 +187,15 @@ const program = Effect.gen(function* () {
   const v5 = str(lastNarr())
   assert.ok(v5.includes("A trusts the player.") && !v5.includes("arm's length"))
   assert.deepEqual(prompts.narrate.at(-1)!.slice(0, 3), prompts.narrate.at(-3)!.slice(0, 3)) // prefix intact
+  i = calls.length
   const t6 = yield* run(full, player, t5.id, { text: "rest" })
   assert.ok(!str(lastNarr()).includes("Previous draft broke"))
-  // A readout option can emit an event; it shows in the ledger the structured stages read next turn.
+  // A readout option can emit an event. It shows in the ledger the structured stages read next turn, and it opens a
+  // window on that next turn: t5's "close" is carried into t6's gate, li's third layer is offered, the director runs.
   assert.ok(eventsOf(chain(t5.id), t5).includes("warmth:close") && /warmth:close/.test(str(prompts.decide.at(-1)!)))
+  assert.deepEqual(since(i), ["decide", "direct", "narrate", "check", "record"])
+  assert.deepEqual(t6.brief.may, ["li"])
+  assert.ok(str(lastNarr()).includes(`MAY reveal: ${L.entries[0].layers[2]}`))
   assert.equal(stateAt(chain(t6.id)).bond, 16)
 
   // Compression in the loop: at 4 turns on the path, the first block (t1, t2) is folded.

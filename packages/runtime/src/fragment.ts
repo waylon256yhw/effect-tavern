@@ -1,4 +1,4 @@
-// §8 / §18: Fragment = text + position + condition. The head zone = player layer → card frame → character.
+// §8 / §18: Fragment = text + position + condition. The head zone = player layer → card frame → fiction.
 // Frame ids are slots; how a player's slot meets the card's same slot is the player's per-fragment setting.
 import { Schema } from "effect"
 import { Cond, holds, type State } from "./cond.ts"

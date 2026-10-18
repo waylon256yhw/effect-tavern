@@ -1,4 +1,6 @@
-// §22: the RPG half of a card as DATA. Fields with bounds, actions whose only branch is the die, effects that are
+// §22: the card as DATA. `Card` is the whole thing: frame and fiction fragments, greetings, rules, lore, guard lines.
+// Everything the loop needs is derived from it (a card with no actions has no decide stage; no lore, no lookup).
+// The RPG half, `Rules`: fields with bounds, actions whose only branch is the die, effects that are
 // mutations (set / add / event), a termination condition and a beat cap. Every node is a GUI control, a structured-
 // output target (the NL compile step) and directly evaluable — §16.4's admission test.
 // The LLM has two entries into settlement: a probability (`chance: { judge }`, answered inside the decide call and
@@ -8,6 +10,7 @@
 // reference, dynamic entities, time. Fields are flat paths for now.
 import { Effect, Random, Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
+import { Fragment } from "./fragment.ts"
 
 const Num = Schema.Number
 export const Field = Schema.Struct({
@@ -177,4 +180,31 @@ export const makeCard = (r: Rules) => {
     cap: r.cap ?? Infinity,
   }
 }
-export type Card = ReturnType<typeof makeCard>
+export type Rpg = ReturnType<typeof makeCard>
+
+// ───────── The whole card ─────────
+// Lore gates as data: `unlock` is a Cond over state (visible = layer 1), `offer` a Cond over state + this turn's events.
+export const LoreEntry = Schema.Struct({
+  id: Schema.String,
+  layers: Schema.Array(Schema.String),
+  unlock: Cond,
+  offer: Cond,
+})
+// Two coordinates place a card among the ways people write (1:1 RP, a world with no fixed protagonist, directed prose):
+// who the player is in the fiction is the frame slot `persona` (card default, player override like any slot), and
+// which channel the input takes by default: `act` (in-fiction, enters the transcript) or `aside` (direction to the
+// narrator, this turn only). `input` is read by the client, not the loop; the loop takes both channels on every turn.
+export const Card = Schema.Struct({
+  id: Schema.String,
+  frame: Schema.Array(Fragment), // slots: persona, voice, style, setting …
+  fiction: Schema.Array(Fragment), // a character, a cast or a world; variants carry `when`
+  greetings: Schema.Array(Schema.String),
+  rules: Rules,
+  lore: Schema.Array(LoreEntry),
+  guard: Schema.Array(Schema.String), // checked after the prose, never shown to the narrator
+  director: Schema.optionalKey(Schema.Boolean),
+  input: Schema.optionalKey(Schema.Literals(["act", "aside"])),
+})
+export type Card = typeof Card.Type
+export type LoreEntry = typeof LoreEntry.Type
+export const decodeCard = Schema.decodeUnknownSync(Card)

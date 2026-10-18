@@ -1,5 +1,5 @@
 // Tests for src/fragment.ts (+ history over Turn[]): §8's `assemble` re-done over layers + Turn[] + stage.
-// Head = player layer → card frame → character; audience per stage comes from the layer, not from a per-fragment field.
+// Head = player layer → card frame → fiction (the card's character, cast or world); audience per stage comes from the layer, not from a per-fragment field.
 // Dropped from Fragment: keys, trigger, depth, scan, before/after anchors, order. Kept: when, enabled/options.
 import assert from "node:assert/strict"
 import { decodeFragments as frags, frame, head, type Fragment, type Msg, type Player } from "../src/fragment.ts"

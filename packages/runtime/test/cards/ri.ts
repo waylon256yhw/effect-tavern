@@ -1,8 +1,9 @@
 // 青空 理 (docs/card-reading.md §2.5): the MVU example card, compiled from ~/MagVarUpdate/example into a data card.
 // This is the hand-done version of the compile step: each piece of the author's scaffolding lands where the record
 // said it belongs.
-//   角色信息 / NPC信息 / 地点            → character and frame fragments, the author's YAML as prose
-//   变量分阶段-好感度 (six EJS bands)      → six character fragments with `when` on 好感度; the active band is in the head
+//   角色信息 / NPC信息 / 地点            → fiction and frame fragments, the author's YAML as prose; "你是新来的牧师" is
+//                                            the frame's `persona` slot (who the player is), separate from the setting
+//   变量分阶段-好感度 (six EJS bands)      → six fiction fragments with `when` on 好感度; the active band is in the head
 //   理.好感度 [-30,100], 变化 [-5,8]        → an int field with bounds, moved by a readout after the prose (record stage)
 //   <user>.与理的关系 (恋人 / 哥哥)         → two booleans
 //   角色事件-告白 (EJS condition + override) → a lore entry whose `unlock` / `offer` is the same condition as a Cond; the
@@ -13,9 +14,9 @@
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { decodeCard, type Card } from "../../src/card.ts"
 import type { Cond } from "../../src/cond.ts"
-import { decodeFragments as frags, type Fragment } from "../../src/fragment.ts"
-import type { Card, CardData } from "../harness.ts"
+import type { Fragment } from "../../src/fragment.ts"
 
 const PLAYER = "你"
 const strip = (s: string) =>
@@ -80,7 +81,7 @@ const bands = (md: string): Fragment[] => {
   return out
 }
 
-export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingIndex = 2) => {
+export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingIndex = 2): Card => {
   const src = (f: string) => readFileSync(join(dir, "理理", f), "utf8")
   const init = JSON.parse(src("[initvar]初始变量1.yaml")) as { 地点: Record<string, Record<string, string>> }
   const places = Object.entries(init.地点)
@@ -100,7 +101,17 @@ export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingI
       { path: "哥哥", is: false },
     ],
   }
-  const data: CardData = {
+  return decodeCard({
+    id: "ri",
+    frame: [
+      { id: "persona", text: "你是新来到小镇的牧师。" },
+      { id: "setting", text: `小镇的地点：\n${places}` },
+      { id: "npc", text: strip(src("npc信息.yaml")) },
+    ],
+    fiction: [{ id: "ri", text: strip(src("角色信息.yaml")) }, ...bands(src("变量分阶段-好感度.md"))],
+    greetings: [g.text],
+    guard: [],
+    director: true,
     rules: {
       fields: [
         { path: "好感度", type: "int", min: -30, max: 100, initial: g.affinity },
@@ -154,21 +165,7 @@ export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingI
         offer: confession,
       },
     ],
-  }
-  const card: Card = {
-    id: "ri",
-    frame: frags([
-      { id: "setting", text: `你是新来到小镇的牧师。小镇的地点：\n${places}` },
-      { id: "npc", text: strip(src("npc信息.yaml")) },
-    ]),
-    character: [...frags([{ id: "ri", text: strip(src("角色信息.yaml")) }]), ...bands(src("变量分阶段-好感度.md"))],
-    actions: false,
-    readouts: true,
-    lore: true,
-    director: true,
-    rules: [],
-  }
-  return { data, card, greeting: g.text }
+  })
 }
 
 export const turns = [

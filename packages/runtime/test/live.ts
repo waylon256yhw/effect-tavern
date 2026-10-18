@@ -3,29 +3,15 @@
 // No assertions on the prose; the point is judgement quality, request shapes and cache behaviour. Skips without a key.
 import { capabilities, compile, localAnthropic, type Trace } from "@effect-tavern/provider"
 import { Effect } from "effect"
+import type { Card } from "../src/card.ts"
 import { prose } from "../src/journal.ts"
-import {
-  chain,
-  chat,
-  eventsOf,
-  full,
-  greet,
-  journal,
-  log,
-  msgText,
-  player as wuxiaPlayer,
-  run,
-  stateAt,
-  useCard,
-  useModel,
-  wuxia,
-  type Card,
-  type CardData,
-} from "./harness.ts"
+import { chat, full, player as wuxiaPlayer } from "./cards/wuxia.ts"
+import { chain, eventsOf, greet, journal, log, msgText, run, stateAt, useCard, useModel } from "./harness.ts"
 
 const which = process.argv[2] ?? "wuxia"
 // The player layer: language, and the point-of-view slot every player sets once. Without the second, Haiku wrote the
-// player's answer to the confession for them (docs/provider-reading.md §10).
+// player's answer to the confession for them (docs/provider-reading.md §10). A card with no player in the fiction
+// (yandao) fills the same slot itself; the player's global `pov` yields to it (fragment.ts defaults).
 const player = {
   global: [
     ...wuxiaPlayer.global,
@@ -34,30 +20,39 @@ const player = {
   forCard: {},
 }
 
+/** `card` is what `useCard` binds; a turn may run a stripped copy of it (wuxia's `chat`) to show the stages switch off. */
 type Script = {
-  data: CardData
-  greeting?: string
-  turns: Array<{ card: Card; parent: number | null; input: { text: string; aside?: string } }>
+  card: Card
+  turns: Array<{ card?: Card; parent: number | null; input: { text: string; aside?: string } }>
 }
 const script = async (): Promise<Script> => {
   switch (which) {
     case "wuxia":
       return {
-        data: wuxia,
+        card: full,
         turns: [
           { card: chat, parent: null, input: { text: "你好，我是个路过的旅人。" } },
-          { card: full, parent: null, input: { text: "你认识一个叫李的人吗？" } },
-          { card: full, parent: 1, input: { text: "我拔剑攻向B。", aside: "写得短一点。" } },
-          { card: full, parent: 2, input: { text: "我停手，看着B的肩膀。" } },
-          { card: full, parent: 3, input: { text: "我一剑接一剑地砍，直到他倒下为止。" } }, // the §10 case
+          { parent: null, input: { text: "你认识一个叫李的人吗？" } },
+          { parent: 1, input: { text: "我拔剑攻向B。", aside: "写得短一点。" } },
+          { parent: 2, input: { text: "我停手，看着B的肩膀。" } },
+          { parent: 3, input: { text: "我一剑接一剑地砍，直到他倒下为止。" } }, // the §10 case
         ],
       }
     case "banxing":
-    case "ri": {
-      const m = which === "banxing" ? await import("./cards/banxing.ts") : await import("./cards/ri.ts")
-      const { data, card, greeting } = m.load()
-      // Linear: each turn follows the previous node; node 0 is the greeting.
-      return { data, greeting, turns: m.turns.map((text, i) => ({ card, parent: i, input: { text } })) }
+    case "ri":
+    case "yandao": {
+      const m = await import(`./cards/${which}.ts`)
+      const card = m.load()
+      // Linear: each turn follows the previous node; node 0 is the greeting when the card has one. The card's default
+      // channel decides which box the typed text lands in: the client reads `input`, the loop takes both.
+      const first = card.greetings.length ? 1 : 0
+      return {
+        card,
+        turns: m.turns.map((text: string, i: number) => ({
+          parent: i === 0 ? (first ? 0 : null) : i - 1 + first,
+          input: card.input === "aside" ? { text: "", aside: text } : { text },
+        })),
+      }
     }
     default:
       throw new Error(`unknown card ${which}`)
@@ -86,8 +81,9 @@ const thinkingSent = (t: Trace | undefined) => {
 const show = (s: unknown) => (typeof s === "string" ? s : JSON.stringify(s))
 const clip = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s).replaceAll("\n", "⏎")
 
-const { data, greeting, turns } = await script()
-useCard(data)
+const { card, turns } = await script()
+useCard(card)
+const greeting = card.greetings[0]
 if (greeting) {
   const g = greet(greeting)
   console.log(`━━ node ${g.id}: greeting (${greeting.length} chars), state=${show(stateAt(chain(g.id)))}`)
@@ -97,10 +93,12 @@ const program = Effect.gen(function* () {
   for (const t of turns) {
     const before = log.length
     const t0 = performance.now()
-    const node = yield* run(t.card, player, t.parent, t.input)
+    const node = yield* run(t.card ?? card, player, t.parent, t.input)
     const ms = Math.round(performance.now() - t0)
     const path = chain(node.id)
-    console.log(`\n━━ turn ${node.id} ← ${t.parent ?? "root"}  "${t.input.text}"  ${ms}ms`)
+    console.log(
+      `\n━━ turn ${node.id} ← ${t.parent ?? "root"}  "${t.input.text || `(aside) ${t.input.aside}`}"  ${ms}ms`,
+    )
     for (const [k, e] of log.slice(before).entries()) {
       const u = e.usage
       if (e.phase === "narrate")
