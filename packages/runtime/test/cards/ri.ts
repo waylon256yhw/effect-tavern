@@ -109,7 +109,7 @@ export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingI
       { id: "npc", text: strip(src("npc信息.yaml")) },
     ],
     fiction: [{ id: "ri", text: strip(src("角色信息.yaml")) }, ...bands(src("变量分阶段-好感度.md"))],
-    greetings: [g.text],
+    greetings: [{ text: g.text }], // ponytail: the greeting index is picked at load; the other openings' affinities would be `do` effects
     guard: [],
     director: true,
     rules: {

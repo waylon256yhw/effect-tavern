@@ -1,5 +1,6 @@
 // §17: one node per turn = the player's input plus every block the system produced for it. Only LLM outputs and seeds
 // are stored; events, state and deliveries are derived along the path. Siblings under one parent are swipes.
+import type { Effect_ } from "./card.ts"
 import type { Part } from "./fragment.ts"
 import type { Disclosure } from "./lore.ts"
 
@@ -17,6 +18,7 @@ export interface Turn<B> {
   parent: number | null
   input: Input
   read: readonly Disclosure[] // lore delivered by lookup
+  opening?: readonly (typeof Effect_.Type)[] // a greeting's effects, applied before anything else on the path
   beats: readonly B[] // decide + seed, settled by code on replay
   answers: Readonly<Record<string, string>> // readout id → option id, chosen at record; settled by code on replay
   end: "end" | "over" | "cap"

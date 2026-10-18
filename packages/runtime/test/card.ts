@@ -1,7 +1,7 @@
 // Tests for src/card.ts: the three earlier RPG prototypes written as data, settled by the interpreter.
 import assert from "node:assert/strict"
 import { Schema } from "effect"
-import { decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
+import { Greeting, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
 import { holds } from "../src/cond.ts"
 
 // ───────── harness.ts as data: fight (judged chance) / rest / talk, gold and hp with bounds ─────────
@@ -168,6 +168,44 @@ assert.ok(Schema.decodeUnknownSync(bond.readoutSchema(b.s)!)({ warmth: "warm" })
 assert.throws(() => Schema.decodeUnknownSync(bond.readoutSchema(b.s)!)({})) // every asked question is answered
 assert.throws(() => Schema.decodeUnknownSync(bond.readoutSchema(b.s)!)({ warmth: "hot" }))
 assert.equal(tavern.readoutSchema(tavern.initial), undefined) // nothing declared → nothing asked
+
+// ───────── Enum fields: a closed set, gated on every set; `when` reads it like any other value ─────────
+const routed = makeCard(
+  decodeRules({
+    fields: [
+      { path: "route", type: "enum", options: ["calm", "blood"], initial: "calm" },
+      { path: "heat", type: "int", min: 0, max: 10, initial: 2 },
+    ],
+    actions: [
+      {
+        id: "riot",
+        text: "riot",
+        do: [{ path: "route", set: "blood" }, { path: "heat", add: 5 }, { event: "riot" }],
+      },
+      { id: "hide", text: "hide", when: { path: "route", is: "blood" }, do: [] },
+    ],
+  }),
+)
+assert.deepEqual(
+  routed.available(routed.initial).map((a) => a.id),
+  ["riot"],
+)
+const rr = routed.fold(routed.initial, [{ next: "riot", seed: 0 }])
+assert.deepEqual([rr.s.route, rr.s.heat, rr.events], ["blood", 7, ["riot"]])
+assert.deepEqual(
+  routed.available(rr.s).map((a) => a.id),
+  ["riot", "hide"],
+)
+assert.throws(() => routed.apply(routed.initial, [{ path: "route", set: "fire" }])) // outside the closed set
+assert.throws(() => routed.apply(routed.initial, [{ path: "heat", set: "hot" }])) // a string on an int
+assert.throws(
+  () => makeCard(decodeRules({ fields: [{ path: "r", type: "enum", initial: "x" }], actions: [] })),
+  /enum needs options/,
+)
+// A greeting's opening uses the same effect vocabulary; the harness applies it before the first turn (test/loop.ts).
+const g = Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", set: "blood" }, { event: "riot" }] })
+assert.deepEqual(routed.apply(routed.initial, g.do!), { s: { route: "blood", heat: 2 }, events: ["riot"] })
+assert.throws(() => Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", go: "blood" }] }))
 
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")

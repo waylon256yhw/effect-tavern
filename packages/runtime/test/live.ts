@@ -1,4 +1,5 @@
-// The loop (test/harness.ts) on a real connection, for one card: `node test/live.ts wuxia | banxing | ri`.
+// The loop (test/harness.ts) on a real connection, for one card: `node test/live.ts wuxia | banxing | ri | yandao [greeting]`.
+// The optional second argument picks the greeting (default 0): `yandao 1` opens the town after the fight.
 // Printed the way the inspector would show it: every stage's request size, output and usage, then the node.
 // No assertions on the prose; the point is judgement quality, request shapes and cache behaviour. Skips without a key.
 import { capabilities, compile, localAnthropic, type Trace } from "@effect-tavern/provider"
@@ -83,10 +84,10 @@ const clip = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s).
 
 const { card, turns } = await script()
 useCard(card)
-const greeting = card.greetings[0]
+const greeting = card.greetings[Number(process.argv[3] ?? 0)]
 if (greeting) {
   const g = greet(greeting)
-  console.log(`━━ node ${g.id}: greeting (${greeting.length} chars), state=${show(stateAt(chain(g.id)))}`)
+  console.log(`━━ node ${g.id}: greeting (${greeting.text.length} chars), state=${show(stateAt(chain(g.id)))}`)
 }
 
 const program = Effect.gen(function* () {

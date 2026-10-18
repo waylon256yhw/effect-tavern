@@ -13,12 +13,16 @@ import { Cond, holds } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
 
 const Num = Schema.Number
+const Scalar = Schema.Union([Num, Schema.Boolean, Schema.String])
+// `enum`: a discrete state (a route, a mode) that nothing derives from a number; `options` is its closed set and the
+// gate on every `set`. Strings exist only inside an enum: free text is never state (docs/card-reading-2.md §7).
 export const Field = Schema.Struct({
   path: Schema.String,
-  type: Schema.Literals(["int", "number", "boolean"]),
+  type: Schema.Literals(["int", "number", "boolean", "enum"]),
   min: Schema.optionalKey(Num),
   max: Schema.optionalKey(Num),
-  initial: Schema.Union([Num, Schema.Boolean]),
+  options: Schema.optionalKey(Schema.Array(Schema.String)),
+  initial: Scalar,
 })
 export const Chance = Schema.Union([
   Num,
@@ -26,7 +30,7 @@ export const Chance = Schema.Union([
   Schema.Struct({ judge: Schema.String }),
 ])
 export const Effect_ = Schema.Union([
-  Schema.Struct({ path: Schema.String, set: Schema.Union([Num, Schema.Boolean]) }),
+  Schema.Struct({ path: Schema.String, set: Scalar }),
   Schema.Struct({ path: Schema.String, add: Schema.Union([Num, Schema.Struct({ path: Schema.String })]) }),
   Schema.Struct({ event: Schema.String }), // `{path}` interpolates the post-effect state; feeds narrator and ledger
 ])
@@ -57,7 +61,7 @@ export const Rules = Schema.Struct({
 })
 export type Rules = typeof Rules.Type
 export type Action = typeof Action.Type
-export type State = Record<string, number | boolean>
+export type State = Record<string, number | boolean | string>
 export interface Beat {
   next: string
   chance?: number
@@ -73,6 +77,10 @@ export const makeCard = (r: Rules) => {
   const initial: State = Object.fromEntries(r.fields.map((f) => [f.path, f.initial]))
   const fieldSchema = (f: typeof Field.Type) => {
     if (f.type === "boolean") return Schema.Boolean
+    if (f.type === "enum") {
+      if (!f.options?.length) throw new Error(`${f.path}: enum needs options`)
+      return Schema.Literals([...f.options])
+    }
     const base = f.type === "int" ? Schema.Int : Num
     const lo = f.min === undefined ? undefined : Schema.isGreaterThanOrEqualTo(f.min)
     const hi = f.max === undefined ? undefined : Schema.isLessThanOrEqualTo(f.max)
@@ -167,6 +175,7 @@ export const makeCard = (r: Rules) => {
     rules: r,
     initial,
     validate,
+    apply, // effects outside a beat or readout: a greeting's opening
     available,
     settle,
     fold,
@@ -194,11 +203,16 @@ export const LoreEntry = Schema.Struct({
 // who the player is in the fiction is the frame slot `persona` (card default, player override like any slot), and
 // which channel the input takes by default: `act` (in-fiction, enters the transcript) or `aside` (direction to the
 // narrator, this turn only). `input` is read by the client, not the loop; the loop takes both channels on every turn.
+// A greeting is node 0 with no player input. `do` is its opening: the effects that make this opening differ from the
+// card's initial state (an IF line's route, a later date, a tenser town). Fiction variants read the result through
+// `when`; its events reach the first turn's gate. Two ecosystem cards needed exactly this and had no place for it.
+export const Greeting = Schema.Struct({ text: Schema.String, do: Schema.optionalKey(Schema.Array(Effect_)) })
+export type Greeting = typeof Greeting.Type
 export const Card = Schema.Struct({
   id: Schema.String,
   frame: Schema.Array(Fragment), // slots: persona, voice, style, setting …
   fiction: Schema.Array(Fragment), // a character, a cast or a world; variants carry `when`
-  greetings: Schema.Array(Schema.String),
+  greetings: Schema.Array(Greeting),
   rules: Rules,
   lore: Schema.Array(LoreEntry),
   guard: Schema.Array(Schema.String), // checked after the prose, never shown to the narrator

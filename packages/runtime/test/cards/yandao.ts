@@ -3,6 +3,8 @@
 // the player types is direction to the narrator, never a line of anyone in the story. Nothing else is special: the
 // fiction is a town instead of a person, one world-state field moved by a readout, one layered lore entry whose second
 // layer opens on an event the readout emits, the director on so MUST/MAY plays.
+// Two greetings (the ecosystem's "IF line" openings): the second starts after the fight. Its `do` sets the tension, flips
+// the `起点` enum that one fiction variant reads, and emits the event that opens the lore's second layer on turn 1.
 import { decodeCard, type Card } from "../../src/card.ts"
 
 export const load = (): Card =>
@@ -34,10 +36,26 @@ export const load = (): Card =>
         text: "街面上已经见过血，店铺半数关门，镇民晚上不出门。",
         when: { path: "局势", op: "gte", value: 6 },
       },
+      {
+        id: "blood",
+        text: "镇上人都记得三天前货栈门口那一场：差役断了胳膊，驼夫开了头，县衙拿人的告示还贴在卡子上。两边都在等对方先低头。",
+        when: { path: "起点", is: "血案" },
+      },
     ],
-    greetings: [],
+    greetings: [
+      {
+        text: "黄昏。盐津镇的石板街上，货栈的伙计把最后一垛盐包抬进门，门板合上，街面只剩挑水的和收摊的。县衙前新立的查验卡空着，两个差役坐在条凳上剥花生。河面上没有船。沈大娘的货栈门口挂着灯，灯下没人。",
+      },
+      {
+        text: "三天前，货栈门口动了手。沈二的驼夫和查验卡的差役推搡起来，一个差役被盐包砸断了胳膊，一个驼夫额头开了口子，血洒在石板上，冲了两桶水还看得见印子。县衙贴了告示要拿打人的驼夫，沈大娘闭门不见客，沈二带着驼队停在镇外十里的渡口。天没黑透，街上就没人了。",
+        do: [{ path: "局势", set: 7 }, { path: "起点", set: "血案" }, { event: "冲突:升级" }],
+      },
+    ],
     rules: {
-      fields: [{ path: "局势", type: "int", min: 0, max: 10, initial: 2 }],
+      fields: [
+        { path: "局势", type: "int", min: 0, max: 10, initial: 2 },
+        { path: "起点", type: "enum", options: ["平静", "血案"], initial: "平静" },
+      ],
       actions: [],
       readouts: [
         {
@@ -69,7 +87,7 @@ export const load = (): Card =>
 
 // Direction, not dialogue: each line is what a novelist tells the narrator to write next.
 export const turns = [
-  "开场。黄昏，沈二带的驼队进镇，街上的人在看。先写镇子的样子，不要急着出事。",
+  "沈二带的驼队进镇，街上的人在看。先写镇子的样子，不要急着出事。",
   "老柯带两个差役上来查驼队，沈二不让开包。写到动手为止，写两三个旁观者的反应。",
   "切到县衙里。周秉文听到消息，写他和老柯的对话。",
   "第二天早上，镇上的传言。收尾时留一个悬念。",

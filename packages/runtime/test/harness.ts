@@ -20,7 +20,7 @@ import { decodeFragments as frags, frame, head as headOf, type Msg, type Player 
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import { deliveredOn, makeJournal, textOf, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
-import { makeCard, type Answers, type Beat, type Card, type State } from "../src/card.ts"
+import { makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "../src/card.ts"
 import { holds, type Cond } from "../src/cond.ts"
 
 // ───────── The card in play, set once per process with `useCard`. `L`, `initial` and `summaries` are live bindings. ─────────
@@ -87,26 +87,30 @@ const Notes = Schema.Struct({ notes: Schema.Array(Schema.String) })
 export type Turn = TurnOf<Beat>
 export const journal = makeJournal<Beat>()
 export const { chain } = journal
-/** A greeting node: the card's opening as node 0, with no player input. */
-export const greet = (text: string) =>
+/** A greeting node: the card's opening as node 0, with no player input; its `do` is the node's opening. */
+export const greet = (g: Greeting) =>
   journal.save({
     parent: null,
     input: { text: "" },
     read: [],
+    ...(g.do ? { opening: g.do } : {}),
     beats: [],
     answers: {},
     end: "end",
     brief: { must: [], may: [] },
-    reply: [{ type: "text", text }],
+    reply: [{ type: "text", text: g.text }],
     fired: [],
     violated: [],
     notes: [],
   })
-// A turn's state: beats settle before the prose, readout answers after it. Both are code folds over recorded outputs.
+// A turn's state: the opening (a greeting's effects), then beats before the prose, then readout answers after it. All
+// code folds over recorded outputs. `post` is what this turn emitted that no gate of its own could read: a greeting has
+// no gate and a readout is answered after the prose, so both open windows on the next turn.
 const settleTurn = (s: State, t: Turn) => {
-  const b = rpg.fold(s, t.beats)
+  const o = t.opening ? rpg.apply(s, t.opening) : { s, events: [] as string[] }
+  const b = rpg.fold(o.s, t.beats)
   const r = rpg.settleReadouts(b.s, t.answers)
-  return { s: r.s, events: [...b.events, ...r.events] }
+  return { s: r.s, events: [...o.events, ...b.events, ...r.events], post: [...o.events, ...r.events] }
 }
 export const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, initial)
 export const eventsOf = (path: readonly Turn[], t: Turn) =>
@@ -235,14 +239,11 @@ export const run = (
       }
     }
     const { s: s1, events } = rpg.fold(s0, beats)
-    // gate: after settlement, on this turn's beat events plus the readout events of the turn before. A readout is
-    // answered after the prose, so what it emits can only open a window on the next turn; without the carry it never
-    // opened one at all (found by the yandao card: a readout-only card has no beat events). Director only if the card
-    // has one and something is open.
+    // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate (readout
+    // events; a greeting's opening events). Without the carry a readout-only card never opened a window at all (found
+    // by the yandao card: no beat events). Director only if the card has one and something is open.
     const prev = path.at(-1)
-    const carried = prev
-      ? rpg.settleReadouts(rpg.fold(stateAt(path.slice(0, -1)), prev.beats).s, prev.answers).events
-      : []
+    const carried = prev ? settleTurn(stateAt(path.slice(0, -1)), prev).post : []
     const gateEvents = [...events, ...carried]
     const open: Disclosure[] = L.offers(s1, deliveredOn(path, disclosures), gateEvents).map(({ id, layer }) => ({
       id,

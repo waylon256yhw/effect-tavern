@@ -10,6 +10,7 @@ import {
   calls,
   chain,
   eventsOf,
+  greet,
   history,
   initial,
   journal,
@@ -235,6 +236,17 @@ const program = Effect.gen(function* () {
   assert.ok(/Known: .*\nASK#notes$/m.test(str(prompts.record.at(-1)!)))
   assert.ok(/Notes are the record/.test(str(prompts.record.at(-2)!)))
   assert.deepEqual([w.parent, w.read, w.beats, w.brief], [t2.parent, t2.read, t2.beats, t2.brief])
+
+  // A greeting with an opening: its effects fold into the state before the first turn (the head reads the warm band,
+  // not the initial cool one), and its events are carried into that turn's gate like a readout's: li's second layer is
+  // offered on turn 1 of this branch without a single beat.
+  const g = greet({ text: "G", do: [{ path: "bond", set: 8 }, { event: "warmth:close" }] })
+  assert.equal(stateAt(chain(g.id)).bond, 8)
+  i = calls.length
+  const t9 = yield* run(full, player, g.id, { text: "wait" })
+  assert.deepEqual(since(i), ["lookup", "decide", "direct", "narrate", "check", "record"])
+  assert.deepEqual([t9.beats, t9.brief.may], [[], ["li"]])
+  assert.ok(str(lastNarr()).includes("A trusts the player.") && str(lastNarr()).includes("G"))
   i = calls.length
   for (const t of journal.values()) stateAt(chain(t.id))
   assert.equal(calls.length, i)

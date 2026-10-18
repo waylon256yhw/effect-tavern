@@ -60,6 +60,17 @@ export const standard = <S extends Schema.Top & Schema.Constraint & Schema.Const
   return { "~standard": { ...v["~standard"], jsonSchema: j["~standard"].jsonSchema } }
 }
 
+/** Wire placement. Anthropic takes a mid-conversation system message only directly after a user message (verified live:
+ *  400 otherwise). The harness's views put directives after the player's line, but a past turn that had no player line
+ *  (an aside-only turn that delivered lore) leaves its system lines after an assistant message; those go out under the
+ *  one role the wire still allows there, content unchanged. Leading system messages (the head) are untouched. */
+const wire = (format: Format, messages: readonly Message[]): Message[] =>
+  format === "anthropic"
+    ? messages.map((m, i) =>
+        m.role === "system" && messages[i - 1]?.role === "assistant" ? ({ ...m, role: "user" } as Message) : m,
+      )
+    : [...messages]
+
 const settings = (format: Format, o: CallOptions) => ({
   allowSystemInMessages: true, // the head and mid-history lore are system messages in the message list; ai 7 refuses them by default
   maxOutputTokens: o.maxOutputTokens,
@@ -106,7 +117,7 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
       model: m.model,
       schema: standard(schema),
       schemaName: o.name,
-      messages: [...messages],
+      messages: wire(m.format, messages),
       abortSignal,
       ...settings(m.format, o),
     }),
@@ -117,7 +128,7 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
 
 export const text = (m: Model, messages: readonly Message[], o: CallOptions = {}) =>
   Effect.tryPromise((abortSignal) =>
-    generateText({ model: m.model, messages: [...messages], abortSignal, ...settings(m.format, o) }),
+    generateText({ model: m.model, messages: wire(m.format, messages), abortSignal, ...settings(m.format, o) }),
   ).pipe(
     Effect.mapError(fail),
     Effect.map((r) => ({
@@ -152,7 +163,7 @@ export const stream = (m: Model, messages: readonly Message[], o: CallOptions = 
       yield* Effect.addFinalizer(() => Effect.sync(() => ac.abort()))
       const r = streamText({
         model: m.model,
-        messages: [...messages],
+        messages: wire(m.format, messages),
         abortSignal: ac.signal,
         ...settings(m.format, o),
       })

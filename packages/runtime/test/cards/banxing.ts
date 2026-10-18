@@ -21,7 +21,7 @@ export const load = (path = join(homedir(), "Downloads", "伴星.json")) => {
       { id: "character", text: macros(rest.join("\n\n"), char) },
       { id: "examples", text: `示范（${char}的声音）：\n${macros(d.mes_example.replace(/<START>\n?/g, ""), char)}` },
     ],
-    greetings: [macros(d.first_mes, char)],
+    greetings: [{ text: macros(d.first_mes, char) }],
     rules: { fields: [], actions: [] },
     lore: [],
     guard: [],
