@@ -89,8 +89,16 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
       const asked = [...text.matchAll(/^(\w+): (?!.*\[)/gm)]
         .map(([, id]) => id!)
         .filter((id) => !["Known", "Current", "Questions"].includes(id))
+      // Notes repeat the first Known item on purpose: the harness drops what the path already holds.
       const canned: Record<string, unknown> = {
-        notes: [`NOTE#${n}`],
+        notes: [
+          `NOTE#${n}`,
+          ...(text
+            .match(/^Known: (.*)/m)?.[1]
+            ?.split("; ")
+            .slice(0, 1)
+            .filter(Boolean) ?? []),
+        ],
         options: ["O1", "O2", "O3", "O4", "O5"], // five: the cap cuts to four
         scene: { place: `P#${n}`, present: [{ name: "B", mood: "calm" }] },
         people: /^ask about li/i.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
@@ -149,6 +157,7 @@ const program = Effect.gen(function* () {
   assert.ok(/Questions: warmth: how A treated/.test(rec1) && !/bond|State:/.test(rec1))
   assert.ok(str(lastNarr()).includes("arm's length") && !/bond/.test(str(lastNarr())))
   assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
+  assert.deepEqual(t1.products.notes, ["NOTE#2"]) // the echoed Known item is dropped; only the new fact is kept
 
   // Turn 2: lookup lists only t1's people row (li#1 already on the path) and the input reads nothing; strikes settle,
   // window opens, director, reveal fired. The narrator gets the feed record as `Current:` after the outcome.
@@ -203,6 +212,16 @@ const program = Effect.gen(function* () {
   ]) // player zone → frame → fiction
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
+  // Cache breakpoints: the head's last message and the last history message (t2's reply, what next turn resends
+  // verbatim) carry markers; this turn's input and tail do not.
+  const marks = prompts.narrate
+    .at(-1)!
+    .map((m) => (m.providerOptions?.anthropic as { cacheControl?: unknown } | undefined)?.cacheControl !== undefined)
+  const at = (i: number) => msgText(prompts.narrate.at(-1)![i]!)
+  assert.deepEqual(
+    [marks.at(-1), marks.filter(Boolean).length, at(marks.indexOf(true)), at(marks.lastIndexOf(true))],
+    [false, 2, "A keeps the player at arm's length.", prose(t2)],
+  )
 
   // Truncation: one node, prose concatenated, two narrate calls, second prompt ends with the partial as assistant.
   i = calls.length

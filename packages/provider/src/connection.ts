@@ -37,6 +37,8 @@ export interface Connection {
   credential: Credential
   model: string
   capabilities?: Partial<Capabilities>
+  /** Lifetime of the head's cache entry: 1h when a person is on the other end (replies 5–60 minutes apart), else 5m. */
+  cacheTtl?: "5m" | "1h"
   headers?: Record<string, string>
   /** Forward proxy, three states like Bun's: unset follows the runtime (Node reads the env only with
    *  NODE_USE_ENV_PROXY=1), `false` forces a direct connection, a URL routes this connection through it. */

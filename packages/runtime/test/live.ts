@@ -73,6 +73,7 @@ useModel({
   prefill: caps.prefill,
   reasoningBack: caps.reasoningBack,
   effort: "low", // narrate thinks, so the reply carries reasoning parts
+  ttl: conn.cacheTtl,
 })
 const thinkingSent = (t: Trace | undefined) => {
   const body = t?.body ? (JSON.parse(t.body) as { messages?: Array<{ content?: Array<{ type: string }> }> }) : undefined

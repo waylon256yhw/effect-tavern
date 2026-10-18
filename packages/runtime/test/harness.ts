@@ -16,8 +16,22 @@
 // Player actions on a node, each with its landing in the log tree (docs/card-reading-2.md §8 item 8): `swipe` and
 // `reword` (a sibling, from lookup / from narrate), `edit` (a sibling carrying the player's prose, check and record
 // rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pin` (a delivery on the
-// node, no model), `pick` (an option as the next act). Skipped: continue (needs a prefix the provider takes), streaming, persistence.
-import { breakpoint, object, text, type Effort, type Message, type Model, type Usage } from "@effect-tavern/provider"
+// node, no model), `pick` (an option as the next act). "Continue" is not a kind: with no output cap the model ends where
+// it ends, and "go on" is an aside turn. Skipped: streaming, persistence.
+// Cache (docs/provider-reading.md §6 item 3): three breakpoints, where the request stops being byte-stable across turns:
+// the end of the head (the connection's TTL: 1h for a person), the folded summary, and the last history message
+// before this turn's input. The transcript is append-only, so everything before the input is a cached read next turn;
+// no padding for the model's minimum prefix, which a head plus one turn crosses on its own.
+import {
+  breakpoint,
+  object,
+  text,
+  type CacheTtl,
+  type Effort,
+  type Message,
+  type Model,
+  type Usage,
+} from "@effect-tavern/provider"
 import { Effect, Schema } from "effect"
 import { decodeFragments as frags, frame, head as headOf, type Msg, type Player } from "../src/fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
@@ -204,14 +218,17 @@ const asideOf = (i: Input) => (i.text && i.aside ? [sys(`Player aside: ${i.aside
 /** Head, with a cache breakpoint on its last message: player zone → frame → fiction is byte-stable across turns. */
 const head = (p: Player, c: Card, stage: "narrate" | "direct", state: State) => {
   const h = headOf(stage === "narrate" ? [...frame(p, c), ...c.fiction] : frame(p, c), { state }).map(toP)
-  return h.length ? [...h.slice(0, -1), breakpoint(h.at(-1)!)] : h
+  return h.length ? [...h.slice(0, -1), breakpoint(h.at(-1)!, M.ttl)] : h
 }
 const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when a real tokenizer is in the loop
 export const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
   if (stage === "direct") return ledger(path, (t) => eventsOf(path, t)).map(toP)
   const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
   const h = narratorHistory(path, textOf, sum).map(toP)
-  return sum ? [breakpoint(h[0]!), ...h.slice(1)] : h // the fold is byte-stable until the boundary moves
+  if (!h.length) return h
+  // The fold is byte-stable until the boundary moves; the last message is the end of what next turn resends verbatim.
+  const marked = sum ? [breakpoint(h[0]!), ...h.slice(1)] : h
+  return [...marked.slice(0, -1), breakpoint(marked.at(-1)!)]
 }
 export const msgText = (m: PMsg) =>
   typeof m.content === "string" ? m.content : m.content.map((c) => ("text" in c ? c.text : "")).join("")
@@ -219,7 +236,13 @@ export const str = (p: readonly PMsg[]) => p.map(msgText).join("\n")
 
 // ───────── The loop ─────────
 // The connection: one Model for every stage here; a real harness binds stages to connections.
-export type LoopModel = Model & { prefill: boolean; reasoningBack?: boolean; effort?: Effort; maxOutputTokens?: number }
+export type LoopModel = Model & {
+  prefill: boolean
+  reasoningBack?: boolean
+  effort?: Effort
+  maxOutputTokens?: number
+  ttl?: CacheTtl // the head's cache lifetime; the connection's setting
+}
 let M: LoopModel
 export const useModel = (m: LoopModel) => {
   M = m
@@ -511,8 +534,18 @@ const record = (
       ...(qs ? { answers: qs.schema } : {}),
     }) as unknown as Schema.Codec<Record<string, unknown>>
     const out = yield* obj("record", schema, msgs, 4096)
+    // A list accumulates along the path, so an item the path already holds is noise: on a turn with no new fact Haiku
+    // echoed Known back verbatim as notes (live), and the fold carried it twice. Dropped by code, like a cap.
+    const have = fold(
+      asked.filter((p) => p.shape.kind === "list"),
+      path.map((t) => t.products),
+    )
+    const fresh = (p: Product, v: unknown) =>
+      p.shape.kind === "list"
+        ? (v as string[]).filter((x) => !((have[p.id] as string[] | undefined) ?? []).includes(x))
+        : v
     return {
-      products: Object.fromEntries(asked.map((p) => [p.id, cap(p.shape, out[p.id])])),
+      products: Object.fromEntries(asked.map((p) => [p.id, cap(p.shape, fresh(p, out[p.id]))])),
       answers: out.answers as Record<string, string> | undefined,
     }
   })

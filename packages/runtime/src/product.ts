@@ -6,7 +6,8 @@
 // value goes back to the model next turn; `recall` makes the accumulated items readable by the lookup stage like lore
 // (hook = the item, or one column). The harness owns a default list (notes, options, inner); a card patches by id; the
 // player toggles `on`.
-// Ceilings: keyed tables answered as upsert/delete ops instead of full values; a cap derived from state; `every` n turns.
+// Ceilings: keyed tables answered as upsert/delete ops instead of full values (and with them, pinning a row so record
+// leaves it alone: on a whole-value table that is the same problem); a cap derived from state; `every` n turns.
 import { Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
 

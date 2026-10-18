@@ -27,10 +27,17 @@ export interface CallOptions {
   providerOptions?: Record<string, Record<string, unknown>>
 }
 
-/** Cache breakpoint. The harness marks the last head message and the last folded-prefix message; other formats ignore it. */
-export const breakpoint = <M extends Message>(m: M): M => ({
+/** Cache breakpoint on a message. Anthropic needs explicit markers (at most four, each caching the prefix up to it,
+ *  nothing below the model's minimum prefix); OpenAI and Gemini cache prefixes on their own and ignore it. The TTL is the
+ *  connection's call: 5m for traffic under five minutes apart, 1h (twice the write price) for a human who replies
+ *  within the hour; 1h markers must precede 5m ones in the request. */
+export type CacheTtl = "5m" | "1h"
+export const breakpoint = <M extends Message>(m: M, ttl?: CacheTtl): M => ({
   ...m,
-  providerOptions: { ...m.providerOptions, anthropic: { cacheControl: { type: "ephemeral" } } },
+  providerOptions: {
+    ...m.providerOptions,
+    anthropic: { cacheControl: { type: "ephemeral", ...(ttl === "1h" ? { ttl } : {}) } },
+  },
 })
 
 // Deckled's reasoning-effort table, cut to three formats. `off` is only sent where the format has an off value.

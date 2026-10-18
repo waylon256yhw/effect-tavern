@@ -83,6 +83,14 @@ export const load = (): Card =>
     ],
     guard: [],
     director: true,
+    // A world card's notes came back as scenery (docs/provider-reading.md §10). The fix is the ask, not the mechanism:
+    // the card overrides the harness's notes wording by id, and the list shape stays (the fold reads it).
+    asks: [
+      {
+        id: "product.notes",
+        text: "记事只记事实：谁做了什么、谁说了什么要紧的话、什么变了、新出现的人名和地名。不写景物、天气和气氛，不评价文字。每条一句。",
+      },
+    ],
   })
 
 // Direction, not dialogue: each line is what a novelist tells the narrator to write next.
