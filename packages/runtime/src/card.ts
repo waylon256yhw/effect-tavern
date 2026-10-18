@@ -204,6 +204,7 @@ export const Card = Schema.Struct({
   guard: Schema.Array(Schema.String), // checked after the prose, never shown to the narrator
   director: Schema.optionalKey(Schema.Boolean),
   input: Schema.optionalKey(Schema.Literals(["act", "aside"])),
+  asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id
 })
 export type Card = typeof Card.Type
 export type LoreEntry = typeof LoreEntry.Type

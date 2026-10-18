@@ -228,9 +228,12 @@ const program = Effect.gen(function* () {
   assert.ok(again.includes(prose(t3)) && again.includes(s6.text) && !again.includes(s8.text))
 
   // reword: narrate, check, record only; read/beats/brief kept; sibling under the same parent. Replay calls nothing.
+  // The card overrides one of the harness's own asks by id; the rest keep their defaults.
   i = calls.length
-  const w = yield* reword(full, player, t2)
+  const w = yield* reword({ ...full, asks: [{ id: "record.notes", text: "ASK#notes" }] }, player, t2)
   assert.deepEqual(since(i), ["narrate", "check", "record"])
+  assert.ok(/Known: .*\nASK#notes$/m.test(str(prompts.record.at(-1)!)))
+  assert.ok(/Notes are the record/.test(str(prompts.record.at(-2)!)))
   assert.deepEqual([w.parent, w.read, w.beats, w.brief], [t2.parent, t2.read, t2.beats, t2.brief])
   i = calls.length
   for (const t of journal.values()) stateAt(chain(t.id))

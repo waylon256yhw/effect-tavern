@@ -16,7 +16,7 @@
 // Skipped: swipe kinds other than reword, continue, streaming, persistence, reasoning parts on the node.
 import { breakpoint, object, text, type Effort, type Message, type Model, type Usage } from "@effect-tavern/provider"
 import { Effect, Schema } from "effect"
-import { frame, head as headOf, type Msg, type Player } from "../src/fragment.ts"
+import { decodeFragments as frags, frame, head as headOf, type Msg, type Player } from "../src/fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import { deliveredOn, makeJournal, textOf, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
@@ -40,6 +40,29 @@ export const useCard = (c: Card) => {
   )
   summaries = makeSummaries<Beat>(L.text)
 }
+
+// ───────── The harness's own words ─────────
+// Every instruction the loop says to the model, as fragments with ids, in the open. Data lines (State:, Actions:,
+// Open:, Known:, Questions:) are format and stay in code; these are the prose around them. Resolved per id: the
+// player's `asks`, then the card's, then these defaults. Lookup, direct and check carry no prose: the schema is the
+// question.
+export const asks = frags([
+  {
+    id: "decide.first",
+    text: `Which card action does the player's input take first? "end" if it takes none of the listed actions. Set "again" to true only if the input's own words ask for more than one beat ("until he falls", "twice", "then …").`,
+  },
+  {
+    id: "decide.again",
+    text: `The input asked to keep going. Given the outcomes so far, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`,
+  },
+  { id: "narrate.correction", text: "Previous draft broke:" },
+  {
+    id: "record.notes",
+    text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.",
+  },
+])
+const wording = (p: Player, c: Card, id: string) =>
+  [...(p.asks ?? []), ...(c.asks ?? []), ...asks].find((f) => f.id === id)!.text!
 
 const Lookup = (ids: readonly string[]) => Schema.Struct({ read: Schema.Array(Schema.Literals(ids)) })
 const BriefOf = (open: readonly string[]) =>
@@ -190,9 +213,7 @@ export const run = (
         // (`again`). Only an input that asked for more enters the per-beat loop, where each later question sees the
         // outcomes so far (§10.2) and continues by default. Verified on Haiku: one question for both roles answers
         // the input again every time, whichever way it is worded.
-        const question = beats.length
-          ? `The input asked to keep going. Acted on so far: ${beats.map((b, i) => `${b.next} → ${events[i] ?? "-"}`).join(", ")}. Given these outcomes, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`
-          : `Which card action does the player's input take first? "end" if it takes none of the listed actions. Set "again" to true only if the input's own words ask for more than one beat ("until he falls", "twice", "then …").`
+        const question = wording(player, card, beats.length ? "decide.again" : "decide.first")
         const d = yield* obj("decide", rpg.decideSchema(s), [
           ...head(player, card, "direct", s),
           ...history(path, "direct"),
@@ -289,7 +310,7 @@ export const run = (
       const missed = brief.must.filter((id) => !c.fired.includes(id))
       if (c.violated.length || missed.length) {
         reply = yield* narrate(
-          `Previous draft broke: ${[...c.violated.map((r) => `rule "${r}"`), ...missed.map((m) => `missed MUST ${m}`)].join("; ")}`,
+          `${wording(player, card, "narrate.correction")} ${[...c.violated.map((r) => `rule "${r}"`), ...missed.map((m) => `missed MUST ${m}`)].join("; ")}`,
         )
         c = yield* check(textOf(reply))
       }
@@ -300,9 +321,7 @@ export const run = (
     // questions, never the numbers; the chosen options settle by code, so replay never asks again.
     const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
     const recMsgs = [
-      sys(
-        `Known: ${path.flatMap((t) => t.notes).join("; ")}\nNotes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.`,
-      ),
+      sys(`Known: ${path.flatMap((t) => t.notes).join("; ")}\n${wording(player, card, "record.notes")}`),
       ...(qs ? [sys(`Questions: ${rpg.questions(s1).join("\n")}`)] : []),
       usr(`${input.text}\n${textOf(reply)}`),
     ]

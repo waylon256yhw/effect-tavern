@@ -30,6 +30,7 @@ export interface Player {
   global: readonly Fragment[]
   forCard: Record<string, readonly Fragment[]>
   defaults?: { global?: Mode; forCard?: Mode } // harness-level setting, also the player's
+  asks?: readonly Fragment[] // the harness's own wording, overridden by id (see harness `asks`)
 }
 export interface FrameSource {
   id: string
