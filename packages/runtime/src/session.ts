@@ -14,8 +14,9 @@
 // nodes are untouched, and lore dedupe keeps working because deliveries live on the nodes, not in the view.
 // Player actions on a node, each with its landing in the log tree (docs/card-reading-2.md §8 item 8): `swipe` and
 // `reword` (a sibling, from lookup / from narrate), `edit` (a sibling carrying the player's prose, check and record
-// rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pin` (a delivery on the
-// node, no model), `pick` (an option as the next act). "Continue" is not a kind: with no output cap the model ends where
+// rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pick` (an option as the
+// next act). A pin is not an action on a node: it rides on an act's input (`Input.pin`), the entry is forced open as a
+// MUST for that turn, check verifies it, and what the path could still be told is the node's `readable` list. "Continue" is not a kind: with no output cap the model ends where
 // it ends, and "go on" is an aside turn. Stop has two meanings by stage: before the prose starts, the action is
 // interrupted and leaves nothing; once it streams, `stop` halts the prose where it is, check is skipped (the player cut
 // the draft, not the model), record runs, and the node is saved with `end: "stopped"`, so "go on" has a node to follow.
@@ -71,12 +72,14 @@ import {
 
 export type Turn = TurnOf<Beat>
 export type Phase = "lookup" | "decide" | "direct" | "narrate" | "check" | "record"
-/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. */
+/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `readable` is what the
+ *  path could still be told (hooks, not bodies): the client's untold list, where a pin is picked from. */
 export interface Node {
   turn: Turn
   state: State
   events: readonly string[]
   delivered: readonly (Disclosure & { text: string })[]
+  readable: readonly { id: string; hook: string }[]
 }
 export type Event =
   | { kind: "stage"; phase: Phase }
@@ -186,12 +189,13 @@ export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn,
       return last.value.node.turn
     }),
   )
-/** The events an action causes, as a stream: the body runs forked, emitting as it goes; the stream ends when it does. */
+/** The events an action causes, as a stream: the body runs forked, emitting as it goes; the stream ends when it does.
+ *  A defect in the body (an invalid action found mid-turn, such as a pin with nothing to tell) fails the stream too;
+ *  swallowing it would leave the stream open forever. */
 const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Events =>
   Stream.callback<Event, ModelError>((q) =>
-    body((e) => Effect.asVoid(Queue.offer(q, e))).pipe(
-      Effect.andThen(Queue.end(q)),
-      Effect.catch((e) => Queue.fail(q, e)),
+    Effect.exit(body((e) => Effect.asVoid(Queue.offer(q, e)))).pipe(
+      Effect.andThen((x) => (x._tag === "Success" ? Queue.end(q) : Queue.failCause(q, x.cause))),
     ),
   )
 
@@ -254,6 +258,21 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
   }
   const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, rpg.initial)
   const eventsOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t).events
+  /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
+   *  not yet delivered. The lookup's enum, the node's `readable`, and where `Input.pin` picks from. */
+  const readableOn = (path: readonly Turn[]) => {
+    const s = stateAt(path)
+    const seen = deliveredOn(path)
+    const seenKeys = new Set(seen.map(key))
+    const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
+    const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)!, lore: true })) : []
+    const recall = products
+      .filter((p) => p.recall !== undefined)
+      .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
+      .filter((e) => !seenKeys.has(`${e.id}#1`))
+      .map((e) => ({ id: e.id, hook: e.hook, lore: false }))
+    return [...lore, ...recall]
+  }
   const project = (t: Turn): Node => {
     const path = chain(t.id)
     return {
@@ -261,6 +280,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       state: stateAt(path),
       events: eventsOf(path, t),
       delivered: deliveredIn(t).map((d) => ({ ...d, text: textOf(d) })),
+      readable: readableOn(path).map(({ id, hook }) => ({ id, hook })),
     }
   }
   const nodeEvent = (t: Turn): Event => ({ kind: "node", node: project(t) })
@@ -366,13 +386,11 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the
       // items of recall products stored on the path and not yet delivered (model-written memory walks the same road as
       // lore). Nothing to pick → no call.
-      const seenKeys = new Set(seen.map(key))
-      const recall = products
-        .filter((p) => p.recall !== undefined)
-        .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
-        .filter((e) => !seenKeys.has(`${e.id}#1`))
-      const loreIds = card.lore.length ? L.readable(s0, seen) : []
-      const idx = [...loreIds, ...recall.map((e) => e.id)]
+      // The pin: the entry's next unseen layer, forced open below, so the lookup is not offered it as well.
+      const forced = input.pin === undefined ? [] : deliver(s0, seen, [input.pin]).slice(0, 1)
+      if (input.pin !== undefined && !forced.length) throw new Error(`${input.pin}: nothing to pin`)
+      const untold = readableOn(path).filter((e) => e.id !== input.pin)
+      const idx = untold.map((e) => e.id)
       const disclosures =
         from !== "lookup"
           ? base!.read
@@ -381,7 +399,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
               seen,
               idx.length
                 ? (yield* obj(emit, "lookup", Lookup(idx), [
-                    sys(`Index: ${[...loreIds, ...recall.map((e) => `${e.id}=${e.hook}`)].join(", ")}`),
+                    sys(`Index: ${untold.map((e) => (e.lore ? e.id : `${e.id}=${e.hook}`)).join(", ")}`),
                     said(input),
                   ])).read
                 : [],
@@ -435,34 +453,41 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       // The window's state carries each entry's derived counters under `lore.<id>` (since / shown), this turn's reads
       // counting as shown now; a card field named `lore` would collide, so none may be.
       const gateState = { ...s1, lore: L.counters([...path.map(deliveredIn), disclosures]) }
-      const open: Disclosure[] = L.offers(gateState, deliveredOn(path, disclosures), gateEvents).map(
-        ({ id, layer }) => ({
-          id,
-          layer,
-        }),
-      )
+      const offered = L.offers(gateState, deliveredOn(path, disclosures), gateEvents).map(({ id, layer }) => ({
+        id,
+        layer,
+      }))
+      // The pinned entry is open with its forced layer and MUST be told, director or not: check verifies it, a miss is
+      // the one correction rewrite, and an entry still unfired after that stays untold.
+      const open: Disclosure[] = [...forced, ...offered.filter((d) => !forced.some((f) => f.id === d.id))]
       const openIds = open.map((d) => d.id)
-      const brief: Brief =
+      const mustIds = forced.map((d) => d.id)
+      const briefed: Brief =
         from !== "lookup"
           ? base!.brief
-          : card.director && open.length
+          : card.director && offered.length
             ? yield* obj(emit, "direct", BriefOf(openIds), [
                 ...head("direct", s1),
                 ...card.guard.map((r) => sys(`Rule: ${r}`)),
                 ...history(path, "direct"),
-                sys(`Open: ${open.map((d) => `${d.id}=${L.text(d)}`).join(" | ")}\nEvents: ${gateEvents.join(",")}`),
+                sys(`Open: ${open.map((d) => `${d.id}=${textOf(d)}`).join(" | ")}\nEvents: ${gateEvents.join(",")}`),
                 ...asideOf(input),
                 said(input),
               ])
             : { must: [], may: openIds }
+      const brief: Brief = {
+        ...briefed,
+        must: [...new Set([...mustIds, ...briefed.must])],
+        may: briefed.may.filter((id) => !mustIds.includes(id)),
+      }
       // narrate, streamed, with truncation recovery and at most one correction rewrite
       const fed = known(path)
       const tail = [
         ...disclosures.map((d) => sys(textOf(d))),
         ...(events.length ? [sys(`Outcome: ${events.join(", ")}`)] : []),
         ...(fed.current ? [sys(fed.current)] : []), // feed products other than notes: where the scene stands, as data
-        ...open.filter((d) => brief.must.includes(d.id)).map((d) => sys(`MUST reveal: ${L.text(d)}`)),
-        ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${L.text(d)}`)),
+        ...open.filter((d) => brief.must.includes(d.id)).map((d) => sys(`MUST reveal: ${textOf(d)}`)),
+        ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${textOf(d)}`)),
         ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
         ...asideOf(input),
         ...(/⦅/.test(input.text) ? [sys(wording("input.thought"))] : []),
@@ -617,14 +642,6 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       settleTurn(stateAt(chain(t.parent)), { ...t, adjust })
       return project(journal.amend(nodeId, { adjust }))
     },
-    /** The player pins a lore entry or a recalled row (`<product>@<node>#<i>`) on a node: delivered from there on, without
-     *  asking the model; dedupe and the fold treat it like a lookup read. Nothing new to deliver is an error. */
-    pin: (nodeId: number, id: string): Node => {
-      const path = chain(nodeId)
-      const ds = deliver(stateAt(path), deliveredOn(path), [id])
-      if (!ds.length) throw new Error(`${id}: nothing to pin`)
-      return project(journal.amend(nodeId, { pinned: [...(journal.get(nodeId).pinned ?? []), ...ds] }))
-    },
     /** The player picks one of a node's `options`: it is their next act, a child turn like any typed input. */
     pick: (nodeId: number, i: number, stop?: Stop): Events => {
       const text = (journal.get(nodeId).products.options as readonly string[] | undefined)?.[i]
@@ -655,13 +672,16 @@ export const Action = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("act"),
     parent: Schema.NullOr(Id),
-    input: Schema.Struct({ text: Schema.String, aside: Schema.optionalKey(Schema.String) }),
+    input: Schema.Struct({
+      text: Schema.String,
+      aside: Schema.optionalKey(Schema.String),
+      pin: Schema.optionalKey(Schema.String),
+    }),
   }),
   Schema.Struct({ kind: Schema.Literal("swipe"), node: Id }),
   Schema.Struct({ kind: Schema.Literal("reword"), node: Id }),
   Schema.Struct({ kind: Schema.Literal("edit"), node: Id, text: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("setField"), node: Id, effects: Schema.Array(Effect_) }),
-  Schema.Struct({ kind: Schema.Literal("pin"), node: Id, id: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("pick"), node: Id, option: Id }),
   Schema.Struct({ kind: Schema.Literal("demand"), node: Id, product: Schema.String }),
 ])
@@ -681,8 +701,6 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
         return s.edit(a.node, a.text)
       case "setField":
         return Stream.succeed<Event>({ kind: "node", node: s.setField(a.node, a.effects) })
-      case "pin":
-        return Stream.succeed<Event>({ kind: "node", node: s.pin(a.node, a.id) })
       case "pick":
         return s.pick(a.node, a.option, stop)
       case "demand":

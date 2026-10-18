@@ -1,8 +1,8 @@
 // The wire adapter at the session's seam: one process, one session, no logic of its own.
 //   POST /        an Action (src/session.ts `Action`, decoded at this boundary) → the events it causes, as SSE, one
-//                 `event:` per kind; a failure is an `error` event. Closing the response is the stop: before the prose
-//                 has started it interrupts the action (nothing is saved, the model request aborts); once a `narrate`
-//                 stage was sent it halts the prose where it is and the turn finishes into a `stopped` node.
+//                 `event:` per kind; a failure is an `error` event. Closing the response is the stop: before the first
+//                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
+//                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
 //   GET  /nodes   every node's projection, for a client that just opened.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
@@ -58,7 +58,9 @@ export const serve = (session: Session, { inspect = false } = {}) =>
     const fiber = Effect.runFork(
       Stream.runForEach(perform(session, action, Deferred.await(stop)), (e) =>
         Effect.sync(() => {
-          if (e.kind === "stage" && e.phase === "narrate") narrating = true
+          // Each draft starts over: a stop before its first character withdraws the turn, even on the correction rewrite.
+          if (e.kind === "stage" && e.phase === "narrate") narrating = false
+          if (e.kind === "delta") narrating = true
           send(e.kind, shown(e))
         }),
       ).pipe(

@@ -6,8 +6,9 @@ import type { Disclosure } from "./lore.ts"
 
 export interface Input {
   text: string
-  aside?: string
-} // aside: this-turn-only instruction, never rendered for past turns
+  aside?: string // this-turn-only instruction, never rendered for past turns
+  pin?: string // an untold entry (lore id or `<product>@<node>#<i>`) this turn MUST tell; check verifies, a miss stays untold
+}
 export interface Brief {
   must: readonly string[]
   may: readonly string[]
@@ -25,7 +26,6 @@ export interface Turn<B> {
   brief: Brief
   reply: readonly Part[] // the model's output as parts; the prose is `textOf(reply)` and non-authoritative
   fired: readonly Disclosure[] // reveals confirmed by check; count as delivered
-  pinned?: readonly Disclosure[] // the player's own deliveries (pin lore / pin a recalled row): no model asked, count as delivered
   adjust?: readonly (typeof Effect_.Type)[] // the player's field edits on this node, applied last in the fold; replayed like any effect
   violated: readonly string[]
   products: Readonly<Record<string, unknown>> // record's answers by product id, shaped by the card (src/product.ts); `notes` is one
@@ -73,7 +73,7 @@ export const textOf = (parts: readonly Part[]): string =>
     .join("")
 export const prose = <B>(t: Turn<B>): string => textOf(t.reply)
 
-export const deliveredIn = <B>(t: Turn<B>): Disclosure[] => [...t.read, ...t.fired, ...(t.pinned ?? [])]
+export const deliveredIn = <B>(t: Turn<B>): Disclosure[] => [...t.read, ...t.fired]
 export const deliveredOn = <B>(path: readonly Turn<B>[], extra: readonly Disclosure[] = []): Disclosure[] => [
   ...path.flatMap(deliveredIn),
   ...extra,

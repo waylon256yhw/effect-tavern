@@ -2,7 +2,7 @@
 // back. Every stage's request shape (from `call` events) and the node's contents are asserted. The script answers by
 // phase name and by what the request says; reveals, kills and cuts are queued per turn.
 import { fake, fakeText, type Message } from "@effect-tavern/provider"
-import { Deferred, Effect, Stream } from "effect"
+import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import { prose } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
@@ -345,17 +345,28 @@ const program = Effect.gen(function* () {
   assert.equal(S.setField(t3.id, [{ path: "bond", set: 20 }]).state.bond, 20)
   assert.deepEqual([S.node(t3.id).state.bond, S.node(t6.id).state.bond, calls().length], [20, 28, i])
 
-  // pin: on t9's branch li's first layer is visible but was never read; pinning delivers it on t9 without a call. The
-  // next turn has nothing left to look up, and the narrator reads the pinned text in history. Pinning it again is an error.
-  const p9 = S.pin(t9.id, "li")
+  // pin: on t9's branch li's first layer is visible but was never read, so t9 lists it as untold. The player pins it on
+  // the next act: no lookup (the pinned entry is kept out of it, nothing else is readable), the narrator gets it as MUST,
+  // check confirms it fired, so it is delivered through `fired`, and the new node has nothing untold.
+  const hook = full.lore[0]!.layers[0]!.split(/(?<=\.)\s/)[0]!
+  assert.deepEqual(S.node(t9.id).readable, [{ id: "li", hook }])
+  narrations.push("fire")
+  const t10 = yield* go(S.act(t9.id, { text: "wait", pin: "li" }))
+  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"])
+  assert.ok(str(lastNarr()).includes(`MUST reveal: ${full.lore[0]!.layers[0]!}`))
   assert.deepEqual(
-    [p9.turn.pinned, p9.delivered.at(-1)!.text, calls().length],
-    [[{ id: "li", layer: 1 }], full.lore[0]!.layers[0], i],
+    [t10.brief.must, t10.fired, t10.read, S.node(t10.id).readable],
+    [["li"], [{ id: "li", layer: 1 }], [], []],
   )
-  assert.throws(() => S.pin(t9.id, "li"), /nothing to pin/)
-  const t10 = yield* go(S.act(t9.id, { text: "wait" }))
-  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"]) // no lookup: nothing readable remains
-  assert.ok(str(lastNarr()).includes(full.lore[0]!.layers[0]!) && t10.read.length === 0)
+  // A miss: the narrator ignores the pin, the one correction rewrite runs and misses again; the entry stays untold.
+  i = calls().length
+  const t10b = yield* go(S.act(t9.id, { text: "wait", pin: "li" }))
+  assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "check", "record"])
+  assert.deepEqual([t10b.fired, S.node(t10b.id).readable], [[], [{ id: "li", hook }]])
+  // Pinning what the path already holds is a defect.
+  const ex = yield* Effect.exit(go(S.act(t10.id, { text: "wait", pin: "li" })))
+  assert.ok(ex._tag === "Failure" && /nothing to pin/.test(String(Cause.squash(ex.cause))))
+  i = calls().length
 
   // stop: the player halts the prose while it streams (the signal completes on the first delta). The text so far is the
   // reply, check is skipped, record runs, the node says `stopped`; "go on" is an aside child that reads the partial back.
