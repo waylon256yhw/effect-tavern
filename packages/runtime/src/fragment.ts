@@ -26,12 +26,20 @@ export interface Msg {
   parts?: readonly Part[]
 }
 
+/** A quick input: a named text the client fills into the box (never sends), on the aside channel when `aside`. The
+ *  ecosystem's quick replies and input helpers, as player-layer data; the harness ships defaults (session `snippets`). */
+export interface Snippet {
+  name: string
+  text: string
+  aside?: boolean
+}
 export interface Player {
   global: readonly Fragment[]
   forCard: Record<string, readonly Fragment[]>
   defaults?: { global?: Mode; forCard?: Mode } // harness-level setting, also the player's
   asks?: readonly Fragment[] // the harness's own wording, overridden by id (see session `asks`)
   products?: Readonly<Record<string, boolean>> // record products on/off by id: the player's toggle wins over card and defaults
+  snippets?: readonly Snippet[] // the player's quick inputs, before the harness defaults
 }
 export interface FrameSource {
   id: string

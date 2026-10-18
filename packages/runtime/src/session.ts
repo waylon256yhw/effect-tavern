@@ -16,7 +16,9 @@
 // `reword` (a sibling, from lookup / from narrate), `edit` (a sibling carrying the player's prose, check and record
 // rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pin` (a delivery on the
 // node, no model), `pick` (an option as the next act). "Continue" is not a kind: with no output cap the model ends where
-// it ends, and "go on" is an aside turn.
+// it ends, and "go on" is an aside turn. Stop has two meanings by stage: before the prose starts, the action is
+// interrupted and leaves nothing; once it streams, `stop` halts the prose where it is, check is skipped (the player cut
+// the draft, not the model), record runs, and the node is saved with `end: "stopped"`, so "go on" has a node to follow.
 // Cache (docs/provider-reading.md §6 item 3): three breakpoints, where the request stops being byte-stable across turns:
 // the end of the head (the connection's TTL: 1h for a person), the folded summary, and the last history message
 // before this turn's input. The transcript is append-only, so everything before the input is a cached read next turn;
@@ -41,7 +43,7 @@ import {
 import { Effect, Queue, Schema, Stream } from "effect"
 import { Effect_, makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
-import { decodeFragments as frags, frame, head as headOf, type Msg, type Player } from "./fragment.ts"
+import { decodeFragments as frags, frame, head as headOf, type Msg, type Player, type Snippet } from "./fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
 import {
   deliveredIn,
@@ -82,6 +84,8 @@ export type Event =
   | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage }
   | { kind: "node"; node: Node }
 export type Events = Stream.Stream<Event, ModelError>
+/** A stop signal: completes when the player halts the prose (a Deferred's await on the wire). Only narrate listens. */
+export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
 
 /** The connection as the session sees it: one Model for every stage; a real harness binds stages to connections. */
@@ -108,7 +112,20 @@ export const asks = frags([
     text: `The input asked to keep going. Given the outcomes so far, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`,
   },
   { id: "narrate.correction", text: "Previous draft broke:" },
+  {
+    id: "input.thought",
+    text: "Text between ⦅ and ⦆ in the player's input is what their character thinks and does not say: no one in the story hears it.",
+  },
 ])
+// The default quick inputs: what the ecosystem's quick-reply lists and input helpers hold, as data (Player `snippets`
+// goes first). A snippet fills the box and never sends; `⦅⦆` is the thought mark the ask above explains.
+export const snippets: readonly Snippet[] = [
+  { name: "心声", text: "⦅⦆" },
+  { name: "继续", text: "继续。", aside: true },
+  { name: "推进剧情", text: "推进剧情到下一个场景。", aside: true },
+  { name: "时间流逝", text: "时间流逝，跳到下一件有事发生的时刻。", aside: true },
+  { name: "详细描写", text: "把这一段写得更细。", aside: true },
+]
 // The default products (src/product.ts): what record asks for on every card unless the card patches or the player
 // toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
 // overridden like any ask by the fragment id `product.<id>`.
@@ -334,7 +351,14 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
   // ───────── The turn ─────────
   /** `from` is where a sibling starts: lookup (a swipe), narrate (a reword: lookup, beats and brief kept from `base`),
    *  check (an edit: the player's prose stands in for the narrator's, check and record run over it). */
-  const turn = (emit: Emit, parent: number | null, input: Input, from: "lookup" | "narrate" | "check", base?: Turn) =>
+  const turn = (
+    emit: Emit,
+    parent: number | null,
+    input: Input,
+    from: "lookup" | "narrate" | "check",
+    base?: Turn,
+    stop?: Stop,
+  ) =>
     Effect.gen(function* () {
       const path = chain(parent)
       const s0 = stateAt(path)
@@ -441,17 +465,34 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
         ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${L.text(d)}`)),
         ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
         ...asideOf(input),
+        ...(/⦅/.test(input.text) ? [sys(wording("input.thought"))] : []),
       ]
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
+      // A stopped stream ends after the current pull without the `finish` part: the text so far is the reply, usage unknown.
+      let cut = false
       const write = (msgs: Message[]) =>
         Effect.gen(function* () {
           yield* emit({ kind: "stage", phase: "narrate" })
           const { parts, reply } = yield* streamed(M, msgs, opts)
-          yield* Stream.runForEach(parts, (part) =>
-            part.type === "text-delta" || part.type === "reasoning-delta" ? emit({ kind: "delta", part }) : Effect.void,
-          )
-          const r = yield* reply
+          let text = ""
+          let finished = false
+          yield* Stream.runForEach(stop ? parts.pipe(Stream.haltWhen(stop)) : parts, (part) => {
+            if (part.type === "text-delta") text += part.text
+            if (part.type === "finish") finished = true
+            return part.type === "text-delta" || part.type === "reasoning-delta"
+              ? emit({ kind: "delta", part })
+              : Effect.void
+          })
+          cut = !finished
+          const r = cut
+            ? {
+                text,
+                parts: [{ type: "text" as const, text }],
+                usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                finishReason: "stop" as const,
+              }
+            : yield* reply
           yield* emit({ kind: "call", phase: "narrate", msgs, out: r.text, usage: r.usage })
           return r
         })
@@ -474,7 +515,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       let reply = from === "check" ? base!.reply : yield* narrate()
       let fired: Disclosure[] = []
       let violated: string[] = []
-      if (card.guard.length > 0 || open.length > 0) {
+      if (!cut && (card.guard.length > 0 || open.length > 0)) {
         const check = (text: string) =>
           obj(emit, "check", Check(openIds, card.guard), [
             ...card.guard.map((r) => sys(`Rule: ${r}`)),
@@ -518,7 +559,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
         read: disclosures,
         beats,
         answers,
-        end,
+        end: cut ? "stopped" : end,
         brief,
         reply,
         fired,
@@ -527,9 +568,9 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       })
       yield* emit(nodeEvent(node))
     })
-  const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>) => {
+  const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>, stop?: Stop) => {
     const t = journal.get(nodeId)
-    return emitting((emit) => turn(emit, t.parent, t.input, from, { ...t, ...patch }))
+    return emitting((emit) => turn(emit, t.parent, t.input, from, { ...t, ...patch }, stop))
   }
 
   return {
@@ -553,15 +594,17 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       ),
     node: (id: number): Node => project(journal.get(id)),
     nodes: (): Turn[] => [...journal.values()],
+    snippets: [...(player.snippets ?? []), ...snippets] as readonly Snippet[],
     get size() {
       return journal.size
     },
     /** The player's turn: a child of `parent` (null for a root), every stage the card declares. */
-    act: (parent: number | null, input: Input): Events => emitting((emit) => turn(emit, parent, input, "lookup")),
+    act: (parent: number | null, input: Input, stop?: Stop): Events =>
+      emitting((emit) => turn(emit, parent, input, "lookup", undefined, stop)),
     // Siblings: the same input under the same parent, started at a later stage. Nothing of the original is reused
     // except what the stage order already fixed before the start point.
-    swipe: (nodeId: number): Events => sibling(nodeId, "lookup"),
-    reword: (nodeId: number): Events => sibling(nodeId, "narrate"),
+    swipe: (nodeId: number, stop?: Stop): Events => sibling(nodeId, "lookup", undefined, stop),
+    reword: (nodeId: number, stop?: Stop): Events => sibling(nodeId, "narrate", undefined, stop),
     /** The player rewrites the prose: a sibling carrying their text as the reply; check and record run over it, so what
      *  enters the record is only what the edit fired and answered (README §5 direction 3). */
     edit: (nodeId: number, text: string): Events => sibling(nodeId, "check", { reply: [{ type: "text", text }] }),
@@ -583,10 +626,10 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       return project(journal.amend(nodeId, { pinned: [...(journal.get(nodeId).pinned ?? []), ...ds] }))
     },
     /** The player picks one of a node's `options`: it is their next act, a child turn like any typed input. */
-    pick: (nodeId: number, i: number): Events => {
+    pick: (nodeId: number, i: number, stop?: Stop): Events => {
       const text = (journal.get(nodeId).products.options as readonly string[] | undefined)?.[i]
       if (text === undefined) throw new Error(`no option ${i} on node ${nodeId}`)
-      return emitting((emit) => turn(emit, nodeId, { text }, "lookup"))
+      return emitting((emit) => turn(emit, nodeId, { text }, "lookup", undefined, stop))
     },
     /** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
      *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner
@@ -625,15 +668,15 @@ export const Action = Schema.Union([
 export type Action = typeof Action.Type
 export const decodeAction = Schema.decodeUnknownSync(Action)
 /** One action, one stream, whatever its kind: the synchronous ones become a single `node` event. */
-export const perform = (s: Session, a: Action): Events =>
+export const perform = (s: Session, a: Action, stop?: Stop): Events =>
   Stream.suspend(() => {
     switch (a.kind) {
       case "act":
-        return s.act(a.parent, a.input)
+        return s.act(a.parent, a.input, stop)
       case "swipe":
-        return s.swipe(a.node)
+        return s.swipe(a.node, stop)
       case "reword":
-        return s.reword(a.node)
+        return s.reword(a.node, stop)
       case "edit":
         return s.edit(a.node, a.text)
       case "setField":
@@ -641,7 +684,7 @@ export const perform = (s: Session, a: Action): Events =>
       case "pin":
         return Stream.succeed<Event>({ kind: "node", node: s.pin(a.node, a.id) })
       case "pick":
-        return s.pick(a.node, a.option)
+        return s.pick(a.node, a.option, stop)
       case "demand":
         return s.demand(a.node, a.product)
     }

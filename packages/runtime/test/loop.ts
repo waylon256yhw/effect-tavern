@@ -2,17 +2,17 @@
 // back. Every stage's request shape (from `call` events) and the node's contents are asserted. The script answers by
 // phase name and by what the request says; reveals, kills and cuts are queued per turn.
 import { fake, fakeText, type Message } from "@effect-tavern/provider"
-import { Effect, Stream } from "effect"
+import { Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import { prose } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, player } from "./cards/wuxia.ts"
 
 // ───────── Scripted model ─────────
-const narrations: Array<"plain" | "fire" | "kill" | "cut"> = []
+const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
 let n = 0
-function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean } {
+function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean; delay?: number } {
   const text = o.prompt.map(fakeText).join("\n")
   const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
   const last = o.prompt.at(-1)!
@@ -25,6 +25,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
       .filter(Boolean) ?? []
   let out: string
   let reason: "stop" | "length" = "stop"
+  let delay: number | undefined
   switch (phase) {
     case "lookup":
       // Index entries are `id` (lore) or `id=hook` (a recall product's item); the script reads "about <hook>".
@@ -97,9 +98,13 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
         out += " partial"
         reason = "length"
       }
+      if (how === "long") {
+        out += " the road winds on through the bamboo".repeat(4)
+        delay = 1
+      }
     }
   }
-  return { text: out, cut: reason === "length" }
+  return { text: out, cut: reason === "length", delay } // delay: a stop needs the stream to still be running
 }
 
 // ───────── Through the interface: every event kept, the node read off the end ─────────
@@ -351,6 +356,23 @@ const program = Effect.gen(function* () {
   const t10 = yield* go(S.act(t9.id, { text: "wait" }))
   assert.deepEqual(since(i), ["decide", "narrate", "check", "record"]) // no lookup: nothing readable remains
   assert.ok(str(lastNarr()).includes(full.lore[0]!.layers[0]!) && t10.read.length === 0)
+
+  // stop: the player halts the prose while it streams (the signal completes on the first delta). The text so far is the
+  // reply, check is skipped, record runs, the node says `stopped`; "go on" is an aside child that reads the partial back.
+  i = calls().length
+  narrations.push("long")
+  const halt = yield* Deferred.make<void>()
+  const t12 = yield* go(
+    S.act(t10.id, { text: "wait" }, Deferred.await(halt)).pipe(
+      Stream.tap((e) => (e.kind === "delta" ? Deferred.succeed(halt, undefined) : Effect.void)),
+    ),
+  )
+  assert.deepEqual(since(i), ["decide", "narrate", "record"])
+  assert.equal(t12.end, "stopped")
+  assert.ok(prose(t12).startsWith("PROSE#") && prose(t12).length < 100, prose(t12))
+  assert.equal(made().at(-2)!.out, prose(t12)) // the narrate call reports what was kept
+  const t13 = yield* go(S.act(t12.id, { text: "", aside: "继续。" }))
+  assert.ok(str(lastNarr()).includes(prose(t12)) && t13.end === "end")
 
   // pick: an option recorded on c0 becomes the player's next act, a child of c0 with that text as the input.
   const t11 = yield* go(C.pick(c0.id, 1))

@@ -16,8 +16,8 @@ const usage = {
 }
 const finish = (cut: boolean | undefined) => ({ unified: cut ? "length" : "stop", raw: undefined }) as const
 /** `reply` sees the provider-side request: `prompt` (messages), `responseFormat.name` (the `name` passed to `object`).
- *  A streamed request gets the same answer in eight-character deltas. */
-export const fake = (reply: (o: FakeCall) => { text: string; cut?: boolean }): Model => ({
+ *  A streamed request gets the same answer in eight-character deltas, `delay` milliseconds apart when set. */
+export const fake = (reply: (o: FakeCall) => { text: string; cut?: boolean; delay?: number }): Model => ({
   format: "openai-compatible",
   model: new MockLanguageModelV4({
     doGenerate: async (o) => {
@@ -28,6 +28,7 @@ export const fake = (reply: (o: FakeCall) => { text: string; cut?: boolean }): M
       const r = reply(o)
       return {
         stream: simulateReadableStream({
+          chunkDelayInMs: r.delay ?? null,
           chunks: [
             { type: "stream-start", warnings: [] },
             { type: "text-start", id: "0" },

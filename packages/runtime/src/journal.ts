@@ -21,7 +21,7 @@ export interface Turn<B> {
   opening?: readonly (typeof Effect_.Type)[] // a greeting's effects, applied before anything else on the path
   beats: readonly B[] // decide + seed, settled by code on replay
   answers: Readonly<Record<string, string>> // readout id → option id, chosen at record; settled by code on replay
-  end: "end" | "over" | "cap"
+  end: "end" | "over" | "cap" | "stopped" // stopped: the player halted the prose mid-stream; the partial stands, check skipped
   brief: Brief
   reply: readonly Part[] // the model's output as parts; the prose is `textOf(reply)` and non-authoritative
   fired: readonly Disclosure[] // reveals confirmed by check; count as delivered

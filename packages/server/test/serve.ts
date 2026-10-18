@@ -1,7 +1,7 @@
 // The adapter on a scripted session over a real socket: an action goes in as JSON, its events come back as SSE in the
 // session's order, a bad body is a 400, a bad action is an `error` event, and `inspect` decides whether `call` events
 // carry the request.
-import { fake } from "@effect-tavern/provider"
+import { fake, fakeText } from "@effect-tavern/provider"
 import { makeSession, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, player } from "@effect-tavern/runtime/test/cards/wuxia.ts"
 import assert from "node:assert/strict"
@@ -19,7 +19,9 @@ const model = {
             scene: { place: "P", present: [] },
           }),
         }
-      : { text: "hello world" },
+      : /slow/.test(fakeText(o.prompt.at(-1)!))
+        ? { text: "hello world ".repeat(20), delay: 20 }
+        : { text: "hello world" },
   ),
   prefill: false,
 }
@@ -38,7 +40,7 @@ const sse = (text: string) =>
 const run = async (inspect: boolean) => {
   const server = serve(session, { inspect }).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
-  const post = (v: unknown) => fetch(base, { method: "POST", body: JSON.stringify(v) })
+  const post = (v: unknown, signal?: AbortSignal) => fetch(base, { method: "POST", body: JSON.stringify(v), signal })
   try {
     assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(session.nodes().map((t) => session.node(t.id))))
 
@@ -60,6 +62,20 @@ const run = async (inspect: boolean) => {
 
     const picked = sse(await (await post({ kind: "pick", node: node.turn.id, option: 1 })).text())
     assert.equal((picked.at(-1)!.data as Extract<Event, { kind: "node" }>).node.turn.input.text, "B")
+
+    // stop: the client closes the response once the prose streams; the turn finishes into a `stopped` node it reads back.
+    const ac = new AbortController()
+    const size = session.size
+    const slow = await post({ kind: "act", parent: null, input: { text: "slow" } }, ac.signal)
+    const reader = slow.body!.getReader()
+    let got = ""
+    while (!/event: delta/.test(got)) got += new TextDecoder().decode((await reader.read()).value)
+    ac.abort()
+    while (session.size === size) await new Promise((r) => setTimeout(r, 10))
+    const stopped = session.nodes().at(-1)!
+    const kept = (stopped.reply[0] as { text: string }).text
+    assert.deepEqual([stopped.input.text, stopped.end, kept.length > 0 && kept.length < 240], ["slow", "stopped", true])
+    assert.equal(((await (await fetch(`${base}/nodes`)).json()) as unknown[]).length, session.size)
 
     const bad = await post({ kind: "fly" })
     assert.equal(bad.status, 400)
