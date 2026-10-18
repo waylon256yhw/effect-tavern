@@ -49,6 +49,17 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
         .filter((e) => e.offer?.(s, ctx) && current(e, s, ds) < e.layers.length)
         .map((e) => ({ id: e.id, layer: current(e, s, ds) + 1, text: e.layers[current(e, s, ds)] })),
     text: (d: Disclosure) => byId.get(d.id)!.layers[d.layer - 1],
+    /** Derived per-entry state for `offer` to read as `lore.<id>.since` / `.shown`: turns since the entry last reached the
+     *  narrator on this path (0 = this turn, Infinity = never) and how many turns it did. `perTurn` is the path's
+     *  deliveries turn by turn, the current turn last. The ecosystem's sticky / cooldown / once-only event chains are
+     *  conditions over these two numbers (docs/card-reading-2.md §8 item 4). */
+    counters: (perTurn: readonly (readonly Disclosure[])[]) =>
+      Object.fromEntries(
+        entries.map((e) => {
+          const turns = perTurn.flatMap((ds, i) => (ds.some((d) => d.id === e.id) ? [i] : []))
+          return [e.id, { since: turns.length ? perTurn.length - 1 - turns.at(-1)! : Infinity, shown: turns.length }]
+        }),
+      ),
   }
 }
 export type Lore<S, C> = ReturnType<typeof makeLore<S, C>>

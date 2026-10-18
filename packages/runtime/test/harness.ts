@@ -13,12 +13,16 @@
 // summary, both stable across turns.
 // Compression (§17.3/§18.4): before each narrate, fold the leading turns in blocks; the summary is a cached code fold,
 // nodes are untouched, and lore dedupe keeps working because deliveries live on the nodes, not in the view.
-// Skipped: swipe kinds other than reword, continue, streaming, persistence, reasoning parts on the node.
+// Player actions on a node, each with its landing in the log tree (docs/card-reading-2.md §8 item 8): `swipe` and
+// `reword` (a sibling, from lookup / from narrate), `edit` (a sibling carrying the player's prose, check and record
+// rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pin` (a delivery on the
+// node, no model), `pick` (an option as the next act). Skipped: continue (needs a prefix the provider takes), streaming, persistence.
 import { breakpoint, object, text, type Effort, type Message, type Model, type Usage } from "@effect-tavern/provider"
 import { Effect, Schema } from "effect"
 import { decodeFragments as frags, frame, head as headOf, type Msg, type Player } from "../src/fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import {
+  deliveredIn,
   deliveredOn,
   makeJournal,
   notesOf,
@@ -28,8 +32,8 @@ import {
   type Turn as TurnOf,
 } from "../src/journal.ts"
 import { key, makeLore, type Disclosure } from "../src/lore.ts"
-import { makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "../src/card.ts"
-import { holds, type Cond } from "../src/cond.ts"
+import { makeCard, type Answers, type Beat, type Card, type Effect_, type Greeting, type State } from "../src/card.ts"
+import { holds, type Cond, type State as Paths } from "../src/cond.ts"
 import {
   cap,
   decodeProducts,
@@ -45,17 +49,17 @@ import {
 
 // ───────── The card in play, set once per process with `useCard`. `L`, `initial` and `summaries` are live bindings. ─────────
 const gate = (unlock: Cond, offer: Cond) => ({
-  unlock: (s: State) => (holds(unlock, s) ? 1 : 0),
-  offer: (s: State, ev: readonly string[]) => holds(offer, s, ev),
+  unlock: (s: Paths) => (holds(unlock, s) ? 1 : 0),
+  offer: (s: Paths, ev: readonly string[]) => holds(offer, s, ev),
 })
 let rpg = makeCard({ fields: [], actions: [] })
 export let initial: State = rpg.initial
-export let L = makeLore<State, readonly string[]>([])
+export let L = makeLore<Paths, readonly string[]>([])
 export let summaries = makeSummaries<Beat>(textOf)
 export const useCard = (c: Card) => {
   rpg = makeCard(c.rules)
   initial = rpg.initial
-  L = makeLore<State, readonly string[]>(
+  L = makeLore<Paths, readonly string[]>(
     c.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.unlock, e.offer) })),
   )
   summaries = makeSummaries<Beat>(textOf)
@@ -166,13 +170,19 @@ export const greet = (g: Greeting) =>
     products: {},
   })
 // A turn's state: the opening (a greeting's effects), then beats before the prose, then readout answers after it. All
-// code folds over recorded outputs. `post` is what this turn emitted that no gate of its own could read: a greeting has
-// no gate and a readout is answered after the prose, so both open windows on the next turn.
+// code folds over recorded outputs. The player's `adjust` goes last: a correction wins over everything the turn did.
+// `post` is what this turn emitted that no gate of its own could read: a greeting has no gate and a readout is answered
+// after the prose, so both open windows on the next turn.
 const settleTurn = (s: State, t: Turn) => {
   const o = t.opening ? rpg.apply(s, t.opening) : { s, events: [] as string[] }
   const b = rpg.fold(o.s, t.beats)
   const r = rpg.settleReadouts(b.s, t.answers)
-  return { s: r.s, events: [...o.events, ...b.events, ...r.events], post: [...o.events, ...r.events] }
+  const a = t.adjust ? rpg.apply(r.s, t.adjust) : { s: r.s, events: [] as string[] }
+  return {
+    s: a.s,
+    events: [...o.events, ...b.events, ...r.events, ...a.events],
+    post: [...o.events, ...r.events, ...a.events],
+  }
 }
 export const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, initial)
 export const eventsOf = (path: readonly Turn[], t: Turn) =>
@@ -240,12 +250,22 @@ const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder
     Effect.map((r) => r.value),
   )
 
+/** Ids the player or the lookup named, as the disclosures they deliver: every unseen layer up to a lore entry's current
+ *  one, or the one layer of a recalled product row. Already-seen ones deliver nothing. */
+const deliver = (s: State, seen: readonly Disclosure[], ids: readonly string[]): Disclosure[] => {
+  const seenKeys = new Set(seen.map(key))
+  return [...new Set(ids)]
+    .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (L.read(s, seen, id) ?? [])))
+    .filter((d) => !seenKeys.has(key(d)))
+}
+/** `from` is where a sibling starts: lookup (a swipe), narrate (a reword: lookup, beats and brief kept from `base`),
+ *  check (an edit: the player's prose stands in for the narrator's, check and record run over it). */
 export const run = (
   card: Card,
   player: Player,
   parent: number | null,
   input: Input,
-  from: "lookup" | "narrate" = "lookup",
+  from: "lookup" | "narrate" | "check" = "lookup",
   base?: Turn,
 ) =>
   Effect.gen(function* () {
@@ -263,23 +283,23 @@ export const run = (
       .filter((e) => !seenKeys.has(`${e.id}#1`))
     const loreIds = card.lore.length ? L.readable(s0, seen) : []
     const idx = [...loreIds, ...recall.map((e) => e.id)]
-    const readIds =
-      from === "narrate"
-        ? base!.read.map((d) => d.id)
-        : idx.length
-          ? (yield* obj("lookup", Lookup(idx), [
-              sys(`Index: ${[...loreIds, ...recall.map((e) => `${e.id}=${e.hook}`)].join(", ")}`),
-              said(input),
-            ])).read
-          : []
     const disclosures =
-      from === "narrate"
+      from !== "lookup"
         ? base!.read
-        : [...new Set(readIds)].flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (L.read(s0, seen, id) ?? [])))
+        : deliver(
+            s0,
+            seen,
+            idx.length
+              ? (yield* obj("lookup", Lookup(idx), [
+                  sys(`Index: ${[...loreIds, ...recall.map((e) => `${e.id}=${e.hook}`)].join(", ")}`),
+                  said(input),
+                ])).read
+              : [],
+          )
     // decide → settle, looping; the k-th decide sees the first k events
-    let beats: Beat[] = from === "narrate" ? [...base!.beats] : []
-    let end: Turn["end"] = from === "narrate" ? base!.end : "end"
-    if (card.rules.actions.length && from !== "narrate") {
+    let beats: Beat[] = from !== "lookup" ? [...base!.beats] : []
+    let end: Turn["end"] = from !== "lookup" ? base!.end : "end"
+    if (card.rules.actions.length && from === "lookup") {
       for (;;) {
         const { s, events } = rpg.fold(s0, beats)
         if (rpg.over(s)) {
@@ -322,13 +342,16 @@ export const run = (
     const prev = path.at(-1)
     const carried = prev ? settleTurn(stateAt(path.slice(0, -1)), prev).post : []
     const gateEvents = [...events, ...carried]
-    const open: Disclosure[] = L.offers(s1, deliveredOn(path, disclosures), gateEvents).map(({ id, layer }) => ({
+    // The window's state carries each entry's derived counters under `lore.<id>` (since / shown), this turn's reads
+    // counting as shown now; a card field named `lore` would collide, so none may be.
+    const gateState = { ...s1, lore: L.counters([...path.map(deliveredIn), disclosures]) }
+    const open: Disclosure[] = L.offers(gateState, deliveredOn(path, disclosures), gateEvents).map(({ id, layer }) => ({
       id,
       layer,
     }))
     const openIds = open.map((d) => d.id)
     const brief: Brief =
-      from === "narrate"
+      from !== "lookup"
         ? base!.brief
         : card.director && open.length
           ? yield* obj("direct", BriefOf(openIds), [
@@ -371,7 +394,7 @@ export const run = (
         const r2 = yield* ask("narrate", text(M, p2, opts), p2)
         return [...r.parts, ...r2.parts]
       })
-    let reply = yield* narrate()
+    let reply = from === "check" ? base!.reply : yield* narrate()
     let fired: Disclosure[] = []
     let violated: string[] = []
     const checked = card.guard.length > 0 || open.length > 0
@@ -428,7 +451,38 @@ export const run = (
       products: rec.products,
     })
   })
+// ───────── Player actions on a node ─────────
+// Siblings: the same input under the same parent, started at a later stage. Nothing of the original is reused except
+// what the stage order already fixed before the start point.
+export const swipe = (card: Card, player: Player, t: Turn) => run(card, player, t.parent, t.input)
 export const reword = (card: Card, player: Player, t: Turn) => run(card, player, t.parent, t.input, "narrate", t)
+/** The player rewrites the prose: a sibling carrying their text as the reply; check and record run over it, so what
+ *  enters the record is only what the edit fired and answered (README §5 direction 3). */
+export const edit = (card: Card, player: Player, t: Turn, text: string) =>
+  run(card, player, t.parent, t.input, "check", { ...t, reply: [{ type: "text", text }] })
+/** The player sets fields on a node (a status bar's +/-): effects appended to the node's `adjust`, validated against
+ *  the card's bounds and enums now, replayed in the fold after everything the turn itself did. Every descendant sees it. */
+export const setField = (nodeId: number, effects: readonly (typeof Effect_.Type)[]) => {
+  const t = journal.get(nodeId)
+  const path = chain(t.parent)
+  const adjust = [...(t.adjust ?? []), ...effects]
+  settleTurn(stateAt(path), { ...t, adjust }) // throws on a value outside the field: the node is left as it was
+  return journal.amend(nodeId, { adjust })
+}
+/** The player pins a lore entry or a recalled row (`<product>@<node>#<i>`) on a node: delivered from there on, without
+ *  asking the model; dedupe and the fold treat it like a lookup read. Nothing new to deliver is an error. */
+export const pin = (nodeId: number, id: string) => {
+  const path = chain(nodeId)
+  const ds = deliver(stateAt(path), deliveredOn(path), [id])
+  if (!ds.length) throw new Error(`${id}: nothing to pin`)
+  return journal.amend(nodeId, { pinned: [...(journal.get(nodeId).pinned ?? []), ...ds] })
+}
+/** The player picks one of a node's `options`: it is their next act, a child turn like any typed input. */
+export const pick = (card: Card, player: Player, nodeId: number, i: number) => {
+  const text = (journal.get(nodeId).products.options as readonly string[] | undefined)?.[i]
+  if (text === undefined) throw new Error(`no option ${i} on node ${nodeId}`)
+  return run(card, player, nodeId, { text })
+}
 
 const record = (
   player: Player,

@@ -25,6 +25,8 @@ export interface Turn<B> {
   brief: Brief
   reply: readonly Part[] // the model's output as parts; the prose is `textOf(reply)` and non-authoritative
   fired: readonly Disclosure[] // reveals confirmed by check; count as delivered
+  pinned?: readonly Disclosure[] // the player's own deliveries (pin lore / pin a recalled row): no model asked, count as delivered
+  adjust?: readonly (typeof Effect_.Type)[] // the player's field edits on this node, applied last in the fold; replayed like any effect
   violated: readonly string[]
   products: Readonly<Record<string, unknown>> // record's answers by product id, shaped by the card (src/product.ts); `notes` is one
 }
@@ -44,7 +46,7 @@ export const makeJournal = <B>() => {
       if (!t) throw new Error(`no node ${id}`)
       return t
     },
-    /** A player action on a node (a demanded product): the node is replaced, its id and place in the tree kept. */
+    /** A player action on a node (demand, pin, set): the node is replaced, its id and place in the tree kept. */
     amend: (id: number, patch: Partial<Omit<Turn<B>, "id" | "parent">>): Turn<B> => {
       const node = { ...nodes.get(id)!, ...patch }
       nodes.set(id, node)
@@ -71,7 +73,7 @@ export const textOf = (parts: readonly Part[]): string =>
     .join("")
 export const prose = <B>(t: Turn<B>): string => textOf(t.reply)
 
-export const deliveredIn = <B>(t: Turn<B>): Disclosure[] => [...t.read, ...t.fired]
+export const deliveredIn = <B>(t: Turn<B>): Disclosure[] => [...t.read, ...t.fired, ...(t.pinned ?? [])]
 export const deliveredOn = <B>(path: readonly Turn<B>[], extra: readonly Disclosure[] = []): Disclosure[] => [
   ...path.flatMap(deliveredIn),
   ...extra,

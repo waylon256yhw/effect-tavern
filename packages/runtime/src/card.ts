@@ -211,6 +211,8 @@ export const Greeting = Schema.Struct({ text: Schema.String, do: Schema.optional
 export type Greeting = typeof Greeting.Type
 export const Card = Schema.Struct({
   id: Schema.String,
+  version: Schema.optionalKey(Schema.String), // the author's; a changed card under a running log is the client's call to notice
+  source: Schema.optionalKey(Schema.String), // where it came from: a URL, a file, "hand"
   frame: Schema.Array(Fragment), // slots: persona, voice, style, setting …
   fiction: Schema.Array(Fragment), // a character, a cast or a world; variants carry `when`
   greetings: Schema.Array(Greeting),

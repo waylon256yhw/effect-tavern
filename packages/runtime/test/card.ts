@@ -1,7 +1,8 @@
 // Tests for src/card.ts: the three earlier RPG prototypes written as data, settled by the interpreter.
 import assert from "node:assert/strict"
 import { Schema } from "effect"
-import { Greeting, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
+import { Greeting, decodeCard, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
+import { full } from "./cards/wuxia.ts"
 import { holds } from "../src/cond.ts"
 
 // ───────── harness.ts as data: fight (judged chance) / rest / talk, gold and hp with bounds ─────────
@@ -207,5 +208,6 @@ const g = Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", 
 assert.deepEqual(routed.apply(routed.initial, g.do!), { s: { route: "blood", heat: 2 }, events: ["riot"] })
 assert.throws(() => Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", go: "blood" }] }))
 
+assert.deepEqual(decodeCard({ ...full, version: "1.2", source: "hand" }).version, "1.2") // optional metadata, decoded as-is
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")

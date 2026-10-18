@@ -110,6 +110,21 @@ for (const n of tree.values()) {
   }
 }
 
+// Derived counters for `offer`: turns since last shown (this turn = 0, never = Infinity) and how many turns shown.
+assert.deepEqual(
+  L.counters([
+    [{ id: "li", layer: 1 }],
+    [],
+    [
+      { id: "li", layer: 2 },
+      { id: "heir", layer: 1 },
+    ],
+    [],
+  ]),
+  { li: { since: 1, shown: 2 }, heir: { since: 1, shown: 1 }, sect: { since: Infinity, shown: 0 } },
+)
+assert.deepEqual(L.counters([[{ id: "li", layer: 1 }]]).li, { since: 0, shown: 1 })
+
 for (const n of tree.values()) {
   const p = path(n.id)
   console.log(

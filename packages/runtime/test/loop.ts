@@ -10,16 +10,20 @@ import {
   calls,
   chain,
   demand,
+  edit,
   eventsOf,
   greet,
   history,
   initial,
   journal,
   msgText,
+  pick,
+  pin,
   productsOf,
   prompts,
   reword,
   run,
+  setField,
   stateAt,
   str,
   summaries,
@@ -299,6 +303,63 @@ const program = Effect.gen(function* () {
     5,
   )
 
+  // ───────── Player actions on a node (docs/card-reading-2.md §8 item 8) ─────────
+  // edit: the player's prose stands as the reply of a sibling of t2; check and record run over it, narrate never does.
+  // The edited text mentions the tattoo, so the reveal that was open at t2 fires from the player's own words.
+  i = calls.length
+  const e = yield* edit(full, player, t2, "EDITED: the sleeve tears, a crane tattoo")
+  assert.deepEqual(since(i), ["check", "record"])
+  assert.deepEqual(
+    [e.parent, e.read, e.beats, e.brief, prose(e)],
+    [t2.parent, t2.read, t2.beats, t2.brief, "EDITED: the sleeve tears, a crane tattoo"],
+  )
+  assert.deepEqual(e.fired, [{ id: "li", layer: 2 }])
+  assert.ok(str(prompts.check.at(-1)!).includes("EDITED"))
+
+  // setField: an effect kept on t3 and folded last; every descendant's state moves with it (t6 was 16: t5's +8 on 20), no call made.
+  // A value outside the field is refused and the node is untouched.
+  i = calls.length
+  assert.throws(() => setField(t3.id, [{ path: "bond", set: 999 }]), /bond/)
+  assert.equal(journal.get(t3.id).adjust, undefined)
+  setField(t3.id, [{ path: "bond", set: 20 }])
+  assert.deepEqual([stateAt(chain(t3.id)).bond, stateAt(chain(t6.id)).bond, calls.length], [20, 28, i])
+
+  // pin: on t9's branch li's first layer is visible but was never read; pinning delivers it on t9 without a call. The
+  // next turn has nothing left to look up, and the narrator reads the pinned text in history. Pinning it again is an error.
+  const p9 = pin(t9.id, "li")
+  assert.deepEqual([p9.pinned, calls.length], [[{ id: "li", layer: 1 }], i])
+  assert.throws(() => pin(t9.id, "li"), /nothing to pin/)
+  const t10 = yield* run(full, player, t9.id, { text: "wait" })
+  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"]) // no lookup: nothing readable remains
+  assert.ok(str(lastNarr()).includes(L.entries[0].layers[0]) && t10.read.length === 0)
+
+  // pick: an option recorded on c0 becomes the player's next act, a child of c0 with that text as the input.
+  const t11 = yield* pick(chat, player, c0.id, 1)
+  assert.deepEqual([t11.parent, t11.input], [c0.id, { text: "O2" }])
+  assert.throws(() => pick(chat, player, c0.id, 9), /no option/)
+
+  // ───────── Derived lore counters in the window (§8 item 4) ─────────
+  // A recurring entry: offered when it has not reached the narrator for two turns and has been shown fewer than twice.
+  // Never shown counts as Infinity, so it opens on the first turn; shown there, it waits one turn, then opens again.
+  const echo = {
+    id: "echo",
+    layers: ["E1", "E2", "E3"],
+    unlock: { all: [] },
+    offer: {
+      all: [
+        { path: "lore.echo.since", op: "gte", value: 2 },
+        { path: "lore.echo.shown", op: "lt", value: 2 },
+      ],
+    },
+  } as const
+  useCard({ ...full, lore: [...full.lore, echo] })
+  narrations.push("fire", "plain", "fire")
+  const a = yield* run(full, player, null, { text: "wait" })
+  assert.deepEqual([a.brief.may, a.fired], [["echo"], [{ id: "echo", layer: 2 }]])
+  const b = yield* run(full, player, a.id, { text: "wait" })
+  assert.deepEqual(b.brief.may, []) // since = 1
+  const c = yield* run(full, player, b.id, { text: "wait" })
+  assert.deepEqual([c.brief.may, c.fired], [["echo"], [{ id: "echo", layer: 3 }]]) // since = 2, shown = 1
   console.log(str(lastNarr()))
 })
 
