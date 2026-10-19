@@ -203,7 +203,7 @@ export const LoreEntry = Schema.Struct({
 })
 // Two coordinates place a card among the ways people write (1:1 RP, a world with no fixed protagonist, directed prose):
 // who the player is in the fiction is the frame slot `persona` (card default, player override like any slot), and
-// which channel the input takes by default: `act` (in-fiction, enters the transcript) or `aside` (direction to the
+// which channel the input takes by default: `act` (in-fiction, enters the transcript) or `note` (direction to the
 // narrator, this turn only). `input` is read by the client, not the loop; the loop takes both channels on every turn.
 // A greeting is node 0 with no player input. `do` is its opening: the effects that make this opening differ from the
 // card's initial state (an IF line's route, a later date, a tenser town). Fiction variants read the result through
@@ -221,7 +221,7 @@ export const Card = Schema.Struct({
   lore: Schema.Array(LoreEntry),
   guard: Schema.Array(Schema.String), // checked after the prose, never shown to the narrator
   director: Schema.optionalKey(Schema.Boolean),
-  input: Schema.optionalKey(Schema.Literals(["act", "aside"])),
+  input: Schema.optionalKey(Schema.Literals(["act", "note"])),
   asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // record products: patches over the harness defaults by id, or new ones
 })

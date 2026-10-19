@@ -1,5 +1,5 @@
 // 盐道: the world-card template, hand-written. No protagonist and no player in the fiction: the frame has no `persona`,
-// the card fills `pov` itself (so the player's global pov slot yields), and `input` defaults to the aside channel: what
+// the card fills `pov` itself (so the player's global pov slot yields), and `input` defaults to the note channel: what
 // the player types is direction to the narrator, never a line of anyone in the story. Nothing else is special: the
 // fiction is a town instead of a person, one world-state field moved by a readout, one layered lore entry whose second
 // layer opens on an event the readout emits, the director on so MUST/MAY plays.
@@ -10,7 +10,7 @@ import { decodeCard, type Card } from "../../src/card.ts"
 export const load = (): Card =>
   decodeCard({
     id: "yandao",
-    input: "aside",
+    input: "note",
     frame: [
       {
         id: "pov",

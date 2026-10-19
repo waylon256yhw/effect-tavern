@@ -26,12 +26,12 @@ export interface Msg {
   parts?: readonly Part[]
 }
 
-/** A quick input: a named text the client fills into the box (never sends), on the aside channel when `aside`. The
+/** A quick input: a named text the client fills into the box (never sends), on the note channel when `note`. The
  *  ecosystem's quick replies and input helpers, as player-layer data; the harness ships defaults (session `snippets`). */
 export interface Snippet {
   name: string
   text: string
-  aside?: boolean
+  note?: boolean
 }
 export interface Player {
   global: readonly Fragment[]

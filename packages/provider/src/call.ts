@@ -70,7 +70,7 @@ export const standard = <S extends Schema.Top & Schema.Constraint & Schema.Const
 
 /** Wire placement. Anthropic takes a mid-conversation system message only directly after a user message (verified live:
  *  400 otherwise). The harness's views put directives after the player's line, but a past turn that had no player line
- *  (an aside-only turn that delivered lore) leaves its system lines after an assistant message; those go out under the
+ *  (an note-only turn that delivered lore) leaves its system lines after an assistant message; those go out under the
  *  one role the wire still allows there, content unchanged. Leading system messages (the head) are untouched. */
 const wire = (format: Format, messages: readonly Message[]): Message[] =>
   format === "anthropic"

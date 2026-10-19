@@ -44,7 +44,7 @@ export type Summaries<B> = ReturnType<typeof makeSummaries<B>>
 export const folded = (len: number, keep: number, block: number) =>
   Math.max(0, Math.floor((len - keep) / block) * block)
 
-/** Narrator: past input + prose + the lore delivered at that turn (so `read` can dedupe against it); never brief/notes/aside.
+/** Narrator: past input + prose + the lore delivered at that turn (so `read` can dedupe against it); never brief/notes/note.
  *  `sum` is the summary the POLICY chose for this path (what `compress` returned); the side table is a cache and a cache
  *  never decides what a view contains, so the view is a function of (path, policy) and identical across branches. */
 export const narratorHistory = <B>(

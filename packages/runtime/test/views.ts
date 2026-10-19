@@ -61,7 +61,7 @@ const render = (card: Card, path: readonly Turn[], stage: Stage, cur: Current): 
         ...(cur.brief.must.length ? [sys(`MUST: ${cur.brief.must.join(", ")}`)] : []),
         ...(cur.brief.may.length ? [sys(`MAY: ${cur.brief.may.join(", ")}`)] : []),
         ...(cur.brief.tone ? [sys(`Tone: ${cur.brief.tone}`)] : []),
-        ...(cur.input.aside ? [sys(`Player aside: ${cur.input.aside}`)] : []),
+        ...(cur.input.note ? [sys(`Player note: ${cur.input.note}`)] : []),
         user(cur.input.text),
       ]
       return [
@@ -76,7 +76,7 @@ const render = (card: Card, path: readonly Turn[], stage: Stage, cur: Current): 
         ...head,
         ...card.rules.map((r) => sys(`Rule: ${r}`)),
         ...ledger(path, eventsOf),
-        ...(cur.input.aside ? [sys(`Player aside: ${cur.input.aside}`)] : []),
+        ...(cur.input.note ? [sys(`Player note: ${cur.input.note}`)] : []),
         user(cur.input.text),
       ]
     case "check":
@@ -173,13 +173,13 @@ const program = Effect.gen(function* () {
   )
   assert.deepEqual([prose(c0), notesOf(c0)], ["PROSE#0", ["NOTE#0"]])
 
-  // Directed card over five turns; turn 1 delivers lore layer 1, turn 2 reveals layer 2, turn 3 carries an aside.
+  // Directed card over five turns; turn 1 delivers lore layer 1, turn 2 reveals layer 2, turn 3 carries an note.
   calls.length = 0
   const inputs: Array<[Input, Disclosure[], Disclosure[]]> = [
     [{ text: "enter the inn" }, [], []],
     [{ text: "ask about Li" }, [{ id: "li", layer: 1 }], []],
     [{ text: "strike B" }, [], [{ id: "li", layer: 2 }]],
-    [{ text: "step back", aside: "ASIDE#3 make it darker" }, [], []],
+    [{ text: "step back", note: "NOTE#3 make it darker" }, [], []],
     [{ text: "speak" }, [], []],
   ]
   let parent: number | null = null
@@ -192,22 +192,22 @@ const program = Effect.gen(function* () {
   }
   const k = turns[4].id // the marker suffix of the last turn
 
-  // Narrator: past input + prose + delivered lore; never past brief/tone, notes, aside. Current tone and aside in tail.
+  // Narrator: past input + prose + delivered lore; never past brief/tone, notes, note. Current tone and note in tail.
   let v = last("narrate")
   for (const t of turns.slice(0, 4)) assert.ok(has(v, t.input.text) && has(v, prose(t)))
   assert.ok(has(v, lore.li[0]) && has(v, lore.li[1]))
   for (const t of turns.slice(0, 4)) assert.ok(!has(v, t.brief.tone!) && !has(v, notesOf(t)[0]!))
-  assert.ok(!has(v, "ASIDE#3"))
+  assert.ok(!has(v, "NOTE#3"))
   assert.ok(has(v, `Tone: TONE#${k}`))
   const v3 = calls.filter((c) => c.phase === "narrate")[3].msgs
-  assert.ok(has(v3, "Player aside: ASIDE#3 make it darker") && v3.at(-1)!.text === "step back")
+  assert.ok(has(v3, "Player note: NOTE#3 make it darker") && v3.at(-1)!.text === "step back")
 
-  // Director: facts, fired, notes, aside; no prose anywhere.
+  // Director: facts, fired, notes, note; no prose anywhere.
   v = last("direct")
   assert.ok(!/PROSE#/.test(text(v)))
   assert.ok(has(v, "strike:") && has(v, "fired li") && has(v, "NOTE#"))
   assert.ok(has(last("direct"), "Rule: B does not die"))
-  assert.ok(has(calls.filter((c) => c.phase === "direct")[3].msgs, "ASIDE#3"))
+  assert.ok(has(calls.filter((c) => c.phase === "direct")[3].msgs, "NOTE#3"))
 
   // Check: only this turn's prose and brief.
   v = last("check")

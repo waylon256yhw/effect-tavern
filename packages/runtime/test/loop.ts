@@ -174,7 +174,7 @@ const program = Effect.gen(function* () {
   i = calls().length
   narrations.push("fire")
   warmths.push("warm")
-  const t2 = yield* go(S.act(t1.id, { text: "strike B", aside: "ASIDE#2" }))
+  const t2 = yield* go(S.act(t1.id, { text: "strike B", note: "NOTE#2" }))
   assert.deepEqual([t2.answers, S.node(t2.id).state.bond], [{ warmth: "warm" }, 4])
   assert.deepEqual(since(i), ["lookup", "decide", "decide", "decide", "direct", "narrate", "check", "record"])
   assert.equal(str(prompts("lookup").at(-1)!).split("\n")[0], `Index: people@${t1.id}#0=Li`)
@@ -188,7 +188,7 @@ const program = Effect.gen(function* () {
   assert.deepEqual([t2.brief.may, t2.fired], [["li"], [{ id: "li", layer: 2 }]])
   assert.ok(
     /MAY reveal: B is Li/.test(str(lastNarr())) &&
-      str(lastNarr()).includes("ASIDE#2") &&
+      str(lastNarr()).includes("NOTE#2") &&
       str(lastNarr()).includes(`Tone: TONE#`),
   )
   // The k-th decide saw the first k events.
@@ -201,7 +201,7 @@ const program = Effect.gen(function* () {
   // Director never saw prose; narrator never saw the ledger.
   assert.ok(!/PROSE#/.test(str(prompts("direct").at(-1)!)) && !/Ledger/.test(str(lastNarr())))
 
-  // Turn 3: history carries both lore layers; the previous aside and tone are gone; head is byte-identical. The input
+  // Turn 3: history carries both lore layers; the previous note and tone are gone; head is byte-identical. The input
   // asks about Li: lookup delivers t1's people row like a lore layer, and it lands in the tail as text.
   i = calls().length
   warmths.push("warm")
@@ -211,7 +211,7 @@ const program = Effect.gen(function* () {
   assert.deepEqual(S.node(t3.id).delivered[0]!.text, "name=Li, note=N#2")
   assert.ok(v3.includes("name=Li, note=N#2"))
   assert.ok(v3.includes("B is Li") && v3.includes(full.lore[0]!.layers[0]!) && v3.includes(prose(t2)))
-  assert.ok(!v3.includes("ASIDE#2") && !v3.includes(t2.brief.tone!))
+  assert.ok(!v3.includes("NOTE#2") && !v3.includes(t2.brief.tone!))
   assert.ok(v3.includes("arm's length")) // bond was 4 when this head was built; the answer lands after the prose
   assert.equal(S.node(t3.id).state.bond, 8)
   assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 3), prompts("narrate").at(-2)!.slice(0, 3))
@@ -369,7 +369,7 @@ const program = Effect.gen(function* () {
   i = calls().length
 
   // stop: the player halts the prose while it streams (the signal completes on the first delta). The text so far is the
-  // reply, check is skipped, record runs, the node says `stopped`; "go on" is an aside child that reads the partial back.
+  // reply, check is skipped, record runs, the node says `stopped`; "go on" is an note child that reads the partial back.
   i = calls().length
   narrations.push("long")
   const halt = yield* Deferred.make<void>()
@@ -382,7 +382,7 @@ const program = Effect.gen(function* () {
   assert.equal(t12.end, "stopped")
   assert.ok(prose(t12).startsWith("PROSE#") && prose(t12).length < 100, prose(t12))
   assert.equal(made().at(-2)!.out, prose(t12)) // the narrate call reports what was kept
-  const t13 = yield* go(S.act(t12.id, { text: "", aside: "继续。" }))
+  const t13 = yield* go(S.act(t12.id, { text: "", note: "继续。" }))
   assert.ok(str(lastNarr()).includes(prose(t12)) && t13.end === "end")
   // A thought in the input: decide and narrate both hear what ⦅ ⦆ is; a turn without one carries no such line.
   const thought = /not said, not done/

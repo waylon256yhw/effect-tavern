@@ -6,7 +6,7 @@ import type { Disclosure } from "./lore.ts"
 
 export interface Input {
   text: string
-  aside?: string // this-turn-only instruction, never rendered for past turns
+  note?: string // this-turn-only instruction, never rendered for past turns
   pin?: string // an untold entry (lore id or `<product>@<node>#<i>`) this turn MUST tell; check verifies, a miss stays untold
 }
 export interface Brief {

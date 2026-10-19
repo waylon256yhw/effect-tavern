@@ -11,7 +11,7 @@ import { makeSession, type Event } from "../src/session.ts"
 import { loadCard, player } from "./cards/index.ts"
 
 const which = process.argv[2] ?? "wuxia"
-type Script = { card: Card; turns: Array<{ parent: number | null; input: { text: string; aside?: string } }> }
+type Script = { card: Card; turns: Array<{ parent: number | null; input: { text: string; note?: string } }> }
 const script = async (): Promise<Script> => {
   const card = await loadCard(which)
   switch (which) {
@@ -21,7 +21,7 @@ const script = async (): Promise<Script> => {
         turns: [
           { parent: null, input: { text: "你好，我是个路过的旅人。" } },
           { parent: null, input: { text: "你认识一个叫李的人吗？" } },
-          { parent: 1, input: { text: "我拔剑攻向B。", aside: "写得短一点。" } },
+          { parent: 1, input: { text: "我拔剑攻向B。", note: "写得短一点。" } },
           { parent: 2, input: { text: "我停手，看着B的肩膀。" } },
           { parent: 3, input: { text: "我一剑接一剑地砍，直到他倒下为止。" } }, // the §10 case
         ],
@@ -35,7 +35,7 @@ const script = async (): Promise<Script> => {
         card,
         turns: m.turns.map((text: string, i: number) => ({
           parent: i === 0 ? (first ? 0 : null) : i - 1 + first,
-          input: card.input === "aside" ? { text: "", aside: text } : { text },
+          input: card.input === "note" ? { text: "", note: text } : { text },
         })),
       }
     }
@@ -123,7 +123,7 @@ const print = (e: Event) => {
 const program = Effect.gen(function* () {
   for (const t of turns) {
     const t0 = performance.now()
-    console.log(`\n━━ turn ← ${t.parent ?? "root"}  "${t.input.text || `(aside) ${t.input.aside}`}"`)
+    console.log(`\n━━ turn ← ${t.parent ?? "root"}  "${t.input.text || `(note) ${t.input.note}`}"`)
     yield* Stream.runForEach(S.act(t.parent, t.input), (e) => Effect.sync(() => print(e)))
     console.log(`  ${Math.round(performance.now() - t0)}ms`)
   }

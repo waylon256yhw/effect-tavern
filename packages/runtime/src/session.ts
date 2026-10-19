@@ -17,7 +17,7 @@
 // rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pick` (an option as the
 // next act). A pin is not an action on a node: it rides on an act's input (`Input.pin`), the entry is forced open as a
 // MUST for that turn, check verifies it, and what the path could still be told is the node's `readable` list. "Continue" is not a kind: with no output cap the model ends where
-// it ends, and "go on" is an aside turn. Stop has two meanings by stage: before the prose starts, the action is
+// it ends, and "go on" is an note turn. Stop has two meanings by stage: before the prose starts, the action is
 // interrupted and leaves nothing; once it streams, `stop` halts the prose where it is, check is skipped (the player cut
 // the draft, not the model), record runs, and the node is saved with `end: "stopped"`, so "go on" has a node to follow.
 // Cache (docs/provider-reading.md §6 item 3): three breakpoints, where the request stops being byte-stable across turns:
@@ -124,10 +124,10 @@ export const asks = frags([
 // goes first). A snippet fills the box and never sends; `⦅⦆` is the thought mark the ask above explains.
 export const snippets: readonly Snippet[] = [
   { name: "心声", text: "⦅⦆" },
-  { name: "继续", text: "继续。", aside: true },
-  { name: "推进剧情", text: "推进剧情到下一个场景。", aside: true },
-  { name: "时间流逝", text: "时间流逝，跳到下一件有事发生的时刻。", aside: true },
-  { name: "详细描写", text: "把这一段写得更细。", aside: true },
+  { name: "继续", text: "继续。", note: true },
+  { name: "推进剧情", text: "推进剧情到下一个场景。", note: true },
+  { name: "时间流逝", text: "时间流逝，跳到下一件有事发生的时刻。", note: true },
+  { name: "详细描写", text: "把这一段写得更细。", note: true },
 ]
 // The default products (src/product.ts): what record asks for on every card unless the card patches or the player
 // toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
@@ -174,12 +174,12 @@ const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when
 
 const sys = (content: string): Message => ({ role: "system", content })
 const usr = (content: string): Message => ({ role: "user", content })
-/** This turn's user message. In-fiction text when there is any; otherwise the aside itself (directed prose: the
- *  player writes to the narrator, not as anyone in the story). Past aside-only turns leave no user message in the
+/** This turn's user message. In-fiction text when there is any; otherwise the note itself (directed prose: the
+ *  player writes to the narrator, not as anyone in the story). Past note-only turns leave no user message in the
  *  transcript, so direction never becomes history. */
-const said = (i: Input) => usr(i.text || i.aside || "")
-/** The aside as a system line, only when it accompanies in-fiction text; alone, it is already the user message. */
-const asideOf = (i: Input) => (i.text && i.aside ? [sys(`Player aside: ${i.aside}`)] : [])
+const said = (i: Input) => usr(i.text || i.note || "")
+/** The note as a system line, only when it accompanies in-fiction text; alone, it is already the user message. */
+const noteOf = (i: Input) => (i.text && i.note ? [sys(`Player note: ${i.note}`)] : [])
 
 /** Runs an action's stream and gives back the node it ended with. */
 export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn, E> =>
@@ -476,7 +476,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
                 ...card.guard.map((r) => sys(`Rule: ${r}`)),
                 ...history(path, "direct"),
                 sys(`Open: ${open.map((d) => `${d.id}=${textOf(d)}`).join(" | ")}\nEvents: ${gateEvents.join(",")}`),
-                ...asideOf(input),
+                ...noteOf(input),
                 said(input),
               ])
             : { must: [], may: openIds }
@@ -494,7 +494,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
         ...open.filter((d) => brief.must.includes(d.id)).map((d) => sys(`MUST reveal: ${textOf(d)}`)),
         ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${textOf(d)}`)),
         ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
-        ...asideOf(input),
+        ...noteOf(input),
         ...thoughtOf(input),
       ]
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
@@ -679,7 +679,7 @@ export const Action = Schema.Union([
     parent: Schema.NullOr(Id),
     input: Schema.Struct({
       text: Schema.String,
-      aside: Schema.optionalKey(Schema.String),
+      note: Schema.optionalKey(Schema.String),
       pin: Schema.optionalKey(Schema.String),
     }),
   }),
