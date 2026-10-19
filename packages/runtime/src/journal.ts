@@ -37,6 +37,7 @@ export const makeJournal = <B>() => {
   const nodes = new Map<number, Turn<B>>()
   return {
     save: (t: Omit<Turn<B>, "id">): Turn<B> => {
+      if (t.parent !== null && !nodes.has(t.parent)) throw new Error(`no node ${t.parent}`) // a cycle otherwise
       const node = { ...t, id: nodes.size }
       nodes.set(node.id, node)
       return node
@@ -53,6 +54,7 @@ export const makeJournal = <B>() => {
       return node
     },
     chain: (id: number | null): Turn<B>[] => {
+      if (id !== null && !nodes.has(id)) throw new Error(`no node ${id}`) // a missing parent is the caller's bug, not a root
       const out: Turn<B>[] = []
       for (let t = id === null ? undefined : nodes.get(id); t; t = t.parent === null ? undefined : nodes.get(t.parent))
         out.unshift(t)

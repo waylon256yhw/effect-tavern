@@ -83,6 +83,9 @@ const run = async (inspect: boolean) => {
 
     const err = sse(await (await post({ kind: "setField", node: 0, effects: [{ path: "x", set: 1 }] })).text())
     assert.deepEqual([err.length, err[0]!.event, /x/.test(err[0]!.data.message!)], [1, "error", true])
+    // A parent that does not exist is a defect on the stream, not a new root (it once became its own parent and spun).
+    const orphan = sse(await (await post({ kind: "act", parent: 99, input: { text: "hi" } })).text())
+    assert.deepEqual([orphan.length, orphan[0]!.event, /99/.test(orphan[0]!.data.message!)], [1, "error", true])
   } finally {
     server.close()
   }

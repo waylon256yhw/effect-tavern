@@ -1,0 +1,115 @@
+/* Reading first: one column of prose, nothing competing with it. */
+:root {
+  --fg: #1f1d1a;
+  --bg: #faf8f4;
+  --mute: #7a746c;
+  --line: #e6e1d8;
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  font-size: 17px;
+  line-height: 1.9;
+  color: var(--fg);
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e6e2da;
+    --bg: #171614;
+    --mute: #8d877d;
+    --line: #2b2925;
+  }
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 36em;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 8rem;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+section {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+p {
+  margin: 0 0 1em;
+  text-align: justify;
+}
+.said {
+  color: var(--mute);
+  border-left: 2px solid var(--line);
+  padding-left: 0.75em;
+}
+.note {
+  color: var(--mute);
+  font-size: 0.9em;
+}
+.stage,
+.end,
+.error {
+  color: var(--mute);
+  font-size: 0.85em;
+}
+.error {
+  color: #b4473a;
+}
+footer {
+  display: flex;
+  gap: 1em;
+  align-items: center;
+  font-size: 0.85em;
+  color: var(--mute);
+}
+.siblings {
+  display: inline-flex;
+  gap: 0.4em;
+  align-items: center;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.2em 0.7em;
+  min-height: 2.2em;
+}
+button:disabled {
+  opacity: 0.4;
+}
+.composer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom));
+}
+.composer textarea {
+  display: block;
+  width: 100%;
+  max-width: 36em;
+  margin: 0 auto;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  field-sizing: content;
+  min-height: 2.4em;
+  max-height: 35dvh;
+}
+.composer .row {
+  display: flex;
+  justify-content: space-between;
+  max-width: 36em;
+  margin: 0.3rem auto 0;
+}
+.mode.off {
+  color: var(--mute);
+  border-style: dashed;
+}

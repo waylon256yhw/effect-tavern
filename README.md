@@ -108,7 +108,7 @@ SillyTavern 及其生态（变量框架、世界书、导演类插件、各类 f
 - **回合循环已在 Haiku 上跑通**（`test/live.ts <wuxia|banxing|ri|yandao>`；`src/session.ts` 是循环本体，`test/loop.ts` 是它的脚本化断言，`test/cards/` 是四张卡：wuxia 自检卡、伴星纯聊天、青空 理的好感度分段加告白事件（后两张是真卡的手做编译）、盐道大世界模板（没有 persona，输入默认走 note，卡自带 pov 槽让玩家层的让位），四张都跑通，缓存在真卡上验证成立；记录在 `docs/provider-reading.md` 第十节）：全部阶段通、强制 schema 通、分层 lore 的揭示按窗口发生、护栏未触发、读数合理；decide 的问法改过一次才收敛（第一拍读输入的措辞决定要不要多拍，`again`；多拍才进每拍一问的循环），记录在 `docs/provider-reading.md` 第八节。节点已存 parts（`reply`，正文加带签名的推理，`prose(t)` 派生）。推理往返按格式：Anthropic 把 thinking 块绑定到生成时的前缀，重新渲染的历史无法重放，`reasoningBack` 对它默认关，推理只存不发；兼容端点与 Gemini 默认发回，未实测。
 - **持久化。** 日志树只在内存里。
 - **流式输出。** 已接：narrate 走 provider 的流式调用，增量作为 `delta` 事件逐 part 发出，结构化阶段与产物整份随 `call` 事件到达（wuxia 五轮 live 验过）。逐 token 的 partial object 是 ceiling。
-- **服务端已有，客户端没有。** `packages/server` 是 session 接缝上的线上适配器，不含逻辑：`POST /` 收一个 `Action`（`src/session.ts` 里的数据词表，在这条边界上解码），回这个动作的事件流（SSE，每种事件一个 `event:`，失败是 `error` 事件）；关掉响应就是停止，按阶段分两种：一稿的第一个字之前是取消，中断动作、中止模型请求、什么都不留（纠错重写的第二稿同样从头算）；第一个字之后是收尾，narrate 在当前位置停、check 跳过、record 照跑、节点以 `end: "stopped"` 存下，"继续"就是它下面一条 note 子轮。`GET /nodes` 给全部节点投影。`inspect` 开着 `call` 事件带请求消息（含卡的 fragment 正文），关着只剩阶段、答案、用量。一进程一局，`node src/main.ts <卡> [端口] [开场]` 在本机 Anthropic 连接上起一局；`test/serve.ts` 在真 socket 上用脚本模型断言。wuxia 在 Haiku 上经 HTTP 走过一轮。客户端的设计稿已回，它的形状与对协议的要求在 `docs/client-shape.md`；缺的是卡与玩家层的投影端点、兄弟类型、事件 `seq`。
+- **服务端已有，客户端立了骨架。** `packages/server` 是 session 接缝上的线上适配器，不含逻辑：`POST /` 收一个 `Action`（`src/session.ts` 里的数据词表，在这条边界上解码），回这个动作的事件流（SSE，每种事件一个 `event:`，失败是 `error` 事件）；关掉响应就是停止，按阶段分两种：一稿的第一个字之前是取消，中断动作、中止模型请求、什么都不留（纠错重写的第二稿同样从头算）；第一个字之后是收尾，narrate 在当前位置停、check 跳过、record 照跑、节点以 `end: "stopped"` 存下，"继续"就是它下面一条 note 子轮。`GET /nodes` 给全部节点投影。`inspect` 开着 `call` 事件带请求消息（含卡的 fragment 正文），关着只剩阶段、答案、用量。一进程一局，`node src/main.ts <卡> [端口] [开场]` 在本机 Anthropic 连接上起一局；`test/serve.ts` 在真 socket 上用脚本模型断言。wuxia 在 Haiku 上经 HTTP 走过一轮。客户端的设计稿已回，它的形状与对协议的要求在 `docs/client-shape.md`；缺的是卡与玩家层的投影端点、兄弟类型、事件 `seq`。`packages/client` 是在真 server 上跑通回合的骨架：atom store（`nodes`、`active`、`draft`、`stage`）吃 SSE，路径从根按活动兄弟推出来，delta 按动画帧合并，纠错重写的第二稿从头显示，停止后回读快照拿 `stopped` 节点；页面是一列节加底部 composer，角色 / 场外一个开关，⌘↵ 发送，IME 控制器搬自 Deckled。设计稿的其余（附注、读数面板、目录、跟底）还没有。
 - **编译。** 自然语言到卡数据的那一步没有做，现在卡是手写的数据。
 - **前端协议与编辑器。**
 - 截断恢复依赖 provider 接受末尾的 assistant 前缀。已验证：当前的 Claude 全系拒绝 prefill（400），连接能力 `prefill` 对 anthropic 默认 false；截断恢复在这类连接上要走别的路，尚未定。
@@ -144,12 +144,13 @@ demo 的顺序：过线的协议已定（session 的接口，第四节），serv
 
 ## 六、仓库
 
-pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端待定，从协议长出来。
+pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端是 React 19 加 Vite，store 是 Effect 自己的 `Atom`（选型记录在 `docs/frontend-stack-reading.md`）。
 
 ```
 packages/runtime/   运行时模块与自检
 packages/provider/  provider 层：连接、ai-sdk 编译、三个调用；URL 断言与 Anthropic 实测
 packages/server/    session 接缝上的线上适配器：POST 动作 → SSE 事件流，GET 节点；入口起一局
+packages/client/    玩家客户端：atom store 吃事件流，路径按活动兄弟推，草稿按帧长；IME 控制器搬自 Deckled
 docs/               设计记录
 vite.config.ts      格式与 lint 配置（根配置覆盖全部包）
 CLAUDE.md           Vite+ 生成的 agent 说明
@@ -161,14 +162,16 @@ CLAUDE.md           Vite+ 生成的 agent 说明
 vp install
 vp check        # oxfmt + oxlint + tsc
 pnpm verify     # 自检脚本（node:assert，不用 vitest）；provider 的 Anthropic 实测需要 ANTHROPIC_API_KEY，没有就跳过
+node packages/server/src/main.ts wuxia 7777   # 起一局
+cd packages/client && vp dev                    # 页面在 5173，/api 代理到 7777
 ```
 
 代理是连接记录上的显式字段（不写跟运行时、`false` 直连、URL 走它），不从环境变量读；Node 自己要读环境变量得开 `NODE_USE_ENV_PROXY=1`。
 
-Node 24 或更新，直接执行 `.ts`，没有构建步骤。pnpm 钉在 12.11.1，`effect` 固定在 4.0.0。`docs/` 不参与格式化。
+Node 24 或更新，直接执行 `.ts`，没有构建步骤。pnpm 钉在 12.11.1，`effect` 固定在 4.0.5。`docs/` 不参与格式化。
 
 ## 七、文档
 
 `docs/state-harness-research.md` 是搬进来的原型阶段调研记录，按章节编号归档。代码注释里的 `§n` 指向它的章节。它记录的是过程，本文记录的是现状；两者冲突时以本文为准。
 
-`docs/card-reading.md`、`docs/preset-reading.md`、`docs/preset-reading-2.md`、`docs/tavern-helper-reading.md`、`docs/card-reading-2.md` 是对生态材料的结构化阅读记录：五张卡、两份预设（一份代码化、一份魔咒式）、一个作者自建的运行时、一张重前端的 MVU 卡加 MVU 维护者的工具链示例（末节是对协议的要求清单）。每份末尾的"跨文件的规则"是读出来的结论，待确认后再折进本文。`docs/provider-reading.md` 是对 provider 层的同类阅读：SillyTavern 原版、API Hub 补丁、Deckled 的协议层、`effect/ai` 的现成能力，末尾是 provider 层的拟议形状。`docs/deckled-workbench-reading.md` 是对前作 Deckled 主工作面（Transcript、Composer）的阅读：哪些机制与流程能搬进玩家客户端，哪些是 agent 专属或它自己已推翻的，末尾是对协议与客户端的要求。`docs/chatbot-template-reading.md` 读 shadcn 的 chatbot-template：作为客户端骨架哪些直接能用、砍掉 agent 能力后仍错位的四处、要换的两件。`docs/memory-table-reading.md` 与 `docs/baibai-book-reading.md` 读生态里两个记忆扩展：前者（数据库 / 记忆表格）是在宿主旁再造一个宿主，后者（柏宝书）用消息 extra 当事件日志、状态由 fold 派生、压缩与状态分离，独立走到了本项目的结构；两份都先按三堆（兼容补丁 / 方向错误 / 我们已有）分，末节只列过了三问的要求。
+`docs/card-reading.md`、`docs/preset-reading.md`、`docs/preset-reading-2.md`、`docs/tavern-helper-reading.md`、`docs/card-reading-2.md` 是对生态材料的结构化阅读记录：五张卡、两份预设（一份代码化、一份魔咒式）、一个作者自建的运行时、一张重前端的 MVU 卡加 MVU 维护者的工具链示例（末节是对协议的要求清单）。每份末尾的"跨文件的规则"是读出来的结论，待确认后再折进本文。`docs/provider-reading.md` 是对 provider 层的同类阅读：SillyTavern 原版、API Hub 补丁、Deckled 的协议层、`effect/ai` 的现成能力，末尾是 provider 层的拟议形状。`docs/deckled-workbench-reading.md` 是对前作 Deckled 主工作面（Transcript、Composer）的阅读：哪些机制与流程能搬进玩家客户端，哪些是 agent 专属或它自己已推翻的，末尾是对协议与客户端的要求。`docs/chatbot-template-reading.md` 读 shadcn 的 chatbot-template：作为客户端骨架哪些直接能用、砍掉 agent 能力后仍错位的四处、要换的两件。`docs/memory-table-reading.md` 与 `docs/baibai-book-reading.md` 读生态里两个记忆扩展：前者（数据库 / 记忆表格）是在宿主旁再造一个宿主，后者（柏宝书）用消息 extra 当事件日志、状态由 fold 派生、压缩与状态分离，独立走到了本项目的结构；两份都先按三堆（兼容补丁 / 方向错误 / 我们已有）分，末节只列过了三问的要求。`docs/risuai-reading.md` 读 RisuAI，门类里唯一现代栈、非 ST 代码基的完整客户端，前后端一起对照：它没有后端（harness 整个跑在浏览器里），swipe 不落库、分支整条复制，记忆是存在 chat 上的模型摘要，Svelte 没有给它流式（累计全文、每 delta 重挂）；结论零协议改动，栈便宜、store 贵，客户端留下对白标记与 col-reverse 两条，插件沙箱是作者视图 iframe 协议的参照。`docs/frontend-stack-reading.md` 读四个前端对照（gpui-kit、mygo、zeron、T3 Code），回答"React 之外有没有能走多端的栈"：三个原生栈都到不了手机浏览器，zeron 的 iOS 不经 gpui；四个在转录面上收敛到同一组与框架无关的技术（块粒度行、精确高度、弹簧跟底加输入打断、只重解析最后一个开放块、paint 层淡入），T3 Code 给出 Effect 服务端到客户端的缝（seq 流项三元组、续传预算、前向兼容联合、有界快照）；结案：React 加 Vite，store 用 Effect 的 Atom 加 @effect/atom-react。
