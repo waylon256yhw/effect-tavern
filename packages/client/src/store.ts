@@ -33,7 +33,7 @@ export const path = Atom.make((get) => {
   for (;;) {
     const kids = childrenOf(all, parent)
     if (kids.length === 0) return out
-    const next: Node = all.get(chosen.get(parent) ?? kids[kids.length - 1]!.turn.id) ?? kids[kids.length - 1]!
+    const next: Node = all.get(chosen.get(parent)!) ?? kids.at(-1)!
     out.push(next)
     parent = next.turn.id
   }
@@ -68,14 +68,7 @@ export const apply = (e: Wire): void => {
         frame ??= requestAnimationFrame(flush)
       }
       return
-    case "call":
-      return
     case "node":
-      if (frame !== undefined) {
-        cancelAnimationFrame(frame)
-        frame = undefined
-        pending = ""
-      }
       registry.update(nodes, (all) => new Map(all).set(e.node.turn.id, e.node))
       registry.update(active, (m) => new Map(m).set(e.node.turn.parent, e.node.turn.id))
       registry.set(draft, null)

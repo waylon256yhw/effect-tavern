@@ -7,22 +7,16 @@ const base = "/api"
 
 export const fetchNodes = async (): Promise<void> => load((await (await fetch(`${base}/nodes`)).json()) as Node[])
 
-/** Sends one action; returns the stop. Resolves when the stream ends. */
-export const send = (action: Action): { stop: () => void; done: Promise<void> } => {
+/** Sends one action; returns the stop. */
+export const send = (action: Action): (() => void) => {
   const ac = new AbortController()
-  const done = (async () => {
-    let res: Response
+  void (async () => {
     try {
-      res = await fetch(base, { method: "POST", body: JSON.stringify(action), signal: ac.signal })
-    } catch (e) {
-      if (!ac.signal.aborted) apply({ kind: "error", message: String(e) })
-      return
-    }
-    if (!res.ok || !res.body) return apply({ kind: "error", message: `${res.status} ${await res.text()}` })
-    const reader = res.body.getReader()
-    const dec = new TextDecoder()
-    let buf = ""
-    try {
+      const res = await fetch(base, { method: "POST", body: JSON.stringify(action), signal: ac.signal })
+      if (!res.ok || !res.body) return apply({ kind: "error", message: `${res.status} ${await res.text()}` })
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ""
       for (;;) {
         const { value, done } = await reader.read()
         if (done) break
@@ -40,5 +34,5 @@ export const send = (action: Action): { stop: () => void; done: Promise<void> } 
       if (!ac.signal.aborted) apply({ kind: "error", message: String(e) })
     }
   })()
-  return { stop: () => ac.abort(), done }
+  return () => ac.abort()
 }

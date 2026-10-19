@@ -69,7 +69,6 @@ const Composer = ({
 }) => {
   const [text, setText] = useState("")
   const [note, setNote] = useState(false)
-  const ref = useRef<HTMLTextAreaElement>(null)
   const submit = () => {
     const t = text.trim()
     if (!t || busy) return false
@@ -78,8 +77,9 @@ const Composer = ({
     setNote(false)
     return true
   }
-  const ime = useRef(imeController(submit))
-  ime.current = imeController(submit)
+  const submitRef = useRef(submit)
+  submitRef.current = submit
+  const ime = useRef(imeController(() => submitRef.current()))
   return (
     <form
       className="composer"
@@ -89,7 +89,6 @@ const Composer = ({
       }}
     >
       <textarea
-        ref={ref}
         value={text}
         placeholder={note ? "给叙述者的话，不进故事" : "说或做"}
         enterKeyHint="enter"
@@ -121,13 +120,13 @@ const Reader = () => {
   const d = useAtomValue(draft)
   const phase = useAtomValue(stage)
   const err = useAtomValue(error)
-  const current = useRef<ReturnType<typeof send> | null>(null)
+  const stop = useRef<(() => void) | null>(null)
   useEffect(() => void fetchNodes(), [])
 
   const start = (parent: Id | null, input: { text: string; note?: string }, action: Parameters<typeof send>[0]) => {
     registry.set(error, null)
     registry.set(draft, { parent, input, text: "" })
-    current.current = send(action)
+    stop.current = send(action)
   }
   const onSend = (text: string, note: boolean) => {
     const parent = line.at(-1)?.turn.id ?? null
@@ -136,9 +135,8 @@ const Reader = () => {
   }
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
   const onStop = async () => {
-    const c = current.current
-    if (!c) return
-    c.stop()
+    if (!stop.current) return
+    stop.current()
     // Before the first character the turn is withdrawn; after it, the server finishes a `stopped` node the closed
     // response never carried, so read the snapshot back until it shows up.
     const was = registry.get(nodes).size
