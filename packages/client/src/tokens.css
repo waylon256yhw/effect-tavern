@@ -1,0 +1,129 @@
+/* The client's design constants, in one place. Structure after Claude Desktop 2.0's token layer (docs/open-claude-ui-reading.md):
+   four surfaces on one gray ramp, alpha borders, near+far shadows, one radius ruler, spacing from the line, five durations.
+   Colors are neutral on purpose: the brand slot is empty until there is a brand. Every color is written once with
+   light-dark(); `color-scheme` on :root (or data-theme) picks the side. test/tokens.ts asserts every var() used in src
+   is defined here. */
+:root {
+  color-scheme: light dark;
+
+  /* surfaces: canvas behind panels (desktop) → page → card → composer / popover */
+  --surface-0: light-dark(#f9f9f7, #0b0b0b);
+  --surface-1: light-dark(#fcfcfb, #151515);
+  --surface-2: light-dark(#ffffff, #1a1a19);
+  --surface-3: light-dark(#ffffff, #20201f);
+
+  /* ink: text, secondary text, muted */
+  --ink: light-dark(#151515, #f5f5f5);
+  --ink-2: light-dark(#525252, #a3a3a3);
+  --ink-3: light-dark(#8a8a8a, #6f6f6f);
+
+  /* alpha steps in the ink's hue, so they sit on any surface: ghost hover / border, fill / border strong / heavy divider */
+  --alpha-1: light-dark(rgb(20 20 20 / 0.05), rgb(255 255 255 / 0.05));
+  --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+  --alpha-3: light-dark(rgb(20 20 20 / 0.2), rgb(255 255 255 / 0.18));
+  --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+  --line: var(--alpha-2);
+  --line-strong: var(--alpha-3);
+  --fill: var(--alpha-2); /* secondary button, chip */
+  --fill-hover: light-dark(rgb(20 20 20 / 0.14), rgb(255 255 255 / 0.14));
+  --ghost-hover: var(--alpha-1); /* borderless button */
+  --ghost-active: var(--alpha-2);
+
+  /* roles. primary is near-black until there is a brand; danger is the only hue */
+  --primary: var(--ink);
+  --primary-ink: var(--surface-1);
+  --danger: light-dark(#dc2626, #f87171);
+  --ring: var(--alpha-4); /* focus */
+
+  /* one closed border per line of sight; borders are drawn with box-shadow so they stay out of the box model */
+  --hairline: 1px;
+  --shadow-1:
+    0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)), 0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+  --shadow-2:
+    0 2px 4px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+    0 6px 16px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+  --shadow-3:
+    0 4px 8px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+    0 12px 28px -2px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+  /* a floating layer: outer 1px ring in light, inner 1px white ring in dark */
+  --shadow-pop:
+    inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)), 0 0 0 1px light-dark(var(--line), transparent),
+    0 8px 24px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.65)),
+    0 2px 6px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  --shadow-composer: 0 4px 20px light-dark(rgb(0 0 0 / 0.035), rgb(0 0 0 / 0.4)), inset 0 0 0 1px var(--line);
+  --shadow-composer-focus:
+    0 4px 24px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.65)), inset 0 0 0 1px var(--line-strong),
+    0 0 0 1px var(--line-strong);
+
+  /* radius: one ruler, comfortable density. the card is concentric with what it holds */
+  --radius-sm: 4px; /* kbd, checkbox */
+  --radius: 8px; /* buttons, inputs, menu rows */
+  --radius-card: calc(var(--radius) + 4px);
+  --radius-composer: 14px;
+  --radius-dialog: 16px;
+  --radius-pill: 999px;
+
+  /* controls */
+  --control: 32px;
+  --control-sm: 24px;
+  --icon: 20px;
+  --icon-sm: 16px;
+
+  /* type: system sans only, CJK fallbacks in the stack. UI reads at body, the story at prose */
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-caption: 0.6875rem; /* 11: timestamps, kbd */
+  --text-footnote: 0.75rem; /* 12: secondary notes */
+  --text-body: 0.875rem; /* 14: UI */
+  --text-heading: 0.9375rem; /* 15: card and sheet titles */
+  --text-prose: 1rem; /* 16: the story; never below 16 in inputs (iOS zoom) */
+  --text-title: 1.25rem; /* 20: page title */
+  --leading-tight: 1.25;
+  --leading-body: 1.45;
+  --leading-prose: 1.75;
+
+  /* spacing: a 4px grid; the reading rhythm derives from the prose line */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --line-prose: calc(var(--text-prose) * var(--leading-prose));
+  --gap-turn: calc(var(--line-prose) * 0.75); /* between a reader's line and the card, and between turns */
+  --gap-item: calc(var(--line-prose) * 0.5); /* inside a turn */
+  --measure: 42rem; /* the prose column */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* motion: five durations, one ease for movement, one for pulses */
+  --dur-1: 60ms; /* press, focus ring */
+  --dur-2: 120ms; /* chip, toggle */
+  --dur-3: 200ms; /* hover, menu, card */
+  --dur-4: 300ms; /* sheet */
+  --dur-5: 450ms; /* page-level */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-pulse: cubic-bezier(0.4, 0, 0.2, 1);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+@media (resolution >= 2x) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+    --dur-4: 0ms;
+    --dur-5: 0ms;
+  }
+}

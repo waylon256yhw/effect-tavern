@@ -1,22 +1,12 @@
-/* Reading first: one column of prose, nothing competing with it. */
+@import "./tokens.css";
+
+/* Skeleton only: the page runs on the tokens, the component styles come in the next round. */
 :root {
-  --fg: #1f1d1a;
-  --bg: #faf8f4;
-  --mute: #7a746c;
-  --line: #e6e1d8;
-  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
-  font-size: 17px;
-  line-height: 1.9;
-  color: var(--fg);
-  background: var(--bg);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #e6e2da;
-    --bg: #171614;
-    --mute: #8d877d;
-    --line: #2b2925;
-  }
+  font-family: var(--font-sans);
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
+  color: var(--ink);
+  background: var(--surface-1);
 }
 body {
   margin: 0;
@@ -37,29 +27,29 @@ p {
   text-align: justify;
 }
 .said {
-  color: var(--mute);
+  color: var(--ink-3);
   border-left: 2px solid var(--line);
   padding-left: 0.75em;
 }
 .note {
-  color: var(--mute);
+  color: var(--ink-3);
   font-size: 0.9em;
 }
 .stage,
 .end,
 .error {
-  color: var(--mute);
+  color: var(--ink-3);
   font-size: 0.85em;
 }
 .error {
-  color: #b4473a;
+  color: var(--danger);
 }
 footer {
   display: flex;
   gap: 1em;
   align-items: center;
   font-size: 0.85em;
-  color: var(--mute);
+  color: var(--ink-3);
 }
 .siblings {
   display: inline-flex;
@@ -83,7 +73,7 @@ button:disabled {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg);
+  background: var(--surface-1);
   border-top: 1px solid var(--line);
   padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom));
 }
@@ -110,6 +100,6 @@ button:disabled {
   margin: 0.3rem auto 0;
 }
 .mode.off {
-  color: var(--mute);
+  color: var(--ink-3);
   border-style: dashed;
 }
