@@ -98,6 +98,7 @@
   --gap-turn: calc(var(--line-prose) * 0.75); /* between a reader's line and the card, and between turns */
   --gap-item: calc(var(--line-prose) * 0.5); /* inside a turn */
   --measure: 42rem; /* the prose column */
+  --topbar: 48px; /* the phone's title bar, under the safe area */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 

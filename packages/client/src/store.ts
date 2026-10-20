@@ -2,6 +2,7 @@
 // is `active` (parent → child), client state the protocol does not keep; the path is derived by walking it from the
 // root. `draft` is the node being written: its prose grows by `delta`, a second draft (check failed) starts it over.
 import type { Rules } from "@effect-tavern/runtime/src/card.ts"
+import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import * as Atom from "effect/reactivity/Atom"
 import * as AtomRegistry from "effect/reactivity/AtomRegistry"
@@ -18,7 +19,14 @@ export const registry = AtomRegistry.make()
 export const nodes = Atom.make<ReadonlyMap<Id, Node>>(new Map())
 export const active = Atom.make<ReadonlyMap<Id | null, Id>>(new Map())
 export const draft = Atom.make<Draft | null>(null)
-export const rules = Atom.make<Rules | null>(null).pipe(Atom.keepAlive) // the card's rules, read once at open, before anything subscribes
+/** What the client draws the card by (GET /card): read once at open, before anything subscribes, hence keepAlive. */
+export interface CardView {
+  id: string
+  title: string
+  rules: Rules
+  snippets: readonly Snippet[]
+}
+export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
 export const compose = Atom.make("") // the composer's text; an Options row writes here and never sends
 export const stage = Atom.make<Phase | null>(null)
@@ -41,6 +49,14 @@ export const path = Atom.make((get) => {
     out.push(next)
     parent = next.turn.id
   }
+})
+
+/** The last node on the reading line and the one before it (its parent): what the header's dot, the Status table and
+ *  the desktop's inline Record read. */
+export const latest = Atom.make((get) => {
+  const line = get(path)
+  const node = line.at(-1)
+  return node ? { node, prev: line.at(-2) } : null
 })
 
 export const prose = (n: Node): string =>

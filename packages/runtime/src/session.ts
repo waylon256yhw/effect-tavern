@@ -629,6 +629,8 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     node: (id: number): Node => project(journal.get(id)),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
+    /** What the client's chrome shows about the card: the title. Not the card: fragment bodies stay on the server. */
+    meta: { id: card.id, title: card.title ?? card.id },
     nodes: (): Turn[] => [...journal.values()],
     snippets: [...(player.snippets ?? []), ...snippets] as readonly Snippet[],
     get size() {

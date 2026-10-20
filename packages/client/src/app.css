@@ -1,6 +1,6 @@
 /* Four cascade layers, lowest first: the tokens, the components (which may only use tokens), the card's CSS, the
    reader's own. A later layer wins unconditionally, so nobody needs !important. Structure names here (.said, .prose,
-   .actions, .composer, .channel, .send) are the public surface a card or a reader styles against: rename with care.
+   .actions, .composer, .channel, .send, .topbar, .canvas, .panel, .side, .status, .pinned, .snippets) are the public surface a card or a reader styles against: rename with care.
    Shapes follow docs/client-design-brief-3.md and the canvas in docs/client-canvas/. */
 @layer tokens, components, card, user;
 @import "./tokens.css" layer(tokens);
@@ -19,7 +19,7 @@
   main {
     max-width: var(--measure);
     margin: 0 auto;
-    padding: var(--space-5) var(--space-4) 160px;
+    padding: calc(var(--topbar) + var(--safe-top) + var(--space-3)) var(--space-4) 160px;
     display: flex;
     flex-direction: column;
     gap: var(--gap-turn);
@@ -34,6 +34,47 @@
     margin: 0;
     text-align: justify;
     line-break: strict;
+  }
+
+  /* the bar on top (phone): the card's title, and Status with a dot when this turn moved the state */
+  .topbar {
+    position: fixed;
+    z-index: 1;
+    inset: 0 0 auto;
+    box-sizing: border-box;
+    height: calc(var(--topbar) + var(--safe-top));
+    padding: var(--safe-top) var(--space-2) 0 var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--surface-1);
+  }
+  .topbar h1 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--text-heading);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar .icon {
+    position: relative;
+  }
+  .topbar .dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink);
+  }
+  /* the side cards exist on desktop only */
+  .side {
+    display: none;
   }
 
   /* the reader's line: a sunken block, the only framed thing in the flow */
@@ -58,7 +99,8 @@
     font-size: var(--text-body);
     color: var(--ink-3);
   }
-  .actions .spacer {
+  .actions .spacer,
+  .composer .spacer {
     flex: 1;
   }
   .siblings {
@@ -217,6 +259,7 @@
   /* the sheet: a scrim, then a full-page panel rising from the bottom to 56px under the top; the prose never moves */
   .backdrop {
     position: fixed;
+    z-index: 2;
     inset: 0;
     background: var(--scrim);
     transition: opacity var(--dur-4) var(--ease);
@@ -227,6 +270,7 @@
   }
   .sheet {
     position: fixed;
+    z-index: 2;
     inset: calc(56px + var(--safe-top)) 0 0;
     max-width: var(--measure);
     margin: 0 auto;
@@ -271,6 +315,17 @@
     gap: var(--space-4);
     font-size: var(--text-body);
     line-height: var(--leading-body);
+  }
+  .record .group {
+    display: contents;
+  }
+  .record .group h3 {
+    margin: 0;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
   }
   .record .row {
     display: flex;
@@ -458,5 +513,130 @@
     width: var(--icon-sm);
     height: var(--icon-sm);
     color: var(--ink-3);
+  }
+
+  /* the snippets menu: names only, above the composer; a pick fills the box and never sends */
+  .layer {
+    z-index: 2;
+  }
+  .snippets {
+    min-width: 10rem;
+    padding: var(--space-1);
+    border-radius: var(--radius-card);
+    background: var(--surface-3);
+    box-shadow: var(--shadow-pop);
+    outline: none;
+    transition: opacity var(--dur-2) var(--ease);
+  }
+  .snippets[data-starting-style],
+  .snippets[data-ending-style] {
+    opacity: 0;
+  }
+  .snippets .item {
+    max-width: 16rem;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius);
+    font-size: var(--text-body);
+    line-height: var(--control);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    outline: none;
+  }
+  .snippets .item[data-highlighted] {
+    background: var(--ghost-hover);
+  }
+
+  /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */
+  @media (min-width: 64rem) {
+    :root {
+      background: var(--surface-0);
+    }
+    .topbar {
+      display: none;
+    }
+    .canvas {
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr) 19rem;
+      align-items: start;
+      gap: var(--space-5);
+      padding: var(--space-5);
+    }
+    .side {
+      position: sticky;
+      top: var(--space-5);
+      box-sizing: border-box;
+      max-height: calc(100dvh - 2 * var(--space-5));
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      padding: var(--space-5);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+    }
+    .side h1 {
+      margin: 0;
+      font-size: var(--text-title);
+      font-weight: 600;
+      line-height: var(--leading-tight);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .side h2 {
+      margin: 0;
+      font-size: var(--text-caption);
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .side section {
+      gap: var(--space-2);
+    }
+    .pinned p {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--ink-2);
+      text-align: left;
+    }
+    .pinned svg {
+      flex: none;
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+    }
+    .pinned span {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .panel {
+      box-sizing: border-box;
+      min-height: calc(100dvh - 2 * var(--space-5));
+      display: flex;
+      flex-direction: column;
+      padding: 0 var(--space-6);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+    }
+    main {
+      flex: 1;
+      width: 100%;
+      box-sizing: border-box;
+      padding: var(--space-6) 0 0;
+    }
+    .composer {
+      position: sticky;
+      margin-top: auto;
+      padding: var(--space-4) 0 var(--space-5);
+    }
   }
 }

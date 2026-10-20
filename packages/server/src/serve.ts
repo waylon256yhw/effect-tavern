@@ -4,7 +4,8 @@
 //                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
 //                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
 //   GET  /nodes   every node's projection, for a client that just opened.
-//   GET  /rules   the card's rules as data (field bounds, options, action ids): what the client needs to draw state.
+//   GET  /card    what a client draws the card by: id, title, the rules as data (field bounds, options, action ids) and
+//                 the quick inputs (snippets). Fragment bodies never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
 import { decodeAction, perform, type Event, type Session } from "@effect-tavern/runtime/src/session.ts"
@@ -36,7 +37,8 @@ export const serve = (session: Session, { inspect = false } = {}) =>
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
     }
-    if (req.method === "GET" && req.url === "/rules") return json(200, session.rules)
+    if (req.method === "GET" && req.url === "/card")
+      return json(200, { ...session.meta, rules: session.rules, snippets: session.snippets })
     if (req.method === "GET" && req.url === "/nodes")
       return json(
         200,

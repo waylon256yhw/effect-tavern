@@ -7,6 +7,7 @@ export const player: Player = { global: frags([{ id: "language", text: "Write in
 
 export const full: Card = {
   id: "wuxia",
+  title: "竹林",
   frame: frags([{ id: "setting", text: "Frame: wuxia" }]),
   // Bands of the readout are `when` fragments: the narrator reads the band's text, never the number.
   fiction: frags([
@@ -17,9 +18,9 @@ export const full: Card = {
   greetings: [],
   rules: {
     fields: [
-      { path: "hp", type: "int", min: 0, max: 100, initial: 40 },
-      { path: "foe", type: "int", min: 0, initial: 30 },
-      { path: "bond", type: "int", min: -30, max: 100, initial: 0 }, // a readout: never settled before the prose
+      { path: "hp", label: "体力", group: "Body", type: "int", min: 0, max: 100, initial: 40 },
+      { path: "foe", label: "敌手", group: "People", type: "int", min: 0, initial: 30 },
+      { path: "bond", label: "交情", group: "People", type: "int", min: -30, max: 100, initial: 0 }, // a readout: never settled before the prose
     ],
     readouts: [
       {

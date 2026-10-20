@@ -17,8 +17,13 @@ const Num = Schema.Number
 const Scalar = Schema.Union([Num, Schema.Boolean, Schema.String])
 // `enum`: a discrete state (a route, a mode) that nothing derives from a number; `options` is its closed set and the
 // gate on every `set`. Strings exist only inside an enum: free text is never state (docs/card-reading-2.md §7).
+// Display declarations (docs/client-design-brief-3.md §2): what a client needs to draw a field that settlement never
+// reads. `label` is the shown name (the path when absent); `group` names the Status section it sits in (the harness's
+// defaults are Body / People / World / Belongings, the client knows their icons; any other name is a plain section).
 export const Field = Schema.Struct({
   path: Schema.String,
+  label: Schema.optionalKey(Schema.String),
+  group: Schema.optionalKey(Schema.String),
   type: Schema.Literals(["int", "number", "boolean", "enum"]),
   min: Schema.optionalKey(Num),
   max: Schema.optionalKey(Num),
@@ -62,6 +67,7 @@ export const Rules = Schema.Struct({
 })
 export type Rules = typeof Rules.Type
 export type Action = typeof Action.Type
+export type Field = typeof Field.Type
 export type State = Record<string, number | boolean | string>
 export interface Beat {
   next: string
@@ -221,6 +227,7 @@ export const Greeting = Schema.Struct({ text: Schema.String, do: Schema.optional
 export type Greeting = typeof Greeting.Type
 export const Card = Schema.Struct({
   id: Schema.String,
+  title: Schema.optionalKey(Schema.String), // shown in the client's header; the id when absent. Never reaches the model
   version: Schema.optionalKey(Schema.String), // the author's; a changed card under a running log is the client's call to notice
   source: Schema.optionalKey(Schema.String), // where it came from: a URL, a file, "hand"
   frame: Schema.Array(Fragment), // slots: persona, voice, style, setting …
