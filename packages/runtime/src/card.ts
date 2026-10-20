@@ -69,6 +69,13 @@ export interface Beat {
   seed: number
 } // next = action id; chance only when the roll is a judge
 export type Answers = Record<string, string> // readout id → option id, as recorded on the node
+/** A judged beat as it settled: the chance it was rolled against, the roll (0..1, from the seed), and which side it fell on. */
+export interface Check {
+  action: string
+  chance: number
+  roll: number
+  hit: boolean
+}
 
 export const decodeRules = Schema.decodeUnknownSync(Rules)
 export const rollOf = (seed: number) => Effect.runSync(Random.next.pipe(Random.withSeed(seed)))
@@ -120,16 +127,18 @@ export const makeCard = (r: Rules) => {
     const a = available(s).find((x) => x.id === b.next)
     if (!a) throw new Error(`${b.next}: not an available action`)
     const p = chanceOf(s, a, b)
-    const effects = p === undefined ? (a.do ?? []) : rollOf(b.seed) < p ? (a.hit ?? []) : (a.miss ?? [])
-    return apply(s, effects)
+    if (p === undefined) return { ...apply(s, a.do ?? []), check: undefined }
+    const roll = rollOf(b.seed)
+    const hit = roll < p
+    return { ...apply(s, hit ? (a.hit ?? []) : (a.miss ?? [])), check: { action: a.id, chance: p, roll, hit } }
   }
   const fold = (s: State, beats: readonly Beat[]) =>
-    beats.reduce<{ s: State; events: string[] }>(
+    beats.reduce<{ s: State; events: string[]; checks: Check[] }>(
       (acc, b) => {
         const r = settle(acc.s, b)
-        return { s: r.s, events: [...acc.events, ...r.events] }
+        return { s: r.s, events: [...acc.events, ...r.events], checks: r.check ? [...acc.checks, r.check] : acc.checks }
       },
-      { s, events: [] },
+      { s, events: [], checks: [] },
     )
   /** Decide schema for the current state: the enum is the gate; `chance` exists only when some available action is judged.
    *  `again` is read on the first beat only: whether the input's own wording asks for more beats after this one

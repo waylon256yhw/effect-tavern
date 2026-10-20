@@ -1,11 +1,14 @@
-// The seam to packages/server: `GET /nodes` is the snapshot, `POST /` is one action whose events come back as SSE.
+// The seam to packages/server: `GET /rules` and `GET /nodes` are the snapshot, `POST /` is one action whose events come back as SSE.
 // Closing the response is the stop (before the first delta it withdraws the turn, after it the prose halts).
+import type { Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Action, Node } from "@effect-tavern/runtime/src/session.ts"
-import { apply, load, type Wire } from "./store.ts"
+import { apply, load, registry, rules, type Wire } from "./store.ts"
 
 const base = "/api"
 
 export const fetchNodes = async (): Promise<void> => load((await (await fetch(`${base}/nodes`)).json()) as Node[])
+export const fetchRules = async (): Promise<void> =>
+  registry.set(rules, (await (await fetch(`${base}/rules`)).json()) as Rules)
 
 /** Sends one action; returns the stop. */
 export const send = (action: Action): (() => void) => {

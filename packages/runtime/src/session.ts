@@ -42,7 +42,7 @@ import {
   type Usage,
 } from "@effect-tavern/provider"
 import { Effect, Queue, Schema, Stream } from "effect"
-import { Effect_, makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "./card.ts"
+import { Effect_, makeCard, type Answers, type Beat, type Card, type Check, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
 import { decodeFragments as frags, frame, head as headOf, type Msg, type Player, type Snippet } from "./fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
@@ -78,6 +78,7 @@ export interface Node {
   turn: Turn
   state: State
   events: readonly string[]
+  checks: readonly Check[] // this turn's judged beats, in order; what the Record's check track draws
   delivered: readonly (Disclosure & { text: string })[]
   readable: readonly { id: string; hook: string }[]
 }
@@ -257,11 +258,12 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     return {
       s: a.s,
       events: [...o.events, ...b.events, ...r.events, ...a.events],
+      checks: b.checks,
       post: [...o.events, ...r.events, ...a.events],
     }
   }
   const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, rpg.initial)
-  const eventsOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t).events
+  const settledOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t)
   /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
    *  not yet delivered. The lookup's enum, the node's `readable`, and where `Input.pin` picks from. */
   const readableOn = (path: readonly Turn[]) => {
@@ -279,10 +281,12 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
   }
   const project = (t: Turn): Node => {
     const path = chain(t.id)
+    const settled = settledOf(path, t)
     return {
       turn: t,
       state: stateAt(path),
-      events: eventsOf(path, t),
+      events: settled.events,
+      checks: settled.checks,
       delivered: deliveredIn(t).map((d) => ({ ...d, text: textOf(d) })),
       readable: readableOn(path).map(({ id, hook }) => ({ id, hook })),
     }
@@ -301,7 +305,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     return h.length ? [...h.slice(0, -1), breakpoint(h.at(-1)!, M.ttl)] : h
   }
   const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
-    if (stage === "direct") return ledger(path, (t) => eventsOf(path, t)).map(toP)
+    if (stage === "direct") return ledger(path, (t) => settledOf(path, t).events).map(toP)
     const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
     const h = narratorHistory(path, textOf, sum).map(toP)
     if (!h.length) return h
@@ -623,6 +627,8 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
         }),
       ),
     node: (id: number): Node => project(journal.get(id)),
+    /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
+    rules: card.rules,
     nodes: (): Turn[] => [...journal.values()],
     snippets: [...(player.snippets ?? []), ...snippets] as readonly Snippet[],
     get size() {

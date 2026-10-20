@@ -33,6 +33,9 @@
   --primary: var(--ink);
   --primary-ink: var(--surface-1);
   --danger: light-dark(#dc2626, #f87171);
+  --ok: light-dark(#1f7a3f, #4ade80); /* a state that went well: a hit, a success; pairs with danger, never a brand */
+  --ok-soft: light-dark(rgb(31 122 63 / 0.22), rgb(74 222 128 / 0.25)); /* the hit zone on a check track */
+  --scrim: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.5)); /* behind a sheet */
   --ring: var(--alpha-4); /* focus */
 
   /* one closed border per line of sight; borders are drawn with box-shadow so they stay out of the box model */
