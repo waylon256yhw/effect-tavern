@@ -2,6 +2,7 @@
 //   layer 0      hidden: not in the index, not readable, never offered
 //   layer 1..n   layers[i-1]; the first sentence of layers[0] is the index hook
 //   current      max(code floor `unlock(s)`, deepest layer delivered on this path)
+//                the floor is the caller's; the session supplies one that is monotone along the path (session.ts `gated`)
 // Existence is the code floor's call; windows (`offer`) only deepen what is already visible, one layer at a time.
 // `C` is whatever the window reads: player input (lore.ts), settled events (loop.ts), later a Cond over both.
 export interface Disclosure {

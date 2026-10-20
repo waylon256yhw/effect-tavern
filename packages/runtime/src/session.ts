@@ -202,13 +202,21 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
 
 export const makeSession = ({ card, player, model: M }: { card: Card; player: Player; model: SessionModel }) => {
   const rpg = makeCard(card.rules)
-  const gate = (unlock: Cond, offer: Cond) => ({
-    unlock: (s: Paths) => (holds(unlock, s) ? 1 : 0),
+  // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
+  const gate = (id: string, offer: Cond) => ({
+    unlock: (s: Paths) => (s.lore as Record<string, { floor: number }> | undefined)?.[id]?.floor ?? 0,
     offer: (s: Paths, ev: readonly string[]) => holds(offer, s, ev),
   })
   const L = makeLore<Paths, readonly string[]>(
-    card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.unlock, e.offer) })),
+    card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.id, e.offer) })),
   )
+  /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
+  const floorAt = (unlock: Cond | readonly Cond[], s: State) => {
+    const cs = Array.isArray(unlock) ? unlock : [unlock]
+    let n = 0
+    while (n < cs.length && holds(cs[n]!, s)) n++
+    return n
+  }
   const journal = makeJournal<Beat>()
   const { chain } = journal
   /** What a disclosure says: a lore layer, or one item of a recall product stored on a node (`<product>@<node>#<i>`). */
@@ -263,11 +271,29 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     }
   }
   const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, rpg.initial)
+  /** The state the lore gate reads: the card state (the path's end, or `s` when the turn has settled past it) plus,
+   *  under `lore.<id>`, each entry's derived counters (since / shown, for `offer`; `extra` is this turn's deliveries,
+   *  counted as shown now) and its floor: the deepest layer `unlock` has held for at ANY state along the path. The
+   *  floor is monotone because knowledge is: what the fiction made available does not become unavailable again. A
+   *  told layer already stayed (lore.ts keeps the deepest delivered); this keeps an untold one too. A card field named
+   *  `lore` would collide, so none may be. */
+  const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): Paths => {
+    const states = path.reduce<State[]>((acc, t) => [...acc, settleTurn(acc.at(-1)!, t).s], [rpg.initial]) // ponytail: one fold per call; cache per node if long logs drag
+    const at = s ?? states.at(-1)!
+    const counters = L.counters([...path.map(deliveredIn), extra]) // the turn being made is the last, shown now
+    const lore = Object.fromEntries(
+      card.lore.map((e) => [
+        e.id,
+        { ...counters[e.id], floor: Math.max(...[...states, at].map((x) => floorAt(e.unlock, x))) },
+      ]),
+    )
+    return { ...at, lore }
+  }
   const settledOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t)
   /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
    *  not yet delivered. The lookup's enum, the node's `readable`, and where `Input.pin` picks from. */
   const readableOn = (path: readonly Turn[]) => {
-    const s = stateAt(path)
+    const s = gated(path)
     const seen = deliveredOn(path)
     const seenKeys = new Set(seen.map(key))
     const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
@@ -331,7 +357,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
 
   /** Ids the player or the lookup named, as the disclosures they deliver: every unseen layer up to a lore entry's current
    *  one, or the one layer of a recalled product row. Already-seen ones deliver nothing. */
-  const deliver = (s: State, seen: readonly Disclosure[], ids: readonly string[]): Disclosure[] => {
+  const deliver = (s: Paths, seen: readonly Disclosure[], ids: readonly string[]): Disclosure[] => {
     const seenKeys = new Set(seen.map(key))
     return [...new Set(ids)]
       .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (L.read(s, seen, id) ?? [])))
@@ -390,12 +416,13 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     Effect.gen(function* () {
       const path = chain(parent)
       const s0 = stateAt(path)
+      const g0 = gated(path)
       const seen = deliveredOn(path)
       // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the
       // items of recall products stored on the path and not yet delivered (model-written memory walks the same road as
       // lore). Nothing to pick → no call.
       // The pin: the entry's next unseen layer, forced open below, so the lookup is not offered it as well.
-      const forced = input.pin === undefined ? [] : deliver(s0, seen, [input.pin]).slice(0, 1)
+      const forced = input.pin === undefined ? [] : deliver(g0, seen, [input.pin]).slice(0, 1)
       if (input.pin !== undefined && !forced.length) throw new Error(`${input.pin}: nothing to pin`)
       const untold = readableOn(path).filter((e) => e.id !== input.pin)
       const idx = untold.map((e) => e.id)
@@ -403,7 +430,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
         from !== "lookup"
           ? base!.read
           : deliver(
-              s0,
+              g0,
               seen,
               idx.length
                 ? (yield* obj(emit, "lookup", Lookup(idx), [
@@ -459,13 +486,12 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
       const prev = path.at(-1)
       const carried = prev ? settleTurn(stateAt(path.slice(0, -1)), prev).post : []
       const gateEvents = [...events, ...carried]
-      // The window's state carries each entry's derived counters under `lore.<id>` (since / shown), this turn's reads
-      // counting as shown now; a card field named `lore` would collide, so none may be.
-      const gateState = { ...s1, lore: L.counters([...path.map(deliveredIn), disclosures]) }
-      const offered = L.offers(gateState, deliveredOn(path, disclosures), gateEvents).map(({ id, layer }) => ({
-        id,
-        layer,
-      }))
+      const offered = L.offers(gated(path, disclosures, s1), deliveredOn(path, disclosures), gateEvents).map(
+        ({ id, layer }) => ({
+          id,
+          layer,
+        }),
+      )
       // The pinned entry is open with its forced layer and MUST be told, director or not: check verifies it, a miss is
       // the one correction rewrite, and an entry still unfired after that stays untold.
       const open: Disclosure[] = [...forced, ...offered.filter((d) => !forced.some((f) => f.id === d.id))]
@@ -629,8 +655,8 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     node: (id: number): Node => project(journal.get(id)),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
-    /** What the client's chrome shows about the card: the title. Not the card: fragment bodies stay on the server. */
-    meta: { id: card.id, title: card.title ?? card.id },
+    /** What the client's chrome shows about the card: the title and the turn-heading reference. Not the card: fragment bodies stay on the server. */
+    meta: { id: card.id, title: card.title ?? card.id, heading: card.heading }, // leaves as JSON, which drops undefined
     nodes: (): Turn[] => [...journal.values()],
     snippets: [...(player.snippets ?? []), ...snippets] as readonly Snippet[],
     get size() {

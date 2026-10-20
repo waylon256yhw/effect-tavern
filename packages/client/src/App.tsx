@@ -14,6 +14,7 @@ import {
   Change,
   Close,
   Clue,
+  Contents,
   Die,
   Insert,
   Next,
@@ -29,7 +30,7 @@ import {
   Swipe,
 } from "./icons.tsx"
 import { imeController } from "./ime.ts"
-import { record, status, type Element } from "./record.ts"
+import { heading, record, scenes, status, type Element } from "./record.ts"
 import {
   active,
   card,
@@ -73,8 +74,22 @@ const Said = ({ input }: { input: { text: string; note?: string } }) =>
   input.text ? <p className="said">{input.text}</p> : input.note ? <p className="said note">{input.note}</p> : null
 
 // ───────── The Record sheet: one renderer per element kind ─────────
-const Reading = ({ el }: { el: Element }) => {
+/** Arms (or disarms) an untold entry as the next act's pin. */
+const PinButton = ({ id }: { id: string }) => {
   const pinned = useAtomValue(pin)
+  return (
+    <button
+      className="icon"
+      aria-label="Pin"
+      aria-pressed={pinned === id}
+      onClick={() => registry.set(pin, pinned === id ? null : id)}
+    >
+      <Pin weight={pinned === id ? "fill" : "regular"} />
+    </button>
+  )
+}
+
+const Reading = ({ el }: { el: Element }) => {
   switch (el.kind) {
     case "steps":
       return (
@@ -144,16 +159,18 @@ const Reading = ({ el }: { el: Element }) => {
         <div className="clue">
           <Clue aria-hidden />
           <p>{el.text}</p>
-          {el.pinnable && (
-            <button
-              className="icon"
-              aria-label="Pin"
-              aria-pressed={pinned === el.id}
-              onClick={() => registry.set(pin, pinned === el.id ? null : el.id)}
-            >
-              <Pin weight={pinned === el.id ? "fill" : "regular"} />
-            </button>
-          )}
+          {el.pinnable && <PinButton id={el.id} />}
+        </div>
+      )
+    case "pin":
+      return (
+        <div className="clue">
+          <Pin aria-hidden />
+          <p>{el.id}</p>
+          <span className="badge" data-hit={el.told || undefined}>
+            {el.told ? "Told" : "Untold"}
+          </span>
+          {!el.told && <PinButton id={el.id} />}
         </div>
       )
     case "notes":
@@ -224,6 +241,7 @@ const RecordSheet = ({
   onReword: () => void
 }) => {
   const all = useAtomValue(nodes)
+  const ref = useAtomValue(card)?.heading
   const [open, setOpen] = useState(false)
   const act = (f: () => void) => {
     setOpen(false)
@@ -233,7 +251,7 @@ const RecordSheet = ({
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      heading={`Turn ${n}`}
+      heading={heading(ref, node) ?? `Turn ${n}`}
       trigger={
         <Dialog.Trigger className="record-pill">
           <Record aria-hidden />
@@ -277,15 +295,54 @@ const StatusTable = () => {
   )
 }
 
-/** The slim bar on top: the card's title, and Status with a dot when this turn changed the state. */
+/** The scene list: the reading line folded into runs of one title (the card's `heading`); a row scrolls to the run's
+ *  first section. Nothing when the card declares no heading. */
+const Scenes = ({ onPick }: { onPick?: () => void }) => {
+  const runs = scenes(useAtomValue(card)?.heading, useAtomValue(path))
+  if (!runs.length) return null
+  return (
+    <nav className="scenes" aria-label="Scenes">
+      {runs.map((s) => (
+        <button
+          key={s.id}
+          className="scene"
+          onClick={() => {
+            onPick?.()
+            document.getElementById(`node-${s.id}`)?.scrollIntoView({ block: "start" })
+          }}
+        >
+          {s.title}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+/** The slim bar on top: the card's title, Contents (the scene list) and Status with a dot when this turn changed the state. */
 const Topbar = () => {
   const t = useAtomValue(card)?.title ?? null
+  const ref = useAtomValue(card)?.heading
   const r = useAtomValue(card)?.rules
   const last = useAtomValue(latest)
+  const [open, setOpen] = useState(false)
   const changed = r !== undefined && last !== null && record(r, last.node, last.prev).some((e) => "path" in e)
   return (
     <header className="topbar">
       {t !== null && <h1>{t}</h1>}
+      {ref !== undefined && (
+        <Sheet
+          heading="Contents"
+          open={open}
+          onOpenChange={setOpen}
+          trigger={
+            <Dialog.Trigger className="icon" aria-label="Contents">
+              <Contents />
+            </Dialog.Trigger>
+          }
+        >
+          <Scenes onPick={() => setOpen(false)} />
+        </Sheet>
+      )}
       <Sheet
         heading="Status"
         trigger={
@@ -339,7 +396,7 @@ const Section = ({
   const go = (i: number) => registry.update(active, (m) => new Map(m).set(node.turn.parent, siblings[i]!.turn.id))
   const options = node.turn.products.options as readonly string[] | undefined
   return (
-    <section>
+    <section id={`node-${node.turn.id}`}>
       <Said input={node.turn.input} />
       <Paragraphs text={prose(node)} />
       <footer className="actions">
@@ -535,13 +592,14 @@ const Reader = () => {
   )
 }
 
-/** Desktop's left card: the title, and the armed pin. */
+/** Desktop's left card: the title, the scene list, and the armed pin. */
 const Side = () => {
   const t = useAtomValue(card)?.title ?? null
   const pinned = useAtomValue(pin)
   return (
     <aside className="side">
       {t !== null && <h1>{t}</h1>}
+      <Scenes />
       {pinned && (
         <section className="pinned">
           <h2>Pinned</h2>

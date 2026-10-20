@@ -209,11 +209,14 @@ export const makeCard = (r: Rules) => {
 export type Rpg = ReturnType<typeof makeCard>
 
 // ───────── The whole card ─────────
-// Lore gates as data: `unlock` is a Cond over state (visible = layer 1), `offer` a Cond over state + this turn's events.
+// Lore gates as data. `unlock` is the lock: one Cond per layer (a single Cond is layer 1's), the floor being the leading
+// layers whose Cond holds; a layer any state on the path unlocked stays unlocked, so the lock is a predicate over what
+// has happened, never a filter on the instant (a filter is what `offer` is for). `offer` is the moment: a Cond over
+// state + this turn's events, opening the next layer to the narrator for this turn only.
 export const LoreEntry = Schema.Struct({
   id: Schema.String,
   layers: Schema.Array(Schema.String),
-  unlock: Cond,
+  unlock: Schema.Union([Cond, Schema.Array(Cond)]),
   offer: Cond,
 })
 // Two coordinates place a card among the ways people write (1:1 RP, a world with no fixed protagonist, directed prose):
@@ -228,6 +231,7 @@ export type Greeting = typeof Greeting.Type
 export const Card = Schema.Struct({
   id: Schema.String,
   title: Schema.optionalKey(Schema.String), // shown in the client's header; the id when absent. Never reaches the model
+  heading: Schema.optionalKey(Schema.String), // what titles a turn: a field path or `<product>.<key>` (a text key of a record product), read off the node; no declaration, no turn titles
   version: Schema.optionalKey(Schema.String), // the author's; a changed card under a running log is the client's call to notice
   source: Schema.optionalKey(Schema.String), // where it came from: a URL, a file, "hand"
   frame: Schema.Array(Fragment), // slots: persona, voice, style, setting …

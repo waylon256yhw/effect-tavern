@@ -23,6 +23,7 @@ export const draft = Atom.make<Draft | null>(null)
 export interface CardView {
   id: string
   title: string
+  heading?: string // what titles a turn (Card.heading); absent, turns have no titles and there is no scene list
   rules: Rules
   snippets: readonly Snippet[]
 }

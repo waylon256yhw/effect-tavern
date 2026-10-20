@@ -1,6 +1,6 @@
 /* Four cascade layers, lowest first: the tokens, the components (which may only use tokens), the card's CSS, the
    reader's own. A later layer wins unconditionally, so nobody needs !important. Structure names here (.said, .prose,
-   .actions, .composer, .channel, .send, .topbar, .canvas, .panel, .side, .status, .pinned, .snippets) are the public surface a card or a reader styles against: rename with care.
+   .actions, .composer, .channel, .send, .topbar, .canvas, .panel, .side, .status, .pinned, .scenes, .snippets) are the public surface a card or a reader styles against: rename with care.
    Shapes follow docs/client-design-brief-3.md and the canvas in docs/client-canvas/. */
 @layer tokens, components, card, user;
 @import "./tokens.css" layer(tokens);
@@ -26,6 +26,7 @@
     overflow-wrap: anywhere;
   }
   section {
+    scroll-margin-top: calc(var(--topbar) + var(--safe-top) + var(--space-3)); /* a scene jump lands below the bar */
     display: flex;
     flex-direction: column;
     gap: var(--gap-item);
@@ -453,6 +454,28 @@
   }
   .clue .icon {
     margin: -6px -8px -6px 0;
+  }
+  .clue .badge {
+    margin-top: 2px;
+  }
+
+  /* the scene list: one ghost row per run of a title; the Contents sheet on phones, the left card on desktop */
+  .scenes {
+    display: grid;
+  }
+  .scene {
+    min-height: var(--control);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius);
+    text-align: left;
+    font-size: var(--text-body);
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .scene:hover {
+    background: var(--alpha-1);
   }
   .icon[aria-pressed="true"] {
     color: var(--ink);

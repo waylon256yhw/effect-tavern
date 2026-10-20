@@ -8,6 +8,7 @@ export const player: Player = { global: frags([{ id: "language", text: "Write in
 export const full: Card = {
   id: "wuxia",
   title: "竹林",
+  heading: "scene.place",
   frame: frags([{ id: "setting", text: "Frame: wuxia" }]),
   // Bands of the readout are `when` fragments: the narrator reads the band's text, never the number.
   fiction: frags([
@@ -55,14 +56,15 @@ export const full: Card = {
   lore: [
     {
       id: "li",
-      // Layer 2 opens on a beat event (settled before the prose); layer 3 on a readout event, which is emitted after
-      // the prose and so can only open the window on the following turn.
+      // The lock: layer 2 is unlocked once A has trusted the player (bond ≥ 8, and it stays unlocked when bond falls
+      // back); layer 3 only ever comes through a window. The moments: layer 2 is offered on a beat event (settled
+      // before the prose); layer 3 on a readout event, emitted after the prose and so opening the window next turn.
       layers: [
         "Li: A's lost friend; crane tattoo on the left shoulder.",
         "B is Li.",
         "Li once made A swear to finish it, should they ever cross swords.",
       ],
-      unlock: { all: [] },
+      unlock: [{ all: [] }, { path: "bond", op: "gte", value: 8 }],
       offer: { any: [{ event: "strike:hit" }, { event: "warmth:close" }] },
     },
     { id: "heir", layers: ["Li was heir to the throne."], unlock: { any: [] }, offer: { all: [] } }, // hidden: never in play

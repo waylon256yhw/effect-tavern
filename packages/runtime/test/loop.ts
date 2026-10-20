@@ -347,7 +347,8 @@ const program = Effect.gen(function* () {
 
   // pin: on t9's branch li's first layer is visible but was never read, so t9 lists it as untold. The player pins it on
   // the next act: no lookup (the pinned entry is kept out of it, nothing else is readable), the narrator gets it as MUST,
-  // check confirms it fired, so it is delivered through `fired`, and the new node has nothing untold.
+  // check confirms it fired, so it is delivered through `fired`. The greeting set bond to 8, which unlocks li's second
+  // layer, so the entry is still untold one layer deeper: a pin takes one layer at a time.
   const hook = full.lore[0]!.layers[0]!.split(/(?<=\.)\s/)[0]!
   assert.deepEqual(S.node(t9.id).readable, [{ id: "li", hook }])
   narrations.push("fire")
@@ -356,15 +357,18 @@ const program = Effect.gen(function* () {
   assert.ok(str(lastNarr()).includes(`MUST reveal: ${full.lore[0]!.layers[0]!}`))
   assert.deepEqual(
     [t10.brief.must, t10.fired, t10.read, S.node(t10.id).readable],
-    [["li"], [{ id: "li", layer: 1 }], [], []],
+    [["li"], [{ id: "li", layer: 1 }], [], [{ id: "li", hook }]],
   )
   // A miss: the narrator ignores the pin, the one correction rewrite runs and misses again; the entry stays untold.
   i = calls().length
   const t10b = yield* go(S.act(t9.id, { text: "wait", pin: "li" }))
   assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "check", "record"])
   assert.deepEqual([t10b.fired, S.node(t10b.id).readable], [[], [{ id: "li", hook }]])
-  // Pinning what the path already holds is a defect.
-  const ex = yield* Effect.exit(go(S.act(t10.id, { text: "wait", pin: "li" })))
+  // The next pin takes layer 2; layer 3 is locked (only a window opens it), so nothing is left to pin: a defect.
+  narrations.push("fire")
+  const t10c = yield* go(S.act(t10.id, { text: "wait", pin: "li" }))
+  assert.deepEqual([t10c.fired, S.node(t10c.id).readable], [[{ id: "li", layer: 2 }], []])
+  const ex = yield* Effect.exit(go(S.act(t10c.id, { text: "wait", pin: "li" })))
   assert.ok(ex._tag === "Failure" && /nothing to pin/.test(String(Cause.squash(ex.cause))))
   i = calls().length
 
@@ -374,7 +378,7 @@ const program = Effect.gen(function* () {
   narrations.push("long")
   const halt = yield* Deferred.make<void>()
   const t12 = yield* go(
-    S.act(t10.id, { text: "wait" }, Deferred.await(halt)).pipe(
+    S.act(t10c.id, { text: "wait" }, Deferred.await(halt)).pipe(
       Stream.tap((e) => (e.kind === "delta" ? Deferred.succeed(halt, undefined) : Effect.void)),
     ),
   )
@@ -424,6 +428,22 @@ const program = Effect.gen(function* () {
   assert.deepEqual(b.brief.may, []) // since = 1
   const c = yield* go(E.act(b.id, { text: "wait" }))
   assert.deepEqual([c.brief.may, c.fired], [["echo"], [{ id: "echo", layer: 3 }]]) // since = 2, shown = 1
+
+  // ───────── The lock is a predicate over the path: a layer once unlocked stays readable after the state drops ─────────
+  // li's second layer unlocks at bond ≥ 8. One warm turn reaches it; a cold turn after takes bond back to 3, and the
+  // layer is still readable (so pinnable), then read by the lookup. Layer 3 never: only a window opens it.
+  const V = makeSession({ card: full, player, model })
+  const untold = (id: number) => V.node(id).readable.map((r) => r.id)
+  const v0 = yield* go(V.act(null, { text: "about li" }))
+  assert.deepEqual([v0.read, untold(v0.id)], [[{ id: "li", layer: 1 }], []])
+  warmths.push("close")
+  const v1 = yield* go(V.act(v0.id, { text: "wait" }))
+  assert.deepEqual([V.node(v1.id).state.bond, untold(v1.id)], [8, ["li"]])
+  warmths.push("cold")
+  const v2 = yield* go(V.act(v1.id, { text: "wait" }))
+  assert.deepEqual([V.node(v2.id).state.bond, untold(v2.id)], [3, ["li"]]) // the instant no longer holds; the lock stays open
+  const v4 = yield* go(V.act(v2.id, { text: "about li" }))
+  assert.deepEqual([v4.read, untold(v4.id)], [[{ id: "li", layer: 2 }], []])
   console.log(str(lastNarr()))
 })
 

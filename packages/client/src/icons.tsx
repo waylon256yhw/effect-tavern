@@ -10,6 +10,7 @@ export {
   ChartBarIcon as Status,
   CaretRightIcon as Next,
   DiceFiveIcon as Die,
+  ListIcon as Contents,
   MagicWandIcon as Reword,
   MagnifyingGlassIcon as Clue,
   NotepadIcon as Record,
