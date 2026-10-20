@@ -1,105 +1,196 @@
-@import "./tokens.css";
+/* Four cascade layers, lowest first: the tokens, the components (which may only use tokens), the card's CSS, the
+   reader's own. A later layer wins unconditionally, so nobody needs !important. Structure names here (.said, .prose,
+   .actions, .composer, .channel, .send) are the public surface a card or a reader styles against: rename with care.
+   Shapes follow docs/client-design-brief-3.md and the canvas in docs/client-canvas/. */
+@layer tokens, components, card, user;
+@import "./tokens.css" layer(tokens);
 
-/* Skeleton only: the page runs on the tokens, the component styles come in the next round. */
-:root {
-  font-family: var(--font-sans);
-  font-size: var(--text-prose);
-  line-height: var(--leading-prose);
-  color: var(--ink);
-  background: var(--surface-1);
-}
-body {
-  margin: 0;
-}
-main {
-  max-width: 36em;
-  margin: 0 auto;
-  padding: 1.5rem 1rem 8rem;
-  overflow-wrap: anywhere;
-  word-break: normal;
-}
-section {
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--line);
-}
-p {
-  margin: 0 0 1em;
-  text-align: justify;
-}
-.said {
-  color: var(--ink-3);
-  border-left: 2px solid var(--line);
-  padding-left: 0.75em;
-}
-.note {
-  color: var(--ink-3);
-  font-size: 0.9em;
-}
-.stage,
-.end,
-.error {
-  color: var(--ink-3);
-  font-size: 0.85em;
-}
-.error {
-  color: var(--danger);
-}
-footer {
-  display: flex;
-  gap: 1em;
-  align-items: center;
-  font-size: 0.85em;
-  color: var(--ink-3);
-}
-.siblings {
-  display: inline-flex;
-  gap: 0.4em;
-  align-items: center;
-}
-button {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.2em 0.7em;
-  min-height: 2.2em;
-}
-button:disabled {
-  opacity: 0.4;
-}
-.composer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--surface-1);
-  border-top: 1px solid var(--line);
-  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom));
-}
-.composer textarea {
-  display: block;
-  width: 100%;
-  max-width: 36em;
-  margin: 0 auto;
-  box-sizing: border-box;
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  outline: none;
-  resize: none;
-  field-sizing: content;
-  min-height: 2.4em;
-  max-height: 35dvh;
-}
-.composer .row {
-  display: flex;
-  justify-content: space-between;
-  max-width: 36em;
-  margin: 0.3rem auto 0;
-}
-.mode.off {
-  color: var(--ink-3);
-  border-style: dashed;
+@layer components {
+  :root {
+    font-family: var(--font-sans);
+    font-size: var(--text-prose);
+    line-height: var(--leading-prose);
+    color: var(--ink);
+    background: var(--surface-1);
+  }
+  body {
+    margin: 0;
+  }
+  main {
+    max-width: var(--measure);
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-4) 160px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-turn);
+    overflow-wrap: anywhere;
+  }
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-item);
+  }
+  p {
+    margin: 0;
+    text-align: justify;
+    line-break: strict;
+  }
+
+  /* the reader's line: a sunken block, the only framed thing in the flow */
+  .said {
+    background: var(--alpha-1);
+    border-radius: var(--radius-card);
+    padding: 10px 14px;
+    font-size: 15px;
+    line-height: 1.6;
+    text-align: left;
+  }
+  .said.note {
+    color: var(--ink-2);
+  }
+
+  /* under each section: version nav on the left, actions on the right, all ghost */
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control);
+    font-size: var(--text-body);
+    color: var(--ink-3);
+  }
+  .actions .spacer {
+    flex: 1;
+  }
+  .siblings {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stage,
+  .end {
+    font-size: var(--text-footnote);
+    color: var(--ink-3);
+  }
+  .error {
+    font-size: var(--text-body);
+    color: var(--danger);
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    border-radius: var(--radius);
+    padding: 0;
+    cursor: pointer;
+    transition: background var(--dur-3) var(--ease);
+  }
+  button:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  button:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .icon {
+    width: var(--control);
+    height: var(--control);
+    display: grid;
+    place-items: center;
+    color: var(--ink-2);
+  }
+  .icon:hover:not(:disabled) {
+    background: var(--ghost-hover);
+  }
+  .icon svg {
+    width: var(--icon);
+    height: var(--icon);
+  }
+
+  /* the composer: the one raised object, fixed at the bottom */
+  .composer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: var(--space-2) var(--space-3) calc(var(--space-4) + var(--safe-bottom));
+    background: var(--surface-1);
+  }
+  .composer .box {
+    max-width: var(--measure);
+    margin: 0 auto;
+    background: var(--surface-3);
+    border-radius: var(--radius-composer);
+    box-shadow: var(--shadow-composer);
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    transition: box-shadow var(--dur-3) var(--ease);
+  }
+  .composer .box:focus-within {
+    box-shadow: var(--shadow-composer-focus);
+  }
+  .composer textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 40px;
+    max-height: 35dvh;
+    padding: var(--space-2);
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--text-prose);
+    line-height: 1.5;
+    color: var(--ink);
+    resize: none;
+    outline: none;
+    field-sizing: content;
+  }
+  .composer .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .channel {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius);
+    background: var(--alpha-1);
+  }
+  .channel button {
+    height: var(--control-sm);
+    padding: 0 10px;
+    border-radius: calc(var(--radius) - 2px);
+    font-size: var(--text-footnote);
+    color: var(--ink-3);
+  }
+  .channel button[aria-checked="true"] {
+    background: var(--surface-3);
+    box-shadow: var(--shadow-1);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .send {
+    width: var(--control);
+    height: var(--control);
+    border-radius: var(--radius-pill);
+    background: var(--primary);
+    color: var(--primary-ink);
+    display: grid;
+    place-items: center;
+  }
+  .send:disabled {
+    opacity: 1;
+    background: var(--fill);
+    color: var(--ink-3);
+  }
+  .send svg {
+    width: var(--icon);
+    height: var(--icon);
+  }
 }

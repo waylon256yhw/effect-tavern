@@ -3,17 +3,18 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { useEffect, useRef, useState } from "react"
+import { Next, Prev, Send, Stop, Swipe } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { active, childrenOf, draft, error, nodes, path, prose, registry, stage, type Id } from "./store.ts"
 import { fetchNodes, send } from "./wire.ts"
 
 const waiting: Record<string, string> = {
-  lookup: "翻阅",
-  decide: "掷骰",
-  direct: "导演",
-  narrate: "落笔",
-  check: "检查",
-  record: "记账",
+  lookup: "Reading",
+  decide: "Rolling",
+  direct: "Directing",
+  narrate: "Writing",
+  check: "Checking",
+  record: "Recording",
 }
 
 const Paragraphs = ({ text }: { text: string }) => (
@@ -28,7 +29,7 @@ const Paragraphs = ({ text }: { text: string }) => (
 )
 
 const Said = ({ input }: { input: { text: string; note?: string } }) =>
-  input.text ? <p className="said">{input.text}</p> : input.note ? <p className="note">{input.note}</p> : null
+  input.text ? <p className="said">{input.text}</p> : input.note ? <p className="said note">{input.note}</p> : null
 
 const Section = ({ node, last, onSwipe }: { node: Node; last: boolean; onSwipe: () => void }) => {
   const all = useAtomValue(nodes)
@@ -39,20 +40,30 @@ const Section = ({ node, last, onSwipe }: { node: Node; last: boolean; onSwipe: 
     <section>
       <Said input={node.turn.input} />
       <Paragraphs text={prose(node)} />
-      <footer>
+      <footer className="actions">
         {siblings.length > 1 && (
           <span className="siblings">
-            <button disabled={at === 0} onClick={() => go(at - 1)}>
-              ‹
+            <button className="icon" aria-label="Previous version" disabled={at === 0} onClick={() => go(at - 1)}>
+              <Prev />
             </button>
             {at + 1}/{siblings.length}
-            <button disabled={at === siblings.length - 1} onClick={() => go(at + 1)}>
-              ›
+            <button
+              className="icon"
+              aria-label="Next version"
+              disabled={at === siblings.length - 1}
+              onClick={() => go(at + 1)}
+            >
+              <Next />
             </button>
           </span>
         )}
-        {node.turn.end === "stopped" && <span className="end">（停）</span>}
-        {last && <button onClick={onSwipe}>重来</button>}
+        {node.turn.end === "stopped" && <span className="end">Stopped</span>}
+        <span className="spacer" />
+        {last && (
+          <button className="icon" aria-label="Swipe" onClick={onSwipe}>
+            <Swipe />
+          </button>
+        )}
       </footer>
     </section>
   )
@@ -88,28 +99,36 @@ const Composer = ({
         submit()
       }}
     >
-      <textarea
-        value={text}
-        placeholder={note ? "给叙述者的话，不进故事" : "说或做"}
-        enterKeyHint="enter"
-        onChange={(e) => setText(e.target.value)}
-        onCompositionStart={() => ime.current.compositionStart()}
-        onCompositionEnd={() => ime.current.compositionEnd()}
-        onKeyDown={(e) => ime.current.keyDown(e.nativeEvent)}
-      />
-      <div className="row">
-        <button type="button" className={note ? "mode off" : "mode"} onClick={() => setNote((n) => !n)}>
-          {note ? "场外" : "角色"}
-        </button>
-        {busy ? (
-          <button type="button" onClick={onStop}>
-            停
-          </button>
-        ) : (
-          <button type="submit" disabled={!text.trim()}>
-            发
-          </button>
-        )}
+      <div className="box">
+        <textarea
+          value={text}
+          aria-label={note ? "Note to the narrator" : "Your line"}
+          enterKeyHint="enter"
+          onChange={(e) => setText(e.target.value)}
+          onCompositionStart={() => ime.current.compositionStart()}
+          onCompositionEnd={() => ime.current.compositionEnd()}
+          onKeyDown={(e) => ime.current.keyDown(e.nativeEvent)}
+        />
+        <div className="row">
+          <div className="channel" role="radiogroup" aria-label="Channel">
+            <button type="button" role="radio" aria-checked={!note} onClick={() => setNote(false)}>
+              Act
+            </button>
+            <button type="button" role="radio" aria-checked={note} onClick={() => setNote(true)}>
+              Note
+            </button>
+          </div>
+          <span className="spacer" />
+          {busy ? (
+            <button type="button" className="send" aria-label="Stop" onClick={onStop}>
+              <Stop />
+            </button>
+          ) : (
+            <button type="submit" className="send" aria-label="Send" disabled={!text.trim()}>
+              <Send />
+            </button>
+          )}
+        </div>
       </div>
     </form>
   )
