@@ -3,24 +3,25 @@
 // turn's readings (src/record.ts projects them; this file only draws); the last section carries the Options container,
 // whose rows fill the composer and never send. From 64rem the same pieces sit on three cards: title and pin on the
 // left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
-// docs/client-design-brief-3.md and the canvas in docs/client-canvas/.
-import { Dialog } from "@base-ui/react/dialog"
-import { Menu } from "@base-ui/react/menu"
-import { Meter } from "@base-ui/react/meter"
-import { RegistryContext, useAtomValue } from "@effect/atom-react"
+// docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
+// menu a popover anchored to its button: the platform is the component library.
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import type * as Atom from "effect/reactivity/Atom"
+import { type JSX } from "@solidjs/web"
+import { type Accessor, createMemo, createSignal, For, Match, onSettled, runWithOwner, Show, Switch } from "solid-js"
 import {
   Change,
   Close,
   Clue,
   Contents,
   Die,
+  DieFill,
   Down,
   Insert,
   Next,
   Notes,
   Pin,
+  PinFill,
   Prev,
   Record,
   Reword,
@@ -51,6 +52,19 @@ import {
 } from "./store.ts"
 import { fetchCard, fetchNodes, send } from "./wire.ts"
 
+/** An atom as a Solid accessor: one signal per atom for the page's life, owned by no component, like the registry it
+ *  mirrors (store.ts). The registry notifies synchronously from whoever wrote; Solid applies on the next microtask. */
+const signals = new WeakMap<Atom.Atom<unknown>, Accessor<unknown>>()
+const read = <A,>(atom: Atom.Atom<A>): Accessor<A> => {
+  let s = signals.get(atom)
+  if (!s) {
+    const [get, set] = runWithOwner(null, () => createSignal<A>(registry.get(atom) as Exclude<A, Function>))!
+    registry.subscribe(atom, (v) => set(() => v))
+    signals.set(atom, (s = get))
+  }
+  return s as Accessor<A>
+}
+
 const waiting: Record<string, string> = {
   lookup: "Reading",
   decide: "Rolling",
@@ -61,18 +75,22 @@ const waiting: Record<string, string> = {
 }
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
-const Paragraphs = ({ text, tail }: { text: string; tail?: ReactNode }) => {
-  const ps = text.split(/\n{2,}/).filter((p) => p.trim())
-  if (tail && ps.length === 0) ps.push("")
+/** Prose as paragraphs; `tail` lands in the last one (the draft's cursor), which exists even before the first word. */
+const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
+  const ps = createMemo(() => {
+    const ps = props.text.split(/\n{2,}/).filter((p) => p.trim())
+    return ps.length || !("tail" in props) ? ps : [""]
+  })
+  const last = createMemo(() => ps().length - 1)
   return (
-    <>
-      {ps.map((p, i) => (
-        <p key={i}>
-          {p}
-          {i === ps.length - 1 && tail}
+    <For each={ps()} keyed={false}>
+      {(p, i) => (
+        <p>
+          {p()}
+          {i === last() && props.tail}
         </p>
-      ))}
-    </>
+      )}
+    </For>
   )
 }
 
@@ -95,8 +113,8 @@ const stick = () => {
   follow.ours = scrollY
 }
 const Latest = () => {
-  const [away, setAway] = useState(false)
-  useEffect(() => {
+  const [away, setAway] = createSignal(false)
+  onSettled(() => {
     const onScroll = () => {
       const g = gap()
       setAway(g > 120)
@@ -121,12 +139,12 @@ const Latest = () => {
       removeEventListener("scroll", onScroll)
       for (const e of inputs) removeEventListener(e, onInput)
     }
-  }, [])
+  })
   return (
-    away && (
+    <Show when={away()}>
       <button
         type="button"
-        className="icon latest"
+        class="icon latest"
         aria-label="Jump to latest"
         onClick={() => {
           follow.on = true
@@ -135,22 +153,24 @@ const Latest = () => {
       >
         <Down />
       </button>
-    )
+    </Show>
   )
 }
 
 /** The node being written: anchored at the top of the screen when it starts, a blinking cursor where the next
  *  character lands, the die while the beat is judged. */
-const Draft = ({ d, phase }: { d: Draft; phase: Phase | null }) => {
-  useLayoutEffect(anchor, [])
+const Draft = (props: { d: Draft; phase: Phase | null }) => {
+  onSettled(anchor)
   return (
-    <section className="draft">
-      <Said input={d.input} />
+    <section class="draft">
+      <Said input={props.d.input} />
       <Paragraphs
-        text={d.text}
+        text={props.d.text}
         tail={
-          <span className="cursor" role="status" aria-label={phase ? waiting[phase] : "Waiting"}>
-            {phase === "decide" && <Die weight="fill" />}
+          <span class="cursor" role="status" aria-label={props.phase ? waiting[props.phase] : "Waiting"}>
+            <Show when={props.phase === "decide"}>
+              <DieFill />
+            </Show>
           </span>
         }
       />
@@ -158,288 +178,323 @@ const Draft = ({ d, phase }: { d: Draft; phase: Phase | null }) => {
   )
 }
 
-const Said = ({ input }: { input: { text: string; note?: string } }) =>
-  input.text ? <p className="said">{input.text}</p> : input.note ? <p className="said note">{input.note}</p> : null
+const Said = (props: { input: { text: string; note?: string } }) => (
+  <Switch>
+    <Match when={props.input.text}>
+      <p class="said">{props.input.text}</p>
+    </Match>
+    <Match when={props.input.note}>
+      <p class="said note">{props.input.note}</p>
+    </Match>
+  </Switch>
+)
 
 // ───────── The Record sheet: one renderer per element kind ─────────
 /** Arms (or disarms) an untold entry as the next act's pin. */
-const PinButton = ({ id }: { id: string }) => {
-  const pinned = useAtomValue(pin)
+const PinButton = (props: { id: string }) => {
+  const pinned = read(pin)
+  const on = () => pinned() === props.id
   return (
     <button
-      className="icon"
+      class="icon"
       aria-label="Pin"
-      aria-pressed={pinned === id}
-      onClick={() => registry.set(pin, pinned === id ? null : id)}
+      aria-pressed={on() ? "true" : "false"}
+      onClick={() => registry.set(pin, on() ? null : props.id)}
     >
-      <Pin weight={pinned === id ? "fill" : "regular"} />
+      <Show when={on()} fallback={<Pin />}>
+        <PinFill />
+      </Show>
     </button>
   )
 }
 
-const Reading = ({ el }: { el: Element }) => {
-  switch (el.kind) {
-    case "steps":
-      return (
-        <div className="steps" role="img" aria-label={`${el.label}: ${el.options[el.now]}`}>
-          <div className="row">
-            <span className="label">{el.label}</span>
+type El<K extends Element["kind"]> = Extract<Element, { kind: K }>
+const is = <K extends Element["kind"]>(el: Element, kind: K): El<K> | undefined =>
+  el.kind === kind ? (el as El<K>) : undefined
+
+const Reading = (props: { el: Element }) => (
+  <Switch>
+    <Match when={is(props.el, "steps")}>
+      {(el) => (
+        <div class="steps" role="img" aria-label={`${el().label}: ${el().options[el().now]}`}>
+          <div class="row">
+            <span class="label">{el().label}</span>
           </div>
-          <div className="track">
-            {el.options.map((_, i) => (
-              <i key={i} data-reached={i <= el.now || undefined} data-new={(i > el.was && i <= el.now) || undefined} />
-            ))}
+          <div class="track">
+            <For each={el().options} keyed={false}>
+              {(_, i) => <i data-reached={i <= el().now} data-new={i > el().was && i <= el().now} />}
+            </For>
           </div>
-          <div className="names">
-            {el.options.map((o, i) => (i === el.now ? <b key={o}>{o}</b> : <span key={o}>{o}</span>))}
+          <div class="names">
+            <For each={el().options}>
+              {(o, i) => (
+                <Show when={i() === el().now} fallback={<span>{o}</span>}>
+                  <b>{o}</b>
+                </Show>
+              )}
+            </For>
           </div>
         </div>
-      )
-    case "meter":
-      return (
-        <Meter.Root className="meter" value={el.now} min={el.min} max={el.max} aria-label={el.label}>
-          <div className="row">
-            <span className="label">{el.label}</span>
-            <span className="num">
-              {el.now} / {el.max}
+      )}
+    </Match>
+    <Match when={is(props.el, "meter")}>
+      {(el) => (
+        <div
+          class="meter"
+          role="meter"
+          aria-valuemin={el().min}
+          aria-valuemax={el().max}
+          aria-valuenow={el().now}
+          aria-label={el().label}
+        >
+          <div class="row">
+            <span class="label">{el().label}</span>
+            <span class="num">
+              {el().now} / {el().max}
             </span>
           </div>
-          <Meter.Track className="track">
-            <Meter.Indicator className="fill" />
-          </Meter.Track>
-        </Meter.Root>
-      )
-    case "value":
-      return (
-        <div className="row value">
-          <span className="label">{el.label}</span>
-          <span className="num">
-            {el.was !== el.now && (
-              <>
-                {String(el.was)} <Change aria-hidden />
-              </>
-            )}
-            {String(el.now)}
+          <div class="track">
+            <div class="fill" style={{ width: pct((el().now - el().min) / (el().max - el().min)) }} />
+          </div>
+        </div>
+      )}
+    </Match>
+    <Match when={is(props.el, "value")}>
+      {(el) => (
+        <div class="row value">
+          <span class="label">{el().label}</span>
+          <span class="num">
+            <Show when={el().was !== el().now}>
+              {String(el().was)} <Change aria-hidden="true" />
+            </Show>
+            {String(el().now)}
           </span>
         </div>
-      )
-    case "check": {
-      const c = el.check
-      return (
-        <div className="check" role="img" aria-label={`${c.action}: ${c.hit ? "hit" : "miss"}, ${pct(c.chance)}`}>
-          <div className="row">
-            <Die aria-hidden />
-            <span className="label">{c.action}</span>
-            <span className="badge" data-hit={c.hit || undefined}>
-              {c.hit ? "Hit" : "Miss"}
+      )}
+    </Match>
+    <Match when={is(props.el, "check")}>
+      {(el) => (
+        <div
+          class="check"
+          role="img"
+          aria-label={`${el().check.action}: ${el().check.hit ? "hit" : "miss"}, ${pct(el().check.chance)}`}
+        >
+          <div class="row">
+            <Die aria-hidden="true" />
+            <span class="label">{el().check.action}</span>
+            <span class="badge" data-hit={el().check.hit}>
+              {el().check.hit ? "Hit" : "Miss"}
             </span>
-            <span className="num">{pct(c.chance)}</span>
+            <span class="num">{pct(el().check.chance)}</span>
           </div>
-          <div className="track">
-            <i className="zone" style={{ width: pct(c.chance) }} />
-            <i className="dot" style={{ left: pct(c.roll) }} />
+          <div class="track">
+            <i class="zone" style={{ width: pct(el().check.chance) }} />
+            <i class="dot" style={{ left: pct(el().check.roll) }} />
           </div>
         </div>
-      )
-    }
-    case "clue":
-      return (
-        <div className="clue">
-          <Clue aria-hidden />
-          <p>{el.text}</p>
-          {el.pinnable && <PinButton id={el.id} />}
+      )}
+    </Match>
+    <Match when={is(props.el, "clue")}>
+      {(el) => (
+        <div class="clue">
+          <Clue aria-hidden="true" />
+          <p>{el().text}</p>
+          <Show when={el().pinnable}>
+            <PinButton id={el().id} />
+          </Show>
         </div>
-      )
-    case "pin":
-      return (
-        <div className="clue">
-          <Pin aria-hidden />
-          <p>{el.id}</p>
-          <span className="badge" data-hit={el.told || undefined}>
-            {el.told ? "Told" : "Untold"}
+      )}
+    </Match>
+    <Match when={is(props.el, "pin")}>
+      {(el) => (
+        <div class="clue">
+          <Pin aria-hidden="true" />
+          <p>{el().id}</p>
+          <span class="badge" data-hit={el().told}>
+            {el().told ? "Told" : "Untold"}
           </span>
-          {!el.told && <PinButton id={el.id} />}
+          <Show when={!el().told}>
+            <PinButton id={el().id} />
+          </Show>
         </div>
-      )
-    case "notes":
-      return (
-        <div className="notes">
-          <Notes aria-hidden />
+      )}
+    </Match>
+    <Match when={is(props.el, "notes")}>
+      {(el) => (
+        <div class="notes">
+          <Notes aria-hidden="true" />
           <ul>
-            {el.items.map((n, i) => (
-              <li key={i}>{n}</li>
-            ))}
+            <For each={el().items} keyed={false}>
+              {(n) => <li>{n()}</li>}
+            </For>
           </ul>
         </div>
-      )
-  }
-}
+      )}
+    </Match>
+  </Switch>
+)
 
-/** The full-page sheet: a scrim, a titled panel with a close, the body, an optional footer. Record and Status share it. */
-const Sheet = ({
-  trigger,
-  heading,
-  open,
-  onOpenChange,
-  children,
-  footer,
-}: {
-  trigger: ReactNode
-  heading: ReactNode
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-  children: ReactNode
-  footer?: ReactNode
+/** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
+ *  with a close, the body, an optional footer. Scrim click and Escape close it (closedby). Record and Status share it;
+ *  an opener either names it by `id` (invoker commands) or keeps the element through `dialog`. */
+const Sheet = (props: {
+  id?: string
+  dialog?: (el: HTMLDialogElement) => void
+  heading: JSX.Element
+  children: JSX.Element
+  footer?: JSX.Element
 }) => (
-  <Dialog.Root open={open} onOpenChange={onOpenChange}>
-    {trigger}
-    <Dialog.Portal>
-      <Dialog.Backdrop className="backdrop" />
-      <Dialog.Popup className="sheet">
-        <header>
-          <Dialog.Title>{heading}</Dialog.Title>
-          <Dialog.Close className="icon" aria-label="Close">
-            <Close />
-          </Dialog.Close>
-        </header>
-        {children}
-        {footer}
-      </Dialog.Popup>
-    </Dialog.Portal>
-  </Dialog.Root>
+  <dialog id={props.id} class="sheet" ref={props.dialog} closedby="any">
+    <header>
+      <h2>{props.heading}</h2>
+      <button class="icon" aria-label="Close" onClick={(e) => e.currentTarget.closest("dialog")!.close()}>
+        <Close />
+      </button>
+    </header>
+    {props.children}
+    {props.footer}
+  </dialog>
 )
 
 /** A turn's readings: what it changed and produced (src/record.ts). */
-const TurnRecord = ({ node, prev }: { node: Node; prev: Node | undefined }) => {
-  const r = useAtomValue(card)?.rules
-  return <div className="record">{r && record(r, node, prev).map((el, i) => <Reading key={i} el={el} />)}</div>
+const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
+  const view = read(card)
+  const els = createMemo(() => {
+    const r = view()?.rules
+    return r ? record(r, props.node, props.prev) : []
+  })
+  return (
+    <div class="record">
+      <For each={els()}>{(el) => <Reading el={el} />}</For>
+    </div>
+  )
 }
 
-const RecordSheet = ({
-  node,
-  n,
-  busy,
-  onSwipe,
-  onReword,
-}: {
-  node: Node
-  n: number
-  busy: boolean
-  onSwipe: () => void
-  onReword: () => void
-}) => {
-  const all = useAtomValue(nodes)
-  const ref = useAtomValue(card)?.heading
-  const [open, setOpen] = useState(false)
-  const act = (f: () => void) => {
-    setOpen(false)
-    f()
-  }
+const RecordSheet = (props: { node: Node; n: number; busy: boolean; onSwipe: () => void; onReword: () => void }) => {
+  const all = read(nodes)
+  const view = read(card)
+  let dlg!: HTMLDialogElement
   return (
-    <Sheet
-      open={open}
-      onOpenChange={setOpen}
-      heading={heading(ref, node) ?? `Turn ${n}`}
-      trigger={
-        <Dialog.Trigger className="record-pill">
-          <Record aria-hidden />
-          Record
-        </Dialog.Trigger>
-      }
-      footer={
-        <footer className="actions">
-          <span className="spacer" />
-          <button className="icon" aria-label="Swipe" disabled={busy} onClick={() => act(onSwipe)}>
-            <Swipe />
-          </button>
-          <button className="icon" aria-label="Reword" disabled={busy} onClick={() => act(onReword)}>
-            <Reword />
-          </button>
-        </footer>
-      }
-    >
-      <TurnRecord node={node} prev={node.turn.parent === null ? undefined : all.get(node.turn.parent)} />
-    </Sheet>
+    <>
+      <button class="record-pill" onClick={() => dlg.showModal()}>
+        <Record aria-hidden="true" />
+        Record
+      </button>
+      <Sheet
+        dialog={(el) => (dlg = el)}
+        heading={heading(view()?.heading, props.node) ?? `Turn ${props.n}`}
+        footer={
+          <footer class="actions">
+            <span class="spacer" />
+            <button
+              class="icon"
+              aria-label="Swipe"
+              disabled={props.busy}
+              onClick={() => (dlg.close(), props.onSwipe())}
+            >
+              <Swipe />
+            </button>
+            <button
+              class="icon"
+              aria-label="Reword"
+              disabled={props.busy}
+              onClick={() => (dlg.close(), props.onReword())}
+            >
+              <Reword />
+            </button>
+          </footer>
+        }
+      >
+        <TurnRecord
+          node={props.node}
+          prev={props.node.turn.parent === null ? undefined : all().get(props.node.turn.parent)}
+        />
+      </Sheet>
+    </>
   )
 }
 
 // ───────── Status: every field at the last node, grouped, drawn by the same readings the Record uses ─────────
 const StatusTable = () => {
-  const r = useAtomValue(card)?.rules
-  const last = useAtomValue(latest)
+  const view = read(card)
+  const last = read(latest)
+  const groups = createMemo(() => {
+    const r = view()?.rules
+    const l = last()
+    return r && l ? status(r, l.node.state) : []
+  })
   return (
-    <div className="record">
-      {r &&
-        last &&
-        status(r, last.node.state).map((g, i) => (
-          <div key={g.group ?? i} className="group">
-            {g.group && <h3>{g.group}</h3>}
-            {g.items.map((el) => (
-              <Reading key={"path" in el ? el.path : el.kind} el={el} />
-            ))}
+    <div class="record">
+      <For each={groups()} keyed={(g) => g.group ?? ""}>
+        {(g) => (
+          <div class="group">
+            <Show when={g().group}>
+              <h3>{g().group}</h3>
+            </Show>
+            <For each={g().items} keyed={(el) => ("path" in el ? el.path : el.kind)}>
+              {(el) => <Reading el={el()} />}
+            </For>
           </div>
-        ))}
+        )}
+      </For>
     </div>
   )
 }
 
 /** The scene list: the reading line folded into runs of one title (the card's `heading`); a row scrolls to the run's
  *  first section. Nothing when the card declares no heading. */
-const Scenes = ({ onPick }: { onPick?: () => void }) => {
-  const runs = scenes(useAtomValue(card)?.heading, useAtomValue(path))
-  if (!runs.length) return null
+const Scenes = () => {
+  const view = read(card)
+  const line = read(path)
+  const runs = createMemo(() => scenes(view()?.heading, line()))
   return (
-    <nav className="scenes" aria-label="Scenes">
-      {runs.map((s) => (
-        <button
-          key={s.id}
-          className="scene"
-          onClick={() => {
-            onPick?.()
-            document.getElementById(`node-${s.id}`)?.scrollIntoView({ block: "start" })
-          }}
-        >
-          {s.title}
-        </button>
-      ))}
-    </nav>
+    <Show when={runs().length}>
+      <nav class="scenes" aria-label="Scenes">
+        <For each={runs()} keyed={(s) => s.id}>
+          {(s) => (
+            <button
+              class="scene"
+              onClick={(e) => {
+                e.currentTarget.closest("dialog")?.close()
+                document.getElementById(`node-${s().id}`)?.scrollIntoView({ block: "start" })
+              }}
+            >
+              {s().title}
+            </button>
+          )}
+        </For>
+      </nav>
+    </Show>
   )
 }
 
 /** The slim bar on top: the card's title, Contents (the scene list) and Status with a dot when this turn changed the state. */
 const Topbar = () => {
-  const t = useAtomValue(card)?.title ?? null
-  const ref = useAtomValue(card)?.heading
-  const r = useAtomValue(card)?.rules
-  const last = useAtomValue(latest)
-  const [open, setOpen] = useState(false)
-  const changed = r !== undefined && last !== null && record(r, last.node, last.prev).some((e) => "path" in e)
+  const view = read(card)
+  const last = read(latest)
+  const changed = createMemo(() => {
+    const r = view()?.rules
+    const l = last()
+    return r !== undefined && l !== null && record(r, l.node, l.prev).some((e) => "path" in e)
+  })
   return (
-    <header className="topbar">
-      {t !== null && <h1>{t}</h1>}
-      {ref !== undefined && (
-        <Sheet
-          heading="Contents"
-          open={open}
-          onOpenChange={setOpen}
-          trigger={
-            <Dialog.Trigger className="icon" aria-label="Contents">
-              <Contents />
-            </Dialog.Trigger>
-          }
-        >
-          <Scenes onPick={() => setOpen(false)} />
+    <header class="topbar">
+      <Show when={view()?.title}>{(t) => <h1>{t()}</h1>}</Show>
+      <Show when={view()?.heading !== undefined}>
+        <button class="icon" aria-label="Contents" commandfor="contents" command="show-modal">
+          <Contents />
+        </button>
+        <Sheet id="contents" heading="Contents">
+          <Scenes />
         </Sheet>
-      )}
-      <Sheet
-        heading="Status"
-        trigger={
-          <Dialog.Trigger className="icon" aria-label="Status">
-            <Status />
-            {changed && <i className="dot" />}
-          </Dialog.Trigger>
-        }
-      >
+      </Show>
+      <button class="icon" aria-label="Status" commandfor="status" command="show-modal">
+        <Status />
+        <Show when={changed()}>
+          <i class="dot" />
+        </Show>
+      </button>
+      <Sheet id="status" heading="Status">
         <StatusTable />
       </Sheet>
     </header>
@@ -447,30 +502,25 @@ const Topbar = () => {
 }
 
 /** The raised container of this turn's options: a row fills the composer, never sends. */
-const Options = ({ items }: { items: readonly string[] }) => (
-  <div className="options">
+const Options = (props: { items: readonly string[] }) => (
+  <div class="options">
     <header>
-      <Reword aria-hidden />
+      <Reword aria-hidden="true" />
       Options
     </header>
-    {items.map((t, i) => (
-      <button key={i} className="option" onClick={() => registry.set(compose, t)}>
-        <span className="n">{i + 1}</span>
-        <span>{t}</span>
-        <Insert aria-hidden />
-      </button>
-    ))}
+    <For each={props.items} keyed={false}>
+      {(t, i) => (
+        <button class="option" onClick={() => registry.set(compose, t())}>
+          <span class="n">{i + 1}</span>
+          <span>{t()}</span>
+          <Insert aria-hidden="true" />
+        </button>
+      )}
+    </For>
   </div>
 )
 
-const Section = ({
-  node,
-  n,
-  last,
-  busy,
-  onSwipe,
-  onReword,
-}: {
+const Section = (props: {
   node: Node
   n: number
   last: boolean
@@ -478,137 +528,163 @@ const Section = ({
   onSwipe: () => void
   onReword: () => void
 }) => {
-  const all = useAtomValue(nodes)
-  const siblings = childrenOf(all, node.turn.parent)
-  const at = siblings.findIndex((s) => s.turn.id === node.turn.id)
-  const go = (i: number) => registry.update(active, (m) => new Map(m).set(node.turn.parent, siblings[i]!.turn.id))
-  const options = node.turn.products.options as readonly string[] | undefined
+  const all = read(nodes)
+  const siblings = createMemo(() => childrenOf(all(), props.node.turn.parent))
+  const at = () => siblings().findIndex((s) => s.turn.id === props.node.turn.id)
+  const go = (i: number) => {
+    const parent = props.node.turn.parent
+    const id = siblings()[i]!.turn.id
+    registry.update(active, (m) => new Map(m).set(parent, id))
+  }
+  const options = () => props.node.turn.products.options as readonly string[] | undefined
   return (
-    <section id={`node-${node.turn.id}`}>
-      <Said input={node.turn.input} />
-      <Paragraphs text={prose(node)} />
-      <footer className="actions">
-        <RecordSheet node={node} n={n} busy={busy} onSwipe={onSwipe} onReword={onReword} />
-        {siblings.length > 1 && (
-          <span className="siblings">
-            <button className="icon" aria-label="Previous version" disabled={at === 0} onClick={() => go(at - 1)}>
+    <section id={`node-${props.node.turn.id}`}>
+      <Said input={props.node.turn.input} />
+      <Paragraphs text={prose(props.node)} />
+      <footer class="actions">
+        <RecordSheet
+          node={props.node}
+          n={props.n}
+          busy={props.busy}
+          onSwipe={props.onSwipe}
+          onReword={props.onReword}
+        />
+        <Show when={siblings().length > 1}>
+          <span class="siblings">
+            <button class="icon" aria-label="Previous version" disabled={at() === 0} onClick={() => go(at() - 1)}>
               <Prev />
             </button>
-            {at + 1}/{siblings.length}
+            {at() + 1}/{siblings().length}
             <button
-              className="icon"
+              class="icon"
               aria-label="Next version"
-              disabled={at === siblings.length - 1}
-              onClick={() => go(at + 1)}
+              disabled={at() === siblings().length - 1}
+              onClick={() => go(at() + 1)}
             >
               <Next />
             </button>
           </span>
-        )}
-        {node.turn.end === "stopped" && <span className="end">Stopped</span>}
+        </Show>
+        <Show when={props.node.turn.end === "stopped"}>
+          <span class="end">Stopped</span>
+        </Show>
       </footer>
-      {last && options?.length ? <Options items={options} /> : null}
+      <Show when={props.last && options()?.length}>
+        <Options items={options()!} />
+      </Show>
     </section>
   )
 }
 
-const Composer = ({
-  busy,
-  onSend,
-  onStop,
-}: {
-  busy: boolean
-  onSend: (text: string, note: boolean) => void
-  onStop: () => void
-}) => {
-  const text = useAtomValue(compose)
-  const pinned = useAtomValue(pin)
-  const quick = useAtomValue(card)?.snippets ?? []
-  const [note, setNote] = useState(false)
-  const box = useRef<HTMLTextAreaElement>(null)
+const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) => void; onStop: () => void }) => {
+  const text = read(compose)
+  const pinned = read(pin)
+  const view = read(card)
+  const quick = () => view()?.snippets ?? []
+  const [note, setNote] = createSignal(false)
+  let box: HTMLTextAreaElement | undefined
+  let menu: HTMLDivElement | undefined
   // A snippet fills the box and never sends; the caret lands inside an empty ⦅⦆ (the thought mark), else at the end.
   const pick = (s: { text: string; note?: boolean }) => {
+    menu?.hidePopover()
     registry.set(compose, s.text)
     setNote(s.note === true)
     const i = s.text.indexOf("⦅⦆")
     const at = i >= 0 ? i + 1 : s.text.length
     requestAnimationFrame(() => {
-      box.current?.focus()
-      box.current?.setSelectionRange(at, at)
+      box?.focus()
+      box?.setSelectionRange(at, at)
     })
   }
   const submit = () => {
-    const t = text.trim()
-    if (!t || busy) return false
-    onSend(t, note)
+    const t = text().trim()
+    if (!t || props.busy) return false
+    props.onSend(t, note())
     registry.set(compose, "")
     setNote(false)
     return true
   }
-  const submitRef = useRef(submit)
-  submitRef.current = submit
-  const ime = useRef(imeController(() => submitRef.current()))
+  // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
+  const ime = imeController(submit)
+  // The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's.
+  const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")]
+    const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
+    const d = { ArrowDown: 1, ArrowUp: -1, Home: -i, End: items.length - 1 - i }[e.key]
+    if (d === undefined) return
+    e.preventDefault()
+    items.at((i + d) % items.length)?.focus()
+  }
   return (
     <form
-      className="composer"
+      class="composer"
       onSubmit={(e) => {
         e.preventDefault()
         submit()
       }}
     >
-      <div className="box">
+      <div class="box">
         <textarea
-          ref={box}
-          value={text}
-          aria-label={note ? "Note to the narrator" : "Your line"}
-          enterKeyHint="enter"
-          onChange={(e) => registry.set(compose, e.target.value)}
-          onCompositionStart={() => ime.current.compositionStart()}
-          onCompositionEnd={() => ime.current.compositionEnd()}
-          onKeyDown={(e) => ime.current.keyDown(e.nativeEvent)}
+          ref={(el) => (box = el)}
+          value={text()}
+          aria-label={note() ? "Note to the narrator" : "Your line"}
+          enterkeyhint="enter"
+          onInput={(e) => registry.set(compose, e.currentTarget.value)}
+          onCompositionStart={ime.compositionStart}
+          onCompositionEnd={ime.compositionEnd}
+          onKeyDown={ime.keyDown}
         />
-        <div className="row">
-          <div className="channel" role="radiogroup" aria-label="Channel">
-            <button type="button" role="radio" aria-checked={!note} onClick={() => setNote(false)}>
+        <div class="row">
+          <div class="channel" role="radiogroup" aria-label="Channel">
+            <button type="button" role="radio" aria-checked={note() ? "false" : "true"} onClick={() => setNote(false)}>
               Act
             </button>
-            <button type="button" role="radio" aria-checked={note} onClick={() => setNote(true)}>
+            <button type="button" role="radio" aria-checked={note() ? "true" : "false"} onClick={() => setNote(true)}>
               Note
             </button>
           </div>
-          {quick.length > 0 && (
-            <Menu.Root>
-              <Menu.Trigger className="icon" aria-label="Snippets">
-                <Snippets />
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Positioner className="layer" side="top" align="start" sideOffset={4}>
-                  <Menu.Popup className="snippets" finalFocus={box}>
-                    {quick.map((s) => (
-                      <Menu.Item key={s.name} className="item" onClick={() => pick(s)}>
-                        {s.name}
-                      </Menu.Item>
-                    ))}
-                  </Menu.Popup>
-                </Menu.Positioner>
-              </Menu.Portal>
-            </Menu.Root>
-          )}
-          {pinned && (
-            <button type="button" className="icon" aria-label="Unpin" onClick={() => registry.set(pin, null)}>
-              <Pin weight="fill" />
+          <Show when={quick().length > 0}>
+            <button type="button" class="icon" aria-label="Snippets" aria-haspopup="menu" popovertarget="snippets">
+              <Snippets />
             </button>
-          )}
-          <span className="spacer" />
-          {busy ? (
-            <button type="button" className="send" aria-label="Stop" onClick={onStop}>
+            <div
+              id="snippets"
+              class="snippets"
+              popover
+              role="menu"
+              ref={(el) => (menu = el)}
+              onKeyDown={roam}
+              onToggle={(e) =>
+                e.newState === "open" && e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
+              }
+            >
+              <For each={quick()} keyed={(s) => s.name}>
+                {(s) => (
+                  <button type="button" role="menuitem" class="item" onClick={() => pick(s())}>
+                    {s().name}
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+          <Show when={pinned()}>
+            <button type="button" class="icon" aria-label="Unpin" onClick={() => registry.set(pin, null)}>
+              <PinFill />
+            </button>
+          </Show>
+          <span class="spacer" />
+          <Show
+            when={props.busy}
+            fallback={
+              <button type="submit" class="send" aria-label="Send" disabled={!text().trim()}>
+                <Send />
+              </button>
+            }
+          >
+            <button type="button" class="send" aria-label="Stop" onClick={() => props.onStop()}>
               <Stop />
             </button>
-          ) : (
-            <button type="submit" className="send" aria-label="Send" disabled={!text.trim()}>
-              <Send />
-            </button>
-          )}
+          </Show>
         </div>
       </div>
     </form>
@@ -616,20 +692,20 @@ const Composer = ({
 }
 
 const Reader = () => {
-  const line = useAtomValue(path)
-  const d = useAtomValue(draft)
-  const phase = useAtomValue(stage)
-  const err = useAtomValue(error)
-  const stop = useRef<(() => void) | null>(null)
-  useEffect(() => void Promise.all([fetchCard(), fetchNodes()]), [])
+  const line = read(path)
+  const d = read(draft)
+  const phase = read(stage)
+  const err = read(error)
+  let stop: (() => void) | null = null
+  onSettled(() => void Promise.all([fetchCard(), fetchNodes()]))
 
   const start = (parent: Id | null, input: { text: string; note?: string }, action: Parameters<typeof send>[0]) => {
     registry.set(error, null)
     registry.set(draft, { parent, input, text: "" })
-    stop.current = send(action)
+    stop = send(action)
   }
   const onSend = (text: string, note: boolean) => {
-    const parent = line.at(-1)?.turn.id ?? null
+    const parent = registry.get(path).at(-1)?.turn.id ?? null
     const pinned = registry.get(pin)
     const input = { ...(note ? { text: "", note: text } : { text }), ...(pinned ? { pin: pinned } : {}) }
     registry.set(pin, null)
@@ -638,8 +714,8 @@ const Reader = () => {
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
   const onReword = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "reword", node: n.turn.id })
   const onStop = async () => {
-    if (!stop.current) return
-    stop.current()
+    if (!stop) return
+    stop()
     // Before the first character the turn is withdrawn; after it, the server finishes a `stopped` node the closed
     // response never carried, so read the snapshot back until it shows up.
     const was = registry.get(nodes).size
@@ -653,23 +729,24 @@ const Reader = () => {
   }
 
   return (
-    <div className="panel">
+    <div class="panel">
       <main>
-        {line.map((n, i) => (
-          <Section
-            key={n.turn.id}
-            node={n}
-            n={i + 1}
-            last={!d && i === line.length - 1}
-            busy={d !== null}
-            onSwipe={() => onSwipe(n)}
-            onReword={() => onReword(n)}
-          />
-        ))}
-        {d && <Draft d={d} phase={phase} />}
-        {err && <p className="error">{err}</p>}
+        <For each={line()}>
+          {(n, i) => (
+            <Section
+              node={n}
+              n={i() + 1}
+              last={!d() && i() === line().length - 1}
+              busy={d() !== null}
+              onSwipe={() => onSwipe(n)}
+              onReword={() => onReword(n)}
+            />
+          )}
+        </For>
+        <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} />}</Show>
+        <Show when={err()}>{(e) => <p class="error">{e()}</p>}</Show>
         <Latest />
-        <Composer busy={d !== null} onSend={onSend} onStop={onStop} />
+        <Composer busy={d() !== null} onSend={onSend} onStop={onStop} />
       </main>
     </div>
   )
@@ -677,51 +754,53 @@ const Reader = () => {
 
 /** Desktop's left card: the title, the scene list, and the armed pin. */
 const Side = () => {
-  const t = useAtomValue(card)?.title ?? null
-  const pinned = useAtomValue(pin)
+  const view = read(card)
+  const pinned = read(pin)
   return (
-    <aside className="side">
-      {t !== null && <h1>{t}</h1>}
+    <aside class="side">
+      <Show when={view()?.title}>{(t) => <h1>{t()}</h1>}</Show>
       <Scenes />
-      {pinned && (
-        <section className="pinned">
-          <h2>Pinned</h2>
-          <p>
-            <Pin aria-hidden />
-            <span>{pinned}</span>
-          </p>
-        </section>
-      )}
+      <Show when={pinned()}>
+        {(p) => (
+          <section class="pinned">
+            <h2>Pinned</h2>
+            <p>
+              <Pin aria-hidden="true" />
+              <span>{p()}</span>
+            </p>
+          </section>
+        )}
+      </Show>
     </aside>
   )
 }
 
 /** Desktop's right card: the Status table and this turn's Record, inline. */
 const Glance = () => {
-  const last = useAtomValue(latest)
+  const last = read(latest)
   return (
-    <aside className="side">
-      <section className="status">
+    <aside class="side">
+      <section class="status">
         <h2>Status</h2>
         <StatusTable />
       </section>
-      {last && (
-        <section>
-          <h2>Record</h2>
-          <TurnRecord node={last.node} prev={last.prev} />
-        </section>
-      )}
+      <Show when={last()}>
+        {(l) => (
+          <section>
+            <h2>Record</h2>
+            <TurnRecord node={l().node} prev={l().prev} />
+          </section>
+        )}
+      </Show>
     </aside>
   )
 }
 
 export const App = () => (
-  <RegistryContext.Provider value={registry}>
-    <div className="canvas">
-      <Topbar />
-      <Side />
-      <Reader />
-      <Glance />
-    </div>
-  </RegistryContext.Provider>
+  <div class="canvas">
+    <Topbar />
+    <Side />
+    <Reader />
+    <Glance />
+  </div>
 )

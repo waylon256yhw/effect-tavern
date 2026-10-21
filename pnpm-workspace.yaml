@@ -10,3 +10,10 @@ peerDependencyRules:
     - vite
   allowedVersions:
     vite: "*"
+permissions:
+  "@solidjs/diagnostics":
+    skills: true
+  "@solidjs/web":
+    skills: true
+  solid-js:
+    skills: true

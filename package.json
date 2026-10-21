@@ -5,6 +5,7 @@
     "verify": "pnpm -r verify"
   },
   "devDependencies": {
+    "eslint-plugin-solid": "0.18.1",
     "vite-plus": "catalog:"
   },
   "engines": {

@@ -299,35 +299,55 @@
     height: var(--icon-sm);
   }
 
-  /* the sheet: a scrim, then a full-page panel rising from the bottom to 56px under the top; the prose never moves */
-  .backdrop {
-    position: fixed;
-    z-index: 2;
-    inset: 0;
-    background: var(--scrim);
-    transition: opacity var(--dur-4) var(--ease);
-  }
-  .backdrop[data-starting-style],
-  .backdrop[data-ending-style] {
-    opacity: 0;
-  }
+  /* the sheet: a native modal dialog, its backdrop the scrim, a full-page panel rising from the bottom to 56px under the
+     top; the prose never moves (the page does not scroll while one is open) */
   .sheet {
     position: fixed;
-    z-index: 2;
     inset: calc(56px + var(--safe-top)) 0 0;
+    width: 100%;
     max-width: var(--measure);
+    height: auto;
+    max-height: none;
     margin: 0 auto;
-    display: flex;
+    padding: 0;
+    border: 0;
     flex-direction: column;
     background: var(--surface-3);
+    color: inherit;
     border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
     box-shadow: var(--shadow-pop);
     outline: none;
-    transition: transform var(--dur-4) var(--ease);
-  }
-  .sheet[data-starting-style],
-  .sheet[data-ending-style] {
     transform: translateY(100%);
+    transition:
+      transform var(--dur-4) var(--ease),
+      overlay var(--dur-4) allow-discrete,
+      display var(--dur-4) allow-discrete;
+  }
+  .sheet[open] {
+    display: flex;
+    transform: none;
+  }
+  .sheet::backdrop {
+    background: var(--scrim);
+    opacity: 0;
+    transition:
+      opacity var(--dur-4) var(--ease),
+      overlay var(--dur-4) allow-discrete,
+      display var(--dur-4) allow-discrete;
+  }
+  .sheet[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    .sheet[open] {
+      transform: translateY(100%);
+    }
+    .sheet[open]::backdrop {
+      opacity: 0;
+    }
+  }
+  body:has(.sheet[open]) {
+    overflow: hidden;
   }
   .sheet header {
     display: flex;
@@ -581,35 +601,51 @@
   }
 
   /* the snippets menu: names only, above the composer; a pick fills the box and never sends */
-  .layer {
-    z-index: 2;
+  .icon[popovertarget="snippets"] {
+    anchor-name: --snippets;
   }
   .snippets {
+    position-anchor: --snippets;
+    position-area: top span-right;
+    inset: auto;
+    margin: 0 0 4px;
     min-width: 10rem;
     padding: var(--space-1);
+    border: 0;
     border-radius: var(--radius-card);
     background: var(--surface-3);
+    color: inherit;
     box-shadow: var(--shadow-pop);
     outline: none;
-    transition: opacity var(--dur-2) var(--ease);
-  }
-  .snippets[data-starting-style],
-  .snippets[data-ending-style] {
     opacity: 0;
+    transition:
+      opacity var(--dur-2) var(--ease),
+      overlay var(--dur-2) allow-discrete,
+      display var(--dur-2) allow-discrete;
+  }
+  .snippets:popover-open {
+    opacity: 1;
+  }
+  @starting-style {
+    .snippets:popover-open {
+      opacity: 0;
+    }
   }
   .snippets .item {
+    display: block;
+    width: 100%;
     max-width: 16rem;
     padding: 0 var(--space-3);
     border-radius: var(--radius);
     font-size: var(--text-body);
     line-height: var(--control);
+    text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    cursor: pointer;
     outline: none;
   }
-  .snippets .item[data-highlighted] {
+  .snippets .item:is(:hover, :focus-visible) {
     background: var(--ghost-hover);
   }
 

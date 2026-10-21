@@ -1,22 +1,22 @@
-// Phosphor Icons, regular weight, under the names the chrome uses (docs/client-design-brief-3.md §3). Sizes come from
-// CSS (`.icon svg`, `.record svg`), nothing here.
-export {
-  ArrowClockwiseIcon as Swipe,
-  ArrowDownIcon as Down,
-  ArrowElbowDownLeftIcon as Insert,
-  ArrowRightIcon as Change,
-  ArrowUpIcon as Send,
-  BookOpenIcon as Notes,
-  CaretLeftIcon as Prev,
-  ChartBarIcon as Status,
-  CaretRightIcon as Next,
-  DiceFiveIcon as Die,
-  ListIcon as Contents,
-  MagicWandIcon as Reword,
-  MagnifyingGlassIcon as Clue,
-  NotepadIcon as Record,
-  PlusIcon as Snippets,
-  PushPinIcon as Pin,
-  StopIcon as Stop,
-  XIcon as Close,
-} from "@phosphor-icons/react"
+// Phosphor Icons from Iconify's `ph` set, under the names the chrome uses (docs/client-design-brief-3.md §3). The bare
+// name is the regular weight, `-fill` the filled one. Sizes come from CSS (`.icon svg`, `.record svg`), nothing here.
+export { default as Swipe } from "~icons/ph/arrow-clockwise"
+export { default as Down } from "~icons/ph/arrow-down"
+export { default as Insert } from "~icons/ph/arrow-elbow-down-left"
+export { default as Change } from "~icons/ph/arrow-right"
+export { default as Send } from "~icons/ph/arrow-up"
+export { default as Notes } from "~icons/ph/book-open"
+export { default as Prev } from "~icons/ph/caret-left"
+export { default as Next } from "~icons/ph/caret-right"
+export { default as Status } from "~icons/ph/chart-bar"
+export { default as Die } from "~icons/ph/dice-five"
+export { default as DieFill } from "~icons/ph/dice-five-fill"
+export { default as Contents } from "~icons/ph/list"
+export { default as Reword } from "~icons/ph/magic-wand"
+export { default as Clue } from "~icons/ph/magnifying-glass"
+export { default as Record } from "~icons/ph/notepad"
+export { default as Snippets } from "~icons/ph/plus"
+export { default as Pin } from "~icons/ph/push-pin"
+export { default as PinFill } from "~icons/ph/push-pin-fill"
+export { default as Stop } from "~icons/ph/stop"
+export { default as Close } from "~icons/ph/x"

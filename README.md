@@ -144,7 +144,7 @@ demo 的顺序：过线的协议已定（session 的接口，第四节），serv
 
 ## 六、仓库
 
-pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端是 React 19 加 Vite，store 是 Effect 自己的 `Atom`（选型记录在 `docs/frontend-stack-reading.md`）。
+pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端是 Solid 2.0（RC，钉死版本）加 Vite，store 是 Effect 自己的 `Atom`，`packages/client/src/App.tsx` 顶部十行把 atom 桥成 Solid accessor；组件库是平台本身（`<dialog>`、popover 加 anchor positioning、`role=meter`），图标是 Iconify 的 `ph` 集经 unplugin-icons 编译（2026-10-19 的选型记录在 `docs/frontend-stack-reading.md`，2026-10-21 从 React 迁过来：同样的 atom、同样的 CSS，少了三个依赖）。
 
 ```
 packages/runtime/   运行时模块与自检
