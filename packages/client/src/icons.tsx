@@ -2,6 +2,7 @@
 // CSS (`.icon svg`, `.record svg`), nothing here.
 export {
   ArrowClockwiseIcon as Swipe,
+  ArrowDownIcon as Down,
   ArrowElbowDownLeftIcon as Insert,
   ArrowRightIcon as Change,
   ArrowUpIcon as Send,

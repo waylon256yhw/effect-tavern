@@ -8,14 +8,15 @@ import { Dialog } from "@base-ui/react/dialog"
 import { Menu } from "@base-ui/react/menu"
 import { Meter } from "@base-ui/react/meter"
 import { RegistryContext, useAtomValue } from "@effect/atom-react"
-import type { Node } from "@effect-tavern/runtime/src/session.ts"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import {
   Change,
   Close,
   Clue,
   Contents,
   Die,
+  Down,
   Insert,
   Next,
   Notes,
@@ -37,6 +38,7 @@ import {
   childrenOf,
   compose,
   draft,
+  type Draft,
   error,
   latest,
   nodes,
@@ -59,16 +61,102 @@ const waiting: Record<string, string> = {
 }
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
-const Paragraphs = ({ text }: { text: string }) => (
-  <>
-    {text
-      .split(/\n{2,}/)
-      .filter((p) => p.trim())
-      .map((p, i) => (
-        <p key={i}>{p}</p>
+const Paragraphs = ({ text, tail }: { text: string; tail?: ReactNode }) => {
+  const ps = text.split(/\n{2,}/).filter((p) => p.trim())
+  if (tail && ps.length === 0) ps.push("")
+  return (
+    <>
+      {ps.map((p, i) => (
+        <p key={i}>
+          {p}
+          {i === ps.length - 1 && tail}
+        </p>
       ))}
-  </>
-)
+    </>
+  )
+}
+
+/** Following the live edge the way every chat reader does (Cherry Studio's state, open-claude-ui's constants): one
+ *  state that only the user's intent flips. A scroll event the program did not cause is the user's (content growing
+ *  under the viewport fires none): past 40px from the bottom they are reading, back within it they follow again;
+ *  growth while following sticks to the bottom unless their hand was on the page within 150ms; the way back shows
+ *  past 120px. The one deviation is the anchor: a new turn lands at its own top, where the last section's min-height
+ *  puts the page bottom at the viewport bottom, so following holds from there. Programmatic scrolls are instant: a
+ *  smooth one fires many events no one could attribute. */
+const follow = { on: true, ours: null as number | null, touched: -Infinity }
+const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY
+const anchor = () => {
+  follow.on = true
+  document.querySelector("main > section:last-of-type")?.scrollIntoView({ block: "start", behavior: "instant" })
+  follow.ours = scrollY
+}
+const stick = () => {
+  scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })
+  follow.ours = scrollY
+}
+const Latest = () => {
+  const [away, setAway] = useState(false)
+  useEffect(() => {
+    const onScroll = () => {
+      const g = gap()
+      setAway(g > 120)
+      const t = follow.ours
+      follow.ours = null
+      if (t === null || Math.abs(scrollY - t) > 2) follow.on = g <= 40
+    }
+    const onInput = () => {
+      follow.touched = performance.now()
+    }
+    // opening included: the first growth is the story loading, and following from the start lands at its live edge
+    const ro = new ResizeObserver(() => {
+      if (follow.on && performance.now() - follow.touched >= 150) stick()
+      setAway(!follow.on && gap() > 120)
+    })
+    ro.observe(document.querySelector("main")!)
+    const inputs = ["wheel", "touchmove", "keydown", "pointerdown"] as const
+    addEventListener("scroll", onScroll, { passive: true })
+    for (const e of inputs) addEventListener(e, onInput, { passive: true })
+    return () => {
+      ro.disconnect()
+      removeEventListener("scroll", onScroll)
+      for (const e of inputs) removeEventListener(e, onInput)
+    }
+  }, [])
+  return (
+    away && (
+      <button
+        type="button"
+        className="icon latest"
+        aria-label="Jump to latest"
+        onClick={() => {
+          follow.on = true
+          stick()
+        }}
+      >
+        <Down />
+      </button>
+    )
+  )
+}
+
+/** The node being written: anchored at the top of the screen when it starts, a blinking cursor where the next
+ *  character lands, the die while the beat is judged. */
+const Draft = ({ d, phase }: { d: Draft; phase: Phase | null }) => {
+  useLayoutEffect(anchor, [])
+  return (
+    <section className="draft">
+      <Said input={d.input} />
+      <Paragraphs
+        text={d.text}
+        tail={
+          <span className="cursor" role="status" aria-label={phase ? waiting[phase] : "Waiting"}>
+            {phase === "decide" && <Die weight="fill" />}
+          </span>
+        }
+      />
+    </section>
+  )
+}
 
 const Said = ({ input }: { input: { text: string; note?: string } }) =>
   input.text ? <p className="said">{input.text}</p> : input.note ? <p className="said note">{input.note}</p> : null
@@ -578,14 +666,9 @@ const Reader = () => {
             onReword={() => onReword(n)}
           />
         ))}
-        {d && (
-          <section className="draft">
-            <Said input={d.input} />
-            <Paragraphs text={d.text} />
-            <p className="stage">{phase ? waiting[phase] : "…"}</p>
-          </section>
-        )}
+        {d && <Draft d={d} phase={phase} />}
         {err && <p className="error">{err}</p>}
+        <Latest />
         <Composer busy={d !== null} onSend={onSend} onStop={onStop} />
       </main>
     </div>

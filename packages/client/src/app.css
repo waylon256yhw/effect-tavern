@@ -19,17 +19,60 @@
   main {
     max-width: var(--measure);
     margin: 0 auto;
-    padding: calc(var(--topbar) + var(--safe-top) + var(--space-3)) var(--space-4) 160px;
+    padding: var(--inset-top) var(--space-4) var(--inset-bottom);
     display: flex;
     flex-direction: column;
     gap: var(--gap-turn);
     overflow-wrap: anywhere;
   }
   section {
-    scroll-margin-top: calc(var(--topbar) + var(--safe-top) + var(--space-3)); /* a scene jump lands below the bar */
+    scroll-margin-top: var(--inset-top); /* a scene jump lands below the bar */
     display: flex;
     flex-direction: column;
     gap: var(--gap-item);
+  }
+  /* the latest section fills the screen: scrolled to its start, the blank under it is where the prose grows, and
+     the viewport holds still while it does */
+  main > section:last-of-type {
+    min-height: calc(100dvh - var(--inset-top) - var(--inset-bottom));
+  }
+  .cursor {
+    display: inline-block;
+    vertical-align: text-bottom;
+    width: 2px;
+    height: 1em;
+    margin-left: 1px;
+    background: var(--ink-2);
+    animation: blink 1s steps(2, jump-none) infinite;
+  }
+  .cursor:has(svg) {
+    width: auto;
+    background: none;
+    color: var(--ink-2);
+  }
+  .cursor svg {
+    display: block;
+    width: 1em;
+    height: 1em;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cursor {
+      animation: none;
+    }
+  }
+  .latest {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--inset-bottom) + var(--safe-bottom));
+    translate: -50% 0;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    box-shadow: var(--shadow-1);
   }
   p {
     margin: 0;
@@ -110,7 +153,6 @@
     gap: 2px;
     font-variant-numeric: tabular-nums;
   }
-  .stage,
   .end {
     font-size: var(--text-footnote);
     color: var(--ink-3);
