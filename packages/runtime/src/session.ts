@@ -44,7 +44,15 @@ import {
 import { Effect, Queue, Schema, Stream } from "effect"
 import { Effect_, makeCard, type Answers, type Beat, type Card, type Check, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
-import { decodeFragments as frags, frame, head as headOf, type Msg, type Player, type Snippet } from "./fragment.ts"
+import {
+  decodeFragments as frags,
+  frame,
+  head as headOf,
+  type Format,
+  type Msg,
+  type Player,
+  type Snippet,
+} from "./fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
 import {
   deliveredIn,
@@ -121,14 +129,25 @@ export const asks = frags([
     text: "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it.",
   },
 ])
-// The default quick inputs: what the ecosystem's quick-reply lists and input helpers hold, as data (Player `snippets`
-// goes first). A snippet fills the box and never sends; `⦅⦆` is the thought mark the ask above explains.
+// The default quick inputs: the ecosystem's quick-reply lists as data (Player `snippets` goes first). Each has a
+// meaning in play: the thought mark (a perception scope the `input.thought` ask explains), the note channel, or a
+// direction to the narrator. Inserted at the caret, never sent; an empty note snippet only switches the channel.
 export const snippets: readonly Snippet[] = [
-  { name: "心声", text: "⦅⦆" },
-  { name: "继续", text: "继续。", note: true },
-  { name: "推进剧情", text: "推进剧情到下一个场景。", note: true },
-  { name: "时间流逝", text: "时间流逝，跳到下一件有事发生的时刻。", note: true },
-  { name: "详细描写", text: "把这一段写得更细。", note: true },
+  { name: "心声", text: "⦅", after: "⦆", hint: "角色心里的话，不说出口" },
+  { name: "场外", text: "", hint: "给叙事者的话，不计入正文", note: true },
+  { name: "继续", text: "继续。", hint: "顺着写下去", note: true },
+  { name: "推进剧情", text: "推进剧情到下一个场景。", hint: "引入新事件，或切到下一幕", note: true },
+  { name: "时间流逝", text: "时间流逝，跳到下一件有事发生的时刻。", hint: "略过平淡，直达下一件事", note: true },
+  { name: "详细描写", text: "把这一段写得更细。", hint: "放慢镜头，写细这一段", note: true },
+]
+// The default format keys: typing conveniences with no meaning in play, the ecosystem's 输入助手 as data (Player `format`
+// goes first). A key is its glyph; the text is a template with the caret between `text` and `after`.
+export const format: readonly Format[] = [
+  { label: "「」", text: "「", after: "」" },
+  { label: "『』", text: "『", after: "』" },
+  { label: "“”", text: "“", after: "”" },
+  { label: "（）", text: "（", after: "）" },
+  { label: "《》", text: "《", after: "》" },
 ]
 // The default products (src/product.ts): what record asks for on every card unless the card patches or the player
 // toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
@@ -656,9 +675,16 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
     /** What the client's chrome shows about the card: the title and the turn-heading reference. Not the card: fragment bodies stay on the server. */
-    meta: { id: card.id, title: card.title ?? card.id, heading: card.heading }, // leaves as JSON, which drops undefined
+    // `input` is the card's default channel, the one client-facing coordinate of participant vs author mode: on `act`
+    // the box is the player's line and a note or a thought is this turn's deviation; on `note` every input is direction.
+    meta: { id: card.id, title: card.title ?? card.id, heading: card.heading, input: card.input ?? "act" }, // leaves as JSON, which drops undefined
     nodes: (): Turn[] => [...journal.values()],
-    snippets: [...(player.snippets ?? []), ...snippets] as readonly Snippet[],
+    // In author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
+    // mark have nothing to do there.
+    snippets: [...(player.snippets ?? []), ...snippets].filter(
+      (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
+    ),
+    format: [...(player.format ?? []), ...format],
     get size() {
       return journal.size
     },

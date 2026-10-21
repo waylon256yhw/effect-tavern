@@ -2,7 +2,7 @@
 // is `active` (parent → child), client state the protocol does not keep; the path is derived by walking it from the
 // root. `draft` is the node being written: its prose grows by `delta`, a second draft (check failed) starts it over.
 import type { Rules } from "@effect-tavern/runtime/src/card.ts"
-import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import * as Atom from "effect/reactivity/Atom"
 import * as AtomRegistry from "effect/reactivity/AtomRegistry"
@@ -24,8 +24,10 @@ export interface CardView {
   id: string
   title: string
   heading?: string // what titles a turn (Card.heading); absent, turns have no titles and there is no scene list
+  input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
   rules: Rules
   snippets: readonly Snippet[]
+  format: readonly Format[]
 }
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue

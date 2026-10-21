@@ -110,6 +110,13 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
 // ───────── Through the interface: every event kept, the node read off the end ─────────
 const model = { ...fake((o) => script(o)), prefill: true }
 const S = makeSession({ card: full, player, model }) // the self-check RPG card
+assert.equal(S.meta.input, "act") // the default channel the client opens on: undeclared is act
+const N = makeSession({ card: { ...full, input: "note" }, player, model })
+assert.equal(N.meta.input, "note")
+assert.deepEqual(
+  N.snippets.map((s) => s.name),
+  ["继续", "推进剧情", "时间流逝", "详细描写"],
+) // author mode: no thought mark, no channel switch
 const C = makeSession({ card: chat, player, model }) // its stripped copy: no actions, no lore, no guard
 const events: Event[] = []
 const made = () => events.filter((e) => e.kind === "call")

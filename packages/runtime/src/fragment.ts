@@ -26,12 +26,22 @@ export interface Msg {
   parts?: readonly Part[]
 }
 
-/** A quick input: a named text the client fills into the box (never sends), on the note channel when `note`. The
- *  ecosystem's quick replies and input helpers, as player-layer data; the harness ships defaults (session `snippets`). */
-export interface Snippet {
-  name: string
+/** An insertion at the caret, never sent: `text` goes before the caret, `after` behind it, a selection lands between
+ *  them (the shape of SillyTavern's 输入助手: a template and where the cursor goes next). */
+export interface Insert {
   text: string
-  note?: boolean
+  after?: string
+}
+/** A quick input with a meaning in play: a perception scope (心声), the note channel, a direction to the narrator. The
+ *  ecosystem's quick replies as player-layer data; the harness ships defaults (session `snippets`). */
+export interface Snippet extends Insert {
+  name: string
+  hint?: string // one line under the name in the menu: what it does
+  note?: boolean // on pick the send goes to the narrator (the note channel)
+}
+/** A format key: a typing convenience with no meaning in play (brackets a phone keyboard lacks). Labelled by its glyph. */
+export interface Format extends Insert {
+  label: string
 }
 export interface Player {
   global: readonly Fragment[]
@@ -40,6 +50,7 @@ export interface Player {
   asks?: readonly Fragment[] // the harness's own wording, overridden by id (see session `asks`)
   products?: Readonly<Record<string, boolean>> // record products on/off by id: the player's toggle wins over card and defaults
   snippets?: readonly Snippet[] // the player's quick inputs, before the harness defaults
+  format?: readonly Format[] // the player's format keys, before the harness defaults
 }
 export interface FrameSource {
   id: string

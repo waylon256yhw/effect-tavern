@@ -5,6 +5,7 @@
 // left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
 // docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
 // menu a popover anchored to its button: the platform is the component library.
+import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type * as Atom from "effect/reactivity/Atom"
 import { type JSX } from "@solidjs/web"
@@ -580,33 +581,68 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
   const text = read(compose)
   const pinned = read(pin)
   const view = read(card)
+  // The card's default channel is the mode for the whole session (GET /card `input`): in participant mode the box is the
+  // character's line and a note to the narrator or a thought is this turn's deviation; in author mode every input is
+  // direction and neither exists.
+  const acting = () => view()?.input === "act"
   const quick = () => view()?.snippets ?? []
-  const [note, setNote] = createSignal(false)
+  // The snippets menu groups by meaning: a note snippet is a word to the narrator, the rest stay in the story.
+  const inStory = () => quick().filter((s) => !s.note)
+  const toNarrator = () => quick().filter((s) => s.note)
+  const keys = () => view()?.format ?? []
+  // This one send is a note (participant mode only). It is one state, not a tag per snippet: any number of note snippets
+  // may go into the box, the chip says only where the send goes; it clears after the send.
+  const [aside, setAside] = createSignal(false)
+  const isNote = () => !acting() || aside()
+  // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
+  const prompt = () => (isNote() ? "To the narrator, not in the story…" : "Your line…")
   let box: HTMLTextAreaElement | undefined
   let menu: HTMLDivElement | undefined
-  // A snippet fills the box and never sends; the caret lands inside an empty ⦅⦆ (the thought mark), else at the end.
-  const pick = (s: { text: string; note?: boolean }) => {
-    menu?.hidePopover()
-    registry.set(compose, s.text)
-    setNote(s.note === true)
-    const i = s.text.indexOf("⦅⦆")
-    const at = i >= 0 ? i + 1 : s.text.length
+  const put = (value: string, caret: number) => {
+    registry.set(compose, value)
     requestAnimationFrame(() => {
       box?.focus()
-      box?.setSelectionRange(at, at)
+      box?.setSelectionRange(caret, caret)
     })
   }
+  // An Insert (a format key or a snippet) goes in at the caret and never sends: `text` before the caret, `after`
+  // behind it, the selection between them. A note snippet also switches this send's channel; an empty one does only that.
+  const insert = (s: { text: string; after?: string; note?: boolean }) => {
+    menu?.hidePopover()
+    if (s.note) setAside(true)
+    const v = text()
+    const a = box?.selectionStart ?? v.length
+    const b = box?.selectionEnd ?? a
+    const inner = v.slice(a, b)
+    put(v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b), a + s.text.length + inner.length)
+  }
+  const Items = (p: { of: readonly Snippet[] }) => (
+    <For each={p.of} keyed={(s) => s.name}>
+      {(s) => (
+        <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => insert(s())}>
+          <span class="name">{s().name}</span>
+          <span class="hint">{s().hint}</span>
+          {/* a snippet with words fills the box, like an Options row; a mark or the bare channel switch does not */}
+          <Show when={s().text && !s().after}>
+            <Insert aria-hidden="true" />
+          </Show>
+        </button>
+      )}
+    </For>
+  )
   const submit = () => {
     const t = text().trim()
     if (!t || props.busy) return false
-    props.onSend(t, note())
+    props.onSend(t, isNote())
     registry.set(compose, "")
-    setNote(false)
+    setAside(false)
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
   const ime = imeController(submit)
-  // The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's.
+  const keep = (e: Event) => e.preventDefault() // a tap on a control must not take focus (and the phone's keyboard) from the box
+  // The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Tab leaves the menu and closes it;
+  // Escape and outside clicks are the popover's.
   const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
     const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")]
     const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
@@ -623,28 +659,52 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
         submit()
       }}
     >
-      <div class="box">
+      <div
+        class="box"
+        // The whole box is the input: a press on its padding or the keys row lands in the text, never blurs it.
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest("button, textarea, [popover]")) return
+          e.preventDefault()
+          box?.focus()
+        }}
+      >
+        <Show when={keys().length > 0}>
+          <div class="format" aria-label="Format keys">
+            <For each={keys()} keyed={(k) => k.label}>
+              {(k) => (
+                <button type="button" class="chip" onPointerDown={keep} onClick={() => insert(k())}>
+                  {k().label}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
         <textarea
           ref={(el) => (box = el)}
           value={text()}
-          aria-label={note() ? "Note to the narrator" : "Your line"}
+          placeholder={prompt()}
           enterkeyhint="enter"
           onInput={(e) => registry.set(compose, e.currentTarget.value)}
           onCompositionStart={ime.compositionStart}
           onCompositionEnd={ime.compositionEnd}
-          onKeyDown={ime.keyDown}
+          onKeyDown={(e) => {
+            // "/" on an empty box opens the snippets menu: the keyboard's way to the same menu, no command grammar.
+            if (e.key === "/" && !e.isComposing && text() === "" && menu) {
+              e.preventDefault()
+              menu.showPopover()
+            } else ime.keyDown(e)
+          }}
         />
         <div class="row">
-          <div class="channel" role="radiogroup" aria-label="Channel">
-            <button type="button" role="radio" aria-checked={note() ? "false" : "true"} onClick={() => setNote(false)}>
-              Act
-            </button>
-            <button type="button" role="radio" aria-checked={note() ? "true" : "false"} onClick={() => setNote(true)}>
-              Note
-            </button>
-          </div>
           <Show when={quick().length > 0}>
-            <button type="button" class="icon" aria-label="Snippets" aria-haspopup="menu" popovertarget="snippets">
+            <button
+              type="button"
+              class="icon"
+              aria-label="Snippets"
+              data-hint="Snippets /"
+              aria-haspopup="menu"
+              popovertarget="snippets"
+            >
               <Snippets />
             </button>
             <div
@@ -654,18 +714,28 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
               role="menu"
               ref={(el) => (menu = el)}
               onKeyDown={roam}
+              onFocusOut={(e) => !menu?.contains(e.relatedTarget as HTMLElement | null) && menu?.hidePopover()}
               onToggle={(e) =>
                 e.newState === "open" && e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
               }
             >
-              <For each={quick()} keyed={(s) => s.name}>
-                {(s) => (
-                  <button type="button" role="menuitem" class="item" onClick={() => pick(s())}>
-                    {s().name}
-                  </button>
-                )}
-              </For>
+              {/* two groups, in the story and to the narrator, parted by a line: the items are the card's language, the chrome adds no words */}
+              <Items of={inStory()} />
+              <hr />
+              <Items of={toNarrator()} />
             </div>
+          </Show>
+          <Show when={acting() && aside()}>
+            <button
+              type="button"
+              class="chip state"
+              aria-label="Back to your line"
+              onPointerDown={keep}
+              onClick={() => setAside(false)}
+            >
+              To the narrator
+              <Close />
+            </button>
           </Show>
           <Show when={pinned()}>
             <button type="button" class="icon" aria-label="Unpin" onClick={() => registry.set(pin, null)}>
@@ -676,12 +746,19 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
           <Show
             when={props.busy}
             fallback={
-              <button type="submit" class="send" aria-label="Send" disabled={!text().trim()}>
+              <button
+                type="submit"
+                class="send"
+                aria-label="Send"
+                data-hint="Send ⌘↵"
+                disabled={!text().trim()}
+                onPointerDown={keep}
+              >
                 <Send />
               </button>
             }
           >
-            <button type="button" class="send" aria-label="Stop" onClick={() => props.onStop()}>
+            <button type="button" class="send" aria-label="Stop" onPointerDown={keep} onClick={() => props.onStop()}>
               <Stop />
             </button>
           </Show>

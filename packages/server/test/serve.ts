@@ -43,6 +43,7 @@ const run = async (inspect: boolean) => {
   const post = (v: unknown, signal?: AbortSignal) => fetch(base, { method: "POST", body: JSON.stringify(v), signal })
   try {
     assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(session.nodes().map((t) => session.node(t.id))))
+    assert.equal(((await (await fetch(`${base}/card`)).json()) as { input: string }).input, "act") // undeclared = act
 
     const r = await post({ kind: "act", parent: null, input: { text: "hi" } })
     assert.equal(r.headers.get("content-type"), "text/event-stream")
