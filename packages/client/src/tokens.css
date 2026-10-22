@@ -101,8 +101,7 @@
   --topbar: 48px; /* the phone's title bar, under the safe area */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --inset-top: calc(var(--topbar) + var(--safe-top) + var(--space-3)); /* where the reading column starts */
-  --inset-bottom: 160px; /* room under it for the composer */
+  --fade: 24px; /* the column's vertical padding, over which its two ends fade out */
 
   /* motion: five durations, one ease for movement, one for pulses */
   --dur-1: 60ms; /* press, focus ring */

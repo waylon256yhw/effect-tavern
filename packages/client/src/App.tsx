@@ -100,18 +100,19 @@ const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
  *  under the viewport fires none): past 40px from the bottom they are reading, back within it they follow again;
  *  growth while following sticks to the bottom unless their hand was on the page within 150ms; the way back shows
  *  past 120px. The one deviation is the anchor: a new turn lands at its own top, where the last section's min-height
- *  puts the page bottom at the viewport bottom, so following holds from there. Programmatic scrolls are instant: a
- *  smooth one fires many events no one could attribute. */
+ *  puts the column's end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a
+ *  smooth one fires many events no one could attribute. The scroller is the column (.scroll), never the page. */
 const follow = { on: true, ours: null as number | null, touched: -Infinity }
-const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY
+const scroller = () => document.querySelector(".scroll")!
+const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
 const anchor = () => {
   follow.on = true
   document.querySelector("main > section:last-of-type")?.scrollIntoView({ block: "start", behavior: "instant" })
-  follow.ours = scrollY
+  follow.ours = scroller().scrollTop
 }
 const stick = () => {
-  scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })
-  follow.ours = scrollY
+  scroller().scrollTo({ top: scroller().scrollHeight, behavior: "instant" })
+  follow.ours = scroller().scrollTop
 }
 const Latest = () => {
   const [away, setAway] = createSignal(false)
@@ -121,23 +122,25 @@ const Latest = () => {
       setAway(g > 120)
       const t = follow.ours
       follow.ours = null
-      if (t === null || Math.abs(scrollY - t) > 2) follow.on = g <= 40
+      if (t === null || Math.abs(scroller().scrollTop - t) > 2) follow.on = g <= 40
     }
     const onInput = () => {
       follow.touched = performance.now()
     }
-    // opening included: the first growth is the story loading, and following from the start lands at its live edge
+    // opening included: the first growth is the story loading, and following from the start lands at its live edge;
+    // the scroller shrinking (the composer growing under it) is the same event from the other side
     const ro = new ResizeObserver(() => {
       if (follow.on && performance.now() - follow.touched >= 150) stick()
       setAway(!follow.on && gap() > 120)
     })
     ro.observe(document.querySelector("main")!)
+    ro.observe(scroller())
     const inputs = ["wheel", "touchmove", "keydown", "pointerdown"] as const
-    addEventListener("scroll", onScroll, { passive: true })
+    scroller().addEventListener("scroll", onScroll, { passive: true })
     for (const e of inputs) addEventListener(e, onInput, { passive: true })
     return () => {
       ro.disconnect()
-      removeEventListener("scroll", onScroll)
+      scroller().removeEventListener("scroll", onScroll)
       for (const e of inputs) removeEventListener(e, onInput)
     }
   })
@@ -807,24 +810,26 @@ const Reader = () => {
 
   return (
     <div class="panel">
-      <main>
-        <For each={line()}>
-          {(n, i) => (
-            <Section
-              node={n}
-              n={i() + 1}
-              last={!d() && i() === line().length - 1}
-              busy={d() !== null}
-              onSwipe={() => onSwipe(n)}
-              onReword={() => onReword(n)}
-            />
-          )}
-        </For>
-        <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} />}</Show>
-        <Show when={err()}>{(e) => <p class="error">{e()}</p>}</Show>
-        <Latest />
-        <Composer busy={d() !== null} onSend={onSend} onStop={onStop} />
-      </main>
+      <div class="scroll">
+        <main>
+          <For each={line()}>
+            {(n, i) => (
+              <Section
+                node={n}
+                n={i() + 1}
+                last={!d() && i() === line().length - 1}
+                busy={d() !== null}
+                onSwipe={() => onSwipe(n)}
+                onReword={() => onReword(n)}
+              />
+            )}
+          </For>
+          <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} />}</Show>
+          <Show when={err()}>{(e) => <p class="error">{e()}</p>}</Show>
+        </main>
+      </div>
+      <Composer busy={d() !== null} onSend={onSend} onStop={onStop} />
+      <Latest />
     </div>
   )
 }

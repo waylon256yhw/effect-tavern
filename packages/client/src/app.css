@@ -1,6 +1,6 @@
 /* Four cascade layers, lowest first: the tokens, the components (which may only use tokens), the card's CSS, the
    reader's own. A later layer wins unconditionally, so nobody needs !important. Structure names here (.said, .prose,
-   .actions, .composer, .send, .topbar, .canvas, .panel, .side, .status, .pinned, .scenes, .snippets) are the public surface a card or a reader styles against: rename with care.
+   .actions, .composer, .send, .topbar, .canvas, .panel, .scroll, .side, .status, .pinned, .scenes, .snippets) are the public surface a card or a reader styles against: rename with care.
    Shapes follow docs/client-design-brief-3.md and the canvas in docs/client-canvas/. */
 @layer tokens, components, card, user;
 @import "./tokens.css" layer(tokens);
@@ -16,25 +16,54 @@
   body {
     margin: 0;
   }
+  /* the frame holds still: the bar, the column and the composer fill the viewport, and only the column scrolls */
+  .canvas,
+  .panel {
+    display: flex;
+    flex-direction: column;
+  }
+  .canvas {
+    height: 100dvh;
+  }
+  .panel {
+    flex: 1;
+    min-height: 0;
+  }
+  .scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    container-type: size;
+    /* a thin thumb at the column's edge, only while the pointer is over it (the mask fades its ends) */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--dur-3) var(--ease);
+    /* the prose fades out over the column's padding at both ends, like the composer's text, instead of cutting
+       under the bar or the composer */
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  }
+  .scroll:hover {
+    scrollbar-color: var(--alpha-2) transparent;
+  }
   main {
     max-width: var(--measure);
     margin: 0 auto;
-    padding: var(--inset-top) var(--space-4) var(--inset-bottom);
+    padding: var(--fade) var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--gap-turn);
     overflow-wrap: anywhere;
   }
   section {
-    scroll-margin-top: var(--inset-top); /* a scene jump lands below the bar */
+    scroll-margin-top: var(--fade); /* a scene jump lands below the fade */
     display: flex;
     flex-direction: column;
     gap: var(--gap-item);
   }
-  /* the latest section fills the screen: scrolled to its start, the blank under it is where the prose grows, and
-     the viewport holds still while it does */
+  /* the latest section fills the column: scrolled to its start, the blank under it is where the prose grows, and
+     the column holds still while it does */
   main > section:last-of-type {
-    min-height: calc(100dvh - var(--inset-top) - var(--inset-bottom));
+    min-height: calc(100cqh - 2 * var(--fade));
   }
   .cursor {
     display: inline-block;
@@ -67,9 +96,9 @@
   }
   .latest {
     position: fixed;
-    left: 50%;
-    bottom: calc(var(--inset-bottom) + var(--safe-bottom));
-    translate: -50% 0;
+    position-anchor: --composer;
+    position-area: top;
+    margin-bottom: var(--space-3);
     border-radius: var(--radius-pill);
     background: var(--surface-3);
     box-shadow: var(--shadow-1);
@@ -82,9 +111,6 @@
 
   /* the bar on top (phone): the card's title, and Status with a dot when this turn moved the state */
   .topbar {
-    position: fixed;
-    z-index: 1;
-    inset: 0 0 auto;
     box-sizing: border-box;
     height: calc(var(--topbar) + var(--safe-top));
     padding: var(--safe-top) var(--space-2) 0 var(--space-4);
@@ -195,12 +221,8 @@
     height: var(--icon);
   }
 
-  /* the composer: the one raised object, fixed at the bottom */
+  /* the composer: the one raised object, under the column */
   .composer {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
     padding: var(--space-2) var(--space-3) calc(var(--space-4) + var(--safe-bottom));
     background: var(--surface-1);
   }
@@ -410,9 +432,6 @@
     .sheet[open]::backdrop {
       opacity: 0;
     }
-  }
-  body:has(.sheet[open]) {
-    overflow: hidden;
   }
   .sheet header {
     display: flex;
@@ -765,17 +784,17 @@
       display: none;
     }
     .canvas {
+      box-sizing: border-box;
       display: grid;
       grid-template-columns: 15rem minmax(0, 1fr) 19rem;
+      grid-template-rows: minmax(0, 1fr);
       align-items: start;
       gap: var(--space-5);
       padding: var(--space-5);
     }
     .side {
-      position: sticky;
-      top: var(--space-5);
       box-sizing: border-box;
-      max-height: calc(100dvh - 2 * var(--space-5));
+      max-height: 100%;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -826,25 +845,16 @@
       text-overflow: ellipsis;
     }
     .panel {
-      box-sizing: border-box;
-      min-height: calc(100dvh - 2 * var(--space-5));
-      display: flex;
-      flex-direction: column;
-      padding: 0 var(--space-6);
+      align-self: stretch;
       border-radius: var(--radius-dialog);
       background: var(--surface-1);
       box-shadow: var(--shadow-2);
     }
     main {
-      flex: 1;
-      width: 100%;
-      box-sizing: border-box;
-      padding: var(--space-6) 0 0;
+      padding-inline: var(--space-6);
     }
     .composer {
-      position: sticky;
-      margin-top: auto;
-      padding: var(--space-4) 0 var(--space-5);
+      padding: var(--space-4) var(--space-6) var(--space-5);
     }
   }
 }
