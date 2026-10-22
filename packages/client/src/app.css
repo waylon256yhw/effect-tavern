@@ -61,6 +61,13 @@
     flex-direction: column;
     gap: var(--gap-item);
   }
+  /* only the sections near the viewport are laid out and painted; one scrolled far away keeps its last size (a guess
+     before its first paint), so a long story costs what is on screen. The latest section stays out: its Options
+     container's shadow and the dust in flight paint past its box, which containment would clip. */
+  main > section:not(:last-of-type) {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 20rem;
+  }
   /* the latest section fills the column: scrolled to its start, the blank under it is where the prose grows, and
      the column holds still while it does */
   main > section:last-of-type {
@@ -612,12 +619,16 @@
   .steps .names {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: 1fr;
+    grid-auto-columns: minmax(0, 1fr); /* a long name clips in its own cell instead of pushing the row past the track */
+    gap: 3px;
     margin-top: var(--space-1);
     font-size: var(--text-caption);
     color: var(--ink-3);
     white-space: nowrap;
+  }
+  .steps .names > * {
     overflow: hidden;
+    text-overflow: ellipsis;
   }
   .steps .names b {
     color: var(--ink);
