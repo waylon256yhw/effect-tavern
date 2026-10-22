@@ -161,14 +161,14 @@ CLAUDE.md           Vite+ 生成的 agent 说明
 ```sh
 vp install
 vp check        # oxfmt + oxlint + tsc
-pnpm verify     # 自检脚本（node:assert，不用 vitest）；provider 的 Anthropic 实测需要 ANTHROPIC_API_KEY，没有就跳过
-node packages/server/src/main.ts wuxia 7777   # 起一局
+pnpm verify     # 自检脚本（node:assert，不用 vitest，Bun 跑）；provider 的 Anthropic 实测需要 ANTHROPIC_API_KEY，没有就跳过
+bun packages/server/src/main.ts wuxia 7777    # 起一局
 cd packages/client && vp dev                    # 页面在 5173，/api 代理到 7777
 ```
 
-代理是连接记录上的显式字段（不写跟运行时、`false` 直连、URL 走它），不从环境变量读；Node 自己要读环境变量得开 `NODE_USE_ENV_PROXY=1`。
+代理是连接记录上的显式字段（不写跟运行时、`false` 直连、URL 走它），就是 Bun fetch 自带的 `proxy` 三态，逐请求带上，不再有 undici；Node 的 fetch 不认这个选项，只在 `NODE_USE_ENV_PROXY=1` 下读环境变量。
 
-Node 24 或更新，直接执行 `.ts`，没有构建步骤。pnpm 钉在 12.11.1，`effect` 固定在 4.0.5。`docs/` 不参与格式化。
+运行时是 Bun 1.4.4 或更新，直接执行 `.ts`，没有构建步骤；`vp dev` 本身起的是 Node，`bun --bun vp dev` 让它也跑在 Bun 上。pnpm 钉在 12.11.1，`effect` 固定在 4.0.5。`docs/` 不参与格式化。
 
 ## 七、文档
 

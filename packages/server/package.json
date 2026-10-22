@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "tsc && node test/serve.ts",
-    "start": "node src/main.ts"
+    "verify": "tsc && bun test/serve.ts",
+    "start": "bun src/main.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",

@@ -1,6 +1,6 @@
 // Live check against the real Anthropic API: the things no mock can verify (cache tiers, prefill, signed reasoning).
 // Key: ANTHROPIC_API_KEY, else the "api_key" profile pointed at api.anthropic.com in ~/.deckled. Skips without one.
-// Proxy: https_proxy, passed as the connection's explicit `proxy` (not NODE_USE_ENV_PROXY), so the undici path is what runs.
+// Proxy: https_proxy, passed as the connection's explicit `proxy`, so the per-request path is what runs, not Bun's env fallback.
 // Runs on Haiku with tiny outputs; well under a cent per pass.
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"

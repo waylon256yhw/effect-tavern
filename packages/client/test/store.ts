@@ -6,7 +6,10 @@ import { active, apply, draft, load, nodes, path, registry } from "../src/store.
 let frames: (() => void)[] = []
 ;(globalThis as any).requestAnimationFrame = (f: () => void) => frames.push(f)
 ;(globalThis as any).cancelAnimationFrame = () => void (frames = [])
+let clock = 0
+Object.defineProperty(performance, "now", { value: () => clock }) // the playout loop paces by wall time; the test owns the clock
 const tick = () => {
+  clock += 16
   const fs = frames
   frames = []
   fs.forEach((f) => f())
@@ -31,7 +34,10 @@ apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "he" } })
 apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "llo" } })
 assert.equal(registry.get(draft)!.text, "") // nothing until the frame
 tick()
-assert.equal(registry.get(draft)!.text, "hello")
+assert.equal(registry.get(draft)!.text, "h") // the first frame reveals one grapheme, however much piled up
+let n = 0
+while (registry.get(draft)!.text !== "hello" && n++ < 120) tick()
+assert.equal(registry.get(draft)!.text, "hello") // the rest plays out at the stream's rate, well within two seconds
 apply({ kind: "stage", phase: "check" })
 apply({ kind: "stage", phase: "narrate" }) // the rewrite
 assert.equal(registry.get(draft)!.text, "")

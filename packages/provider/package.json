@@ -7,15 +7,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "verify": "tsc && node test/url.ts && node test/anthropic.ts"
+    "verify": "tsc && bun test/url.ts && bun test/anthropic.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.36",
     "@ai-sdk/google": "4.0.39",
     "@ai-sdk/openai-compatible": "3.0.27",
     "ai": "7.0.62",
-    "effect": "4.0.5",
-    "undici": "8.12.3"
+    "effect": "4.0.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

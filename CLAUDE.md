@@ -78,5 +78,5 @@ Tooling:
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
 effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the journal lives in
 `.dev/<card>.json` (gitignored; delete it to start the story over). The user starts and stops `vp dev` in their own
-terminal; an agent uses it and never starts, restarts or kills it. `node src/main.ts` in packages/server serves the same
+terminal; an agent uses it and never starts, restarts or kills it. `bun src/main.ts` in packages/server serves the same
 session on its own port.

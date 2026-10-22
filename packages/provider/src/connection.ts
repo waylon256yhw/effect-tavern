@@ -5,7 +5,6 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { LanguageModel } from "ai"
-import { Agent, ProxyAgent, fetch as undiciFetch } from "undici"
 import { plan, type Endpoint, type Format } from "./url.ts"
 
 export type { Endpoint, Format } from "./url.ts"
@@ -40,8 +39,9 @@ export interface Connection {
   /** Lifetime of the head's cache entry: 1h when a person is on the other end (replies 5–60 minutes apart), else 5m. */
   cacheTtl?: "5m" | "1h"
   headers?: Record<string, string>
-  /** Forward proxy, three states like Bun's: unset follows the runtime (Node reads the env only with
-   *  NODE_USE_ENV_PROXY=1), `false` forces a direct connection, a URL routes this connection through it. */
+  /** Forward proxy, the three states of Bun's fetch `proxy` option, which carries it: unset reads the environment
+   *  (https_proxy), `false` forces a direct connection, a URL routes this connection through it. Node's fetch ignores
+   *  the option and reads the environment only with NODE_USE_ENV_PROXY=1; the runtime is Bun. */
   proxy?: string | false
 }
 
@@ -78,15 +78,12 @@ export const authHeaders = (c: Connection): Record<string, string> => {
 
 type Fetch = typeof globalThis.fetch
 
-/** The fetch this connection sends through. An explicit proxy needs undici's own fetch paired with its dispatcher
- *  (the installed undici and Node's bundled one must not be mixed); `undefined` keeps the runtime's fetch. */
-const fetchFor = (c: Connection): Fetch => {
-  if (c.proxy === undefined) return globalThis.fetch
-  const dispatcher = c.proxy === false ? new Agent() : new ProxyAgent(c.proxy)
-  // ai-sdk calls fetch(url, init) with a string body; undici's fetch rejects Node's global Request objects, so no re-wrapping.
-  return ((input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) =>
-    undiciFetch(input as never, { ...init, dispatcher } as never)) as unknown as Fetch
-}
+/** The fetch this connection sends through: the runtime's, with `proxy` set on each request when the connection names
+ *  one (`proxy` is not in the DOM RequestInit type, hence the cast). */
+const fetchFor = (c: Connection): Fetch =>
+  c.proxy === undefined
+    ? globalThis.fetch
+    : (input, init) => globalThis.fetch(input, { ...init, proxy: c.proxy } as RequestInit)
 
 /** Wraps fetch so the inspector can see what was actually sent: URL, status, latency, optionally the converted body. */
 const traced =
