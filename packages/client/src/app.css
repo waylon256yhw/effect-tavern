@@ -224,7 +224,6 @@
   /* the composer: the one raised object, under the column */
   .composer {
     padding: var(--space-2) var(--space-3) calc(var(--space-4) + var(--safe-bottom));
-    background: var(--surface-1);
   }
   .composer .box {
     max-width: var(--measure);
