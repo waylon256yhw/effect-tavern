@@ -138,7 +138,6 @@ export const dust = async (el: HTMLElement): Promise<void> => {
   gl.enableVertexAttribArray(at)
   gl.vertexAttribPointer(at, 1, gl.FLOAT, false, 0, 0)
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture())
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1)
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)

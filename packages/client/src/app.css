@@ -168,9 +168,10 @@
     background: var(--surface-3);
     box-shadow: var(--shadow-1);
   }
+  /* left-aligned: justified CJK re-spaces the whole line on every character that streams in, then snaps it at the
+     wrap; no chat reader justifies */
   p {
     margin: 0;
-    text-align: justify;
     line-break: strict;
   }
 

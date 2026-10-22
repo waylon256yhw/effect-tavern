@@ -53,6 +53,7 @@ import {
   registry,
   stage,
   withdraw,
+  arrived,
   type Id,
 } from "./store.ts"
 import { fetchCard, fetchNodes, send } from "./wire.ts"
@@ -850,7 +851,7 @@ const Reader = () => {
     // Before the first character the turn is withdrawn; after it, the server finishes a `stopped` node the closed
     // response never carried, so read the snapshot back until it shows up.
     const was = registry.get(nodes).size
-    if ((registry.get(draft)?.text ?? "") === "") {
+    if (!arrived()) {
       withdraw()
       return registry.set(draft, null)
     }
