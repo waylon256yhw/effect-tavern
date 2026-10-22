@@ -163,7 +163,7 @@ vp install
 vp check        # oxfmt + oxlint + tsc
 pnpm verify     # 自检脚本（node:assert，不用 vitest，Bun 跑）；provider 的 Anthropic 实测需要 ANTHROPIC_API_KEY，没有就跳过
 bun packages/server/src/main.ts wuxia 7777    # 起一局
-cd packages/client && vp dev                    # 页面在 5173，/api 代理到 7777
+cd packages/client && bun --bun vp dev          # 页面在 5173，/api 代理到 7777
 ```
 
 代理是连接记录上的显式字段（不写跟运行时、`false` 直连、URL 走它），就是 Bun fetch 自带的 `proxy` 三态，逐请求带上，不再有 undici；Node 的 fetch 不认这个选项，只在 `NODE_USE_ENV_PROXY=1` 下读环境变量。
