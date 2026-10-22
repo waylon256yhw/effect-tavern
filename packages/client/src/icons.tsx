@@ -1,6 +1,7 @@
 // Phosphor Icons from Iconify's `ph` set, under the names the chrome uses (docs/client-design-brief-3.md §3). The bare
 // name is the regular weight, `-fill` the filled one. Sizes come from CSS (`.icon svg`, `.record svg`), nothing here.
 export { default as Swipe } from "~icons/ph/arrow-clockwise"
+export { default as Back } from "~icons/ph/arrow-left"
 export { default as Warning } from "~icons/ph/warning"
 export { default as Down } from "~icons/ph/arrow-down"
 export { default as Insert } from "~icons/ph/arrow-elbow-down-left"
@@ -11,6 +12,7 @@ export { default as Prev } from "~icons/ph/caret-left"
 export { default as Next } from "~icons/ph/caret-right"
 export { default as Status } from "~icons/ph/chart-bar"
 export { default as Die } from "~icons/ph/dice-five"
+export { default as More } from "~icons/ph/dots-three"
 export { default as DieFill } from "~icons/ph/dice-five-fill"
 export { default as Contents } from "~icons/ph/list"
 export { default as Reword } from "~icons/ph/magic-wand"

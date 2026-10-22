@@ -5,6 +5,7 @@
 import type { Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
+import type { Call } from "./inspect.ts"
 import * as Atom from "effect/reactivity/Atom"
 import * as AtomRegistry from "effect/reactivity/AtomRegistry"
 
@@ -37,6 +38,9 @@ export const compose = Atom.make("") // the composer's text; an Options row writ
 export const aside = Atom.make(false) // this one send goes to the narrator (participant mode's deviation); clears after the send
 export const stage = Atom.make<Phase | null>(null)
 export const error = Atom.make<string | null>(null)
+/** The Inspect page: the node under inspection, or null while reading; the calls by node (GET /calls), read on open. */
+export const inspecting = Atom.make<Id | null>(null)
+export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
 /** Siblings of a parent in id order; the newest is the default active one. */
 export const childrenOf = (all: ReadonlyMap<Id, Node>, parent: Id | null): Node[] =>

@@ -11,6 +11,7 @@ import type * as Atom from "effect/reactivity/Atom"
 import { type JSX } from "@solidjs/web"
 import { type Accessor, createMemo, createSignal, For, Match, onSettled, runWithOwner, Show, Switch } from "solid-js"
 import {
+  Back,
   Change,
   Close,
   Clue,
@@ -20,6 +21,7 @@ import {
   Down,
   Edit,
   Insert,
+  More,
   Next,
   Notes,
   Pin,
@@ -36,16 +38,19 @@ import {
 } from "./icons.tsx"
 import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
+import { regions, rows, textOf, totals, type Call, type Row } from "./inspect.ts"
 import { heading, record, scenes, status, type Element } from "./record.ts"
 import {
   active,
   aside,
+  calls,
   card,
   childrenOf,
   compose,
   draft,
   type Draft,
   error,
+  inspecting,
   latest,
   nodes,
   path,
@@ -57,7 +62,7 @@ import {
   arrived,
   type Id,
 } from "./store.ts"
-import { fetchCard, fetchNodes, send } from "./wire.ts"
+import { fetchCalls, fetchCard, fetchNodes, send } from "./wire.ts"
 
 /** An atom as a Solid accessor: one signal per atom for the page's life, owned by no component, like the registry it
  *  mirrors (store.ts). The registry notifies synchronously from whoever wrote; Solid applies on the next microtask. */
@@ -845,6 +850,41 @@ const Composer = (props: {
               <Items of={toNarrator()} />
             </div>
           </Show>
+          {/* the session's own menu, apart from the card's language in Snippets: what to look at (the Inspector) */}
+          <button
+            type="button"
+            class="icon"
+            aria-label="Session"
+            aria-haspopup="menu"
+            popovertarget="session"
+            onPointerDown={keep}
+          >
+            <More />
+          </button>
+          <div
+            id="session"
+            class="snippets"
+            popover
+            role="menu"
+            onKeyDown={roam}
+            onToggle={(e) =>
+              e.newState === "open" && e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
+            }
+          >
+            <button
+              type="button"
+              role="menuitem"
+              class="item"
+              tabindex="-1"
+              onClick={(e) => {
+                e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()
+                openInspector()
+              }}
+            >
+              <span class="name">Inspector</span>
+              <span class="hint">What the engine did this turn</span>
+            </button>
+          </div>
           <Show when={acting() && toNarratorOn()}>
             <button
               type="button"
@@ -885,6 +925,524 @@ const Composer = (props: {
         </div>
       </div>
     </form>
+  )
+}
+
+// ───────── The Inspect page: one turn from the harness's view ─────────
+// A full page over the reader (the reader stays mounted, so a turn in flight keeps streaming under it): the six-stage
+// trace with each call's duration, tokens and status, the request by cache region and the answer; the state after the
+// node against its parent, the brief and what check made of it, the untold hooks; the products. Two modes: Dev shows
+// the request bodies and the brief, Play (the only mode when the server runs without `inspect`, which strips the
+// bodies before they leave) keeps timing, tokens, state and hooks. Opens on the path's last node; prev / next walk the
+// path, `[` `]` too, Escape returns to the story. src/inspect.ts projects; this draws.
+const openInspector = () => {
+  registry.set(inspecting, registry.get(path).at(-1)?.turn.id ?? null)
+  void fetchCalls()
+}
+const fmt = (n: number) => n.toLocaleString("en-US")
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
+const wall = (ms: number) =>
+  ms < 60_000
+    ? `${(ms / 1000).toFixed(1)} s`
+    : `${Math.floor(ms / 60_000)}m ${String(Math.round((ms % 60_000) / 1000)).padStart(2, "0")}s`
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const count = (text: string, q: string) => (q ? (text.match(new RegExp(escapeRe(q), "gi")) ?? []).length : 0)
+/** Text with every match of the (literal) query marked. */
+const Marked = (props: { text: string; q: string }) => {
+  const pieces = createMemo(() =>
+    props.q ? props.text.split(new RegExp(`(${escapeRe(props.q)})`, "gi")) : [props.text],
+  )
+  return (
+    <For each={pieces()} keyed={false}>
+      {(p, i) => (
+        <Show when={i % 2} fallback={p()}>
+          <mark>{p()}</mark>
+        </Show>
+      )}
+    </For>
+  )
+}
+/** A structured answer as key → value rows; nested values as JSON. */
+const KeyValues = (props: { of: Record<string, unknown> }) => (
+  <dl class="kv">
+    <For each={Object.entries(props.of)} keyed={([k]) => k}>
+      {(e) => (
+        <>
+          <dt>{e()[0]}</dt>
+          <dd>{typeof e()[1] === "string" ? (e()[1] as string) : JSON.stringify(e()[1], null, 2)}</dd>
+        </>
+      )}
+    </For>
+  </dl>
+)
+
+const TraceRow = (props: {
+  row: Row
+  left: number // the bar, as percent of the turn's wall time
+  width: number
+  dev: boolean
+  q: string
+  node: Id
+  open: boolean
+}) => {
+  const c = () => props.row.call
+  const regs = createMemo(() => (c() ? regions(c()!.msgs) : []))
+  const hit = (msgs: readonly Call["msgs"][number][], q: string) => msgs.reduce((n, m) => n + count(textOf(m), q), 0)
+  const hits = createMemo(() => (props.dev ? hit(c()?.msgs ?? [], props.q) : 0))
+  const [copied, setCopied] = createSignal(false)
+  const copy = () => {
+    const out = {
+      node: props.node,
+      stage: props.row.phase,
+      draft: props.row.draft ?? 1,
+      regions: regs().map((r) => ({ name: r.name, chars: r.chars, messages: r.msgs })),
+      answer: c()!.out,
+    }
+    void navigator.clipboard.writeText(JSON.stringify(out, null, 2)).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  const bad = () => props.row.status === "failed" || props.row.status === "stopped"
+  const label = () =>
+    props.row.status === "failed"
+      ? "failed → second draft"
+      : props.row.status === "skipped"
+        ? "no call"
+        : props.row.status
+  const n = (v: number | undefined) => (v === undefined ? "—" : fmt(v))
+  return (
+    <details
+      class={{ trow: true, skipped: !c(), bad: bad() }}
+      open={props.open || (props.q !== "" && hits() > 0) || undefined}
+    >
+      <summary>
+        <span class="stage">
+          <Next class="chev" aria-hidden="true" />
+          <span class="nm">{props.row.phase}</span>
+          <Show when={props.row.draft}>{(d) => <span class="dr">{d()}</span>}</Show>
+          <Show when={hits()}>{(h) => <span class="dr">{h()}</span>}</Show>
+        </span>
+        <span class="axis">
+          <span
+            class={{ bar: true, skip: !c() }}
+            style={c() ? { left: `${props.left}%`, width: `${props.width}%` } : { left: `${props.left}%` }}
+          />
+        </span>
+        <span class="num">{n(c()?.ms)}</span>
+        <span class="num">{n(c()?.usage.input)}</span>
+        <span class="num">{n(c()?.usage.output)}</span>
+        <span class="num">{n(c()?.usage.cacheRead)}</span>
+        <span class="num">{n(c()?.usage.cacheWrite)}</span>
+        <span class="status">{label()}</span>
+        <Show when={c()}>
+          {(k) => (
+            <span class="tok">
+              {fmt(k().ms)} ms · in {fmt(k().usage.input)} · out {fmt(k().usage.output)} · r {fmt(k().usage.cacheRead)}
+              {k().usage.cacheWrite ? ` · w ${fmt(k().usage.cacheWrite)}` : ""}
+            </span>
+          )}
+        </Show>
+      </summary>
+      <Show when={c()}>
+        {(k) => (
+          <div class="tbody">
+            <div class="bhead">
+              <span class="lbl">Request</span>
+              <span class="meta">
+                {regs().length} {regs().length === 1 ? "region" : "regions"} ·{" "}
+                {fmt(regs().reduce((t, r) => t + r.chars, 0))} chars
+              </span>
+              <Show when={props.dev && k().msgs.length > 0}>
+                <button class="cp" onClick={copy}>
+                  {copied() ? "Copied" : "Copy as JSON"}
+                </button>
+              </Show>
+            </div>
+            <Show
+              when={props.dev && k().msgs.length > 0}
+              fallback={<p class="hid">Request bodies hidden in Play mode</p>}
+            >
+              <For each={regs()} keyed={false}>
+                {(r) => (
+                  <details class="region" open={r().name !== "Head" || hit(r().msgs, props.q) > 0 || undefined}>
+                    <summary>
+                      <Next class="chev" aria-hidden="true" />
+                      <span class="rn">{r().name}</span>
+                      <span class="rs">{textOf(r().msgs[0]!).split("\n")[0]}</span>
+                      <span class="rt">
+                        {r().msgs.length} msg · {fmt(r().chars)} chars
+                      </span>
+                    </summary>
+                    <For each={r().msgs} keyed={false}>
+                      {(m) => (
+                        <div class="msg">
+                          <span class="role">{m().role}</span>
+                          <div class="txt">
+                            <Marked text={textOf(m())} q={props.q} />
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </details>
+                )}
+              </For>
+            </Show>
+            <div class="bhead answer">
+              <span class="lbl">Answer</span>
+              <span class="meta">{fmt(k().usage.output)} out</span>
+            </div>
+            <Show when={props.dev} fallback={<p class="hid">Hidden in Play mode</p>}>
+              <Show when={typeof k().out === "string"} fallback={<KeyValues of={k().out as Record<string, unknown>} />}>
+                <p class="prose">
+                  {k().out as string}
+                  <Show when={props.row.status === "stopped"}>
+                    <span class="bad"> ■</span>
+                  </Show>
+                </p>
+              </Show>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </details>
+  )
+}
+
+const Inspect = (props: { id: Id }) => {
+  const all = read(nodes)
+  const line = read(path)
+  const trace = read(calls)
+  const view = read(card)
+  const node = () => all().get(props.id)
+  const at = () => line().findIndex((x) => x.turn.id === props.id) // -1: a sibling off the reading line
+  const turnOf = (id: Id) => {
+    const i = line().findIndex((x) => x.turn.id === id)
+    return i >= 0 ? `turn ${i + 1}` : `#${id}`
+  }
+  const parent = () => {
+    const p = node()?.turn.parent
+    return p === null || p === undefined ? undefined : all().get(p)
+  }
+  const siblings = createMemo(() => (node() ? childrenOf(all(), node()!.turn.parent) : []))
+  const version = () => siblings().findIndex((s) => s.turn.id === props.id) + 1
+  const go = (d: number) => {
+    const x = line()[at() + d]
+    if (x) registry.set(inspecting, x.turn.id)
+  }
+  const mine = () => trace().get(props.id) ?? []
+  // the server's gate: without `inspect` no call carries a request body, and Dev has nothing to show
+  const inspectable = createMemo(() => [...trace().values()].some((l) => l.some((c) => c.msgs.length > 0)))
+  const [pick, setPick] = createSignal<boolean | null>(null)
+  const dev = () => pick() ?? inspectable()
+  const [tab, setTab] = createSignal<"trace" | "state">("trace")
+  const [q, setQ] = createSignal("")
+  const trows = createMemo(() => (node() ? rows(mine(), node()!.turn) : []))
+  const total = () => mine().reduce((t, c) => t + c.ms, 0)
+  const sums = createMemo(() => totals(trace().values()))
+  const fields = () => {
+    const r = view()?.rules
+    const x = node()
+    if (!r || !x) return []
+    const before = parent()?.state ?? Object.fromEntries(r.fields.map((f) => [f.path, f.initial]))
+    return r.fields.map((f) => ({
+      path: f.path,
+      label: f.label ?? f.path,
+      was: before[f.path],
+      now: x.state[f.path],
+      max: f.type === "int" && f.min !== undefined ? f.max : undefined,
+    }))
+  }
+  const shown = (v: unknown) => (typeof v === "number" && v < 0 ? `−${-v}` : String(v))
+  const must = () =>
+    node()?.turn.brief.must.map((id) => ({ id, met: node()!.turn.fired.some((d) => d.id === id) })) ?? []
+  onSettled(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === "INPUT" || tag === "TEXTAREA") return
+      if (e.key === "[") go(-1)
+      else if (e.key === "]") go(1)
+      else if (e.key === "Escape") registry.set(inspecting, null)
+      else return
+      e.preventDefault()
+    }
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  })
+  return (
+    <div class="inspect" data-tab={tab()}>
+      <header class="top">
+        <button class="icon" aria-label="Back to story" onClick={() => registry.set(inspecting, null)}>
+          <Back />
+        </button>
+        <h1>{view()?.title}</h1>
+        <span class="nodenav">
+          <button class="icon" aria-label="Previous node" disabled={at() <= 0} onClick={() => go(-1)}>
+            <Prev />
+          </button>
+          <span class="n">
+            <b>{at() >= 0 ? `Turn ${at() + 1}` : `#${props.id}`}</b>
+            <Show when={siblings().length > 1}>
+              {" "}
+              · {version()}/{siblings().length}
+            </Show>
+          </span>
+          <button
+            class="icon"
+            aria-label="Next node"
+            disabled={at() < 0 || at() === line().length - 1}
+            onClick={() => go(1)}
+          >
+            <Next />
+          </button>
+        </span>
+        <span class="seg" role="group" aria-label="Mode">
+          <button aria-pressed={dev() ? "true" : "false"} disabled={!inspectable()} onClick={() => setPick(true)}>
+            Dev
+          </button>
+          <button aria-pressed={dev() ? "false" : "true"} onClick={() => setPick(false)}>
+            Play
+          </button>
+        </span>
+      </header>
+      <div class="totals">
+        <For
+          each={[
+            ["Requests", fmt(sums().requests)],
+            ["Input", compact.format(sums().input)],
+            ["Output", compact.format(sums().output)],
+            ["Cache read", compact.format(sums().cacheRead)],
+            ["Cache write", compact.format(sums().cacheWrite)],
+            ["Wall", wall(sums().ms)],
+          ]}
+          keyed={false}
+        >
+          {(t) => (
+            <span class="tot">
+              <span class="lbl">{t()[0]}</span>
+              <span class="v">{t()[1]}</span>
+            </span>
+          )}
+        </For>
+      </div>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected={tab() === "trace" ? "true" : "false"} onClick={() => setTab("trace")}>
+          Trace
+        </button>
+        <button role="tab" aria-selected={tab() === "state" ? "true" : "false"} onClick={() => setTab("state")}>
+          State
+        </button>
+      </div>
+      <Show when={node()} fallback={<p class="hid">No such node</p>}>
+        {(x) => (
+          <div class="cols">
+            <section class="pane trace">
+              <div class="sechead">
+                <span class="lbl">Trace</span>
+                <span class="meta">
+                  {mine().length} calls · {(total() / 1000).toFixed(1)} s
+                </span>
+                <Show when={dev()}>
+                  <label class="search">
+                    <Clue aria-hidden="true" />
+                    <input
+                      type="search"
+                      aria-label="Search request text"
+                      autocomplete="off"
+                      value={q()}
+                      onInput={(e) => setQ(e.currentTarget.value.trim())}
+                    />
+                  </label>
+                </Show>
+              </div>
+              <div class="thead">
+                <span>Stage</span>
+                <span />
+                <span class="num">ms</span>
+                <span class="num">in</span>
+                <span class="num">out</span>
+                <span class="num">cache r</span>
+                <span class="num">cache w</span>
+                <span>Status</span>
+              </div>
+              <For each={trows()} keyed={false}>
+                {(r, i) => {
+                  const pct = (ms: number) => (total() ? (ms / total()) * 100 : 0)
+                  const before = () =>
+                    trows()
+                      .slice(0, i)
+                      .reduce((t, y) => t + (y.call?.ms ?? 0), 0)
+                  const lastNarrate = () => trows().findLastIndex((y) => y.phase === "narrate" && y.call)
+                  return (
+                    <>
+                      <Show when={i > 0 && trows()[i - 1]!.status === "failed"}>
+                        <div class="tgroup">
+                          <Swipe aria-hidden="true" />
+                          second draft
+                        </div>
+                      </Show>
+                      <TraceRow
+                        row={r()}
+                        left={pct(before())}
+                        width={pct(r().call?.ms ?? 0)}
+                        dev={dev()}
+                        q={q()}
+                        node={props.id}
+                        open={i === lastNarrate()}
+                      />
+                    </>
+                  )
+                }}
+              </For>
+            </section>
+            <section class="pane state">
+              <div class="sechead">
+                <span class="lbl">State</span>
+                <span class="meta">
+                  <Show when={parent()} fallback="after this node">
+                    {(p) => `vs ${turnOf(p().turn.id)}`}
+                  </Show>
+                </span>
+              </div>
+              <div class="fields">
+                <For each={fields()} keyed={(f) => f.path}>
+                  {(f) => (
+                    <div class={{ unch: f().was === f().now }}>
+                      <span class="k">{f().path}</span>
+                      <span class="lb">{f().label}</span>
+                      <span class="d">
+                        {shown(f().was)}
+                        <span class="ar">→</span>
+                        <b>{shown(f().now)}</b>
+                        <Show when={f().max !== undefined}>
+                          <span class="mx"> /{f().max}</span>
+                        </Show>
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </div>
+              <Show when={x().checks.length}>
+                <div class="sub">Decide</div>
+                <For each={x().checks} keyed={false}>
+                  {(c) => (
+                    <p class="roll">
+                      {c().action}
+                      <span class="ar">·</span>roll {c().roll.toFixed(2)} vs {c().chance.toFixed(2)}
+                      <span class="ar">→</span>
+                      <span class={{ ok: c().hit, bad: !c().hit }}>{c().hit ? "hit" : "miss"}</span>
+                    </p>
+                  )}
+                </For>
+              </Show>
+              <div class="sub">Events</div>
+              <Show when={x().events.length} fallback={<p class="hid">None this turn</p>}>
+                <p class="line">
+                  <For each={x().events} keyed={false}>
+                    {(e) => <span class="chip">{e()}</span>}
+                  </For>
+                </p>
+              </Show>
+              <div class="sub">Lore opened</div>
+              <Show when={x().delivered.length} fallback={<p class="hid">None this turn</p>}>
+                <For each={x().delivered} keyed={false}>
+                  {(d) => (
+                    <details class="lore">
+                      <summary>
+                        <Next class="chev" aria-hidden="true" />
+                        <span class="k">
+                          {d().id}
+                          <i>layer {d().layer}</i>
+                        </span>
+                      </summary>
+                      <p class="lb">{d().text}</p>
+                    </details>
+                  )}
+                </For>
+              </Show>
+              <div class="sub">Untold</div>
+              <Show when={x().readable.length} fallback={<p class="hid">Nothing left to tell</p>}>
+                <For each={x().readable} keyed={(r) => r.id}>
+                  {(r) => (
+                    <p class="untold">
+                      <span class="k">{r().id}</span>
+                      <span class="hk">{r().hook}</span>
+                    </p>
+                  )}
+                </For>
+              </Show>
+              <div class="sub">Brief</div>
+              <Show when={dev()} fallback={<p class="hid">Hidden in Play mode</p>}>
+                <For each={must()} keyed={(m) => m.id}>
+                  {(m) => (
+                    <p class="must">
+                      <span>
+                        must <span class="dim">·</span> {m().id}
+                      </span>
+                      <span class={{ ok: m().met, bad: !m().met }}>{m().met ? "met" : "missed"}</span>
+                    </p>
+                  )}
+                </For>
+                <p class="must">
+                  <span>
+                    may <span class="dim">·</span>{" "}
+                    <Show when={x().turn.brief.may.length} fallback={<span class="dim">none</span>}>
+                      <For each={x().turn.brief.may} keyed={false}>
+                        {(id) => <span class="chip">{id()}</span>}
+                      </For>
+                    </Show>
+                  </span>
+                </p>
+                <Show when={x().turn.brief.tone}>
+                  {(t) => (
+                    <p class="must">
+                      <span>
+                        tone <span class="dim">·</span> {t()}
+                      </span>
+                    </p>
+                  )}
+                </Show>
+                <Show when={x().turn.violated.length}>
+                  <div class="sub">Violations</div>
+                  <For each={x().turn.violated} keyed={false}>
+                    {(v) => <p class="vio">{v()}</p>}
+                  </For>
+                </Show>
+              </Show>
+              <div class="sechead products">
+                <span class="lbl">Products</span>
+              </div>
+              <For each={Object.entries(x().turn.products)} keyed={([k]) => k}>
+                {(e) => (
+                  <>
+                    <div class="sub">{e()[0]}</div>
+                    <Show
+                      when={Array.isArray(e()[1]) && (e()[1] as unknown[]).every((y) => typeof y === "string")}
+                      fallback={<KeyValues of={{ [e()[0]]: e()[1] }} />}
+                    >
+                      <Show when={(e()[1] as string[]).length} fallback={<p class="hid">None</p>}>
+                        <For each={e()[1] as string[]} keyed={false}>
+                          {(t, i) => (
+                            <p class="item">
+                              <span class="idx">{i + 1}</span>
+                              {t()}
+                            </p>
+                          )}
+                        </For>
+                      </Show>
+                    </Show>
+                  </>
+                )}
+              </For>
+              <Show when={Object.keys(x().turn.answers).length}>
+                <div class="sub">Answers</div>
+                <KeyValues of={x().turn.answers} />
+              </Show>
+            </section>
+          </div>
+        )}
+      </Show>
+    </div>
   )
 }
 
@@ -1001,11 +1559,19 @@ const Glance = () => {
   )
 }
 
-export const App = () => (
-  <div class="canvas">
-    <Topbar />
-    <Side />
-    <Reader />
-    <Glance />
-  </div>
-)
+export const App = () => {
+  const id = read(inspecting)
+  return (
+    <>
+      <div class="canvas">
+        <Topbar />
+        <Side />
+        <Reader />
+        <Glance />
+      </div>
+      <Show when={id() !== null}>
+        <Inspect id={id()!} />
+      </Show>
+    </>
+  )
+}

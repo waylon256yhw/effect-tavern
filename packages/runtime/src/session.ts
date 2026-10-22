@@ -94,7 +94,7 @@ export interface Node {
 export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part }
-  | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage }
+  | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number }
   | { kind: "node"; node: Node }
 export type Events = Stream.Stream<Event, ModelError>
 /** A stop signal: completes when the player halts the prose (a Deferred's await on the wire). Only narrate listens. */
@@ -380,8 +380,9 @@ export const makeSession = ({
   ) =>
     Effect.gen(function* () {
       yield* emit({ kind: "stage", phase })
+      const t0 = Date.now()
       const r = yield* object(M, schema, msgs, { name: phase, effort: "off", temperature: 0, maxOutputTokens })
-      yield* emit({ kind: "call", phase, msgs, out: r.value, usage: r.usage })
+      yield* emit({ kind: "call", phase, msgs, out: r.value, usage: r.usage, ms: Date.now() - t0 })
       return r.value
     })
 
@@ -565,6 +566,7 @@ export const makeSession = ({
       const write = (msgs: Message[]) =>
         Effect.gen(function* () {
           yield* emit({ kind: "stage", phase: "narrate" })
+          const t0 = Date.now()
           const { parts, reply } = yield* streamed(M, msgs, opts)
           let text = ""
           let finished = false
@@ -584,7 +586,7 @@ export const makeSession = ({
                 finishReason: "stop" as const,
               }
             : yield* reply
-          yield* emit({ kind: "call", phase: "narrate", msgs, out: r.text, usage: r.usage })
+          yield* emit({ kind: "call", phase: "narrate", msgs, out: r.text, usage: r.usage, ms: Date.now() - t0 })
           return r
         })
       const narrate = (correction?: string) =>

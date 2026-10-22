@@ -60,6 +60,13 @@ const run = async (inspect: boolean) => {
     const node = (evs.at(-1)!.data as Extract<Event, { kind: "node" }>).node
     assert.equal(node.turn.input.text, "hi")
     assert.deepEqual(node, wired(session.node(node.turn.id))) // the wire carries the projection whole
+    // the trace stays on the server, by node, stripped the same way as the stream; every call carries its duration
+    const trace = (await (await fetch(`${base}/calls`)).json()) as Record<string, Extract<Event, { kind: "call" }>[]>
+    assert.deepEqual(trace[node.turn.id], wired(calls))
+    assert.deepEqual(
+      calls.map((c) => typeof c.ms === "number" && c.ms >= 0),
+      [true, true],
+    )
 
     const picked = sse(await (await post({ kind: "pick", node: node.turn.id, option: 1 })).text())
     assert.equal((picked.at(-1)!.data as Extract<Event, { kind: "node" }>).node.turn.input.text, "B")

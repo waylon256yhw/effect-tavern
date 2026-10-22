@@ -1039,4 +1039,592 @@
       padding: var(--space-4) var(--space-6) var(--space-5);
     }
   }
+
+  /* ───────── Inspect: a tool page over the reader (the user's Artifact draft, on the tokens) ─────────
+     Header, the session's totals, then Trace and State; a phone shows them as two tabs and the page scrolls, from
+     64rem they are two panes scrolling on their own. Dense: UI at footnote size, numbers tabular and monospace, ink
+     bars on an alpha track, green for met / hit, red for failed / stopped, nothing else colored. */
+  .inspect {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background: var(--surface-1);
+    font-size: var(--text-footnote);
+    line-height: var(--leading-body);
+    font-variant-numeric: tabular-nums;
+  }
+  .inspect .top {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: calc(var(--topbar) + var(--safe-top));
+    padding: var(--safe-top) var(--space-4) 0;
+    background: var(--surface-1);
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .top h1 {
+    margin: 0;
+    min-width: 0;
+    font-size: var(--text-heading);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inspect .nodenav {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: auto;
+    font-family: var(--font-mono);
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .inspect .nodenav b {
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .inspect .seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+  }
+  .inspect .seg button {
+    padding: 2px var(--space-2);
+    border: 0;
+    border-radius: calc(var(--radius) - 2px);
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+  }
+  .inspect .seg button[aria-pressed="true"] {
+    background: var(--primary);
+    color: var(--primary-ink);
+  }
+  .inspect .seg button:disabled {
+    color: var(--ink-3);
+  }
+  .inspect .lbl {
+    font-size: var(--text-caption);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .inspect .totals {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-5);
+    padding: var(--space-2) var(--space-4);
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .tot {
+    display: flex;
+    flex-direction: column;
+  }
+  .inspect .tot .v {
+    font-family: var(--font-mono);
+  }
+  .inspect .tabs {
+    position: sticky;
+    top: calc(var(--topbar) + var(--safe-top));
+    z-index: 1;
+    display: flex;
+    gap: var(--space-5);
+    padding: 0 var(--space-4);
+    background: var(--surface-1);
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .tabs button {
+    padding: var(--space-2) 0;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--ink-3);
+    font: inherit;
+    font-size: var(--text-body);
+  }
+  .inspect .tabs button[aria-selected="true"] {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+  }
+  .inspect .pane {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+  .inspect[data-tab="trace"] .pane.state,
+  .inspect[data-tab="state"] .pane.trace {
+    display: none;
+  }
+  .inspect .sechead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    min-height: 28px;
+    margin-bottom: var(--space-1);
+  }
+  .inspect .sechead.products {
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+  }
+  .inspect .meta {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .inspect .search {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-2);
+    color: var(--ink-3);
+    box-shadow: 0 var(--hairline) 0 var(--line-strong);
+  }
+  .inspect .search:focus-within {
+    color: var(--ink-2);
+    box-shadow: 0 var(--hairline) 0 var(--ink);
+  }
+  .inspect .search svg {
+    width: 14px;
+    height: 14px;
+  }
+  .inspect .search input {
+    width: 7rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-family: var(--font-mono);
+    outline: 0;
+  }
+  .inspect mark {
+    background: var(--alpha-3);
+    color: inherit;
+    border-radius: 2px;
+  }
+  .inspect .dim,
+  .inspect .hid {
+    color: var(--ink-3);
+  }
+  .inspect .ok {
+    color: var(--ok);
+  }
+  .inspect .bad {
+    color: var(--danger);
+  }
+  .inspect .chip {
+    height: auto;
+    padding: 0 var(--space-2);
+    font-family: var(--font-mono);
+    font-size: inherit;
+    line-height: 1.6;
+  }
+  .inspect .chev {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    color: var(--ink-3);
+    transition: rotate var(--dur-2) var(--ease);
+  }
+  .inspect details[open] > summary .chev {
+    rotate: 90deg;
+  }
+  .inspect summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .inspect summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* the trace: one grid for the header and every row; a phone keeps the stage, the bar and the status */
+  .inspect .thead,
+  .inspect .trow > summary {
+    display: grid;
+    grid-template-columns: 6rem minmax(5rem, 1fr) 3.5rem 3.5rem 3rem 3.75rem 3.75rem 9rem;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .inspect .thead {
+    height: 24px;
+    color: var(--ink-3);
+    font-size: var(--text-caption);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .num {
+    font-family: var(--font-mono);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .inspect .thead .num {
+    font-family: inherit;
+  }
+  .inspect .trow {
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .trow > summary {
+    min-height: 38px;
+    padding: var(--space-1) 0;
+  }
+  .inspect .trow > summary:hover,
+  .inspect .trow[open] > summary {
+    background: var(--alpha-1);
+  }
+  .inspect .trow.skipped {
+    color: var(--ink-3);
+  }
+  .inspect .stage {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .inspect .stage .nm {
+    font-weight: 500;
+  }
+  .inspect .dr {
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    color: var(--ink-3);
+  }
+  .inspect .axis {
+    position: relative;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--alpha-1);
+  }
+  .inspect .bar {
+    position: absolute;
+    top: 4px;
+    height: 8px;
+    min-width: 2px;
+    border-radius: 2px;
+    background: var(--ink);
+  }
+  .inspect .bar.skip {
+    top: 5px;
+    height: 6px;
+    width: 10px;
+    background: none;
+    box-shadow: inset 0 0 0 1px var(--ink-3);
+    opacity: 0.6;
+  }
+  .inspect .trow.bad .bar {
+    background: var(--danger);
+  }
+  .inspect .status {
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .inspect .trow.bad .status {
+    color: var(--danger);
+  }
+  .inspect .tok {
+    display: none;
+  }
+  .inspect .tgroup {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 24px;
+    padding-left: var(--space-4);
+    color: var(--ink-2);
+    font-size: var(--text-caption);
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .tgroup svg {
+    width: 12px;
+    height: 12px;
+    color: var(--ink-3);
+  }
+  .inspect .tbody {
+    padding: var(--space-2) var(--space-3) var(--space-4) calc(var(--space-3) + 14px);
+    background: var(--alpha-1);
+  }
+  .inspect .bhead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    height: 28px;
+  }
+  .inspect .bhead.answer {
+    margin-top: var(--space-3);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+  }
+  .inspect .cp {
+    padding: 2px var(--space-2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+    color: var(--ink-2);
+    font: inherit;
+  }
+  .inspect .cp:hover {
+    color: var(--ink);
+    background: var(--ghost-hover);
+  }
+  .inspect .region {
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+  }
+  .inspect .region > summary {
+    display: grid;
+    grid-template-columns: 14px 4.5rem minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    align-items: center;
+    height: 30px;
+  }
+  .inspect .rn {
+    font-weight: 500;
+  }
+  .inspect .rs {
+    min-width: 0;
+    color: var(--ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inspect .rt {
+    font-family: var(--font-mono);
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .inspect .msg {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-1) 0 var(--space-2) calc(14px + var(--space-2));
+  }
+  .inspect .msg + .msg {
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+  }
+  .inspect .role {
+    padding-top: 2px;
+    color: var(--ink-3);
+    font-size: var(--text-caption);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .inspect .txt {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.55;
+  }
+  .inspect .kv {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-1) var(--space-4);
+    margin: var(--space-1) 0 0;
+    font-family: var(--font-mono);
+  }
+  .inspect .kv dt {
+    color: var(--ink-2);
+  }
+  .inspect .kv dd {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .inspect .prose {
+    max-width: 62ch;
+    margin-top: var(--space-1);
+    font-size: var(--text-body);
+    line-height: var(--leading-prose);
+    white-space: pre-wrap;
+  }
+
+  /* the state: fields as a three-column table, then small-caps groups */
+  .inspect .fields > div {
+    display: grid;
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+    gap: 0 var(--space-4);
+    padding: var(--space-1) 0;
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .fields .k,
+  .inspect .fields .d,
+  .inspect .lore .k,
+  .inspect .untold .k,
+  .inspect .roll {
+    font-family: var(--font-mono);
+  }
+  .inspect .fields .lb {
+    color: var(--ink-2);
+  }
+  .inspect .fields .d {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .inspect .fields .d b {
+    font-weight: 600;
+  }
+  .inspect .fields .unch {
+    color: var(--ink-3);
+  }
+  .inspect .fields .unch b {
+    font-weight: inherit;
+  }
+  .inspect .mx,
+  .inspect .ar {
+    color: var(--ink-3);
+  }
+  .inspect .ar {
+    padding: 0 var(--space-1);
+  }
+  .inspect .sub {
+    margin: var(--space-4) 0 var(--space-1);
+    color: var(--ink-3);
+    font-size: var(--text-caption);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .inspect .line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+    padding: var(--space-1) 0;
+  }
+  .inspect .lore,
+  .inspect .untold,
+  .inspect .must,
+  .inspect .vio,
+  .inspect .item {
+    padding: var(--space-1) 0;
+    box-shadow: 0 var(--hairline) 0 var(--line);
+  }
+  .inspect .lore > summary,
+  .inspect .untold {
+    display: grid;
+    grid-template-columns: 14px max-content minmax(0, 1fr);
+    gap: var(--space-2);
+    align-items: center;
+    min-height: 24px;
+  }
+  .inspect .untold {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+  .inspect .lore .k,
+  .inspect .untold .k {
+    color: var(--ink-2);
+  }
+  .inspect .lore .k i {
+    margin-left: var(--space-1);
+    font-style: normal;
+    color: var(--ink-3);
+  }
+  .inspect .lore .lb {
+    max-width: 60ch;
+    padding: 0 0 var(--space-2) calc(14px + var(--space-2));
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+  .inspect .must {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .inspect .vio {
+    color: var(--danger);
+  }
+  .inspect .item .idx {
+    margin-right: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    color: var(--ink-3);
+  }
+
+  /* a phone: stage, bar and status; the numbers fold into one line under the bar */
+  @media (max-width: 47.99rem) {
+    .inspect .thead {
+      display: none;
+    }
+    .inspect .trow > summary {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-auto-flow: dense; /* the status back up beside the stage, past the full-width bar */
+      row-gap: var(--space-1);
+      padding: var(--space-2) 0;
+    }
+    .inspect .trow > summary .axis,
+    .inspect .trow > summary .tok {
+      grid-column: 1 / -1;
+    }
+    .inspect .trow > summary .num {
+      display: none;
+    }
+    .inspect .tok {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .inspect .msg {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+    }
+    .inspect .rs {
+      display: none;
+    }
+  }
+  /* desktop: two panes, trace wider, each scrolling on its own */
+  @media (min-width: 64rem) {
+    .inspect {
+      overflow: hidden;
+    }
+    .inspect .top,
+    .inspect .totals,
+    .inspect .pane {
+      padding-inline: var(--space-5);
+    }
+    .inspect .tabs {
+      display: none;
+    }
+    .inspect .cols {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    }
+    .inspect .pane {
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .inspect[data-tab] .pane.state,
+    .inspect[data-tab] .pane.trace {
+      display: block;
+    }
+    .inspect .pane.state {
+      box-shadow: calc(-1 * var(--hairline)) 0 0 var(--line);
+    }
+    /* the column header sticks at the pane's top edge: the pane's own padding moves up into the heading row */
+    .inspect .pane.trace {
+      padding-top: 0;
+    }
+    .inspect .pane.trace .sechead {
+      padding-top: var(--space-4);
+    }
+    .inspect .thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface-1);
+    }
+  }
 }
