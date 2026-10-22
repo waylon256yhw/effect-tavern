@@ -62,6 +62,7 @@ import {
   textOf as proseOf,
   type Brief,
   type Input,
+  type Store,
   type Turn as TurnOf,
 } from "./journal.ts"
 import { key, makeLore, type Disclosure } from "./lore.ts"
@@ -219,7 +220,17 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
     ),
   )
 
-export const makeSession = ({ card, player, model: M }: { card: Card; player: Player; model: SessionModel }) => {
+export const makeSession = ({
+  card,
+  player,
+  model: M,
+  store,
+}: {
+  card: Card
+  player: Player
+  model: SessionModel
+  store?: Store<Beat> // the journal's persistence; none = in memory
+}) => {
   const rpg = makeCard(card.rules)
   // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
   const gate = (id: string, offer: Cond) => ({
@@ -236,7 +247,7 @@ export const makeSession = ({ card, player, model: M }: { card: Card; player: Pl
     while (n < cs.length && holds(cs[n]!, s)) n++
     return n
   }
-  const journal = makeJournal<Beat>()
+  const journal = makeJournal<Beat>(store)
   const { chain } = journal
   /** What a disclosure says: a lore layer, or one item of a recall product stored on a node (`<product>@<node>#<i>`). */
   const textOf = (d: Disclosure): string => {

@@ -255,4 +255,19 @@ const program = Effect.gen(function* () {
 })
 
 await Effect.runPromise(program)
+
+// ───────── Store: a journal reloaded from what it wrote is the same tree ─────────
+{
+  let kept: readonly Turn[] = []
+  const store = { read: () => kept, write: (nodes: readonly Turn[]) => void (kept = nodes) }
+  const j = makeJournal<Beat>(store)
+  const a = j.save({ ...journal.get(0), parent: null })
+  const b = j.save({ ...journal.get(1), parent: a.id })
+  j.amend(b.id, { violated: ["x"] })
+  assert.equal(kept.length, 2)
+  const back = makeJournal<Beat>(store)
+  assert.deepEqual(back.chain(b.id), j.chain(b.id))
+  assert.deepEqual(back.get(b.id).violated, ["x"])
+  assert.equal(back.save({ ...journal.get(0), parent: null }).id, 2) // ids continue past what was read
+}
 console.log("ok")

@@ -71,3 +71,12 @@ Tooling:
   or `POST /__solid/diagnostics` on the dev server with `{"method":"begin"}` ... `{"method":"end"}`.
 - `vp check` runs `eslint-plugin-solid/configs/v2` through oxlint (root `vite.config.ts`).
 - Docs: https://v2.solidjs.com/llms.txt; append `.md` to any page URL for its Markdown.
+
+## Dev
+
+`vp run dev` at the root (`vp dev` in packages/client) is the whole stack: the session (packages/server/src/dev.ts) runs
+inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
+effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the journal lives in
+`.dev/<card>.json` (gitignored; delete it to start the story over). The user starts and stops `vp dev` in their own
+terminal; an agent uses it and never starts, restarts or kills it. `node src/main.ts` in packages/server serves the same
+session on its own port.

@@ -10,7 +10,7 @@
 // gets phase, answer and usage only.
 import { decodeAction, perform, type Event, type Session } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Deferred, Effect, Fiber, Stream } from "effect"
-import { createServer, type IncomingMessage } from "node:http"
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
   new Promise<string>((resolve, reject) => {
@@ -31,8 +31,9 @@ const reason = (c: Cause.Cause<unknown>) => {
   return e instanceof Error ? e.message : String(e)
 }
 
-export const serve = (session: Session, { inspect = false } = {}) =>
-  createServer(async (req, res) => {
+export const handle =
+  (session: Session, { inspect = false } = {}) =>
+  async (req: IncomingMessage, res: ServerResponse) => {
     const json = (status: number, v: unknown) => {
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
@@ -79,4 +80,5 @@ export const serve = (session: Session, { inspect = false } = {}) =>
       if (narrating) Effect.runSync(Deferred.succeed(stop, undefined))
       else Effect.runFork(Fiber.interrupt(fiber))
     })
-  })
+  }
+export const serve = (session: Session, opts?: { inspect?: boolean }) => createServer(handle(session, opts))

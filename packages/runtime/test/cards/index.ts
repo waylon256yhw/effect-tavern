@@ -14,8 +14,14 @@ export const player: Player = {
   forCard: {},
 }
 
-export const names = ["wuxia", "banxing", "ri", "yandao"] as const
-export const loadCard = async (name: string): Promise<Card> => {
-  if (!(names as readonly string[]).includes(name)) throw new Error(`unknown card ${name}`)
-  return name === "wuxia" ? full : ((await import(`./${name}.ts`)) as { load: () => Card }).load()
+const cards: Record<string, () => Promise<Card>> = {
+  wuxia: async () => full,
+  banxing: async () => (await import("./banxing.ts")).load(),
+  ri: async () => (await import("./ri.ts")).load(),
+  yandao: async () => (await import("./yandao.ts")).load(),
+}
+export const loadCard = (name: string): Promise<Card> => {
+  const load = cards[name]
+  if (!load) throw new Error(`unknown card ${name}`)
+  return load()
 }

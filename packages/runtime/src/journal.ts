@@ -33,14 +33,22 @@ export interface Turn<B> {
 /** The notes product: the list of facts this turn established, the compression source. */
 export const notesOf = <B>(t: Turn<B>): readonly string[] => (t.products.notes as readonly string[] | undefined) ?? []
 
-export const makeJournal = <B>() => {
-  const nodes = new Map<number, Turn<B>>()
+/** Where a journal's nodes outlive the process: read once at start, every save and amend writes the whole list back. */
+export interface Store<B> {
+  read: () => readonly Turn<B>[]
+  write: (nodes: readonly Turn<B>[]) => void
+}
+export const makeJournal = <B>(store?: Store<B>) => {
+  const nodes = new Map<number, Turn<B>>((store?.read() ?? []).map((t) => [t.id, t]))
+  const keep = (t: Turn<B>): Turn<B> => {
+    nodes.set(t.id, t)
+    store?.write([...nodes.values()])
+    return t
+  }
   return {
     save: (t: Omit<Turn<B>, "id">): Turn<B> => {
       if (t.parent !== null && !nodes.has(t.parent)) throw new Error(`no node ${t.parent}`) // a cycle otherwise
-      const node = { ...t, id: nodes.size }
-      nodes.set(node.id, node)
-      return node
+      return keep({ ...t, id: nodes.size })
     },
     get: (id: number): Turn<B> => {
       const t = nodes.get(id)
@@ -48,11 +56,8 @@ export const makeJournal = <B>() => {
       return t
     },
     /** A player action on a node (demand, pin, set): the node is replaced, its id and place in the tree kept. */
-    amend: (id: number, patch: Partial<Omit<Turn<B>, "id" | "parent">>): Turn<B> => {
-      const node = { ...nodes.get(id)!, ...patch }
-      nodes.set(id, node)
-      return node
-    },
+    amend: (id: number, patch: Partial<Omit<Turn<B>, "id" | "parent">>): Turn<B> =>
+      keep({ ...nodes.get(id)!, ...patch }),
     chain: (id: number | null): Turn<B>[] => {
       if (id !== null && !nodes.has(id)) throw new Error(`no node ${id}`) // a missing parent is the caller's bug, not a root
       const out: Turn<B>[] = []
