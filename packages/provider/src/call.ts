@@ -22,6 +22,7 @@ export interface CallOptions {
   /** Stage name; goes out as the schema name on `object` and is what a fake or a trace sees. */
   name?: string
   maxOutputTokens?: number
+  /** Sampling temperature; sent to openai-compatible and gemini only (Claude has no sampling parameters). */
   temperature?: number
   effort?: Effort
   /** Merged under the model's own provider key; use for anything the connection config does not name. */
@@ -82,7 +83,9 @@ const wire = (format: Format, messages: readonly Message[]): Message[] =>
 const settings = (format: Format, o: CallOptions) => ({
   allowSystemInMessages: true, // the head and mid-history lore are system messages in the message list; ai 7 refuses them by default
   maxOutputTokens: o.maxOutputTokens,
-  temperature: o.temperature,
+  // Claude has no sampling knobs any more: current models ignore temperature (ai-sdk warns and drops it) and the
+  // 2026-10-21 API version rejects it outright; the other two formats still take it.
+  temperature: format === "anthropic" ? undefined : o.temperature,
   providerOptions: { ...(o.effort && effortOptions(format, o.effort)), ...o.providerOptions } as never,
 })
 
