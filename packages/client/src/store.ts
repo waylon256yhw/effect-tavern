@@ -1,6 +1,7 @@
 // The client's state as atoms, fed by the wire's events. The log tree lives in `nodes`; which sibling the reader is on
 // is `active` (parent → child), client state the protocol does not keep; the path is derived by walking it from the
-// root. `draft` is the node being written: its prose grows by `delta`, a second draft (check failed) starts it over.
+// root. `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over and
+// keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
@@ -12,6 +13,7 @@ export interface Draft {
   parent: Id | null
   input: { text: string; note?: string }
   text: string
+  prev?: string // the discarded first draft, shown greyed under the rewrite
 }
 export type Wire = Event | { kind: "error"; message: string }
 
@@ -32,6 +34,7 @@ export interface CardView {
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
 export const compose = Atom.make("") // the composer's text; an Options row writes here and never sends
+export const aside = Atom.make(false) // this one send goes to the narrator (participant mode's deviation); clears after the send
 export const stage = Atom.make<Phase | null>(null)
 export const error = Atom.make<string | null>(null)
 
@@ -82,8 +85,8 @@ export const apply = (e: Wire): void => {
   switch (e.kind) {
     case "stage":
       registry.set(stage, e.phase)
-      // Each draft starts over: a narrate after check is the rewrite, the first one is gone.
-      if (e.phase === "narrate") registry.update(draft, (d) => (d ? { ...d, text: "" } : d))
+      // Each draft starts over: a narrate after check is the rewrite, the first one greys under it.
+      if (e.phase === "narrate") registry.update(draft, (d) => (d ? { ...d, text: "", prev: d.text || d.prev } : d))
       return
     case "delta":
       if (e.part.type === "text-delta") {
@@ -99,10 +102,18 @@ export const apply = (e: Wire): void => {
       return
     case "error":
       registry.set(error, e.message)
-      registry.set(draft, null)
       registry.set(stage, null)
+      withdraw()
       return
   }
+}
+
+/** The turn did not become a node: its line goes back into the box (unless the reader has typed since). */
+export const withdraw = (): void => {
+  const d = registry.get(draft)
+  if (!d || registry.get(compose)) return
+  registry.set(compose, d.input.text || d.input.note || "")
+  registry.set(aside, !!d.input.note)
 }
 
 export const load = (all: readonly Node[]): void => {

@@ -33,6 +33,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden; /* dust in flight (dust.ts) must not raise a horizontal scrollbar */
     container-type: size;
     /* a thin thumb at the column's edge, only while the pointer is over it (the mask fades its ends) */
     scrollbar-width: thin;
@@ -89,9 +90,73 @@
       opacity: 0;
     }
   }
+  /* a rewrite: the first draft greys where it lies and goes to dust (dust.ts draws it on a canvas over the block),
+     the second is written over its place from the top, the block as tall as the taller; a failed turn is the same grey
+     ghost, kept. The dimming is Telegram's inactive alpha, in ink-3 */
+  .drafts {
+    display: grid;
+    position: relative;
+  }
+  .drafts > * {
+    grid-area: 1 / 1;
+  }
+  .drafts .now {
+    align-self: start;
+    background: var(--surface-1);
+  }
+  .drafts .prev,
+  .dead .now {
+    color: var(--ink-3);
+    transition: color var(--dur-3) var(--ease);
+  }
+  /* the Record slot waiting for the turn to settle: three dots in the pill (Claude Desktop's quiet dots) */
+  .dots {
+    display: inline-flex;
+    gap: 3.5px;
+    height: var(--icon-sm);
+    align-items: center;
+  }
+  .dots span {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0;
+    animation: dot 1.9s var(--ease-pulse) infinite;
+  }
+  .dots span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .dots span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes dot {
+    0%,
+    8% {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    22% {
+      opacity: 1;
+      transform: translateY(-2.5px);
+    }
+    36%,
+    70% {
+      opacity: 1;
+      transform: none;
+    }
+    90%,
+    100% {
+      opacity: 0;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
-    .cursor {
+    .cursor,
+    .dots span {
       animation: none;
+    }
+    .dots span {
+      opacity: 1;
     }
   }
   .latest {
@@ -183,8 +248,23 @@
     font-size: var(--text-footnote);
     color: var(--ink-3);
   }
+  /* a failed turn: Cherry Studio's error card, the accent on its left edge, the message in body size */
   .error {
+    display: flex;
+    gap: var(--space-2);
+    padding: 10px 14px;
+    border-left: 3px solid var(--danger);
+    background: var(--alpha-1);
     font-size: var(--text-body);
+    line-height: 1.5;
+    color: var(--ink-2);
+    text-align: left;
+  }
+  .error svg {
+    flex: none;
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+    margin-top: 2px;
     color: var(--danger);
   }
 

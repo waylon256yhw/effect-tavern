@@ -31,11 +31,14 @@ import {
   Status,
   Stop,
   Swipe,
+  Warning,
 } from "./icons.tsx"
+import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
 import { heading, record, scenes, status, type Element } from "./record.ts"
 import {
   active,
+  aside,
   card,
   childrenOf,
   compose,
@@ -49,6 +52,7 @@ import {
   prose,
   registry,
   stage,
+  withdraw,
   type Id,
 } from "./store.ts"
 import { fetchCard, fetchNodes, send } from "./wire.ts"
@@ -162,22 +166,60 @@ const Latest = () => {
 }
 
 /** The node being written: anchored at the top of the screen when it starts, a blinking cursor where the next
- *  character lands, the die while the beat is judged. */
-const Draft = (props: { d: Draft; phase: Phase | null }) => {
+ *  character lands, the die while the beat is judged. A rewrite (check failed) blows the first draft away as dust
+ *  (Telegram's) and writes the second from the top; the dead draft keeps its place, so the column holds still. Once the
+ *  prose is done (check, record) the cursor goes and the Record slot waits with three dots. A failed turn stays as a
+ *  grey ghost with the error under it; its line is back in the box. */
+const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) => {
   onSettled(anchor)
+  const settling = () => props.phase === "check" || props.phase === "record"
+  const writing = () => !settling() && !props.error
   return (
-    <section class="draft">
+    <section class={{ draft: true, dead: props.error !== null }}>
       <Said input={props.d.input} />
-      <Paragraphs
-        text={props.d.text}
-        tail={
-          <span class="cursor" role="status" aria-label={props.phase ? waiting[props.phase] : "Waiting"}>
-            <Show when={props.phase === "decide"}>
-              <DieFill />
-            </Show>
+      <div class="drafts">
+        <Show when={props.d.prev}>
+          {(p) => (
+            <div class="prev" aria-hidden="true" ref={(el: HTMLElement) => void dust(el)}>
+              <Paragraphs text={p()} />
+            </div>
+          )}
+        </Show>
+        <div class="now">
+          <Paragraphs
+            text={props.d.text}
+            tail={
+              <Show when={writing()}>
+                <span class="cursor" role="status" aria-label={props.phase ? waiting[props.phase] : "Waiting"}>
+                  <Show when={props.phase === "decide"}>
+                    <DieFill />
+                  </Show>
+                </span>
+              </Show>
+            }
+          />
+        </div>
+      </div>
+      <Show when={settling()}>
+        <footer class="actions">
+          <span class="record-pill" role="status" aria-label={waiting[props.phase!]}>
+            <Record aria-hidden="true" />
+            <span class="dots">
+              <span />
+              <span />
+              <span />
+            </span>
           </span>
-        }
-      />
+        </footer>
+      </Show>
+      <Show when={props.error}>
+        {(e) => (
+          <p class="error" role="alert">
+            <Warning aria-hidden="true" />
+            {e()}
+          </p>
+        )}
+      </Show>
     </section>
   )
 }
@@ -369,7 +411,10 @@ const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   })
   return (
     <div class="record">
-      <For each={els()}>{(el) => <Reading el={el} />}</For>
+      {/* by index: the memo yields fresh, equal elements whenever the log changes; rows update in place */}
+      <For each={els()} keyed={false}>
+        {(el) => <Reading el={el()} />}
+      </For>
     </div>
   )
 }
@@ -580,7 +625,12 @@ const Section = (props: {
   )
 }
 
-const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) => void; onStop: () => void }) => {
+const Composer = (props: {
+  busy: boolean
+  stoppable: boolean // the prose can still be halted: before and during narrate, not while the turn settles
+  onSend: (text: string, note: boolean) => void
+  onStop: () => void
+}) => {
   const text = read(compose)
   const pinned = read(pin)
   const view = read(card)
@@ -595,8 +645,8 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
   const keys = () => view()?.format ?? []
   // This one send is a note (participant mode only). It is one state, not a tag per snippet: any number of note snippets
   // may go into the box, the chip says only where the send goes; it clears after the send.
-  const [aside, setAside] = createSignal(false)
-  const isNote = () => !acting() || aside()
+  const toNarratorOn = read(aside)
+  const isNote = () => !acting() || toNarratorOn()
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
   const prompt = () => (isNote() ? "To the narrator, not in the story…" : "Your line…")
   let box: HTMLTextAreaElement | undefined
@@ -612,7 +662,7 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
   // behind it, the selection between them. A note snippet also switches this send's channel; an empty one does only that.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
     menu?.hidePopover()
-    if (s.note) setAside(true)
+    if (s.note) registry.set(aside, true)
     const v = text()
     const a = box?.selectionStart ?? v.length
     const b = box?.selectionEnd ?? a
@@ -638,7 +688,7 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
     if (!t || props.busy) return false
     props.onSend(t, isNote())
     registry.set(compose, "")
-    setAside(false)
+    registry.set(aside, false)
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
@@ -728,13 +778,13 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
               <Items of={toNarrator()} />
             </div>
           </Show>
-          <Show when={acting() && aside()}>
+          <Show when={acting() && toNarratorOn()}>
             <button
               type="button"
               class="chip state"
               aria-label="Back to your line"
               onPointerDown={keep}
-              onClick={() => setAside(false)}
+              onClick={() => registry.set(aside, false)}
             >
               To the narrator
               <Close />
@@ -747,14 +797,14 @@ const Composer = (props: { busy: boolean; onSend: (text: string, note: boolean) 
           </Show>
           <span class="spacer" />
           <Show
-            when={props.busy}
+            when={props.busy && props.stoppable}
             fallback={
               <button
                 type="submit"
                 class="send"
                 aria-label="Send"
                 data-hint="Send ⌘↵"
-                disabled={!text().trim()}
+                disabled={!text().trim() || props.busy}
                 onPointerDown={keep}
               >
                 <Send />
@@ -776,6 +826,7 @@ const Reader = () => {
   const d = read(draft)
   const phase = read(stage)
   const err = read(error)
+  const busy = () => d() !== null && err() === null // a ghost draft (failed turn) holds nothing up
   let stop: (() => void) | null = null
   onSettled(() => void Promise.all([fetchCard(), fetchNodes()]))
 
@@ -799,7 +850,11 @@ const Reader = () => {
     // Before the first character the turn is withdrawn; after it, the server finishes a `stopped` node the closed
     // response never carried, so read the snapshot back until it shows up.
     const was = registry.get(nodes).size
-    if ((registry.get(draft)?.text ?? "") === "") return registry.set(draft, null)
+    if ((registry.get(draft)?.text ?? "") === "") {
+      withdraw()
+      return registry.set(draft, null)
+    }
+    registry.set(stage, "record") // what the server is doing with the cut prose; the Record slot waits for it
     for (let i = 0; i < 100 && registry.get(nodes).size === was; i++) {
       await new Promise((r) => setTimeout(r, 300))
       await fetchNodes()
@@ -812,23 +867,23 @@ const Reader = () => {
     <div class="panel">
       <div class="scroll">
         <main>
-          <For each={line()}>
+          {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
+          <For each={line()} keyed={(n) => n.turn.id}>
             {(n, i) => (
               <Section
-                node={n}
+                node={n()}
                 n={i() + 1}
                 last={!d() && i() === line().length - 1}
-                busy={d() !== null}
-                onSwipe={() => onSwipe(n)}
-                onReword={() => onReword(n)}
+                busy={busy()}
+                onSwipe={() => onSwipe(n())}
+                onReword={() => onReword(n())}
               />
             )}
           </For>
-          <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} />}</Show>
-          <Show when={err()}>{(e) => <p class="error">{e()}</p>}</Show>
+          <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} error={err()} />}</Show>
         </main>
       </div>
-      <Composer busy={d() !== null} onSend={onSend} onStop={onStop} />
+      <Composer busy={busy()} stoppable={phase() !== "check" && phase() !== "record"} onSend={onSend} onStop={onStop} />
       <Latest />
     </div>
   )

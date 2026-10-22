@@ -22,6 +22,7 @@ export const fake = (reply: (o: FakeCall) => { text: string; cut?: boolean; dela
   model: new MockLanguageModelV4({
     doGenerate: async (o) => {
       const r = reply(o)
+      if (r.delay) await new Promise((f) => setTimeout(f, r.delay)) // a slow answer waits once; the stream waits per chunk
       return { content: [{ type: "text", text: r.text }], finishReason: finish(r.cut), usage, warnings: [] }
     },
     doStream: async (o) => {

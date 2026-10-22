@@ -23,7 +23,9 @@ const store: Store<Beat> = {
 
 let n = 0
 /** By phase: lookup reads nothing, decide ends, direct opens what the gate offered, check is clean, record answers each
- *  question with its first option and fills the asked products with canned rows. Prose streams a numbered paragraph. */
+ *  question with its first option and fills the asked products with canned rows. Prose streams a numbered paragraph.
+ *  A line containing 重写 is the slow demo: longer prose at reading pace, a second of check and of record, and the
+ *  rewrite — the first draft says 一稿, check fails it, the correction draft says 二稿. */
 const answer = (o: FakeCall) => {
   const text = o.prompt.map(fakeText).join("\n")
   const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
@@ -33,15 +35,22 @@ const answer = (o: FakeCall) => {
       .split(/[,|]/)
       .map((x) => x.split("=")[0]!.trim())
       .filter(Boolean) ?? []
+  const demo = /重写|一稿|二稿/.test(text)
   switch (phase) {
     case "lookup":
-      return { text: JSON.stringify({ read: [] }) }
+      return { text: JSON.stringify({ read: [] }), delay: demo ? 1500 : 0 } // room to stop before the first character
     case "decide":
       return { text: JSON.stringify({ next: "end" }) }
     case "direct":
       return { text: JSON.stringify({ must: [], may: open, tone: "平静" }) }
     case "check":
-      return { text: JSON.stringify({ fired: [], violated: [] }) }
+      return {
+        text: JSON.stringify({
+          fired: [],
+          violated: text.includes("一稿") ? [text.match(/^Rule: (.*)$/m)?.[1] ?? ""] : [],
+        }),
+        delay: demo ? 1000 : 0,
+      }
     case "record": {
       const answers = Object.fromEntries(
         [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)].map(([, id, opts]) => [
@@ -61,12 +70,15 @@ const answer = (o: FakeCall) => {
         .map(([, id]) => id!)
         .filter((id) => !["Known", "Current", "Questions"].includes(id))
       const products = Object.fromEntries(asked.map((id) => [id, canned[id]]))
-      return { text: JSON.stringify(Object.keys(answers).length ? { ...products, answers } : products) }
+      return {
+        text: JSON.stringify(Object.keys(answers).length ? { ...products, answers } : products),
+        delay: demo ? 1000 : 0,
+      }
     }
     default:
       return {
-        text: `第${++n}段。${"竹叶在风里翻了一遍又一遍，"}${"你听见远处有人踏着落叶走来。".repeat(3)}`,
-        delay: 20,
+        text: `第${++n}段。${text.includes("Previous draft broke") ? "二稿。" : demo ? "一稿。" : ""}${"竹叶在风里翻了一遍又一遍，"}${"你听见远处有人踏着落叶走来。".repeat(demo ? 8 : 3)}`,
+        delay: demo ? 120 : 20,
       }
   }
 }
