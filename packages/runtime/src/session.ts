@@ -435,6 +435,7 @@ export const makeSession = ({
   // ───────── The turn ─────────
   /** `from` is where a sibling starts: lookup (a swipe), narrate (a reword: lookup, beats and brief kept from `base`),
    *  check (an edit: the player's prose stands in for the narrator's, check and record run over it). */
+  const SIBLING = { lookup: "swipe", narrate: "reword", check: "edit" } as const
   const turn = (
     emit: Emit,
     parent: number | null,
@@ -654,13 +655,14 @@ export const makeSession = ({
         reply,
         fired,
         violated,
+        ...(base && { sibling: SIBLING[from] }),
         products: rec.products,
       })
       yield* emit(nodeEvent(node))
     })
   const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>, stop?: Stop) => {
-    const t = journal.get(nodeId)
-    return emitting((emit) => turn(emit, t.parent, t.input, from, { ...t, ...patch }, stop))
+    const base = { ...journal.get(nodeId), ...patch }
+    return emitting((emit) => turn(emit, base.parent, base.input, from, base, stop))
   }
 
   return {
@@ -705,7 +707,12 @@ export const makeSession = ({
     // Siblings: the same input under the same parent, started at a later stage. Nothing of the original is reused
     // except what the stage order already fixed before the start point.
     swipe: (nodeId: number, stop?: Stop): Events => sibling(nodeId, "lookup", undefined, stop),
-    reword: (nodeId: number, stop?: Stop): Events => sibling(nodeId, "narrate", undefined, stop),
+    /** A rewrite may carry a word to the narrator ("plainer"): it joins the input's note, this sibling's only. */
+    reword: (nodeId: number, note?: string, stop?: Stop): Events => {
+      const i = journal.get(nodeId).input
+      const joined = [i.note, note].filter(Boolean).join("\n")
+      return sibling(nodeId, "narrate", joined ? { input: { ...i, note: joined } } : undefined, stop)
+    },
     /** The player rewrites the prose: a sibling carrying their text as the reply; check and record run over it, so what
      *  enters the record is only what the edit fired and answered (README §5 direction 3). */
     edit: (nodeId: number, text: string): Events => sibling(nodeId, "check", { reply: [{ type: "text", text }] }),
@@ -755,7 +762,7 @@ export const Action = Schema.Union([
     }),
   }),
   Schema.Struct({ kind: Schema.Literal("swipe"), node: Id }),
-  Schema.Struct({ kind: Schema.Literal("reword"), node: Id }),
+  Schema.Struct({ kind: Schema.Literal("reword"), node: Id, note: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ kind: Schema.Literal("edit"), node: Id, text: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("setField"), node: Id, effects: Schema.Array(Effect_) }),
   Schema.Struct({ kind: Schema.Literal("pick"), node: Id, option: Id }),
@@ -772,7 +779,7 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
       case "swipe":
         return s.swipe(a.node, stop)
       case "reword":
-        return s.reword(a.node, stop)
+        return s.reword(a.node, a.note, stop)
       case "edit":
         return s.edit(a.node, a.text)
       case "setField":

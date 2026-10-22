@@ -306,6 +306,11 @@ const program = Effect.gen(function* () {
   const w = yield* go(S.reword(t2.id))
   assert.deepEqual(since(i), ["narrate", "check", "record"])
   assert.deepEqual([w.parent, w.read, w.beats, w.brief], [t2.parent, t2.read, t2.beats, t2.brief])
+  assert.deepEqual([t2.sibling, t7b.sibling, w.sibling], [undefined, "swipe", "reword"]) // which action made it, for a version list
+  // a reword with a word to the narrator: it rides as this sibling's note, in the request and on the record
+  const w2 = yield* go(S.reword(t2.id, "plainer"))
+  assert.equal(w2.input.note, "NOTE#2\nplainer") // joined to the note the turn already had
+  assert.ok(str(lastNarr()).includes("plainer")) // t2 is a note-only turn: the note is the user message itself
 
   // A greeting with an opening: its effects fold into the state before the first turn (the head reads the warm band,
   // not the initial cool one), and its events are carried into that turn's gate like a readout's: li's second layer is
@@ -342,6 +347,7 @@ const program = Effect.gen(function* () {
     [t2.parent, t2.read, t2.beats, t2.brief, "EDITED: the sleeve tears, a crane tattoo"],
   )
   assert.deepEqual(e.fired, [{ id: "li", layer: 2 }])
+  assert.equal(e.sibling, "edit")
   assert.ok(str(prompts("check").at(-1)!).includes("EDITED"))
 
   // setField: an effect kept on t3 and folded last; every descendant's state moves with it (t6 was 16: t5's +8 on 20), no call made.

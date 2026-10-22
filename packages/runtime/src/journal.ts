@@ -28,6 +28,7 @@ export interface Turn<B> {
   fired: readonly Disclosure[] // reveals confirmed by check; count as delivered
   adjust?: readonly (typeof Effect_.Type)[] // the player's field edits on this node, applied last in the fold; replayed like any effect
   violated: readonly string[]
+  sibling?: "swipe" | "reword" | "edit" // which action made this sibling; absent on a player's own turn
   products: Readonly<Record<string, unknown>> // record's answers by product id, shaped by the card (src/product.ts); `notes` is one
 }
 /** The notes product: the list of facts this turn established, the compression source. */

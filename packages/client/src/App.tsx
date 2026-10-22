@@ -18,6 +18,7 @@ import {
   Die,
   DieFill,
   Down,
+  Edit,
   Insert,
   Next,
   Notes,
@@ -225,15 +226,16 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) =
   )
 }
 
+/** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
 const Said = (props: { input: { text: string; note?: string } }) => (
-  <Switch>
-    <Match when={props.input.text}>
+  <>
+    <Show when={props.input.text}>
       <p class="said">{props.input.text}</p>
-    </Match>
-    <Match when={props.input.note}>
+    </Show>
+    <Show when={props.input.note}>
       <p class="said note">{props.input.note}</p>
-    </Match>
-  </Switch>
+    </Show>
+  </>
 )
 
 // ───────── The Record sheet: one renderer per element kind ─────────
@@ -420,10 +422,24 @@ const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   )
 }
 
-const RecordSheet = (props: { node: Node; n: number; busy: boolean; onSwipe: () => void; onReword: () => void }) => {
+const RecordSheet = (props: {
+  node: Node
+  n: number
+  busy: boolean
+  onSwipe: () => void
+  onReword: (note?: string) => void
+}) => {
   const all = read(nodes)
   const view = read(card)
   let dlg!: HTMLDialogElement
+  let direction!: HTMLInputElement
+  // a rewrite may carry a word to the narrator ("plainer"); it rides as that sibling's note
+  const reword = () => {
+    const note = direction.value.trim()
+    direction.value = ""
+    dlg.close()
+    props.onReword(note || undefined)
+  }
   return (
     <>
       <button class="record-pill" onClick={() => dlg.showModal()}>
@@ -435,7 +451,13 @@ const RecordSheet = (props: { node: Node; n: number; busy: boolean; onSwipe: () 
         heading={heading(view()?.heading, props.node) ?? `Turn ${props.n}`}
         footer={
           <footer class="actions">
-            <span class="spacer" />
+            <input
+              class="direction"
+              placeholder="A word for the rewrite…"
+              disabled={props.busy}
+              ref={(el) => (direction = el)}
+              onKeyDown={(e) => e.key === "Enter" && !e.isComposing && (e.preventDefault(), reword())}
+            />
             <button
               class="icon"
               aria-label="Swipe"
@@ -444,12 +466,7 @@ const RecordSheet = (props: { node: Node; n: number; busy: boolean; onSwipe: () 
             >
               <Swipe />
             </button>
-            <button
-              class="icon"
-              aria-label="Reword"
-              disabled={props.busy}
-              onClick={() => (dlg.close(), props.onReword())}
-            >
+            <button class="icon" aria-label="Reword" disabled={props.busy} onClick={reword}>
               <Reword />
             </button>
           </footer>
@@ -576,10 +593,23 @@ const Section = (props: {
   last: boolean
   busy: boolean
   onSwipe: () => void
-  onReword: () => void
+  onReword: (note?: string) => void
 }) => {
   const all = read(nodes)
   const siblings = createMemo(() => childrenOf(all(), props.node.turn.parent))
+  // how many nodes follow a version: what the player leaves behind by switching away from it
+  const below = (id: Id) => {
+    let n = 0
+    for (const node of all().values()) {
+      for (let p = node.turn.parent; p !== null; p = all().get(p)?.turn.parent ?? null)
+        if (p === id) {
+          n++
+          break
+        }
+    }
+    return n
+  }
+  let list: HTMLDivElement | undefined
   const at = () => siblings().findIndex((s) => s.turn.id === props.node.turn.id)
   const go = (i: number) => {
     const parent = props.node.turn.parent
@@ -604,7 +634,43 @@ const Section = (props: {
             <button class="icon" aria-label="Previous version" disabled={at() === 0} onClick={() => go(at() - 1)}>
               <Prev />
             </button>
-            {at() + 1}/{siblings().length}
+            {/* the counter opens the list: which action made each version, its opening, how many nodes follow it */}
+            <button class="count" aria-haspopup="menu" popovertarget={`versions-${props.node.turn.id}`}>
+              {at() + 1}/{siblings().length}
+            </button>
+            <div
+              id={`versions-${props.node.turn.id}`}
+              class="versions"
+              popover
+              role="menu"
+              ref={(el) => (list = el)}
+              onFocusOut={(e) => !list?.contains(e.relatedTarget as HTMLElement | null) && list?.hidePopover()}
+            >
+              <For each={siblings()} keyed={(s) => s.turn.id}>
+                {(s, i) => (
+                  <button
+                    role="menuitem"
+                    class="version"
+                    aria-current={s().turn.id === props.node.turn.id ? "true" : undefined}
+                    onClick={() => (list?.hidePopover(), go(i()))}
+                  >
+                    <Switch fallback={<span class="kind" />}>
+                      <Match when={s().turn.sibling === "swipe"}>
+                        <Swipe class="kind" aria-label="Swipe" />
+                      </Match>
+                      <Match when={s().turn.sibling === "reword"}>
+                        <Reword class="kind" aria-label="Reword" />
+                      </Match>
+                      <Match when={s().turn.sibling === "edit"}>
+                        <Edit class="kind" aria-label="Edit" />
+                      </Match>
+                    </Switch>
+                    <span class="first">{prose(s())}</span>
+                    <Show when={below(s().turn.id)}>{(n) => <span class="below">{n()}</span>}</Show>
+                  </button>
+                )}
+              </For>
+            </div>
             <button
               class="icon"
               aria-label="Next version"
@@ -844,7 +910,8 @@ const Reader = () => {
     start(parent, input, { kind: "act", parent, input })
   }
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
-  const onReword = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "reword", node: n.turn.id })
+  const onReword = (n: Node, note?: string) =>
+    start(n.turn.parent, n.turn.input, { kind: "reword", node: n.turn.id, ...(note !== undefined && { note }) })
   const onStop = async () => {
     if (!stop) return
     stop()
@@ -877,7 +944,7 @@ const Reader = () => {
                 last={!d() && i() === line().length - 1}
                 busy={busy()}
                 onSwipe={() => onSwipe(n())}
-                onReword={() => onReword(n())}
+                onReword={(note) => onReword(n(), note)}
               />
             )}
           </For>
