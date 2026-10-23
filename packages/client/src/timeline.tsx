@@ -299,7 +299,7 @@ export const Timeline = () => {
                     <span class="dim">
                       {t().root === null ? 1 : L.below(all(), t().root!) + 1} nodes
                       <Show when={t().root !== null && heading(view()?.heading, node(t().root!)!)}>
-                        {(h) => ` · ${h()}`}
+                        {(h) => <> · {h()}</>}
                       </Show>
                     </span>
                   </div>
