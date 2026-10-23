@@ -339,8 +339,9 @@
   padding: var(--space-1);
   border: 0;
   border-radius: var(--radius-card);
-  /* one grid for the rows: the name column as wide as the widest name, the hints aligned after it */
-  display: grid;
+  /* one grid for the rows: the name column as wide as the widest name, the hints aligned after it. The display is
+     the open state's: set here it would override the UA's display: none on a closed popover, which then stays laid out
+     at opacity 0 over the reader, hoverable and clickable (the Timeline opened from a blank page). */
   grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
   background: var(--surface-3);
   color: inherit;
@@ -358,6 +359,7 @@
     display 100ms allow-discrete;
 }
 .snippets:popover-open {
+  display: grid;
   opacity: 1;
   translate: 0 0;
   transition:
