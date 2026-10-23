@@ -8,7 +8,7 @@ import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
-import { card, log, page, registry } from "./store.ts"
+import { card, draft, error, log, page, pin, registry } from "./store.ts"
 import { send } from "./wire.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
@@ -36,12 +36,17 @@ const Bounded = (props: { items: readonly string[] }) => {
 export const CardPage = () => {
   const view = read(card)
   const all = read(log)
+  const d = read(draft)
+  const err = read(error)
+  const busy = () => d() !== null && err() === null // a turn in flight: no new root under it
   const [at, setAt] = createSignal(0)
   const inStory = () => all().nodes.size > 0
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const back = () => registry.set(page, "reader")
   const begin = () => {
+    registry.set(pin, null) // the old thread's pin and error do not carry into a new one
+    registry.set(error, null)
     send(openings().length ? { kind: "greet", greeting: at() } : { kind: "checkout", node: null }) // none: an empty line
     back()
   }
@@ -157,7 +162,7 @@ export const CardPage = () => {
                 <Show when={opening()}>
                   {(g) => <span class="est mono">~{compact.format(tokens(g().text))} tokens</span>}
                 </Show>
-                <button type="button" class={{ begin: true, primary: !inStory() }} onClick={begin}>
+                <button type="button" class={{ begin: true, primary: !inStory() }} disabled={busy()} onClick={begin}>
                   {inStory() ? "New thread" : "Begin"}
                   <Change />
                 </button>

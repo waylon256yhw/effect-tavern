@@ -4,12 +4,14 @@
    token readout under it, the one action at the corner. On a phone the columns stack and each well keeps its height.
    Nothing on the page wraps but the two proses; a row of names ends in "and N more". */
 .manifest {
-  justify-content: center;
   align-items: center;
+  overflow-y: auto; /* a phone shorter than the sheet scrolls the page; the sheet keeps its size */
   padding: var(--space-4);
   font-size: var(--text-body);
 }
 .cardsheet {
+  flex: none;
+  margin: auto;
   width: 100%;
   max-width: 56rem;
   display: grid;
@@ -128,9 +130,13 @@
 }
 /* the opening */
 .manifest .opening .well {
-  flex: 1;
   height: 16.5rem;
   border-radius: var(--radius-card);
+}
+@media (min-width: 52rem) {
+  .manifest .opening .well {
+    flex: 1; /* the sheet has a height: the well takes what the foot leaves */
+  }
 }
 .manifest .opening .wscroll {
   flex: 1;
