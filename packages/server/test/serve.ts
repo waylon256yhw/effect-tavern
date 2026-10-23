@@ -126,7 +126,7 @@ const run = async (inspect: boolean) => {
     assert.ok(Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length < hadTrace)
     assert.equal((await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).status, 404)
     const again = sse(await (await post({ kind: "act", parent: null, input: { text: "hi" } })).text())
-    assert.equal((again.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id, c.head! + 1) // one past the greatest present
+    assert.equal((again.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id, u.id + 1) // one past every id ever handed out, the dropped tail's included
   } finally {
     server.close()
   }

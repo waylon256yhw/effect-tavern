@@ -465,7 +465,8 @@
     display: none;
   }
   /* the latest turn's Record and actions sit in the right card: its pill would open the same thing twice */
-  main > section:last-of-type .record-pill {
+  main > section:last-of-type .record-pill,
+  main > section:has(+ .draft) .record-pill {
     display: none;
   }
   /* a past turn's Record is a centred card: closed on every side, as tall as its content up to most of the viewport,

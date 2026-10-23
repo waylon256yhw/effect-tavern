@@ -16,6 +16,8 @@ import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
 import {
+  Check,
+  Close,
   Contents,
   DieFill,
   Down,
@@ -86,7 +88,8 @@ const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
 }
 
 /** The prose in place as a textarea (Edit): ⌘↵ sends it as an `edit` sibling (check and record run over the player's
- *  text, nothing is narrated), Escape cancels, and so does sending it unchanged or empty. Bare Enter is a paragraph. */
+ *  text, nothing is narrated), Escape cancels, and so does sending it unchanged or empty. Bare Enter is a paragraph.
+ *  Two keys under it do the same for a touch screen, which has neither. */
 const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
   let box!: HTMLTextAreaElement
   const submit = () => {
@@ -101,15 +104,25 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
     box.setSelectionRange(box.value.length, box.value.length)
   })
   return (
-    <textarea
-      class="editor"
-      aria-label="Edit the prose"
-      ref={(el) => (box = el)}
-      value={props.text}
-      onCompositionStart={ime.compositionStart}
-      onCompositionEnd={ime.compositionEnd}
-      onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
-    />
+    <>
+      <textarea
+        class="editor"
+        aria-label="Edit the prose"
+        ref={(el) => (box = el)}
+        value={props.text}
+        onCompositionStart={ime.compositionStart}
+        onCompositionEnd={ime.compositionEnd}
+        onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
+      />
+      <div class="editkeys">
+        <button type="button" class="icon" aria-label="Cancel" data-hint="Cancel Esc" onClick={() => props.onDone()}>
+          <Close />
+        </button>
+        <button type="button" class="icon" aria-label="Save" data-hint="Save ⌘↵" onClick={submit}>
+          <Check />
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -417,7 +430,9 @@ const Section = (props: {
                         <Edit class="kind" aria-label="Edit" />
                       </Match>
                     </Switch>
-                    <span class="first">{varied() ? s().turn.input.text || s().turn.input.note : prose(s())}</span>
+                    <span class="first">
+                      {varied() ? `${s().turn.input.text || s().turn.input.note} · ${prose(s())}` : prose(s())}
+                    </span>
                     <Show when={L.below(all(), s().id)}>{(n) => <span class="below">{n()}</span>}</Show>
                   </button>
                 )}
@@ -450,6 +465,12 @@ const Reader = () => {
   const phase = read(stage)
   const err = read(error)
   const busy = () => d() !== null && err() === null // a ghost draft (failed turn) holds nothing up
+  // the draft hangs under its parent: a sibling of a past turn cuts the line there while it is written
+  const shown = createMemo(() => {
+    const dr = d()
+    const i = dr ? line().findIndex((n) => n.id === dr.parent) : -1
+    return i >= 0 ? line().slice(0, i + 1) : line()
+  })
   let stop: (() => void) | null = null
   onSettled(() => void Promise.all([fetchCard(), fetchNodes()]))
 
@@ -483,11 +504,11 @@ const Reader = () => {
     registry.set(compose, n.turn.input[field] ?? "")
     registry.set(aside, field === "note")
   }
-  /** The revised line as the node's input, and the node; revising ends here. */
+  /** The revised line as the node's input, and the node. Revising ends when the node lands (store.ts), so a failed
+   *  send puts the line back under the same revision. */
   const revised = (text: string) => {
     const r = registry.get(revising)!
     const n = L.get(registry.get(log), r.node)
-    registry.set(revising, null)
     return { n, input: { ...n.turn.input, [r.field]: text } }
   }
   const onKeep = (text: string) => {
@@ -524,6 +545,7 @@ const Reader = () => {
       await new Promise((r) => setTimeout(r, 300))
       await fetchNodes()
     }
+    if (registry.get(log).nodes.size === was) withdraw() // record failed on the server: the line comes back
     registry.set(draft, null)
     registry.set(stage, null)
   }
@@ -534,12 +556,12 @@ const Reader = () => {
         <div class="scroll">
           <main>
             {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
-            <For each={line()} keyed={(n) => n.turn.id}>
+            <For each={shown()} keyed={(n) => n.turn.id}>
               {(n, i) => (
                 <Section
                   node={n()}
                   n={i() + 1}
-                  last={!d() && i() === line().length - 1}
+                  last={!d() && i() === shown().length - 1}
                   busy={busy()}
                   onSwipe={() => onSwipe(n())}
                   onReword={(note) => onReword(n(), note)}
@@ -610,6 +632,8 @@ const Glance = (props: {
             <h2>Record</h2>
             <TurnRecord node={l().node} prev={l().prev} />
             <Rewrite
+              for={l().node.id}
+              rerun={!!(l().node.turn.input.text || l().node.turn.input.note)}
               busy={props.busy}
               onSwipe={() => props.onSwipe(l().node)}
               onReword={(note) => props.onReword(l().node, note)}

@@ -74,7 +74,7 @@ export const Composer = (props: {
   // behind it, the selection between them. A note snippet also switches this send's channel; an empty one does only that.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
     menu?.hidePopover()
-    if (s.note) registry.set(aside, true)
+    if (s.note && !revise()) registry.set(aside, true) // a revision's channel is the field being revised
     const v = text()
     const a = box?.selectionStart ?? v.length
     const b = box?.selectionEnd ?? a

@@ -199,12 +199,17 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
  *  the wand again) and Edit (the prose as a textarea in place, App.tsx `Editor`). Three icons with hints; the box
  *  exists only while the wand is asking. The Record sheet's footer on the phone, the right card's on the desktop. */
 export const Rewrite = (props: {
+  for: number // the node: the wand's box belongs to one node (the desktop's card is not rebuilt per turn)
+  rerun: boolean // the turn has an input to run the narrator from again; an opening has not, only Edit shows
   busy: boolean
   onSwipe: () => void
   onReword: (note?: string) => void
   onEdit: () => void
 }) => {
-  const [asking, setAsking] = createSignal(false)
+  // the box is open for one node: another node under the same card (the desktop's) means it is closed
+  const [askingFor, setAskingFor] = createSignal<number | null>(null)
+  const asking = () => askingFor() === props.for
+  const setAsking = (on: boolean) => setAskingFor(on ? props.for : null)
   let direction: HTMLInputElement | undefined
   const reword = () => {
     const note = direction?.value.trim()
@@ -231,25 +236,27 @@ export const Rewrite = (props: {
           }}
         />
       </Show>
-      <button
-        class="icon"
-        aria-label="Swipe"
-        data-hint="Swipe: the turn again, dice and all"
-        disabled={props.busy}
-        onClick={() => props.onSwipe()}
-      >
-        <Swipe />
-      </button>
-      <button
-        class="icon"
-        aria-label="Reword"
-        data-hint="Reword: new prose, same turn"
-        aria-expanded={asking() ? "true" : "false"}
-        disabled={props.busy}
-        onClick={() => (asking() ? reword() : setAsking(true))}
-      >
-        <Reword />
-      </button>
+      <Show when={props.rerun}>
+        <button
+          class="icon"
+          aria-label="Swipe"
+          data-hint="Swipe: the turn again, dice and all"
+          disabled={props.busy}
+          onClick={() => props.onSwipe()}
+        >
+          <Swipe />
+        </button>
+        <button
+          class="icon"
+          aria-label="Reword"
+          data-hint="Reword: new prose, same turn"
+          aria-expanded={asking() ? "true" : "false"}
+          disabled={props.busy}
+          onClick={() => (asking() ? reword() : setAsking(true))}
+        >
+          <Reword />
+        </button>
+      </Show>
       <button
         class="icon"
         aria-label="Edit"
@@ -294,6 +301,8 @@ export const RecordSheet = (props: {
         heading={heading(view()?.heading, props.node) ?? `Turn ${props.n}`}
         footer={
           <Rewrite
+            for={props.node.id}
+            rerun={!!(props.node.turn.input.text || props.node.turn.input.note)}
             busy={props.busy}
             onSwipe={() => (dlg.close(), props.onSwipe())}
             onReword={(note) => (dlg.close(), props.onReword(note))}

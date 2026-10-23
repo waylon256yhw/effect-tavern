@@ -358,6 +358,10 @@ const program = Effect.gen(function* () {
     [t2.parent, "REVISED line", prose(t2), t2.beats, "edit"],
   )
   assert.ok(str(prompts("record").at(-1)!).includes("REVISED line"))
+  // edit whose prose breaks a rule: the verdict is recorded and the player's words stand, never rewritten
+  i = calls().length
+  const v = yield* go(S.edit(t2.id, { text: "EDITED: KILL" }))
+  assert.deepEqual([since(i), v.violated, prose(v)], [["check", "record"], ["B does not die"], "EDITED: KILL"])
 
   // setField: an effect kept on t3 and folded last; every descendant's state moves with it (t6 was 16: t5's +8 on 20), no call made.
   // A value outside the field is refused and the node is untouched.

@@ -206,6 +206,7 @@ export const apply = (e: Wire): void => {
       resetPlay()
       registry.set(draft, null)
       registry.set(stage, null)
+      registry.set(revising, null) // a revision ends when its node lands; a failed one stays revisable
       return
     case "error":
       resetPlay()
@@ -220,6 +221,7 @@ export const apply = (e: Wire): void => {
 export const withdraw = (): void => {
   const d = registry.get(draft)
   if (!d || registry.get(compose)) return
-  registry.set(compose, d.input.text || d.input.note || "")
-  registry.set(aside, !!d.input.note)
+  const r = registry.get(revising) // a revision puts back the field it was revising
+  registry.set(compose, (r ? d.input[r.field] : d.input.text || d.input.note) ?? "")
+  registry.set(aside, r ? r.field === "note" : !!d.input.note)
 }

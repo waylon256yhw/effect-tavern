@@ -58,7 +58,7 @@ commit(L.drop(auth.log, 2))
 const replica = kept.reduce(L.apply, L.of<N>())
 assert.deepEqual(L.snapshot(replica), L.snapshot(auth.log))
 
-// the store: reloaded from what it wrote is the same log, and ids continue one past the greatest present
+// the store: reloaded from what it wrote is the same log, and a dropped tail's id does not come back
 let disk: L.Snapshot<N> | undefined
 const store: L.Store<N> = { read: () => disk, write: (s) => void (disk = s) }
 const h = L.hold<N>(store)
@@ -67,7 +67,9 @@ h.commit(L.add(h.log, { parent: 0, text: "c" }))
 h.commit(L.drop(h.log, 1))
 const back = L.hold<N>(store)
 assert.deepEqual(L.snapshot(back.log), L.snapshot(h.log))
-assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 1)
+assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
+// a snapshot from before ids were kept: next is one past the greatest present
+assert.equal(L.of<N>({ nodes: [{ id: 0, parent: null, text: "r" }], head: 0 }).next, 1)
 
 // errors: an unknown id, a child of a missing parent, a head that is not there; the log is untouched
 assert.throws(() => L.get(log, 9), /no node 9/)

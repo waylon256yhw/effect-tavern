@@ -1,10 +1,10 @@
 // The log tree, self-contained: nodes with a parent, siblings under one parent as the versions of a turn, a root's
 // subtree as a thread, and one head (a leaf, or null: an empty line awaiting the first input) as the only "where we
 // are". A Log is a value; the writes decide a Change and `apply` is the only mutation, so a replica that applies every
-// Change in order equals the authority by construction. A new id is one past the greatest id present, so a child's id
-// is greater than its parent's and the greatest id in any subtree is a leaf: that one rule is "newest". A drop in the
-// middle leaves holes; a drop at the tail lets those ids come back, and everything keyed by them left with the drop.
-// No imports: the runtime, the server and the client all use this file, and it knows none of them.
+// Change in order equals the authority by construction. A new id is one past every id ever handed out (`next`, kept
+// in the snapshot), so a child's id is greater than its parent's and the greatest id in any subtree is a leaf: that
+// one rule is "newest"; and an id never comes back after a drop, so anything keyed by ids (a summary cached by range)
+// can never name a node it did not mean. No imports: the runtime, the server and the client all use this file, and it knows none of them.
 export type Id = number
 export interface Noded {
   readonly id: Id
@@ -13,11 +13,13 @@ export interface Noded {
 export interface Log<T extends Noded> {
   readonly nodes: ReadonlyMap<Id, T>
   readonly head: Id | null
+  readonly next: Id // the next id to hand out: one past every id ever present
 }
 /** The plain form: what a store keeps and the wire carries. */
 export interface Snapshot<T> {
   readonly nodes: readonly T[]
   readonly head: Id | null
+  readonly next?: Id // absent in a snapshot written before ids were kept: one past the greatest present
 }
 /** One write as data: a node lands (new, or amended in place), the dropped leave, head is set. Also the wire event. */
 export interface Change<T> {
@@ -34,10 +36,12 @@ type Written<T extends Noded> = [Log<T>, Change<T>]
 export const of = <T extends Noded>(s?: Snapshot<T>): Log<T> => ({
   nodes: new Map((s?.nodes ?? []).map((n) => [n.id, n])),
   head: s?.head ?? null,
+  next: Math.max(s?.next ?? 0, ...(s?.nodes ?? []).map((n) => n.id + 1)),
 })
 export const snapshot = <T extends Noded>(log: Log<T>): Snapshot<T> => ({
   nodes: [...log.nodes.values()],
   head: log.head,
+  next: log.next,
 })
 
 // ───────── Reads: pure, every list in id order; an unknown id throws `no node N` (a caller's bug, never a state) ─────────
@@ -78,14 +82,12 @@ export const apply = <T extends Noded>(log: Log<T>, c: Change<T>): Log<T> => {
     nodes.set(c.node.id, c.node)
   }
   if (c.head !== null && !nodes.has(c.head)) throw missing(c.head)
-  return { nodes, head: c.head }
+  return { nodes, head: c.head, next: Math.max(log.next, c.node ? c.node.id + 1 : 0) }
 }
 const write = <T extends Noded>(log: Log<T>, c: Change<T>): Written<T> => [apply(log, c), c]
 /** A new node under its parent (null: a root); it becomes head. */
-export const add = <T extends Noded>(log: Log<T>, node: Omit<T, "id">): Written<T> => {
-  const id = Math.max(-1, ...log.nodes.keys()) + 1
-  return write(log, { node: { ...node, id } as T, head: id })
-}
+export const add = <T extends Noded>(log: Log<T>, node: Omit<T, "id">): Written<T> =>
+  write(log, { node: { ...node, id: log.next } as T, head: log.next })
 /** The node replaced in place: id, parent and head kept. */
 export const amend = <T extends Noded>(log: Log<T>, id: Id, patch: Partial<Omit<T, "id" | "parent">>): Written<T> =>
   write(log, { node: { ...get(log, id), ...patch } as T, head: log.head })

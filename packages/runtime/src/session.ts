@@ -633,7 +633,8 @@ export const makeSession = ({
           )
         let c = yield* check(proseOf(reply))
         const missed = brief.must.filter((id) => !c.fired.includes(id))
-        if (c.violated.length || missed.length) {
+        // the player's own prose (an edit) is never rewritten: its verdict is recorded and stands
+        if (from !== "check" && (c.violated.length || missed.length)) {
           reply = yield* narrate(
             `${wording("narrate.correction")} ${[...c.violated.map((r) => `rule "${r}"`), ...missed.map((m) => `missed MUST ${m}`)].join("; ")}`,
           )
@@ -668,6 +669,7 @@ export const makeSession = ({
         reply,
         fired,
         violated,
+        ...(base?.opening && { opening: base.opening }), // an edited opening keeps its effects
         ...(base && { sibling: SIBLING[from] }),
         products: rec.products,
       })
@@ -675,6 +677,8 @@ export const makeSession = ({
     })
   const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>, stop?: Stop) => {
     const base = { ...turnOf(nodeId), ...patch }
+    // an opening has no input to rerun the narrator from; only its prose can be edited
+    if (from !== "check" && !base.input.text && !base.input.note) throw new Error(`node ${nodeId}: nothing to rerun`)
     return emitting((emit) => turn(emit, base.parent, base.input, from, base, stop))
   }
 
@@ -701,7 +705,11 @@ export const makeSession = ({
       ),
     node: (id: number): Node => project(turnOf(id)),
     /** Every node projected, and head: what a client opens with. */
-    snapshot: (): Log.Snapshot<Node> => ({ nodes: [...held.log.nodes.values()].map(project), head: held.log.head }),
+    snapshot: (): Log.Snapshot<Node> => ({
+      nodes: [...held.log.nodes.values()].map(project),
+      head: held.log.head,
+      next: held.log.next,
+    }),
     /** The log as it stands: head, and every turn by id. */
     get log() {
       return held.log

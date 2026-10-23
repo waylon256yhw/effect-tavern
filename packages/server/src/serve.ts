@@ -88,7 +88,7 @@ export const handle = (s: Session, { inspect = false } = {}) => {
         Effect.sync(() => {
           // Each draft starts over: a stop before its first character withdraws the turn, even on the correction rewrite.
           if (e.kind === "stage" && e.phase === "narrate") narrating = false
-          if (e.kind === "delta") narrating = true
+          if (e.kind === "delta" && e.part.type === "text-delta") narrating = true // reasoning is not prose: the client counts the same
           const v = shown(e)
           if (v.kind === "call") made.push(v)
           if (v.kind === "change" && v.node) {
