@@ -1,6 +1,10 @@
 // §17.2–17.3: history is a per-stage view over the path, never stored. Only the narrator sees the transcript;
 // the director sees a ledger of facts. Compression is a derived view too: a prefix range is replaced by the CODE
 // fold of its notes plus the lore text delivered in it, cached by range (ids are unique, so a range names a prefix).
+// A fold is a function of the turns INSIDE its range and nothing else: a later turn (one that will some day retract
+// an earlier note) cannot reach back into a fold that does not contain it. That is what keeps the summary's cache
+// breakpoint byte-stable between boundary moves; a retraction lands in the summary when the boundary passes its turn,
+// and until then in the tail's Known line, which is rewritten every turn anyway.
 import type { Disclosure } from "./lore.ts"
 import type { Msg } from "./fragment.ts"
 import { deliveredIn, notesOf, prose, type Turn } from "./journal.ts"

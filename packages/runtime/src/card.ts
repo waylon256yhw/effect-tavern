@@ -101,6 +101,17 @@ export const makeCard = (r: Rules) => {
     return lo && hi ? base.check(lo, hi) : lo ? base.check(lo) : hi ? base.check(hi) : base
   }
   const stateSchema = Schema.Struct(Object.fromEntries(r.fields.map((f) => [f.path, fieldSchema(f)])))
+  // Who writes a field decides what the prose may do to it. The narrator sees bands, never numbers, so a field only
+  // actions write is a mechanical quantity the prose cannot move ("the innkeeper hands you three coins" leaves gold
+  // where it was); a field the fiction may move needs a readout. Said once at load, not enforced: the author decides.
+  // A card with no readouts at all has chosen mechanical everywhere (the self-test RPG), so nothing is said there.
+  const writes = (es: readonly (typeof Effect_.Type)[] | undefined) =>
+    (es ?? []).flatMap((e) => ("path" in e ? [e.path] : []))
+  const byActions = new Set(r.actions.flatMap((a) => [...writes(a.hit), ...writes(a.miss), ...writes(a.do)]))
+  const byReadouts = new Set((r.readouts ?? []).flatMap((q) => q.options.flatMap((o) => writes(o.do))))
+  for (const path of byActions)
+    if (byReadouts.size && !byReadouts.has(path))
+      console.warn(`${path}: written by actions only; the prose cannot move it. Add a readout, or keep it mechanical.`)
   const validate = Schema.decodeUnknownSync(stateSchema)
   const num = (s: State, path: string) => {
     const v = s[path]

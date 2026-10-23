@@ -427,6 +427,34 @@ const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   )
 }
 
+/** The sibling actions on a node: Swipe, and Reword with a word for the narrator ("plainer"), which rides as that
+ *  sibling's note. The Record sheet's footer on the phone, the right card's on the desktop. */
+const Rewrite = (props: { busy: boolean; onSwipe: () => void; onReword: (note?: string) => void }) => {
+  let direction!: HTMLInputElement
+  const reword = () => {
+    const note = direction.value.trim()
+    direction.value = ""
+    props.onReword(note || undefined)
+  }
+  return (
+    <footer class="actions">
+      <input
+        class="direction"
+        placeholder="A word for the rewrite…"
+        disabled={props.busy}
+        ref={(el) => (direction = el)}
+        onKeyDown={(e) => e.key === "Enter" && !e.isComposing && (e.preventDefault(), reword())}
+      />
+      <button class="icon" aria-label="Swipe" disabled={props.busy} onClick={() => props.onSwipe()}>
+        <Swipe />
+      </button>
+      <button class="icon" aria-label="Reword" disabled={props.busy} onClick={reword}>
+        <Reword />
+      </button>
+    </footer>
+  )
+}
+
 const RecordSheet = (props: {
   node: Node
   n: number
@@ -437,50 +465,33 @@ const RecordSheet = (props: {
   const all = read(nodes)
   const view = read(card)
   let dlg!: HTMLDialogElement
-  let direction!: HTMLInputElement
-  // a rewrite may carry a word to the narrator ("plainer"); it rides as that sibling's note
-  const reword = () => {
-    const note = direction.value.trim()
-    direction.value = ""
-    dlg.close()
-    props.onReword(note || undefined)
+  const prev = () => (props.node.turn.parent === null ? undefined : all().get(props.node.turn.parent))
+  // the pill's dot: this turn changed a field, judged a beat or told a clue (notes alone light nothing: every turn has them)
+  const marked = () => {
+    const r = view()?.rules
+    return r !== undefined && record(r, props.node, prev()).some((e) => e.kind !== "notes")
   }
   return (
     <>
       <button class="record-pill" onClick={() => dlg.showModal()}>
         <Record aria-hidden="true" />
         Record
+        <Show when={marked()}>
+          <i class="dot" />
+        </Show>
       </button>
       <Sheet
         dialog={(el) => (dlg = el)}
         heading={heading(view()?.heading, props.node) ?? `Turn ${props.n}`}
         footer={
-          <footer class="actions">
-            <input
-              class="direction"
-              placeholder="A word for the rewrite…"
-              disabled={props.busy}
-              ref={(el) => (direction = el)}
-              onKeyDown={(e) => e.key === "Enter" && !e.isComposing && (e.preventDefault(), reword())}
-            />
-            <button
-              class="icon"
-              aria-label="Swipe"
-              disabled={props.busy}
-              onClick={() => (dlg.close(), props.onSwipe())}
-            >
-              <Swipe />
-            </button>
-            <button class="icon" aria-label="Reword" disabled={props.busy} onClick={reword}>
-              <Reword />
-            </button>
-          </footer>
+          <Rewrite
+            busy={props.busy}
+            onSwipe={() => (dlg.close(), props.onSwipe())}
+            onReword={(note) => (dlg.close(), props.onReword(note))}
+          />
         }
       >
-        <TurnRecord
-          node={props.node}
-          prev={props.node.turn.parent === null ? undefined : all().get(props.node.turn.parent)}
-        />
+        <TurnRecord node={props.node} prev={prev()} />
       </Sheet>
     </>
   )
@@ -810,6 +821,13 @@ const Composer = (props: {
           placeholder={prompt()}
           enterkeyhint="enter"
           onInput={(e) => registry.set(compose, e.currentTarget.value)}
+          // a thought's open bracket brings its close: half a pair would leave the model guessing where the thought ends
+          onBeforeInput={(e) => {
+            if (e.inputType !== "insertText" || e.data !== "⦅") return
+            e.preventDefault()
+            const { selectionStart: a, selectionEnd: b, value } = e.currentTarget
+            put(`${value.slice(0, a)}⦅${value.slice(a, b)}⦆${value.slice(b)}`, a + 1)
+          }}
           onCompositionStart={ime.compositionStart}
           onCompositionEnd={ime.compositionEnd}
           onKeyDown={(e) => {
@@ -1490,28 +1508,36 @@ const Reader = () => {
   }
 
   return (
-    <div class="panel">
-      <div class="scroll">
-        <main>
-          {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
-          <For each={line()} keyed={(n) => n.turn.id}>
-            {(n, i) => (
-              <Section
-                node={n()}
-                n={i() + 1}
-                last={!d() && i() === line().length - 1}
-                busy={busy()}
-                onSwipe={() => onSwipe(n())}
-                onReword={(note) => onReword(n(), note)}
-              />
-            )}
-          </For>
-          <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} error={err()} />}</Show>
-        </main>
+    <>
+      <div class="panel">
+        <div class="scroll">
+          <main>
+            {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
+            <For each={line()} keyed={(n) => n.turn.id}>
+              {(n, i) => (
+                <Section
+                  node={n()}
+                  n={i() + 1}
+                  last={!d() && i() === line().length - 1}
+                  busy={busy()}
+                  onSwipe={() => onSwipe(n())}
+                  onReword={(note) => onReword(n(), note)}
+                />
+              )}
+            </For>
+            <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} error={err()} />}</Show>
+          </main>
+        </div>
+        <Composer
+          busy={busy()}
+          stoppable={phase() !== "check" && phase() !== "record"}
+          onSend={onSend}
+          onStop={onStop}
+        />
+        <Latest />
       </div>
-      <Composer busy={busy()} stoppable={phase() !== "check" && phase() !== "record"} onSend={onSend} onStop={onStop} />
-      <Latest />
-    </div>
+      <Glance busy={busy()} onSwipe={onSwipe} onReword={onReword} />
+    </>
   )
 }
 
@@ -1538,8 +1564,9 @@ const Side = () => {
   )
 }
 
-/** Desktop's right card: the Status table and this turn's Record, inline. */
-const Glance = () => {
+/** Desktop's right card: the Status table and the latest turn's Record with its sibling actions, inline. Rendered by
+ *  the Reader (the actions are its), as a sibling of the panel in the canvas grid; the latest section's pill hides. */
+const Glance = (props: { busy: boolean; onSwipe: (n: Node) => void; onReword: (n: Node, note?: string) => void }) => {
   const last = read(latest)
   return (
     <aside class="side">
@@ -1552,6 +1579,11 @@ const Glance = () => {
           <section>
             <h2>Record</h2>
             <TurnRecord node={l().node} prev={l().prev} />
+            <Rewrite
+              busy={props.busy}
+              onSwipe={() => props.onSwipe(l().node)}
+              onReword={(note) => props.onReword(l().node, note)}
+            />
           </section>
         )}
       </Show>
@@ -1567,7 +1599,6 @@ export const App = () => {
         <Topbar />
         <Side />
         <Reader />
-        <Glance />
       </div>
       <Show when={id() !== null}>
         <Inspect id={id()!} />
