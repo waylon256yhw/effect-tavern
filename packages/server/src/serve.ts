@@ -8,8 +8,10 @@
 //   GET  /calls   the `call` events of recent turns by node id: the inspector's trace. They evaporate with the SSE
 //                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
 //                 outputs-only, and a restart starts the trace over.
-//   GET  /card    what a client draws the card by: id, title, the default channel, the rules as data (field bounds,
-//                 options, action ids), the products' shapes, the quick inputs (snippets) and the format keys. Fragment bodies never leave the server.
+//   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
+//                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
+//                 the format keys, the fiction's modules without their text, and the guard and lore as counts.
+//                 Fragment bodies, guard lines and lore never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
 import { decodeAction, perform, type Event, type Session } from "@effect-tavern/runtime/src/session.ts"
@@ -49,7 +51,8 @@ export const handle = (s: Session, { inspect = false } = {}) => {
     if (req.method === "GET" && req.url === "/card")
       return json(200, {
         ...s.meta,
-        greetings: s.greetings.length,
+        greetings: s.greetings,
+        fiction: s.fiction,
         rules: s.rules,
         products: s.products,
         snippets: s.snippets,

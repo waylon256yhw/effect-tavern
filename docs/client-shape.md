@@ -49,7 +49,7 @@
 
 ## 五、协议欠客户端的
 
-- **卡与玩家层的投影端点**：`GET /card` 已带 id、标题、回合标题引用、默认通道（`input`，客户端据此决定参与者 / 作者视角的输入框）、规则、`snippets`；仍缺简介、cast、状态条放哪三项、开场。persona 有无不上线：客户端只读通道（模板里 wuxia、伴星没有 persona 槽却是参与者卡）。
+- **卡与玩家层的投影端点**：`GET /card` 已带 id、标题、简介（`summary`，2026-10-23）、回合标题引用、默认通道（`input`，客户端据此决定参与者 / 作者视角的输入框）、规则、开场（`greetings` 整条，含 `do`；客户端按下标 `greet`）、导演开关、护栏条数、lore 的条数与层数、虚构模块（`fiction` 去掉正文：id、`label`、`when`）、`snippets`、`format`。cast 不进 schema：虚构区的单元是 fragment 不是人（盐道的 `sides` 一条写四个人），展示名是 `Fragment.label`，工作台编辑的也是同一份。护栏与 lore 只给数：禁令本身就是提示，对玩家同样成立；当前可讲的（readable）在节点上。仍缺状态条放哪三项。persona 有无不上线：客户端只读通道（模板里 wuxia、伴星没有 persona 槽却是参与者卡）。dev.ts 不再替玩家 greet（除非显式 `GREETING`）：开场是卡页上选的，服务端选的会留成孤儿根。
 - ~~**兄弟的类型**~~：2026-10-22 已有，`Turn.sibling` 记 swipe / reword / edit，版本列表按它画图标。
 - ~~**`reword` 的风格**~~：2026-10-22 已有，`reword` 带可选的 `note`，并入这个兄弟的 input.note（只随它走）。
 - **`demand` 的参数**：设计稿按人物要内心想法，`demand` 只收产物 id。

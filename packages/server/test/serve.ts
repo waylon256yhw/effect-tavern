@@ -43,7 +43,23 @@ const run = async (inspect: boolean) => {
   const post = (v: unknown, signal?: AbortSignal) => fetch(base, { method: "POST", body: JSON.stringify(v), signal })
   try {
     assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(session.snapshot()))
-    assert.equal(((await (await fetch(`${base}/card`)).json()) as { input: string }).input, "act") // undeclared = act
+    const about = (await (await fetch(`${base}/card`)).json()) as Record<string, unknown>
+    assert.equal(about["input"], "act") // undeclared = act
+    // the card's projection: the openings whole, the fiction without its text, the guard and lore as counts
+    assert.deepEqual(
+      [about["greetings"], about["guard"], about["lore"], about["director"], about["fiction"]],
+      [
+        [{ text: "G" }],
+        0,
+        { entries: 0, layers: 0 },
+        false,
+        [
+          { id: "a" },
+          { id: "a-cool", when: { path: "bond", op: "lt", value: 8 } },
+          { id: "a-warm", when: { path: "bond", op: "gte", value: 8 } },
+        ],
+      ],
+    )
 
     const r = await post({ kind: "act", parent: null, input: { text: "hi" } })
     assert.equal(r.headers.get("content-type"), "text/event-stream")

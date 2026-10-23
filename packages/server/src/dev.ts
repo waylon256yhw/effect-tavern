@@ -1,7 +1,8 @@
 // The developer's session: one card (CARD, default wuxia) on the local Anthropic connection, or on a scripted model
 // (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The journal lives in
 // .dev/<card>.json at the repo root, so Vite re-evaluating this module after a runtime/server edit, or a restart, keeps
-// the story; the greeting (GREETING, default 0) opens only an empty journal.
+// the story; an empty journal opens on the greeting GREETING names, and on none otherwise: the player picks one on the
+// card page (a greet is a root, and one picked on the server would stay as an orphan root beside the player's).
 import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
 import type { Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
 import { makeSession, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
@@ -101,8 +102,8 @@ const live = (): SessionModel => {
 const model: SessionModel = process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false } : live()
 const card = await loadCard(name)
 const session = makeSession({ card, player, model, store })
-if (session.log.nodes.size === 0) {
-  const greeting = card.greetings[Number(process.env["GREETING"] ?? 0)]
+if (session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
+  const greeting = card.greetings[Number(process.env["GREETING"])]
   if (greeting) session.greet(greeting)
 }
 export const handler = handle(session, { inspect: true })

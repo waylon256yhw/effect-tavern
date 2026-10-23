@@ -731,10 +731,22 @@ export const makeSession = ({
     rules: card.rules,
     /** The record products by id and shape, for a client that draws a node's products by their declared shape. */
     products: products.map((p) => ({ id: p.id, shape: p.shape })),
-    /** What the client's chrome shows about the card: the title and the turn-heading reference. Not the card: fragment bodies stay on the server. */
+    /** What the client shows about the card: its name and one line, the turn-heading reference, and its size as numbers.
+     *  Not the card: fragment bodies, guard lines and lore stay on the server (a ban is a prompt, to a player too). */
     // `input` is the card's default channel, the one client-facing coordinate of participant vs author mode: on `act`
     // the box is the player's line and a note or a thought is this turn's deviation; on `note` every input is direction.
-    meta: { id: card.id, title: card.title ?? card.id, heading: card.heading, input: card.input ?? "act" }, // leaves as JSON, which drops undefined
+    meta: {
+      id: card.id,
+      title: card.title ?? card.id,
+      summary: card.summary,
+      heading: card.heading,
+      input: card.input ?? "act",
+      director: !!card.director,
+      guard: card.guard.length,
+      lore: { entries: card.lore.length, layers: card.lore.reduce((n, e) => n + e.layers.length, 0) }, // the card's size; what is readable now is on the node
+    }, // leaves as JSON, which drops undefined
+    /** The fiction's modules without their text: id, shown name, and the state condition that makes one a variant. */
+    fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
     // In author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
     // mark have nothing to do there.
     snippets: [...(player.snippets ?? []), ...snippets].filter(

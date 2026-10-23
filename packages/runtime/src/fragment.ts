@@ -6,6 +6,7 @@ import { Cond, holds, type State } from "./cond.ts"
 export const Fragment = Schema.Struct({
   id: Schema.String, // in the frame, the id is the slot
   text: Schema.optionalKey(Schema.String), // absent = a slot the player may fill
+  label: Schema.optionalKey(Schema.String), // a fiction module's shown name (the id when absent): the card page lists modules by it, never by their text
   role: Schema.optionalKey(Schema.Literals(["system", "user", "assistant"])),
   enabled: Schema.optionalKey(Schema.Boolean),
   when: Schema.optionalKey(Cond),

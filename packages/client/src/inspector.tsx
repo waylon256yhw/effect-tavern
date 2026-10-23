@@ -7,7 +7,7 @@ import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type 
 import { PinButton, Reading } from "./readings.tsx"
 import { record } from "./record.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import { calls, card, inspecting, log, path, pin, registry, turnOf, type Id } from "./store.ts"
+import { calls, card, log, page, path, pin, registry, turnOf, type Id } from "./store.ts"
 import { fetchCalls } from "./wire.ts"
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
@@ -22,7 +22,8 @@ import { fetchCalls } from "./wire.ts"
 // stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
 // path, `[` `]` too, Escape returns to the story. src/inspect.ts projects; this draws.
 export const openInspector = () => {
-  registry.set(inspecting, registry.get(path).at(-1)?.turn.id ?? null)
+  const id = registry.get(path).at(-1)?.turn.id
+  registry.set(page, id === undefined ? "reader" : { inspect: id })
   void fetchCalls()
 }
 const fmt = (n: number) => n.toLocaleString("en-US")
@@ -367,7 +368,7 @@ export const Inspect = (props: { id: Id }) => {
   const version = () => siblings().findIndex((s) => s.turn.id === props.id) + 1
   const go = (d: number) => {
     const x = line()[at() + d]
-    if (x) registry.set(inspecting, x.turn.id)
+    if (x) registry.set(page, { inspect: x.turn.id })
   }
   const mine = () => trace().get(props.id) ?? []
   // the server's gate: without `inspect` no call carries a request body
@@ -399,7 +400,7 @@ export const Inspect = (props: { id: Id }) => {
       if (tag === "INPUT" || tag === "TEXTAREA") return
       if (e.key === "[") go(-1)
       else if (e.key === "]") go(1)
-      else if (e.key === "Escape") registry.set(inspecting, null)
+      else if (e.key === "Escape") registry.set(page, "reader")
       else return
       e.preventDefault()
     }
@@ -409,7 +410,7 @@ export const Inspect = (props: { id: Id }) => {
   return (
     <div class="inspect" data-pane={pane()}>
       <header class="top">
-        <button class="icon" aria-label="Back to story" onClick={() => registry.set(inspecting, null)}>
+        <button class="icon" aria-label="Back to story" onClick={() => registry.set(page, "reader")}>
           <Back />
         </button>
         <h1>{view()?.title}</h1>

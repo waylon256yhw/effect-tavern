@@ -43,7 +43,7 @@ export const Composer = (props: {
   // Deleting a thread drops its root; an empty journal on a card with an opening greets again. Neither acts on a
   // thread with no player turn yet: there is nothing to leave behind or take.
   const begun = read(started)
-  const open = () => (view()?.greetings ?? 0) > 0
+  const open = () => (view()?.greetings.length ?? 0) > 0
   const clean = () => {
     registry.set(pin, null)
     registry.set(error, null)

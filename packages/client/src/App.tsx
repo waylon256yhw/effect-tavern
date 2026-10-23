@@ -49,7 +49,7 @@ import {
   editing,
   error,
   type Id,
-  inspecting,
+  page,
   latest,
   log,
   path,
@@ -59,7 +59,6 @@ import {
   revising,
   settle,
   stage,
-  timeline,
   withdraw,
 } from "./store.ts"
 import { fetchCard, fetchNodes, send } from "./wire.ts"
@@ -658,8 +657,7 @@ const Glance = (props: {
 }
 
 export const App = () => {
-  const id = read(inspecting)
-  const viewing = read(timeline)
+  const pg = read(page)
   return (
     <>
       <div class="canvas">
@@ -667,11 +665,11 @@ export const App = () => {
         <Side />
         <Reader />
       </div>
-      <Show when={viewing()}>
+      <Show when={pg() === "timeline"}>
         <Timeline />
       </Show>
-      <Show when={id() !== null}>
-        <Inspect id={id()!} />
+      <Show when={typeof pg() === "object"}>
+        <Inspect id={(pg() as { inspect: Id }).inspect} />
       </Show>
     </>
   )

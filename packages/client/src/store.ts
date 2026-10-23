@@ -2,7 +2,8 @@
 // (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
 // keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
 // and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
-import type { Rules } from "@effect-tavern/runtime/src/card.ts"
+import type { Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
+import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
@@ -28,9 +29,14 @@ export const draft = Atom.make<Draft | null>(null)
 export interface CardView {
   id: string
   title: string
+  summary?: string // one line on what this card is
   heading?: string // what titles a turn (Card.heading); absent, turns have no titles and there is no scene list
   input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
-  greetings: number // how many openings the card has: a new thread starts with one (greet) or with the player's line (none)
+  greetings: readonly Greeting[] // the openings: a new thread starts with one (greet, by index) or, with none, with the player's line
+  director: boolean
+  guard: number // must-nots check enforces: a count, never the words
+  lore: { entries: number; layers: number } // the card's size; what is readable now is on the node
+  fiction: readonly { id: string; label?: string; when?: Cond }[] // the fiction's modules without their text
   rules: Rules
   products: readonly { id: string; shape: Shape }[] // record products by declared shape: how the inspector draws them
   snippets: readonly Snippet[]
@@ -49,9 +55,11 @@ export const revising = Atom.make<{
   previous: { text: string; aside: boolean }
 } | null>(null)
 export const error = Atom.make<string | null>(null)
-/** The Inspect page: the node under inspection, or null while reading; the calls by node (GET /calls), read on open. */
-export const inspecting = Atom.make<Id | null>(null)
-export const timeline = Atom.make(false) // the Timeline page: the whole log tree over the reader
+/** The page over the reader: none, the Timeline, or the Inspect page on one node. The reader stays mounted under it,
+ *  so a turn in flight keeps streaming. */
+export type Page = "reader" | "timeline" | { inspect: Id }
+export const page = Atom.make<Page>("reader")
+/** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
 /** The reading line: root → head. */

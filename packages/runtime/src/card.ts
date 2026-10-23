@@ -242,6 +242,7 @@ export type Greeting = typeof Greeting.Type
 export const Card = Schema.Struct({
   id: Schema.String,
   title: Schema.optionalKey(Schema.String), // shown in the client's header; the id when absent. Never reaches the model
+  summary: Schema.optionalKey(Schema.String), // one line on what this card is, for the card page and a gallery. Never reaches the model
   heading: Schema.optionalKey(Schema.String), // what titles a turn: a field path or `<product>.<key>` (a text key of a record product), read off the node; no declaration, no turn titles
   version: Schema.optionalKey(Schema.String), // the author's; a changed card under a running log is the client's call to notice
   source: Schema.optionalKey(Schema.String), // where it came from: a URL, a file, "hand"

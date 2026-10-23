@@ -14,7 +14,7 @@ import { read } from "./bridge.ts"
 import { Back, Checkout, Clue, Edit, Notes, Reword, Swipe, Trash } from "./icons.tsx"
 import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { heading } from "./record.ts"
-import { card, draft, type Id, inspecting, log, path, prose, registry, timeline } from "./store.ts"
+import { card, draft, type Id, log, page, path, prose, registry } from "./store.ts"
 import { dropNodes, fetchCalls, send } from "./wire.ts"
 
 // px: a station's width (its height is the CSS's), the gap between lanes, the row step, the turn ruler, the padding, a thread's
@@ -28,7 +28,7 @@ const BAND = 32
 const THREAD_GAP = 14
 const KNOT = { x: 7, y: 14 }
 
-export const openTimeline = () => registry.set(timeline, true)
+export const openTimeline = () => registry.set(page, "timeline")
 const lineOf = (n: Node) => n.turn.input.text || n.turn.input.note || ""
 const textOf = (n: Node) => lineOf(n) || prose(n)
 
@@ -87,7 +87,7 @@ export const Timeline = () => {
   const isTarget = (id: Id) => target() === id && selected() !== id && !isHead(id)
   const lit = (c: Cell) => c.ids[0] !== DRAFT && c.ids.some((i) => onLine().has(i))
 
-  const close = () => registry.set(timeline, false)
+  const close = () => registry.set(page, "reader")
   const scrollTo = (id: Id) => document.getElementById(`node-${id}`)?.scrollIntoView({ block: "start" })
   const checkout = (id: Id) => {
     setSelected(L.leaf(all(), id))
@@ -106,7 +106,7 @@ export const Timeline = () => {
   }
   const inspect = (id: Id) => {
     close()
-    registry.set(inspecting, id)
+    registry.set(page, { inspect: id })
     void fetchCalls()
   }
   let confirm!: HTMLDialogElement
