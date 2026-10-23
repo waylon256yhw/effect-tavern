@@ -447,6 +447,14 @@
     box-shadow: var(--shadow-1);
     font-size: var(--text-body);
     line-height: var(--leading-body);
+    /* the reader's bar: thin, visible only under the pointer (no end fade: the card is its own scroller, a mask would
+       fade the card's edges too) */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--dur-3) var(--ease);
+  }
+  .side:hover {
+    scrollbar-color: var(--alpha-2) transparent;
   }
   .side h1 {
     margin: 0;
