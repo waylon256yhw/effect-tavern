@@ -3,7 +3,7 @@
 // (App.tsx) and the inspector (inspector.tsx) draw with these.
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { heading, record, status, type Element } from "./record.ts"
@@ -194,37 +194,69 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   )
 }
 
-/** The sibling actions on a node: Swipe, Reword with a word for the narrator ("plainer"), which rides as that
- *  sibling's note, and Edit, which turns the prose into a textarea in place (App.tsx `Editor`). The Record sheet's
- *  footer on the phone, the right card's on the desktop. */
+/** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn, new prose: the wand
+ *  opens a box for a word to the narrator, which rides as that sibling's note; Enter sends, empty or not, and so does
+ *  the wand again) and Edit (the prose as a textarea in place, App.tsx `Editor`). Three icons with hints; the box
+ *  exists only while the wand is asking. The Record sheet's footer on the phone, the right card's on the desktop. */
 export const Rewrite = (props: {
   busy: boolean
   onSwipe: () => void
   onReword: (note?: string) => void
   onEdit: () => void
 }) => {
-  let direction!: HTMLInputElement
+  const [asking, setAsking] = createSignal(false)
+  let direction: HTMLInputElement | undefined
   const reword = () => {
-    const note = direction.value.trim()
-    direction.value = ""
+    const note = direction?.value.trim()
+    setAsking(false)
     props.onReword(note || undefined)
   }
   return (
     <footer class="actions">
-      <input
-        class="direction"
-        placeholder="A word for the rewrite…"
+      <Show when={asking()}>
+        <input
+          class="direction"
+          placeholder="A word for the rewrite…"
+          disabled={props.busy}
+          ref={(el) => {
+            direction = el
+            requestAnimationFrame(() => el.focus())
+          }}
+          onKeyDown={(e) => {
+            if (e.isComposing) return
+            if (e.key === "Enter") {
+              e.preventDefault()
+              reword()
+            } else if (e.key === "Escape") setAsking(false)
+          }}
+        />
+      </Show>
+      <button
+        class="icon"
+        aria-label="Swipe"
+        data-hint="Swipe: the turn again, dice and all"
         disabled={props.busy}
-        ref={(el) => (direction = el)}
-        onKeyDown={(e) => e.key === "Enter" && !e.isComposing && (e.preventDefault(), reword())}
-      />
-      <button class="icon" aria-label="Swipe" disabled={props.busy} onClick={() => props.onSwipe()}>
+        onClick={() => props.onSwipe()}
+      >
         <Swipe />
       </button>
-      <button class="icon" aria-label="Reword" disabled={props.busy} onClick={reword}>
+      <button
+        class="icon"
+        aria-label="Reword"
+        data-hint="Reword: new prose, same turn"
+        aria-expanded={asking() ? "true" : "false"}
+        disabled={props.busy}
+        onClick={() => (asking() ? reword() : setAsking(true))}
+      >
         <Reword />
       </button>
-      <button class="icon" aria-label="Edit" disabled={props.busy} onClick={() => props.onEdit()}>
+      <button
+        class="icon"
+        aria-label="Edit"
+        data-hint="Edit: write it yourself"
+        disabled={props.busy}
+        onClick={() => props.onEdit()}
+      >
         <Edit />
       </button>
     </footer>

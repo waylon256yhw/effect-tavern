@@ -468,6 +468,34 @@
   main > section:last-of-type .record-pill {
     display: none;
   }
+  /* a past turn's Record is a centred card: closed on every side, as tall as its content up to most of the viewport,
+     fading in where the phone's panel rose */
+  .sheet {
+    inset: 0;
+    width: min(36rem, calc(100% - 2 * var(--space-5)));
+    height: fit-content;
+    max-height: 80vh;
+    margin: auto;
+    border-radius: var(--radius-dialog);
+    transform: none;
+    opacity: 0;
+    transition:
+      opacity var(--dur-3) var(--ease),
+      overlay var(--dur-3) allow-discrete,
+      display var(--dur-3) allow-discrete;
+  }
+  .sheet[open] {
+    opacity: 1;
+  }
+  @starting-style {
+    .sheet[open] {
+      opacity: 0;
+      transform: none;
+    }
+  }
+  .sheet .record {
+    flex: 0 1 auto;
+  }
   .canvas {
     box-sizing: border-box;
     display: grid;

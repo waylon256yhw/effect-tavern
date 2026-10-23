@@ -41,6 +41,12 @@ export const compose = Atom.make("") // the composer's text; an Options row writ
 export const aside = Atom.make(false) // this one send goes to the narrator (participant mode's deviation); clears after the send
 export const stage = Atom.make<Phase | null>(null)
 export const editing = Atom.make<Id | null>(null) // the node whose prose is a textarea in place (Edit), until sent or cancelled
+/** The player's own line back in the composer (Revise): which node and field, and the draft it displaced, restored on cancel. */
+export const revising = Atom.make<{
+  node: Id
+  field: "text" | "note"
+  previous: { text: string; aside: boolean }
+} | null>(null)
 export const error = Atom.make<string | null>(null)
 /** The Inspect page: the node under inspection, or null while reading; the calls by node (GET /calls), read on open. */
 export const inspecting = Atom.make<Id | null>(null)
@@ -57,6 +63,11 @@ export const latest = Atom.make((get) => {
   return node ? { node, prev: line.at(-2) } : null
 })
 
+/** A node's name in the chrome: its place on the reading line, or its id when it is off the line. */
+export const turnOf = (line: readonly Node[], id: Id): string => {
+  const i = line.findIndex((n) => n.id === id)
+  return i >= 0 ? `turn ${i + 1}` : `#${id}`
+}
 /** Whether the reading line holds a player's turn: what Start over leaves behind and Delete story takes. */
 export const started = Atom.make((get) => get(path).some((n) => n.turn.input.text || n.turn.input.note))
 

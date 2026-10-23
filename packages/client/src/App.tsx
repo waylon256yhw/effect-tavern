@@ -34,12 +34,15 @@ import { Inspect } from "./inspector.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record, scenes } from "./record.ts"
 import {
+  arrived,
+  aside,
   card,
   compose,
-  draft,
   type Draft,
+  draft,
   editing,
   error,
+  type Id,
   inspecting,
   latest,
   log,
@@ -47,10 +50,9 @@ import {
   pin,
   prose,
   registry,
+  revising,
   stage,
   withdraw,
-  arrived,
-  type Id,
 } from "./store.ts"
 import { fetchCard, fetchNodes, send } from "./wire.ts"
 
@@ -235,16 +237,35 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) =
 }
 
 /** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
-const Said = (props: { input: { text: string; note?: string } }) => (
-  <>
-    <Show when={props.input.text}>
-      <p class="said">{props.input.text}</p>
+const Said = (props: { input: { text: string; note?: string }; onEdit?: (field: "text" | "note") => void }) => {
+  // on a landed node the bubble is the way to revise the line: it goes back into the composer (Cherry Studio's edit)
+  const Bubble = (p: { field: "text" | "note"; text: string }) => (
+    <Show when={props.onEdit} fallback={<p class={{ said: true, note: p.field === "note" }}>{p.text}</p>}>
+      <button
+        type="button"
+        class={{ said: true, note: p.field === "note" }}
+        aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
+        onClick={() => {
+          props.onEdit!(p.field)
+          document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()
+        }}
+      >
+        <span>{p.text}</span>
+        <Edit aria-hidden="true" />
+      </button>
     </Show>
-    <Show when={props.input.note}>
-      <p class="said note">{props.input.note}</p>
-    </Show>
-  </>
-)
+  )
+  return (
+    <>
+      <Show when={props.input.text}>
+        <Bubble field="text" text={props.input.text} />
+      </Show>
+      <Show when={props.input.note}>
+        <Bubble field="note" text={props.input.note!} />
+      </Show>
+    </>
+  )
+}
 
 const Scenes = () => {
   const view = read(card)
@@ -331,10 +352,13 @@ const Section = (props: {
   onSwipe: () => void
   onReword: (note?: string) => void
   onEdit: (text?: string) => void // without text: open the editor; with it: send the edit; `undefined` from the editor: cancel
+  onRevise: (field: "text" | "note") => void // the player's line back into the composer
 }) => {
   const all = read(log)
   const edited = read(editing)
   const siblings = createMemo(() => L.children(all(), props.node.parent))
+  // versions that differ in the player's line are told apart by it; otherwise by the prose
+  const varied = createMemo(() => new Set(siblings().map((v) => `${v.turn.input.text}\n${v.turn.input.note}`)).size > 1)
   let list: HTMLDivElement | undefined
   const at = () => siblings().findIndex((s) => s.id === props.node.id)
   // the version's whole follow-up comes back: the server moves head to its newest leaf
@@ -342,7 +366,7 @@ const Section = (props: {
   const options = () => props.node.turn.products.options as readonly string[] | undefined
   return (
     <section id={`node-${props.node.turn.id}`}>
-      <Said input={props.node.turn.input} />
+      <Said input={props.node.turn.input} onEdit={(f) => props.onRevise(f)} />
       <Show when={edited() === props.node.turn.id} fallback={<Paragraphs text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={(t) => props.onEdit(t)} />
       </Show>
@@ -391,7 +415,7 @@ const Section = (props: {
                         <Edit class="kind" aria-label="Edit" />
                       </Match>
                     </Switch>
-                    <span class="first">{prose(s())}</span>
+                    <span class="first">{varied() ? s().turn.input.text || s().turn.input.note : prose(s())}</span>
                     <Show when={L.below(all(), s().id)}>{(n) => <span class="below">{n()}</span>}</Show>
                   </button>
                 )}
@@ -438,10 +462,41 @@ const Reader = () => {
     stop = send(action)
   }
   const onSend = (text: string, note: boolean) => {
+    if (registry.get(revising)) {
+      // the line revised and sent again: a new turn beside the old one, under the same parent
+      const { n, input } = revised(text)
+      return start(n.parent, input, { kind: "act", parent: n.parent, input })
+    }
     const pinned = registry.get(pin)
     const input = { ...(note ? { text: "", note: text } : { text }), ...(pinned ? { pin: pinned } : {}) }
     registry.set(pin, null)
     start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
+  }
+  // Revise: the bubble puts the line in the composer (the draft there is stashed, back on cancel); Send makes a new
+  // turn, Keep makes a sibling with the prose kept and the record redone over the revised line.
+  const onRevise = (n: Node, field: "text" | "note") => {
+    const r = registry.get(revising)
+    const previous = r?.previous ?? { text: registry.get(compose), aside: registry.get(aside) }
+    registry.set(revising, { node: n.id, field, previous })
+    registry.set(compose, n.turn.input[field] ?? "")
+    registry.set(aside, field === "note")
+  }
+  /** The revised line as the node's input, and the node; revising ends here. */
+  const revised = (text: string) => {
+    const r = registry.get(revising)!
+    const n = L.get(registry.get(log), r.node)
+    registry.set(revising, null)
+    return { n, input: { ...n.turn.input, [r.field]: text } }
+  }
+  const onKeep = (text: string) => {
+    const { n, input } = revised(text)
+    start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
+  }
+  const onCancel = () => {
+    const r = registry.get(revising)!
+    registry.set(revising, null)
+    registry.set(compose, r.previous.text)
+    registry.set(aside, r.previous.aside)
   }
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
   const onReword = (n: Node, note?: string) =>
@@ -487,6 +542,7 @@ const Reader = () => {
                   onSwipe={() => onSwipe(n())}
                   onReword={(note) => onReword(n(), note)}
                   onEdit={(text) => onEdit(n(), text)}
+                  onRevise={(field) => onRevise(n(), field)}
                 />
               )}
             </For>
@@ -497,6 +553,8 @@ const Reader = () => {
           busy={busy()}
           stoppable={phase() !== "check" && phase() !== "record"}
           onSend={onSend}
+          onKeep={onKeep}
+          onCancel={onCancel}
           onStop={onStop}
         />
         <Latest />

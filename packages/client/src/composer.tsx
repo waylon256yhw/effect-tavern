@@ -3,16 +3,18 @@
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Close, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
+import { Check, Close, Edit, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { openInspector } from "./inspector.tsx"
-import { aside, card, compose, error, log, path, pin, registry, started } from "./store.ts"
+import { aside, card, compose, error, log, path, pin, registry, revising, started, turnOf } from "./store.ts"
 import { dropNodes, send } from "./wire.ts"
 
 export const Composer = (props: {
   busy: boolean
   stoppable: boolean // the prose can still be halted: before and during narrate, not while the turn settles
   onSend: (text: string, note: boolean) => void
+  onKeep: (text: string) => void // revising: the line sent as a sibling that keeps the prose
+  onCancel: () => void // revising: the line put back, the displaced draft restored
   onStop: () => void
 }) => {
   const text = read(compose)
@@ -30,6 +32,11 @@ export const Composer = (props: {
   // This one send is a note (participant mode only). It is one state, not a tag per snippet: any number of note snippets
   // may go into the box, the chip says only where the send goes; it clears after the send.
   const toNarratorOn = read(aside)
+  // Revising a landed line: the chip names the turn (a tap scrolls to it) and cancels; Keep sits beside Send.
+  const revise = read(revising)
+  const line = read(path)
+  const locate = () =>
+    document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
   // A thread is a root's subtree, so starting over is a new root: the card's opening when it has one, else the
   // player's next line (the reading line empties until it lands). The old thread stays as the first turn's version.
   // Deleting a thread drops its root; an empty journal on a card with an opening greets again. Neither acts on a
@@ -87,10 +94,11 @@ export const Composer = (props: {
       )}
     </For>
   )
-  const submit = () => {
+  const submit = (keep = false) => {
     const t = text().trim()
     if (!t || props.busy) return false
-    props.onSend(t, isNote())
+    if (keep) props.onKeep(t)
+    else props.onSend(t, isNote())
     registry.set(compose, "")
     registry.set(aside, false)
     return true
@@ -156,7 +164,8 @@ export const Composer = (props: {
             if (e.key === "/" && !e.isComposing && text() === "" && menu) {
               e.preventDefault()
               menu.showPopover()
-            } else ime.keyDown(e)
+            } else if (e.key === "Escape" && revise()) props.onCancel()
+            else ime.keyDown(e)
           }}
         />
         <div class="row">
@@ -253,7 +262,20 @@ export const Composer = (props: {
               </button>
             </div>
           </dialog>
-          <Show when={acting() && toNarratorOn()}>
+          <Show when={revise()}>
+            {(r) => (
+              <span class="chip state">
+                <button type="button" class="bare" aria-label="Show the turn" onPointerDown={keep} onClick={locate}>
+                  <Edit aria-hidden="true" />
+                  Revising {turnOf(line(), r().node)}
+                </button>
+                <button type="button" class="bare" aria-label="Cancel" onPointerDown={keep} onClick={props.onCancel}>
+                  <Close />
+                </button>
+              </span>
+            )}
+          </Show>
+          <Show when={acting() && toNarratorOn() && !revise()}>
             <button
               type="button"
               class="chip state"
@@ -271,6 +293,19 @@ export const Composer = (props: {
             </button>
           </Show>
           <span class="spacer" />
+          <Show when={revise()}>
+            <button
+              type="button"
+              class="icon"
+              aria-label="Keep the prose"
+              data-hint="Keep the prose, redo the record"
+              disabled={!text().trim() || props.busy}
+              onPointerDown={keep}
+              onClick={() => submit(true)}
+            >
+              <Check />
+            </button>
+          </Show>
           <Show
             when={props.busy && props.stoppable}
             fallback={

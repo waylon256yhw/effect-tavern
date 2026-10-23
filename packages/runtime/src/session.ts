@@ -738,9 +738,14 @@ export const makeSession = ({
       const joined = [i.note, note].filter(Boolean).join("\n")
       return sibling(nodeId, "narrate", joined ? { input: { ...i, note: joined } } : undefined, stop)
     },
-    /** The player rewrites the prose: a sibling carrying their text as the reply; check and record run over it, so what
-     *  enters the record is only what the edit fired and answered (README §5 direction 3). */
-    edit: (nodeId: number, text: string): Events => sibling(nodeId, "check", { reply: [{ type: "text", text }] }),
+    /** The player rewrites the prose, or their own line under it, or both: a sibling carrying the new text, with check
+     *  and record run over it, so what enters the record is only what the edit fired and answered (README §5 direction
+     *  3). Revising the line while keeping the prose is for a change of wording, not of what happened: the beats stay. */
+    edit: (nodeId: number, patch: { text?: string; input?: Input }): Events =>
+      sibling(nodeId, "check", {
+        ...(patch.text !== undefined && { reply: [{ type: "text", text: patch.text }] }),
+        ...(patch.input && { input: patch.input }),
+      }),
     /** The player sets fields on a node (a status bar's +/-): effects appended to the node's `adjust`, validated against
      *  the card's bounds and enums now, replayed in the fold after everything the turn itself did. Every descendant sees
      *  it. A value outside the field throws and leaves the node as it was. */
@@ -777,21 +782,27 @@ export type Session = ReturnType<typeof makeSession>
 
 // ───────── The action vocabulary as data: what a client sends, decoded at the trust boundary ─────────
 const Id = Schema.Int
+const InputSchema = Schema.Struct({
+  text: Schema.String,
+  note: Schema.optionalKey(Schema.String),
+  pin: Schema.optionalKey(Schema.String),
+})
 export const Action = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("act"),
     parent: Schema.optionalKey(Schema.NullOr(Id)), // absent: under head; null: a root
-    input: Schema.Struct({
-      text: Schema.String,
-      note: Schema.optionalKey(Schema.String),
-      pin: Schema.optionalKey(Schema.String),
-    }),
+    input: InputSchema,
   }),
   Schema.Struct({ kind: Schema.Literal("greet"), greeting: Schema.optionalKey(Id) }), // a new root from the card's opening
   Schema.Struct({ kind: Schema.Literal("checkout"), node: Schema.NullOr(Id) }), // head to a version's newest leaf, or an empty line
   Schema.Struct({ kind: Schema.Literal("swipe"), node: Id }),
   Schema.Struct({ kind: Schema.Literal("reword"), node: Id, note: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({ kind: Schema.Literal("edit"), node: Id, text: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("edit"),
+    node: Id,
+    text: Schema.optionalKey(Schema.String), // the prose rewritten
+    input: Schema.optionalKey(InputSchema), // the player's line revised, the prose kept
+  }),
   Schema.Struct({ kind: Schema.Literal("setField"), node: Id, effects: Schema.Array(Effect_) }),
   Schema.Struct({ kind: Schema.Literal("pick"), node: Id, option: Id }),
   Schema.Struct({ kind: Schema.Literal("demand"), node: Id, product: Schema.String }),
@@ -816,7 +827,7 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
       case "reword":
         return s.reword(a.node, a.note, stop)
       case "edit":
-        return s.edit(a.node, a.text)
+        return s.edit(a.node, a)
       case "setField":
         return Stream.succeed<Event>({ kind: "change", ...s.setField(a.node, a.effects) })
       case "pick":

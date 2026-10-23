@@ -340,7 +340,7 @@ const program = Effect.gen(function* () {
   // edit: the player's prose stands as the reply of a sibling of t2; check and record run over it, narrate never does.
   // The edited text mentions the tattoo, so the reveal that was open at t2 fires from the player's own words.
   i = calls().length
-  const e = yield* go(S.edit(t2.id, "EDITED: the sleeve tears, a crane tattoo"))
+  const e = yield* go(S.edit(t2.id, { text: "EDITED: the sleeve tears, a crane tattoo" }))
   assert.deepEqual(since(i), ["check", "record"])
   assert.deepEqual(
     [e.parent, e.read, e.beats, e.brief, prose(e)],
@@ -349,6 +349,15 @@ const program = Effect.gen(function* () {
   assert.deepEqual(e.fired, [{ id: "li", layer: 2 }])
   assert.equal(e.sibling, "edit")
   assert.ok(str(prompts("check").at(-1)!).includes("EDITED"))
+  // edit with the line revised and the prose kept: the same sibling shape, the record redone over the new words
+  i = calls().length
+  const r = yield* go(S.edit(t2.id, { input: { text: "REVISED line" } }))
+  assert.deepEqual(since(i), ["check", "record"])
+  assert.deepEqual(
+    [r.parent, r.input.text, prose(r), r.beats, r.sibling],
+    [t2.parent, "REVISED line", prose(t2), t2.beats, "edit"],
+  )
+  assert.ok(str(prompts("record").at(-1)!).includes("REVISED line"))
 
   // setField: an effect kept on t3 and folded last; every descendant's state moves with it (t6 was 16: t5's +8 on 20), no call made.
   // A value outside the field is refused and the node is untouched.

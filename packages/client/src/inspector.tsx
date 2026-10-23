@@ -7,7 +7,7 @@ import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type 
 import { PinButton, Reading } from "./readings.tsx"
 import { record } from "./record.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import { calls, card, inspecting, log, path, pin, registry, type Id } from "./store.ts"
+import { calls, card, inspecting, log, path, pin, registry, turnOf, type Id } from "./store.ts"
 import { fetchCalls } from "./wire.ts"
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
@@ -359,10 +359,6 @@ export const Inspect = (props: { id: Id }) => {
   const pinned = read(pin)
   const node = () => all().nodes.get(props.id)
   const at = () => line().findIndex((x) => x.turn.id === props.id) // -1: a sibling off the reading line
-  const turnOf = (id: Id) => {
-    const i = line().findIndex((x) => x.turn.id === id)
-    return i >= 0 ? `turn ${i + 1}` : `#${id}`
-  }
   const parent = () => {
     const p = node()?.turn.parent
     return p === null || p === undefined ? undefined : all().nodes.get(p)
@@ -572,7 +568,7 @@ export const Inspect = (props: { id: Id }) => {
                 <span class="lbl">State</span>
                 <span class="meta">
                   <Show when={parent()} fallback="after this node">
-                    {(p) => `vs ${turnOf(p().turn.id)}`}
+                    {(p) => `vs ${turnOf(line(), p().turn.id)}`}
                   </Show>
                   <Show when={x().events.length}> · {x().events.join(", ")}</Show>
                 </span>
