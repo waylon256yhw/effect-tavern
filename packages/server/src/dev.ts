@@ -3,8 +3,7 @@
 // .dev/<card>.json at the repo root, so Vite re-evaluating this module after a runtime/server edit, or a restart, keeps
 // the story; the greeting (GREETING, default 0) opens only an empty journal.
 import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
-import type { Beat } from "@effect-tavern/runtime/src/card.ts"
-import type { Store } from "@effect-tavern/runtime/src/journal.ts"
+import type { Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
 import { makeSession, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
 import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -15,10 +14,10 @@ const name = process.env["CARD"] ?? "wuxia"
 const dir = fileURLToPath(new URL("../../../.dev/", import.meta.url))
 const file = `${dir}${name}.json`
 mkdirSync(dir, { recursive: true })
-const store: Store<Beat> = {
-  // ponytail: the whole list, synchronously, on every save; a dev journal is a few hundred nodes at most
-  read: () => (existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Turn[]) : []),
-  write: (nodes) => writeFileSync(file, JSON.stringify(nodes)),
+const store: Store<Turn> = {
+  // ponytail: the whole snapshot, synchronously, on every commit; a dev journal is a few hundred nodes at most
+  read: () => (existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Snapshot<Turn>) : undefined),
+  write: (s) => writeFileSync(file, JSON.stringify(s)),
 }
 
 let n = 0
@@ -100,7 +99,7 @@ const live = (): SessionModel => {
 const model: SessionModel = process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false } : live()
 const card = await loadCard(name)
 const session = makeSession({ card, player, model, store })
-if (session.size === 0) {
+if (session.log.nodes.size === 0) {
   const greeting = card.greetings[Number(process.env["GREETING"] ?? 0)]
   if (greeting) session.greet(greeting)
 }

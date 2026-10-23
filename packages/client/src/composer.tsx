@@ -6,7 +6,7 @@ import { read } from "./bridge.ts"
 import { Close, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { openInspector } from "./inspector.tsx"
-import { active, aside, card, compose, error, nodes, path, pin, registry, started } from "./store.ts"
+import { aside, card, compose, error, log, path, pin, registry, started } from "./store.ts"
 import { dropNodes, send } from "./wire.ts"
 
 export const Composer = (props: {
@@ -42,14 +42,13 @@ export const Composer = (props: {
   }
   const startOver = () => {
     clean()
-    registry.update(active, (m) => new Map(m).set(null, null))
-    if (open()) send({ kind: "greet" })
+    send(open() ? { kind: "greet" } : { kind: "checkout", node: null })
   }
   let confirmDrop!: HTMLDialogElement
   const deleteStory = async () => {
     clean()
     await dropNodes(registry.get(path)[0]!.turn.id) // the item is disabled while the line is empty
-    if (registry.get(nodes).size === 0 && open()) send({ kind: "greet" })
+    if (registry.get(log).nodes.size === 0 && open()) send({ kind: "greet" })
   }
   const isNote = () => !acting() || toNarratorOn()
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.

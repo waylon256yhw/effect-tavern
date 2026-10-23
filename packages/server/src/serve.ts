@@ -3,8 +3,8 @@
 //                 `event:` per kind; a failure is an `error` event. Closing the response is the stop: before the first
 //                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
 //                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
-//   GET  /nodes   every node's projection, for a client that just opened.
-//   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the snapshot.
+//   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
+//   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the `call` events of recent turns by node id: the inspector's trace. They evaporate with the SSE
 //                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
 //                 outputs-only, and a restart starts the trace over.
@@ -46,7 +46,6 @@ export const handle = (s: Session, { inspect = false } = {}) => {
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
     }
-    const snapshot = () => s.nodes().map((t) => s.node(t.id))
     if (req.method === "GET" && req.url === "/card")
       return json(200, {
         ...s.meta,
@@ -56,15 +55,17 @@ export const handle = (s: Session, { inspect = false } = {}) => {
         snippets: s.snippets,
         format: s.format,
       })
-    if (req.method === "GET" && req.url === "/nodes") return json(200, snapshot())
+    if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
     const dropping = req.method === "DELETE" && /^\/nodes\/(\d+)$/.exec(req.url ?? "")
     if (dropping) {
+      let c
       try {
-        for (const id of s.drop(Number(dropping[1]))) calls.delete(id)
+        c = s.drop(Number(dropping[1]))
       } catch (e) {
         return json(404, { error: e instanceof Error ? e.message : String(e) })
       }
-      return json(200, snapshot())
+      for (const id of c.dropped ?? []) calls.delete(id)
+      return json(200, c)
     }
     if (req.method === "GET" && req.url === "/calls") return json(200, Object.fromEntries(calls))
     if (req.method !== "POST" || req.url !== "/") return json(404, { error: "not found" })
@@ -90,8 +91,8 @@ export const handle = (s: Session, { inspect = false } = {}) => {
           if (e.kind === "delta") narrating = true
           const v = shown(e)
           if (v.kind === "call") made.push(v)
-          if (v.kind === "node") {
-            const id = v.node.turn.id
+          if (v.kind === "change" && v.node) {
+            const id = v.node.id
             calls.set(id, [...(calls.get(id) ?? []), ...made.splice(0)])
             for (const k of calls.keys()) if (calls.size > KEEP) calls.delete(k)
           }

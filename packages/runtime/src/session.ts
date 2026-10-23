@@ -57,14 +57,13 @@ import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
 import {
   deliveredIn,
   deliveredOn,
-  makeJournal,
   notesOf,
   textOf as proseOf,
   type Brief,
   type Input,
-  type Store,
   type Turn as TurnOf,
 } from "./journal.ts"
+import * as Log from "./log.ts"
 import { key, makeLore, type Disclosure } from "./lore.ts"
 import {
   cap,
@@ -84,6 +83,8 @@ export type Phase = "lookup" | "decide" | "direct" | "narrate" | "check" | "reco
 /** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `readable` is what the
  *  path could still be told (hooks, not bodies): the client's untold list, where a pin is picked from. */
 export interface Node {
+  id: number
+  parent: number | null
   turn: Turn
   state: State
   events: readonly string[]
@@ -95,8 +96,9 @@ export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part }
   | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number }
-  | { kind: "node"; node: Node }
+  | ({ kind: "change" } & Change) // the log moved: a node landed or was amended, nodes dropped, and where head is now
 export type Events = Stream.Stream<Event, ModelError>
+export type Change = Log.Change<Node>
 /** A stop signal: completes when the player halts the prose (a Deferred's await on the wire). Only narrate listens. */
 export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
@@ -206,7 +208,8 @@ const noteOf = (i: Input) => (i.text && i.note ? [sys(`Player note: ${i.note}`)]
 export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn, E> =>
   Stream.runLast(events).pipe(
     Effect.map((last) => {
-      if (last._tag === "None" || last.value.kind !== "node") throw new Error("action ended without a node")
+      if (last._tag === "None" || last.value.kind !== "change" || !last.value.node)
+        throw new Error("action ended without a node")
       return last.value.node.turn
     }),
   )
@@ -229,7 +232,7 @@ export const makeSession = ({
   card: Card
   player: Player
   model: SessionModel
-  store?: Store<Beat> // the journal's persistence; none = in memory
+  store?: Log.Store<Turn> // the log's persistence; none = in memory
 }) => {
   const rpg = makeCard(card.rules)
   // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
@@ -247,13 +250,14 @@ export const makeSession = ({
     while (n < cs.length && holds(cs[n]!, s)) n++
     return n
   }
-  const journal = makeJournal<Beat>(store)
-  const { chain } = journal
+  const held = Log.hold<Turn>(store)
+  const chain = (id: number | null) => Log.chain(held.log, id)
+  const turnOf = (id: number) => Log.get(held.log, id)
   /** What a disclosure says: a lore layer, or one item of a recall product stored on a node (`<product>@<node>#<i>`). */
   const textOf = (d: Disclosure): string => {
     const ref = entryRef(d.id)
     if (!ref) return L.text(d)
-    return itemText((journal.get(ref.node).products[ref.product] as unknown[])[ref.index])
+    return itemText((turnOf(ref.node).products[ref.product] as unknown[])[ref.index])
   }
   const summaries = makeSummaries<Beat>(textOf)
   let seeds = 0
@@ -339,6 +343,8 @@ export const makeSession = ({
     const path = chain(t.id)
     const settled = settledOf(path, t)
     return {
+      id: t.id,
+      parent: t.parent,
       turn: t,
       state: stateAt(path),
       events: settled.events,
@@ -347,7 +353,12 @@ export const makeSession = ({
       readable: readableOn(path).map(({ id, hook }) => ({ id, hook })),
     }
   }
-  const nodeEvent = (t: Turn): Event => ({ kind: "node", node: project(t) })
+  /** A committed change, projected for the wire: the node as the client sees it, the dropped ids, head. */
+  const change = (c: Log.Change<Turn>): Change => ({
+    head: c.head,
+    ...(c.dropped && { dropped: c.dropped }),
+    ...(c.node && { node: project(c.node) }),
+  })
 
   // ───────── Views (src/fragment + src/history), as provider messages ─────────
   /** Past assistant turns go back as parts (reasoning with its signature) when the connection takes them; else as text. */
@@ -646,7 +657,7 @@ export const makeSession = ({
       )
       const answers = (rec.answers ?? {}) as Answers
       rpg.settleReadouts(s1, answers) // validate now, not on the first replay
-      const node = journal.save({
+      const c = Log.add(held.log, {
         parent,
         input,
         read: disclosures,
@@ -660,37 +671,47 @@ export const makeSession = ({
         ...(base && { sibling: SIBLING[from] }),
         products: rec.products,
       })
-      yield* emit(nodeEvent(node))
+      yield* emit({ kind: "change", ...change(held.commit(c)) })
     })
   const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>, stop?: Stop) => {
-    const base = { ...journal.get(nodeId), ...patch }
+    const base = { ...turnOf(nodeId), ...patch }
     return emitting((emit) => turn(emit, base.parent, base.input, from, base, stop))
   }
 
   return {
     /** A greeting node: the card's opening as a root, with no player input; its `do` is the node's opening. */
-    greet: (g: Greeting): Node =>
-      project(
-        journal.save({
-          parent: null,
-          input: { text: "" },
-          read: [],
-          ...(g.do ? { opening: g.do } : {}),
-          beats: [],
-          answers: {},
-          end: "end",
-          brief: { must: [], may: [] },
-          reply: [{ type: "text", text: g.text }],
-          fired: [],
-          violated: [],
-          products: {},
-        }),
+    greet: (g: Greeting): Change =>
+      change(
+        held.commit(
+          Log.add(held.log, {
+            parent: null,
+            input: { text: "" },
+            read: [],
+            ...(g.do ? { opening: g.do } : {}),
+            beats: [],
+            answers: {},
+            end: "end",
+            brief: { must: [], may: [] },
+            reply: [{ type: "text", text: g.text }],
+            fired: [],
+            violated: [],
+            products: {},
+          }),
+        ),
       ),
-    node: (id: number): Node => project(journal.get(id)),
+    node: (id: number): Node => project(turnOf(id)),
+    /** Every node projected, and head: what a client opens with. */
+    snapshot: (): Log.Snapshot<Node> => ({ nodes: [...held.log.nodes.values()].map(project), head: held.log.head }),
+    /** The log as it stands: head, and every turn by id. */
+    get log() {
+      return held.log
+    },
+    /** Head moves to a version's newest leaf (its whole follow-up comes back), or to null: an empty line. */
+    checkout: (id: number | null): Change => change(held.commit(Log.checkout(held.log, id))),
     /** The card's openings, for the greet action: a new thread is a new root, so the client asks for one by index. */
     greetings: card.greetings,
-    /** A node and its descendants gone for good: deleting a thread is dropping its root. The ids dropped come back. */
-    drop: (id: number): number[] => journal.drop(id),
+    /** A node and its descendants gone for good: deleting a thread is dropping its root. */
+    drop: (id: number): Change => change(held.commit(Log.drop(held.log, id))),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
     /** The record products by id and shape, for a client that draws a node's products by their declared shape. */
@@ -699,16 +720,12 @@ export const makeSession = ({
     // `input` is the card's default channel, the one client-facing coordinate of participant vs author mode: on `act`
     // the box is the player's line and a note or a thought is this turn's deviation; on `note` every input is direction.
     meta: { id: card.id, title: card.title ?? card.id, heading: card.heading, input: card.input ?? "act" }, // leaves as JSON, which drops undefined
-    nodes: (): Turn[] => [...journal.values()],
     // In author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
     // mark have nothing to do there.
     snippets: [...(player.snippets ?? []), ...snippets].filter(
       (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
     ),
     format: [...(player.format ?? []), ...format],
-    get size() {
-      return journal.size
-    },
     /** The player's turn: a child of `parent` (null for a root), every stage the card declares. */
     act: (parent: number | null, input: Input, stop?: Stop): Events =>
       emitting((emit) => turn(emit, parent, input, "lookup", undefined, stop)),
@@ -717,7 +734,7 @@ export const makeSession = ({
     swipe: (nodeId: number, stop?: Stop): Events => sibling(nodeId, "lookup", undefined, stop),
     /** A rewrite may carry a word to the narrator ("plainer"): it joins the input's note, this sibling's only. */
     reword: (nodeId: number, note?: string, stop?: Stop): Events => {
-      const i = journal.get(nodeId).input
+      const i = turnOf(nodeId).input
       const joined = [i.note, note].filter(Boolean).join("\n")
       return sibling(nodeId, "narrate", joined ? { input: { ...i, note: joined } } : undefined, stop)
     },
@@ -727,15 +744,15 @@ export const makeSession = ({
     /** The player sets fields on a node (a status bar's +/-): effects appended to the node's `adjust`, validated against
      *  the card's bounds and enums now, replayed in the fold after everything the turn itself did. Every descendant sees
      *  it. A value outside the field throws and leaves the node as it was. */
-    setField: (nodeId: number, effects: readonly (typeof Effect_.Type)[]): Node => {
-      const t = journal.get(nodeId)
+    setField: (nodeId: number, effects: readonly (typeof Effect_.Type)[]): Change => {
+      const t = turnOf(nodeId)
       const adjust = [...(t.adjust ?? []), ...effects]
       settleTurn(stateAt(chain(t.parent)), { ...t, adjust })
-      return project(journal.amend(nodeId, { adjust }))
+      return change(held.commit(Log.amend(held.log, nodeId, { adjust })))
     },
     /** The player picks one of a node's `options`: it is their next act, a child turn like any typed input. */
     pick: (nodeId: number, i: number, stop?: Stop): Events => {
-      const text = (journal.get(nodeId).products.options as readonly string[] | undefined)?.[i]
+      const text = (turnOf(nodeId).products.options as readonly string[] | undefined)?.[i]
       if (text === undefined) throw new Error(`no option ${i} on node ${nodeId}`)
       return emitting((emit) => turn(emit, nodeId, { text }, "lookup", undefined, stop))
     },
@@ -743,13 +760,14 @@ export const makeSession = ({
      *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner
      *  forum" kind of card (docs/card-reading-2.md §2). */
     demand: (nodeId: number, productId: string): Events => {
-      const t = journal.get(nodeId)
+      const t = turnOf(nodeId)
       const p = products.find((x) => x.id === productId)
       if (!p) throw new Error(`${productId}: not a product of this card`)
       return emitting((emit) =>
         Effect.gen(function* () {
           const rec = yield* record(emit, [p], chain(t.parent), `${t.input.text}\n${proseOf(t.reply)}`)
-          yield* emit(nodeEvent(journal.amend(nodeId, { products: { ...t.products, ...rec.products } })))
+          const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...rec.products } })
+          yield* emit({ kind: "change", ...change(held.commit(amended)) })
         }),
       )
     },
@@ -762,7 +780,7 @@ const Id = Schema.Int
 export const Action = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("act"),
-    parent: Schema.NullOr(Id),
+    parent: Schema.optionalKey(Schema.NullOr(Id)), // absent: under head; null: a root
     input: Schema.Struct({
       text: Schema.String,
       note: Schema.optionalKey(Schema.String),
@@ -770,6 +788,7 @@ export const Action = Schema.Union([
     }),
   }),
   Schema.Struct({ kind: Schema.Literal("greet"), greeting: Schema.optionalKey(Id) }), // a new root from the card's opening
+  Schema.Struct({ kind: Schema.Literal("checkout"), node: Schema.NullOr(Id) }), // head to a version's newest leaf, or an empty line
   Schema.Struct({ kind: Schema.Literal("swipe"), node: Id }),
   Schema.Struct({ kind: Schema.Literal("reword"), node: Id, note: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ kind: Schema.Literal("edit"), node: Id, text: Schema.String }),
@@ -784,12 +803,14 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
   Stream.suspend(() => {
     switch (a.kind) {
       case "act":
-        return s.act(a.parent, a.input, stop)
+        return s.act(a.parent === undefined ? s.log.head : a.parent, a.input, stop)
       case "greet": {
         const g = s.greetings[a.greeting ?? 0]
         if (!g) throw new Error(`no greeting ${a.greeting ?? 0}`)
-        return Stream.succeed<Event>({ kind: "node", node: s.greet(g) })
+        return Stream.succeed<Event>({ kind: "change", ...s.greet(g) })
       }
+      case "checkout":
+        return Stream.succeed<Event>({ kind: "change", ...s.checkout(a.node) })
       case "swipe":
         return s.swipe(a.node, stop)
       case "reword":
@@ -797,7 +818,7 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
       case "edit":
         return s.edit(a.node, a.text)
       case "setField":
-        return Stream.succeed<Event>({ kind: "node", node: s.setField(a.node, a.effects) })
+        return Stream.succeed<Event>({ kind: "change", ...s.setField(a.node, a.effects) })
       case "pick":
         return s.pick(a.node, a.option, stop)
       case "demand":

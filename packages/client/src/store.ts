@@ -1,10 +1,11 @@
-// The client's state as atoms, fed by the wire's events. The log tree lives in `nodes`; which sibling the reader is on
-// is `active` (parent → child), client state the protocol does not keep; the path is derived by walking it from the
-// root. `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over and
-// keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
+// The client's state as atoms, fed by the wire's events. The log tree lives in `log`, a replica of the server's
+// (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
+// keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
+// and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
+import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
 import * as Atom from "effect/reactivity/Atom"
@@ -20,8 +21,7 @@ export interface Draft {
 export type Wire = Event | { kind: "error"; message: string }
 
 export const registry = AtomRegistry.make()
-export const nodes = Atom.make<ReadonlyMap<Id, Node>>(new Map())
-export const active = Atom.make<ReadonlyMap<Id | null, Id | null>>(new Map()) // a null child: none chosen, a new thread begins here
+export const log = Atom.make<L.Log<Node>>(L.of<Node>())
 export const draft = Atom.make<Draft | null>(null)
 /** What the client draws the card by (GET /card): read once at open, before anything subscribes, hence keepAlive. */
 export interface CardView {
@@ -46,25 +46,8 @@ export const error = Atom.make<string | null>(null)
 export const inspecting = Atom.make<Id | null>(null)
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
-/** Siblings of a parent in id order; the newest is the default active one. */
-export const childrenOf = (all: ReadonlyMap<Id, Node>, parent: Id | null): Node[] =>
-  [...all.values()].filter((n) => n.turn.parent === parent).sort((a, b) => a.turn.id - b.turn.id)
-
-/** The reading line: from the root, the active child at every step. */
-export const path = Atom.make((get) => {
-  const all = get(nodes)
-  const chosen = get(active)
-  const out: Node[] = []
-  let parent: Id | null = null
-  for (;;) {
-    const kids = childrenOf(all, parent)
-    const pick = chosen.get(parent)
-    if (kids.length === 0 || pick === null) return out
-    const next: Node = all.get(pick!) ?? kids.at(-1)!
-    out.push(next)
-    parent = next.turn.id
-  }
-})
+/** The reading line: root → head. */
+export const path = Atom.make((get) => L.path(get(log)))
 
 /** The last node on the reading line and the one before it (its parent): what the header's dot, the Status table and
  *  the desktop's inline Record read. */
@@ -206,9 +189,8 @@ export const apply = (e: Wire): void => {
     case "delta":
       if (e.part.type === "text-delta") enqueue(e.part.text)
       return
-    case "node":
-      registry.update(nodes, (all) => new Map(all).set(e.node.turn.id, e.node))
-      registry.update(active, (m) => new Map(m).set(e.node.turn.parent, e.node.turn.id))
+    case "change":
+      registry.update(log, (l) => L.apply(l, e))
       resetPlay()
       registry.set(draft, null)
       registry.set(stage, null)
@@ -228,9 +210,4 @@ export const withdraw = (): void => {
   if (!d || registry.get(compose)) return
   registry.set(compose, d.input.text || d.input.note || "")
   registry.set(aside, !!d.input.note)
-}
-
-export const load = (all: readonly Node[]): void => {
-  registry.set(nodes, new Map(all.map((n) => [n.turn.id, n])))
-  registry.set(active, new Map())
 }

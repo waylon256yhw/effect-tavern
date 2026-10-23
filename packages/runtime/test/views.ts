@@ -1,4 +1,4 @@
-// Tests for src/journal.ts + src/history.ts: history is a per-stage VIEW over the turn path, never stored (§17).
+// Tests for src/history.ts over src/log.ts + src/journal.ts: history is a per-stage VIEW over the turn path, never stored (§17).
 // Only the narrator sees the transcript. Structured stages see facts; most see only this turn.
 // Compression is a derived view: a prefix range is replaced by the CODE fold of its notes plus the lore delivered in
 // it, cached by range. Turn nodes are never mutated. record runs every turn: notes are the compression source.
@@ -7,15 +7,8 @@ import { Effect } from "effect"
 import assert from "node:assert/strict"
 import type { Msg } from "../src/fragment.ts"
 import { ledger, makeSummaries, narratorHistory } from "../src/history.ts"
-import {
-  deliveredOn,
-  makeJournal,
-  notesOf,
-  prose,
-  type Brief,
-  type Input,
-  type Turn as TurnOf,
-} from "../src/journal.ts"
+import { deliveredOn, notesOf, prose, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
+import * as Log from "../src/log.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
 
 // ───────── Card: three authored layers (§16.4 + frame), strings only here ─────────
@@ -35,8 +28,8 @@ interface Beat {
   seed: number
 }
 type Turn = TurnOf<Beat>
-const journal = makeJournal<Beat>()
-const { chain } = journal
+const held = Log.hold<Turn>()
+const chain = (id: number | null) => Log.chain(held.log, id)
 const eventsOf = (t: Turn) => t.beats.map((b) => `${b.decide}:${b.seed % 2 ? "hit" : "miss"}`)
 const summaries = makeSummaries<Beat>(L.text)
 
@@ -120,19 +113,21 @@ const run = (
         ? (yield* ask("check", render(card, path, "check", cur))).split(",").filter(Boolean)
         : []
     const notes = [yield* ask("record", render(card, path, "record", cur))]
-    return journal.save({
-      parent,
-      input,
-      read,
-      beats,
-      answers: {},
-      end: "end",
-      brief: cur.brief,
-      reply: [{ type: "text", text: written }],
-      fired,
-      violated,
-      products: { notes },
-    })
+    return held.commit(
+      Log.add(held.log, {
+        parent,
+        input,
+        read,
+        beats,
+        answers: {},
+        end: "end",
+        brief: cur.brief,
+        reply: [{ type: "text", text: written }],
+        fired,
+        violated,
+        products: { notes },
+      }),
+    ).node!
   })
 
 // Scripted answers in call order; each block carries a distinctive marker (TONE#k, PROSE#k, NOTE#k) so views can be
@@ -224,10 +219,10 @@ const program = Effect.gen(function* () {
   assert.equal(n4[0].text, directed.frame[0])
 
   // Compression: derived view; nodes untouched; lore delivered in the range survives; shared across branches.
-  const before = JSON.stringify([...journal.values()])
+  const before = JSON.stringify([...held.log.nodes.values()])
   const path = chain(turns[4].id)
   const sum = summaries.compress(path, 2)! // folds turns 0..2
-  assert.equal(JSON.stringify([...journal.values()]), before)
+  assert.equal(JSON.stringify([...held.log.nodes.values()]), before)
   assert.deepEqual([sum.from, sum.to], [turns[0].id, turns[2].id])
   const cur: Current = { input: { text: "next" }, beats: [], read: [], brief: { must: [], may: [] } }
   v = render(directed, path, "narrate", cur)
@@ -256,18 +251,4 @@ const program = Effect.gen(function* () {
 
 await Effect.runPromise(program)
 
-// ───────── Store: a journal reloaded from what it wrote is the same tree ─────────
-{
-  let kept: readonly Turn[] = []
-  const store = { read: () => kept, write: (nodes: readonly Turn[]) => void (kept = nodes) }
-  const j = makeJournal<Beat>(store)
-  const a = j.save({ ...journal.get(0), parent: null })
-  const b = j.save({ ...journal.get(1), parent: a.id })
-  j.amend(b.id, { violated: ["x"] })
-  assert.equal(kept.length, 2)
-  const back = makeJournal<Beat>(store)
-  assert.deepEqual(back.chain(b.id), j.chain(b.id))
-  assert.deepEqual(back.get(b.id).violated, ["x"])
-  assert.equal(back.save({ ...journal.get(0), parent: null }).id, 2) // ids continue past what was read
-}
 console.log("ok")

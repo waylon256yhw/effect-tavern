@@ -6,7 +6,8 @@ import { Back, Clue, Next, Prev, Record } from "./icons.tsx"
 import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type Tray } from "./inspect.ts"
 import { PinButton, Reading } from "./readings.tsx"
 import { record } from "./record.ts"
-import { calls, card, childrenOf, inspecting, nodes, path, pin, registry, type Id } from "./store.ts"
+import * as L from "@effect-tavern/runtime/src/log.ts"
+import { calls, card, inspecting, log, path, pin, registry, type Id } from "./store.ts"
 import { fetchCalls } from "./wire.ts"
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
@@ -351,12 +352,12 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
 }
 
 export const Inspect = (props: { id: Id }) => {
-  const all = read(nodes)
+  const all = read(log)
   const line = read(path)
   const trace = read(calls)
   const view = read(card)
   const pinned = read(pin)
-  const node = () => all().get(props.id)
+  const node = () => all().nodes.get(props.id)
   const at = () => line().findIndex((x) => x.turn.id === props.id) // -1: a sibling off the reading line
   const turnOf = (id: Id) => {
     const i = line().findIndex((x) => x.turn.id === id)
@@ -364,9 +365,9 @@ export const Inspect = (props: { id: Id }) => {
   }
   const parent = () => {
     const p = node()?.turn.parent
-    return p === null || p === undefined ? undefined : all().get(p)
+    return p === null || p === undefined ? undefined : all().nodes.get(p)
   }
-  const siblings = createMemo(() => (node() ? childrenOf(all(), node()!.turn.parent) : []))
+  const siblings = createMemo(() => (node() ? L.children(all(), node()!.parent) : []))
   const version = () => siblings().findIndex((s) => s.turn.id === props.id) + 1
   const go = (d: number) => {
     const x = line()[at() + d]

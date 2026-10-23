@@ -7,6 +7,7 @@
 // menu a popover anchored to its button: the platform is the component library. This file is the reader: the flow,
 // the bar, the side cards; readings.tsx draws the Record's pieces, composer.tsx the box, inspector.tsx the Inspect
 // page, bridge.ts the atom → accessor read they all use.
+import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
@@ -33,9 +34,7 @@ import { Inspect } from "./inspector.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record, scenes } from "./record.ts"
 import {
-  active,
   card,
-  childrenOf,
   compose,
   draft,
   type Draft,
@@ -43,7 +42,7 @@ import {
   error,
   inspecting,
   latest,
-  nodes,
+  log,
   path,
   pin,
   prose,
@@ -333,28 +332,13 @@ const Section = (props: {
   onReword: (note?: string) => void
   onEdit: (text?: string) => void // without text: open the editor; with it: send the edit; `undefined` from the editor: cancel
 }) => {
-  const all = read(nodes)
+  const all = read(log)
   const edited = read(editing)
-  const siblings = createMemo(() => childrenOf(all(), props.node.turn.parent))
-  // how many nodes follow a version: what the player leaves behind by switching away from it
-  const below = (id: Id) => {
-    let n = 0
-    for (const node of all().values()) {
-      for (let p = node.turn.parent; p !== null; p = all().get(p)?.turn.parent ?? null)
-        if (p === id) {
-          n++
-          break
-        }
-    }
-    return n
-  }
+  const siblings = createMemo(() => L.children(all(), props.node.parent))
   let list: HTMLDivElement | undefined
-  const at = () => siblings().findIndex((s) => s.turn.id === props.node.turn.id)
-  const go = (i: number) => {
-    const parent = props.node.turn.parent
-    const id = siblings()[i]!.turn.id
-    registry.update(active, (m) => new Map(m).set(parent, id))
-  }
+  const at = () => siblings().findIndex((s) => s.id === props.node.id)
+  // the version's whole follow-up comes back: the server moves head to its newest leaf
+  const go = (i: number) => send({ kind: "checkout", node: siblings()[i]!.id })
   const options = () => props.node.turn.products.options as readonly string[] | undefined
   return (
     <section id={`node-${props.node.turn.id}`}>
@@ -408,7 +392,7 @@ const Section = (props: {
                       </Match>
                     </Switch>
                     <span class="first">{prose(s())}</span>
-                    <Show when={below(s().turn.id)}>{(n) => <span class="below">{n()}</span>}</Show>
+                    <Show when={L.below(all(), s().id)}>{(n) => <span class="below">{n()}</span>}</Show>
                   </button>
                 )}
               </For>
@@ -454,11 +438,10 @@ const Reader = () => {
     stop = send(action)
   }
   const onSend = (text: string, note: boolean) => {
-    const parent = registry.get(path).at(-1)?.turn.id ?? null
     const pinned = registry.get(pin)
     const input = { ...(note ? { text: "", note: text } : { text }), ...(pinned ? { pin: pinned } : {}) }
     registry.set(pin, null)
-    start(parent, input, { kind: "act", parent, input })
+    start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
   }
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
   const onReword = (n: Node, note?: string) =>
@@ -474,13 +457,13 @@ const Reader = () => {
     stop()
     // Before the first character the turn is withdrawn; after it, the server finishes a `stopped` node the closed
     // response never carried, so read the snapshot back until it shows up.
-    const was = registry.get(nodes).size
+    const was = registry.get(log).nodes.size
     if (!arrived()) {
       withdraw()
       return registry.set(draft, null)
     }
     registry.set(stage, "record") // what the server is doing with the cut prose; the Record slot waits for it
-    for (let i = 0; i < 100 && registry.get(nodes).size === was; i++) {
+    for (let i = 0; i < 100 && registry.get(log).nodes.size === was; i++) {
       await new Promise((r) => setTimeout(r, 300))
       await fetchNodes()
     }

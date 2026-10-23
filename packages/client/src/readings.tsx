@@ -7,7 +7,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { heading, record, status, type Element } from "./record.ts"
-import { card, latest, nodes, pin, registry } from "./store.ts"
+import { card, latest, log, pin, registry } from "./store.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
@@ -239,10 +239,10 @@ export const RecordSheet = (props: {
   onReword: (note?: string) => void
   onEdit: () => void
 }) => {
-  const all = read(nodes)
+  const all = read(log)
   const view = read(card)
   let dlg!: HTMLDialogElement
-  const prev = () => (props.node.turn.parent === null ? undefined : all().get(props.node.turn.parent))
+  const prev = () => (props.node.parent === null ? undefined : all().nodes.get(props.node.parent))
   // the pill's dot: this turn changed a field, judged a beat or told a clue (notes alone light nothing: every turn has them)
   const marked = () => {
     const r = view()?.rules

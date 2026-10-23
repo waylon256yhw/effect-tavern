@@ -142,7 +142,7 @@ const program = Effect.gen(function* () {
   // The event stream: a stage announced before each call, the prose streamed by part, the node last.
   assert.deepEqual(
     events.map((e) => e.kind),
-    ["stage", ...Array(Math.ceil(prose(c0).length / 8)).fill("delta"), "call", "stage", "call", "node"],
+    ["stage", ...Array(Math.ceil(prose(c0).length / 8)).fill("delta"), "call", "stage", "call", "change"],
   )
   assert.equal(
     events
@@ -151,7 +151,7 @@ const program = Effect.gen(function* () {
       .join(""),
     prose(c0),
   )
-  assert.deepEqual(events.at(-1), { kind: "node", node: C.node(c0.id) })
+  assert.deepEqual(events.at(-1), { kind: "change", node: C.node(c0.id), head: c0.id })
   // Products: the default `inner` stays off; `options` (switched on by the card) is capped by code to four; the feed
   // record `scene` is stored whole; `people` is an empty table this turn.
   assert.deepEqual(Object.keys(c0.products).sort(), ["notes", "options", "people", "scene"])
@@ -248,7 +248,7 @@ const program = Effect.gen(function* () {
   assert.ok(prose(t4).endsWith("partial …and the rest."))
   const resumed = prompts("narrate").at(-1)!.at(-1)!
   assert.equal(resumed.role, "assistant")
-  assert.deepEqual([C.size, S.size], [2, 3])
+  assert.deepEqual([C.log.nodes.size, S.log.nodes.size], [2, 3])
 
   // Guardrail: a draft that kills B is re-asked once with the broken rule in the tail; the correction never enters history.
   i = calls().length
@@ -315,7 +315,7 @@ const program = Effect.gen(function* () {
   // A greeting with an opening: its effects fold into the state before the first turn (the head reads the warm band,
   // not the initial cool one), and its events are carried into that turn's gate like a readout's: li's second layer is
   // offered on turn 1 of this branch without a single beat.
-  const g = S.greet({ text: "G", do: [{ path: "bond", set: 8 }, { event: "warmth:close" }] })
+  const g = S.greet({ text: "G", do: [{ path: "bond", set: 8 }, { event: "warmth:close" }] }).node!
   assert.equal(g.state.bond, 8)
   i = calls().length
   const t9 = yield* go(S.act(g.turn.id, { text: "wait" }))
@@ -323,16 +323,16 @@ const program = Effect.gen(function* () {
   assert.deepEqual([t9.beats, t9.brief.may], [[], ["li"]])
   assert.ok(str(lastNarr()).includes("A trusts the player.") && str(lastNarr()).includes("G"))
   i = calls().length
-  for (const t of S.nodes()) S.node(t.id) // replay: every projection from recorded outputs, no call
+  for (const t of S.log.nodes.values()) S.node(t.id) // replay: every projection from recorded outputs, no call
   assert.equal(calls().length, i)
 
   // A player action on a node: demand a product that is off (inner) over t3's scene. One record call, no new node, the
   // answer kept on t3 beside the turn's own products; the player's toggle alone could have switched it on for every turn.
-  const size = S.size
+  const size = S.log.nodes.size
   const d = yield* go(S.demand(t3.id, "inner"))
   assert.deepEqual(since(i), ["record"])
   assert.ok(/^INNER#\d+$/.test(d.products.inner as string) && d.products.notes !== undefined)
-  assert.equal(S.size, size)
+  assert.equal(S.log.nodes.size, size)
   assert.equal(S.node(t5.id).turn.products.inner, undefined)
   assert.equal(S.node(t3.id).turn.products.inner, d.products.inner) // the amended node is what the path sees
 
@@ -355,7 +355,7 @@ const program = Effect.gen(function* () {
   i = calls().length
   assert.throws(() => S.setField(t3.id, [{ path: "bond", set: 999 }]), /bond/)
   assert.equal(S.node(t3.id).turn.adjust, undefined)
-  assert.equal(S.setField(t3.id, [{ path: "bond", set: 20 }]).state.bond, 20)
+  assert.equal(S.setField(t3.id, [{ path: "bond", set: 20 }]).node!.state.bond, 20)
   assert.deepEqual([S.node(t3.id).state.bond, S.node(t6.id).state.bond, calls().length], [20, 28, i])
 
   // pin: on t9's branch li's first layer is visible but was never read, so t9 lists it as untold. The player pins it on

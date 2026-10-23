@@ -1,5 +1,6 @@
 // §17: one node per turn = the player's input plus every block the system produced for it. Only LLM outputs and seeds
-// are stored; events, state and deliveries are derived along the path. Siblings under one parent are swipes.
+// are stored; events, state and deliveries are derived along the path. The tree itself (parents, siblings as versions,
+// head, drop) is src/log.ts; this file is what a node holds.
 import type { Effect_ } from "./card.ts"
 import type { Part } from "./fragment.ts"
 import type { Disclosure } from "./lore.ts"
@@ -33,55 +34,6 @@ export interface Turn<B> {
 }
 /** The notes product: the list of facts this turn established, the compression source. */
 export const notesOf = <B>(t: Turn<B>): readonly string[] => (t.products.notes as readonly string[] | undefined) ?? []
-
-/** Where a journal's nodes outlive the process: read once at start, every save and amend writes the whole list back. */
-export interface Store<B> {
-  read: () => readonly Turn<B>[]
-  write: (nodes: readonly Turn<B>[]) => void
-}
-export const makeJournal = <B>(store?: Store<B>) => {
-  const nodes = new Map<number, Turn<B>>((store?.read() ?? []).map((t) => [t.id, t]))
-  const chain = (id: number | null): Turn<B>[] => {
-    if (id !== null && !nodes.has(id)) throw new Error(`no node ${id}`) // a missing parent is the caller's bug, not a root
-    const out: Turn<B>[] = []
-    for (let t = id === null ? undefined : nodes.get(id); t; t = t.parent === null ? undefined : nodes.get(t.parent))
-      out.unshift(t)
-    return out
-  }
-  const keep = (t: Turn<B>): Turn<B> => {
-    nodes.set(t.id, t)
-    store?.write([...nodes.values()])
-    return t
-  }
-  return {
-    save: (t: Omit<Turn<B>, "id">): Turn<B> => {
-      if (t.parent !== null && !nodes.has(t.parent)) throw new Error(`no node ${t.parent}`) // a cycle otherwise
-      return keep({ ...t, id: Math.max(-1, ...nodes.keys()) + 1 }) // past every id ever used: a drop leaves holes
-    },
-    /** A node and everything under it leave the journal (a thread is a root's subtree); the dropped ids come back. */
-    drop: (id: number): number[] => {
-      if (!nodes.has(id)) throw new Error(`no node ${id}`)
-      const gone = [...nodes.values()].filter((t) => chain(t.id).some((a) => a.id === id)).map((t) => t.id)
-      for (const g of gone) nodes.delete(g)
-      store?.write([...nodes.values()])
-      return gone
-    },
-    get: (id: number): Turn<B> => {
-      const t = nodes.get(id)
-      if (!t) throw new Error(`no node ${id}`)
-      return t
-    },
-    /** A player action on a node (demand, pin, set): the node is replaced, its id and place in the tree kept. */
-    amend: (id: number, patch: Partial<Omit<Turn<B>, "id" | "parent">>): Turn<B> =>
-      keep({ ...nodes.get(id)!, ...patch }),
-    chain,
-    values: () => nodes.values(),
-    get size() {
-      return nodes.size
-    },
-  }
-}
-export type Journal<B> = ReturnType<typeof makeJournal<B>>
 
 export const textOf = (parts: readonly Part[]): string =>
   parts

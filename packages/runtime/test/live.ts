@@ -73,7 +73,7 @@ const clip = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s).
 
 const greeting = card.greetings[Number(process.argv[3] ?? 0)]
 if (greeting) {
-  const g = S.greet(greeting)
+  const g = S.greet(greeting).node!
   console.log(`━━ node ${g.turn.id}: greeting (${greeting.text.length} chars), state=${show(g.state)}`)
 }
 
@@ -107,7 +107,8 @@ const print = (e: Event) => {
       console.log(`          → ${clip(show(e.out), 220)}`)
       return
     }
-    case "node": {
+    case "change": {
+      if (!e.node) return
       const { turn: t, state, events } = e.node
       console.log(
         `  node: read=${show(t.read)} beats=${show(t.beats.map((b) => b.next))} end=${t.end} events=${show(events)}`,
@@ -128,7 +129,7 @@ const program = Effect.gen(function* () {
     console.log(`  ${Math.round(performance.now() - t0)}ms`)
   }
   console.log(
-    `\n${calls} calls, ${traces.length} requests (${[...new Set(traces.map((t) => t.status))].join("/")}), ${S.size} nodes; tokens ${show(total)}`,
+    `\n${calls} calls, ${traces.length} requests (${[...new Set(traces.map((t) => t.status))].join("/")}), ${S.log.nodes.size} nodes; tokens ${show(total)}`,
   )
 })
 

@@ -19,7 +19,7 @@
 | 设计稿 | 协议（`src/session.ts`） | 备注 |
 | --- | --- | --- |
 | `input.mode` act / direct | `Input.text` / `Input.note` | 纯 direct 轮就是只有 note 的轮：不进历史，只作用于下一节 |
-| `versions` + `active` | 同一 parent 下的兄弟节点 | "当前在哪个兄弟"是客户端状态，协议不存 |
+| `versions` + `active` | 同一 parent 下的兄弟节点 | ~~"当前在哪个兄弟"是客户端状态，协议不存~~ 2026-10-23：head 由服务端持有（`src/log.ts`），切版本是 `checkout` 动作，刷新不丢 |
 | `set` / `add` | 相邻 `Node.state` 的 diff | 闪烁与"上次变化在哪一节"都由客户端从 diff 算 |
 | `clues` | `Node.delivered` | 读到的、check 确认的、钉住的三类合在一起 |
 | `notes` / `sug` / `inner` / `scene` | products：`notes`、`options`、`inner`，卡声明的 `scene` | 建议只填输入框不发送，所以这个客户端不用 `pick` |
@@ -57,4 +57,4 @@
 - **事件的 `seq`：不要。** 关掉响应就是停止（§三 2），断线等于停止：服务端已把这一轮收成 `stopped` 节点或撤掉，客户端回读 `/nodes` 即可，没有可续的流。
 - **客户端用不上的**：`pick`（建议只填输入框）。留着，别的客户端可能直接发。
 - ~~**客户端欠协议的：`edit` 的入口与编辑态**~~：2026-10-23 已做。铅笔是 Swipe / Reword 旁的第三键（手机 Record 弹层底部、桌面右卡）；正文原位变 textarea，字号行高同段落、底色同改写输入框，随内容长高；Enter 分段，⌘↵ 发 `edit`（与 composer 同键），Escape 取消，没改或清空也是取消。
-- ~~**重开一局**~~：2026-10-23 已做，按树推出来：根是兄弟，一条线（ST 的一个 chat）是一个根的子树，第一节的版本列表就是线的列表。Start over 开一个新根（有开场 `greet`，没有就把根的活动孩子设为空、阅读线清空等玩家第一句），旧线不动；Delete story 是 `DELETE /nodes/<根>`，页面自己的 confirm（`<dialog class="confirm">`，取消在左、红色的 Delete 在右）；日志空了而卡有开场就再 `greet`。两项在本线没有玩家回合时灰掉：空线上没有东西可留下或可删。
+- ~~**重开一局**~~：2026-10-23 已做，按树推出来：根是兄弟，一条线（ST 的一个 chat）是一个根的子树，第一节的版本列表就是线的列表。Start over 开一个新根（有开场 `greet`，没有就 `checkout(null)`，head 置空、阅读线清空等玩家第一句），旧线不动；Delete story 是 `DELETE /nodes/<根>`，页面自己的 confirm（`<dialog class="confirm">`，取消在左、红色的 Delete 在右）；日志空了而卡有开场就再 `greet`。两项在本线没有玩家回合时灰掉：空线上没有东西可留下或可删。
