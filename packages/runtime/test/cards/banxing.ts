@@ -16,10 +16,16 @@ export const load = (path = join(homedir(), "Downloads", "伴星.json")) => {
   const [note, ...rest] = d.description.split("\n\n")
   return decodeCard({
     id: "banxing",
+    title: "伴星",
+    summary: `一对一纯聊天：${char}。没有规则、没有 lore，一个人和她的开场。`,
     frame: [{ id: "style", text: macros(note ?? "", char) }],
     fiction: [
-      { id: "character", text: macros(rest.join("\n\n"), char) },
-      { id: "examples", text: `示范（${char}的声音）：\n${macros(d.mes_example.replace(/<START>\n?/g, ""), char)}` },
+      { id: "character", label: char, text: macros(rest.join("\n\n"), char) },
+      {
+        id: "examples",
+        label: "示范",
+        text: `示范（${char}的声音）：\n${macros(d.mes_example.replace(/<START>\n?/g, ""), char)}`,
+      },
     ],
     greetings: [{ text: macros(d.first_mes, char) }],
     rules: { fields: [], actions: [] },

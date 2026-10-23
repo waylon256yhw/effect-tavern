@@ -54,9 +54,9 @@ const run = async (inspect: boolean) => {
         { entries: 0, layers: 0 },
         false,
         [
-          { id: "a" },
-          { id: "a-cool", when: { path: "bond", op: "lt", value: 8 } },
-          { id: "a-warm", when: { path: "bond", op: "gte", value: 8 } },
+          { id: "a", label: "A" },
+          { id: "a-cool", label: "A（疏远）", when: { path: "bond", op: "lt", value: 8 } },
+          { id: "a-warm", label: "A（信任）", when: { path: "bond", op: "gte", value: 8 } },
         ],
       ],
     )

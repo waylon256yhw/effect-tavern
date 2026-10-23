@@ -8,13 +8,19 @@ export const player: Player = { global: frags([{ id: "language", text: "Write in
 export const full: Card = {
   id: "wuxia",
   title: "竹林",
+  summary: "自检卡：竹林里与剑客 A 的一场对峙，带骰子、读数、两条 lore 和一条护栏。",
   heading: "scene.place",
   frame: frags([{ id: "setting", text: "Frame: wuxia" }]),
   // Bands of the readout are `when` fragments: the narrator reads the band's text, never the number.
   fiction: frags([
-    { id: "a", text: "A: swordsman" },
-    { id: "a-cool", text: "A keeps the player at arm's length.", when: { path: "bond", op: "lt", value: 8 } },
-    { id: "a-warm", text: "A trusts the player.", when: { path: "bond", op: "gte", value: 8 } },
+    { id: "a", label: "A", text: "A: swordsman" },
+    {
+      id: "a-cool",
+      label: "A（疏远）",
+      text: "A keeps the player at arm's length.",
+      when: { path: "bond", op: "lt", value: 8 },
+    },
+    { id: "a-warm", label: "A（信任）", text: "A trusts the player.", when: { path: "bond", op: "gte", value: 8 } },
   ]),
   greetings: [],
   rules: {

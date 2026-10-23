@@ -10,6 +10,8 @@ import { decodeCard, type Card } from "../../src/card.ts"
 export const load = (): Card =>
   decodeCard({
     id: "yandao",
+    title: "盐道",
+    summary: "大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；没有玩家角色，输入是给叙述者的指示。",
     input: "note",
     frame: [
       {
@@ -21,23 +23,28 @@ export const load = (): Card =>
     fiction: [
       {
         id: "town",
+        label: "盐津镇",
         text: "盐津镇：川南山里的盐运码头。一条石板街沿河，北头是县衙，南头是盐帮的货栈。镇上三百户，靠盐吃饭。",
       },
       {
         id: "sides",
+        label: "官府与盐帮",
         text: "官府：县令周秉文，五十出头，外省人，到任两年，想在盐税上做出政绩。差役头子叫老柯，本地人，两边都认识。\n盐帮：帮主沈大娘，六十岁，丈夫死后掌舵十五年，驼队和船都是她的。她的侄子沈二是跑外的，脾气急。",
       },
       {
         id: "now",
+        label: "眼下",
         text: "眼下：县衙新立了盐道的查验卡，驼队进镇要开包验货。盐帮认为这是要抽第二道税，已经两趟驼队绕道不进镇。",
       },
       {
         id: "tense",
+        label: "见血之后",
         text: "街面上已经见过血，店铺半数关门，镇民晚上不出门。",
         when: { path: "局势", op: "gte", value: 6 },
       },
       {
         id: "blood",
+        label: "三天前的血案",
         text: "镇上人都记得三天前货栈门口那一场：差役断了胳膊，驼夫开了头，县衙拿人的告示还贴在卡子上。两边都在等对方先低头。",
         when: { path: "起点", is: "血案" },
       },

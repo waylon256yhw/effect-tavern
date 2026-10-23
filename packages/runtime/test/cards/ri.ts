@@ -74,6 +74,7 @@ const bands = (md: string): Fragment[] => {
           }
     out.push({
       id: `band-${lo}`,
+      label: hi === undefined ? `理（好感 ${lo}+）` : `理（好感 ${lo}–${hi}）`,
       text: `<relationship_ri_with_user>\n理:\n${strip(m[3]!)}\n</relationship_ri_with_user>`,
       when,
     })
@@ -103,12 +104,14 @@ export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingI
   }
   return decodeCard({
     id: "ri",
+    title: "理",
+    summary: "一对一：青空理，小镇教堂的圣女；好感度随每一幕的相处变化，理的态度随之分段。",
     frame: [
       { id: "persona", text: "你是新来到小镇的牧师。" },
       { id: "setting", text: `小镇的地点：\n${places}` },
       { id: "npc", text: strip(src("npc信息.yaml")) },
     ],
-    fiction: [{ id: "ri", text: strip(src("角色信息.yaml")) }, ...bands(src("变量分阶段-好感度.md"))],
+    fiction: [{ id: "ri", label: "理", text: strip(src("角色信息.yaml")) }, ...bands(src("变量分阶段-好感度.md"))],
     greetings: [{ text: g.text }], // ponytail: the greeting index is picked at load; the other openings' affinities would be `do` effects
     guard: [],
     director: true,
