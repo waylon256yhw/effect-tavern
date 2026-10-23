@@ -22,8 +22,7 @@ export const load = (path = join(homedir(), "Downloads", "伴星.json")) => {
     fiction: [
       { id: "character", label: char, text: macros(rest.join("\n\n"), char) },
       {
-        id: "examples",
-        label: "示范",
+        id: "examples", // unlabelled: the examples are not a setting the card page names
         text: `示范（${char}的声音）：\n${macros(d.mes_example.replace(/<START>\n?/g, ""), char)}`,
       },
     ],

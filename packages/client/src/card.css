@@ -1,0 +1,226 @@
+/* ───────── Card: the card page over the reader (docs/card-page-prototype.html, on the tokens) ─────────
+   One bounded sheet centred on the canvas. Left, the name, the introduction and the derived rows, which sink to the
+   bottom like a colophon; right, the opening in a well that scrolls behind the Inspector's fade, the picker and the
+   token readout under it, the one action at the corner. On a phone the columns stack and each well keeps its height.
+   Nothing on the page wraps but the two proses; a row of names ends in "and N more". */
+.manifest {
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-4);
+  font-size: var(--text-body);
+}
+.cardsheet {
+  width: 100%;
+  max-width: 56rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-radius: var(--radius-dialog);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.cardsheet section {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-5);
+}
+.cardsheet .about {
+  border-bottom: var(--hairline) solid var(--line);
+}
+@media (min-width: 52rem) {
+  .cardsheet {
+    grid-template-columns: minmax(0, 9fr) minmax(0, 13fr);
+    height: 24.5rem;
+  }
+  .cardsheet section {
+    padding: var(--space-6);
+  }
+  .cardsheet .about {
+    border-bottom: 0;
+    border-right: var(--hairline) solid var(--line);
+  }
+}
+.manifest .head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+.manifest .title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.manifest .title .icon {
+  margin-left: -6px;
+}
+.manifest h1 {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 650;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+/* the introduction: prose, so it wraps, and past its height it scrolls behind the fade */
+.manifest .intro {
+  max-height: 11rem;
+  padding: var(--fade) 0;
+}
+.manifest .intro p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.68;
+  white-space: pre-line;
+}
+.manifest .specs {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: var(--hairline) solid var(--line);
+  font-size: var(--text-footnote);
+}
+.manifest .specs .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.manifest .specs dt {
+  flex: none;
+  color: var(--ink-3);
+}
+.manifest .specs dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink-2);
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.manifest .more {
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+}
+.manifest .more:hover {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.manifest .names {
+  padding: var(--space-3);
+  font-size: var(--text-footnote);
+  line-height: var(--leading-body);
+  color: var(--ink-2);
+}
+.manifest .mono {
+  font-family: var(--font-mono);
+}
+/* the opening */
+.manifest .opening .well {
+  flex: 1;
+  height: 16.5rem;
+  border-radius: var(--radius-card);
+}
+.manifest .opening .wscroll {
+  flex: 1;
+  padding: var(--fade) 20px;
+}
+.manifest .opening .well p {
+  margin: 0;
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.manifest .well.empty {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4) 20px;
+  text-align: center;
+  color: var(--ink-3);
+}
+.manifest .well.empty p {
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+.manifest .foot {
+  display: flex;
+  flex-wrap: wrap; /* a phone with a picker: the action takes the next line, still at the right */
+  align-items: center;
+  gap: var(--space-3);
+}
+.manifest .versions {
+  position-area: top span-right; /* up from the trigger, rightward: never over the other column */
+}
+.manifest .count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  white-space: nowrap;
+}
+@media (max-width: 51.99rem) {
+  .manifest .count .word {
+    display: none; /* the foot is one line on a phone: the number alone, the label stays on the control */
+  }
+}
+.manifest .count svg {
+  width: 11px;
+  height: 11px;
+  color: var(--ink-3);
+}
+.manifest .est {
+  font-size: var(--text-footnote);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.manifest .version .tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.manifest .begin {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--control);
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--ink);
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+.manifest .begin.primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: var(--shadow-1);
+}
+.manifest .begin:hover {
+  opacity: 0.88;
+}
+.manifest .begin:active {
+  transform: scale(0.98);
+}
+.manifest .begin svg {
+  width: 15px;
+  height: 15px;
+}

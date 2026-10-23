@@ -10,7 +10,8 @@
 //                 outputs-only, and a restart starts the trace over.
 //   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
 //                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
-//                 the format keys, the fiction's modules without their text, and the guard and lore as counts.
+//                 the format keys, the fiction's modules without their text, the guard and lore as counts, and what
+//                 the card's text costs each turn, estimated.
 //                 Fragment bodies, guard lines and lore never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.

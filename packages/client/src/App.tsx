@@ -12,6 +12,7 @@ import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
+import { CardPage } from "./card.tsx"
 import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
@@ -477,7 +478,12 @@ const Reader = () => {
     return dr ? line().slice(0, line().findIndex((n) => n.id === dr.parent) + 1) : line() // a root's draft: nothing above
   })
   let stop: (() => void) | null = null
-  onSettled(() => void Promise.all([fetchCard(), fetchNodes()]))
+  onSettled(() => {
+    // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
+    void Promise.all([fetchCard(), fetchNodes()]).then(() => {
+      if (registry.get(log).nodes.size === 0) registry.set(page, "card")
+    })
+  })
 
   const start = (
     parent: Id | null,
@@ -665,6 +671,9 @@ export const App = () => {
         <Side />
         <Reader />
       </div>
+      <Show when={pg() === "card"}>
+        <CardPage />
+      </Show>
       <Show when={pg() === "timeline"}>
         <Timeline />
       </Show>

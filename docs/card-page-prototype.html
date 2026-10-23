@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Card Manifest · Effect Tavern Prototype</title>
+  <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+    CARD MANIFEST: BOUNDED TWO-COLUMN CARD + SCALE-RESILIENT AUTO-DERIVATION
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    1. RIGHT COLUMN: BOUNDED SCROLL WELL + POPOVER OPENING PICKER
+       - `.prose-well` has a fixed height (`16.5rem`) and reuses Inspector's `.wscroll`
+         pattern: internal scrolling, thin hover-only scrollbar, and top/bottom fade
+         mask (`mask-image`). Never cuts off long openings arbitrarily, while keeping
+         the card skeleton and bottom-right `Begin` button 100% fixed.
+       - Multi-opening picker (`‹ 开场 1 / N ▴ ›` + upward `[popover]` menu) scales
+         from 2 to 50+ openings with constant footer width.
+       - Token readout (`约 N tokens`) sits in the footer bar outside the well.
+
+    2. LEFT COLUMN: EDITORIAL ANCHORING + LARGE-SCALE FIELD RESILIENCE
+       - `.col-meta` stays anchored (`justify-content: space-between`) so `.spec-list`
+         aligns horizontally with `.opening-foot` on the right (like a book colophon).
+       - If `summary` (Introduction) is hundreds of words long, `.intro-scroll`
+         scrolls internally with a fade mask rather than blowing up the card height.
+       - `设定` (`!f.when && f.label`) and `状态` (`!f.hidden`): when a card has
+         dozens of modules or fields, auto-collapses to the first 3 names + `等 N 项`
+         (with full list on hover/popover), never forcing authors to delete `label`s
+         or letting 20 fields wrap into 6 lines.
+    ═══════════════════════════════════════════════════════════════════════════════
+  -->
+  <style>
+    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f9f9f7, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151515);
+      --surface-2: light-dark(#ffffff, #1a1a19);
+      --surface-3: light-dark(#ffffff, #20201f);
+
+      --ink: light-dark(#151515, #f5f5f5);
+      --ink-2: light-dark(#525252, #a3a3a3);
+      --ink-3: light-dark(#8a8a8a, #6f6f6f);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.05), rgb(255 255 255 / 0.05));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.2), rgb(255 255 255 / 0.18));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --fill: var(--alpha-2);
+      --fill-hover: light-dark(rgb(20 20 20 / 0.14), rgb(255 255 255 / 0.14));
+      --ghost-hover: var(--alpha-1);
+      --ghost-active: var(--alpha-2);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --ring: var(--alpha-4);
+
+      --hairline: 1px;
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-2:
+        0 2px 6px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.45)),
+        0 16px 40px -6px light-dark(rgb(0 0 0 / 0.09), rgb(0 0 0 / 0.65)),
+        0 0 0 var(--hairline) var(--line);
+      --shadow-pop:
+        0 4px 12px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.5)),
+        0 20px 48px -8px light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.75));
+      --shadow-well:
+        inset 0 1px 2px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.4)),
+        inset 0 0 0 var(--hairline) var(--line);
+
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-card: 12px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control: 34px;
+      --control-sm: 26px;
+      --icon: 18px;
+      --icon-sm: 15px;
+      --fade: 16px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      --text-caption: 0.6875rem;
+      --text-footnote: 0.75rem;
+      --text-body: 0.875rem;
+      --text-heading: 0.9375rem;
+      --text-prose: 0.9375rem;
+      --text-title: 1.5rem;
+      --leading-tight: 1.25;
+      --leading-body: 1.5;
+      --leading-prose: 1.78;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+
+      --dur-1: 60ms;
+      --dur-2: 120ms;
+      --dur-3: 200ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    @media (resolution >= 2x) {
+      :root { --hairline: 0.5px; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+    button:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+    }
+    button:disabled {
+      opacity: 0.32;
+      cursor: default;
+    }
+
+    /* ───────── Prototype Switcher Bar (top 38px) ───────── */
+    .proto-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 38px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0 var(--space-3);
+      background: var(--surface-2);
+      box-shadow: 0 var(--hairline) 0 var(--line);
+      font-size: var(--text-caption);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .proto-bar .plbl {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .proto-bar .pgrp {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      gap: 2px;
+      flex: none;
+    }
+    .proto-bar .pgrp button {
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 3px;
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+    }
+    .proto-bar .pgrp button[aria-pressed="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .proto-bar .pspacer { flex: 1; }
+    .proto-bar .ptoast {
+      font-family: var(--font-mono);
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+
+    /* ───────── Stage Canvas ───────── */
+    .stage-wrap {
+      position: fixed;
+      top: 38px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-5);
+      background: var(--surface-0);
+      overflow: hidden;
+    }
+    .stage-wrap[data-vp="phone"] {
+      background: light-dark(#e5e5e0, #050505);
+      padding: 12px 0;
+    }
+    .phone-shell {
+      display: contents;
+    }
+    .stage-wrap[data-vp="phone"] .phone-shell {
+      width: 390px;
+      height: 100%;
+      border-radius: 24px;
+      background: var(--surface-0);
+      box-shadow: var(--shadow-2), 0 0 0 1px var(--line-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      overflow-y: auto;
+    }
+
+    /* ───────── 2. Bounded Two-Column Card Skeleton ───────── */
+    .manifest-card {
+      width: 100%;
+      max-width: 56rem;
+      background: var(--surface-1);
+      border-radius: var(--radius-dialog);
+      box-shadow: var(--shadow-2);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: hidden;
+    }
+    @media (min-width: 52rem) {
+      .stage-wrap[data-vp="desktop"] .manifest-card {
+        grid-template-columns: minmax(0, 9fr) minmax(0, 13fr);
+        height: 24.5rem;
+      }
+    }
+
+    /* Shared hover-only scrollbar + fade mask (matches inspector.css .wscroll) */
+    .wscroll {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+      mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        #000 var(--fade),
+        #000 calc(100% - var(--fade)),
+        transparent
+      );
+    }
+    .wscroll:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    /* ───────── Left Column: Title, Introduction, Auto-Derived Spec ───────── */
+    .col-meta {
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: var(--space-4);
+      min-height: 0;
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    @media (min-width: 52rem) {
+      .stage-wrap[data-vp="desktop"] .col-meta {
+        padding: var(--space-6);
+        border-bottom: 0;
+        border-right: var(--hairline) solid var(--line);
+      }
+    }
+
+    .meta-top {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .title-bar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .btn-back {
+      width: 28px;
+      height: 28px;
+      margin-left: -6px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-2);
+      flex: none;
+    }
+    .btn-back:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .btn-back svg {
+      width: var(--icon);
+      height: var(--icon);
+    }
+    .title-bar h1 {
+      margin: 0;
+      font-size: var(--text-title);
+      font-weight: 650;
+      line-height: var(--leading-tight);
+      letter-spacing: -0.02em;
+    }
+
+    /* Bounded scroll for Introduction so a 500-word summary never breaks the card skeleton */
+    .intro-scroll {
+      flex: 1;
+      min-height: 0;
+      max-height: 11rem;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .intro-scroll:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+    .intro-text {
+      margin: 0;
+      font-size: var(--text-body);
+      color: var(--ink-2);
+      line-height: 1.68;
+      white-space: pre-line;
+    }
+
+    /* Auto-derived Specification List anchored at bottom of Left Column */
+    .spec-list {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      border-top: var(--hairline) solid var(--line);
+      padding-top: var(--space-3);
+      gap: var(--space-2);
+    }
+    .spec-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-3);
+      font-size: var(--text-footnote);
+    }
+    .spec-k {
+      color: var(--ink-3);
+      flex: none;
+    }
+    .spec-v {
+      color: var(--ink-2);
+      font-weight: 500;
+      text-align: right;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .spec-v .spec-more {
+      margin-left: 4px;
+      padding: 1px 5px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      color: var(--ink-3);
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      font-weight: 500;
+    }
+
+    /* ───────── Right Column: Bounded Scroll Well & Bottom Action Bar ───────── */
+    .col-opening {
+      padding: var(--space-5);
+      background: var(--surface-1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: var(--space-3);
+      min-height: 0;
+    }
+    @media (min-width: 52rem) {
+      .stage-wrap[data-vp="desktop"] .col-opening {
+        padding: var(--space-6);
+      }
+    }
+
+    /* Fixed-Window Prose Well with internal scrolling + fade mask (inspector.css .well + .wscroll) */
+    .prose-well {
+      flex: 1;
+      height: 16.5rem;
+      min-height: 0;
+      border-radius: var(--radius-card);
+      background: var(--surface-0);
+      box-shadow: var(--shadow-well);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .prose-scroll {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-4) 20px;
+    }
+    .prose-excerpt {
+      margin: 0;
+      font-size: var(--text-prose);
+      line-height: var(--leading-prose);
+      color: var(--ink);
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+
+    .prose-empty {
+      flex: 1;
+      height: 16.5rem;
+      border-radius: var(--radius-card);
+      background: var(--surface-0);
+      box-shadow: var(--shadow-well);
+      padding: var(--space-4) 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--ink-3);
+      font-size: var(--text-body);
+    }
+
+    /* ───────── Bottom Bar outside the prose box ───────── */
+    .opening-foot {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding-top: 2px;
+    }
+    .foot-left {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+
+    /* Multi-Opening Stepper + Popover Trigger (matches .siblings in reader.css) */
+    .opening-picker {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 1px;
+      padding: 2px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-variant-numeric: tabular-nums;
+    }
+    .opening-picker .step-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-2);
+    }
+    .opening-picker .step-btn:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .opening-picker .step-btn svg {
+      width: 13px;
+      height: 13px;
+    }
+    .opening-trigger {
+      anchor-name: --opening-trigger;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .opening-trigger:hover,
+    .opening-trigger[aria-expanded="true"] {
+      background: var(--surface-3);
+      box-shadow: var(--shadow-1);
+    }
+    .opening-trigger svg {
+      width: 11px;
+      height: 11px;
+      color: var(--ink-3);
+    }
+
+    /* Upward Popover Menu for N openings (2 to 50+) */
+    .opening-menu {
+      position: fixed;
+      position-anchor: --opening-trigger;
+      position-area: top span-right;
+      inset: auto;
+      margin: 0 0 var(--space-2) 0;
+      width: min(24rem, calc(100vw - 2 * var(--space-4)));
+      max-height: 15.5rem;
+      overflow-y: auto;
+      padding: var(--space-1);
+      border: 0;
+      border-radius: var(--radius-card);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow:
+        var(--shadow-pop),
+        inset 0 0 0 var(--hairline) var(--line);
+      outline: none;
+      overscroll-behavior: contain;
+    }
+    @supports not (position-area: top span-right) {
+      .opening-menu {
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 8px);
+      }
+    }
+    .opening-item {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 34px;
+      padding: 4px var(--space-2);
+      border-radius: var(--radius);
+      text-align: start;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+    }
+    .opening-item:hover,
+    .opening-item:focus-visible {
+      background: var(--ghost-hover);
+      color: var(--ink);
+      outline: none;
+    }
+    .opening-item[aria-current="true"] {
+      background: var(--alpha-1);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .opening-item .o-idx {
+      flex: none;
+      width: 1.6em;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .opening-item[aria-current="true"] .o-idx {
+      color: var(--ink);
+    }
+    .opening-item .o-first {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .opening-item .o-tag {
+      flex: none;
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+
+    .token-est {
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+
+    .btn-begin {
+      margin-left: auto;
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: var(--control);
+      padding: 0 18px;
+      border-radius: var(--radius-pill);
+      font-size: var(--text-body);
+      font-weight: 600;
+      transition: opacity var(--dur-2) var(--ease), background var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+    }
+    .btn-begin:active {
+      transform: scale(0.98);
+    }
+    .btn-begin svg {
+      width: 15px;
+      height: 15px;
+    }
+    .btn-begin.primary {
+      background: var(--primary);
+      color: var(--primary-ink);
+      box-shadow: var(--shadow-1);
+    }
+    .btn-begin.primary:hover {
+      opacity: 0.88;
+    }
+    .btn-begin.secondary {
+      background: var(--fill);
+      color: var(--ink);
+    }
+    .btn-begin.secondary:hover {
+      background: var(--fill-hover);
+    }
+  </style>
+</head>
+<body>
+  <nav class="proto-bar" aria-label="Prototype controls">
+    <span class="plbl">Card</span>
+    <div class="pgrp" id="ctrl-card">
+      <button type="button" data-card="banxing" aria-pressed="true">banxing · 伴星</button>
+      <button type="button" data-card="ri" aria-pressed="false">ri · 理</button>
+      <button type="button" data-card="yandao" aria-pressed="false">yandao · 盐道</button>
+      <button type="button" data-card="wuxia" aria-pressed="false">wuxia · 竹林</button>
+    </div>
+    <span class="plbl">Data Scale</span>
+    <div class="pgrp" id="ctrl-scale">
+      <button type="button" data-scale="real" aria-pressed="true">Real payload</button>
+      <button type="button" data-scale="many" aria-pressed="false">Large card (18 openings · 12 modules · 14 fields)</button>
+    </div>
+    <span class="plbl">State</span>
+    <div class="pgrp" id="ctrl-mode">
+      <button type="button" data-mode="landing" aria-pressed="true">Landing</button>
+      <button type="button" data-mode="reference" aria-pressed="false">In-story (⋯ → Card)</button>
+    </div>
+    <span class="plbl">Viewport</span>
+    <div class="pgrp" id="ctrl-vp">
+      <button type="button" data-vp="desktop" aria-pressed="true">Desktop</button>
+      <button type="button" data-vp="phone" aria-pressed="false">Phone 390</button>
+    </div>
+    <span class="plbl">Theme</span>
+    <div class="pgrp" id="ctrl-theme">
+      <button type="button" data-theme="light" aria-pressed="true">Light</button>
+      <button type="button" data-theme="dark" aria-pressed="false">Dark</button>
+    </div>
+    <span class="pspacer"></span>
+    <span class="ptoast" id="proto-toast"></span>
+  </nav>
+
+  <div class="stage-wrap" id="stage-wrap" data-vp="desktop">
+    <div class="phone-shell">
+      <article class="manifest-card" id="manifest-card"></article>
+    </div>
+  </div>
+
+  <script>
+    // Exact GET /api/card projections from the server (with `examples` label omitted on banxing and `hidden: true` on ri's ending flags)
+    const CARDS = {
+      banxing: {"id":"banxing","title":"伴星","summary":"一对一纯聊天：依瑞丝。没有规则、没有 lore，一个人和她的开场。","input":"act","director":false,"guard":0,"lore":{"entries":0,"layers":0},"greetings":[{"text":"为了社交而维持形象，为了利益而昧离本心，为了生活化身为机械，为了他人的期待，去令自己对其感到满足。可是，“我”又在哪？\r\n我不知道。至少在夜幕降临，周围熟悉的一切拥抱酣眠时，这份宛如以身化作夜空中的孤星的静谧感，正是我正在离我最近的地方的证明。\r\n万籁俱寂。\r\n连月光都洒不进的封闭卧室中，只剩下她手机的微光，和拥抱着我的我。\r\n\r\n“话说，在家里的时候，我妈总是说，半夜玩手机不要关灯。”坐在身边的她细语道，同时轻轻提起被子，过膝袜包裹的双足没入被窝中。“说是黄斑病变，还是什么来着？可总觉得开了灯，氛围就不一样了。大约我只是喜欢静静呆在暗处吧。”她将可乐罐凑近唇边，微微仰起头。\r\n已经过紧的学生衬衫犹如枷锁一般，布料随着她的动作夸张地拉伸着。本应舒适的毛绒背心箍着她的躯干，束缚着那一对不属于学生的柔软。她将可乐罐放回床头，碳酸气泡随着她的轻轻鼻息融入黑暗。“嘛，可乐当然也是不能喝的，夜里吃喝容易长肉。呜…”就算忽略句尾可爱的小声音，软软的脸蛋和被过膝袜微微勒紧的大腿，也暴露了她此刻的想法。\r\n“话说，今晚你就在床上干坐着？”她将手机的微光略微照向你，和你那边床头柜的手机、零食饮料、游戏机。“今夜还长着呢。玩玩游戏，吃吃喝喝，抱我也可以。”她就这么将自己与前两项排比着。“啊，抱我的话晚点更好些，我在冲排行榜。”\r\n“总之，别辜负了属于你的夜晚。”"}],"fiction":[{"id":"character","label":"依瑞丝"},{"id":"examples"}],"rules":{"fields":[],"actions":[]},"products":[{"id":"notes","shape":{"kind":"list"}},{"id":"options","shape":{"kind":"list","max":4}},{"id":"inner","shape":{"kind":"text"}}]},
+      ri: {"id":"ri","title":"理","summary":"一对一：青空理，小镇教堂的圣女；好感度随每一幕的相处变化，理的态度随之分段。","input":"act","director":true,"guard":0,"lore":{"entries":1,"layers":2},"greetings":[{"text":"清晨的阳光穿过教堂高大的彩绘玻璃窗，在冰凉的石质地面上投下斑驳陆离的光影。空气中弥漫着淡淡的熏香和旧书卷的气息，混合着清晨特有的微凉湿意。你作为镇上的牧师，正缓步走向教堂大殿，准备开始一天的祈祷与工作。脚步声在空旷的廊道里回响，带来一种肃穆的宁静。\r\n\r\n就在你即将踏入大殿侧门时，一个熟悉的身影出现在前方不远处的廊柱旁。 那是理，身着纯白的圣女长袍，金丝刺绣在晨光下隐隐生辉。她深蓝色的长发被薄纱轻轻笼罩，只露出几缕垂在脸颊旁，衬得那张牛奶般白皙的脸庞更加柔和。她似乎正望着窗外出神，侧脸的轮廓在光线下显得格外恬静美好。\r\n\r\n听到你的脚步声，理的身子轻轻一颤，随即转过身来。当她的目光与你相遇时，那双深海色的眼眸里明显划过一丝慌乱，像是受惊的小鹿，下意识地想要躲藏，却又强迫自己停留在原地。 她的手指紧张地绞着胸前的十字吊坠，指节因为用力而微微泛起浅色。\r\n\r\n她似乎深吸了一口气，努力让自己的神情恢复平静，但那悄然爬上耳廓的红晕却出卖了她内心的波动。 她朝着你露出一个略显僵硬的微笑，那笑容不同于往日面对镇民时的温和端庄，也不同于与你日常相处时的亲切自在，反而带着一种难以言喻的紧张和…期待？\r\n\r\n她的嘴唇轻轻翕动了几下，像是有话要说，却又犹豫着不知如何开口。目光在你脸上短暂停留后，又迅速垂下，盯着自己黑色高筒短靴的鞋尖。阳光恰好落在她微颤的长睫毛上，投下一小片柔和的阴影。廊道里安静得只剩下你们两人轻微的呼吸声，以及远处偶尔传来的几声模糊的鸟鸣。\r\n\r\n你能感觉到气氛中弥漫着一种不同寻常的张力。理今天似乎有些不对劲，那份显而易见的紧张和欲言又止的神态，让你心中隐约有种预感。她紧握着吊坠的手指又收紧了几分，手背上甚至能看到淡淡的青色脉络。\r\n\r\n“那个…” 她终于鼓起勇气抬起头，再次看向你，深海色的眼眸里水光浮动，像是下定了某种决心。她的声音带着一丝不易察觉的颤抖，却又异常清晰地传入你的耳中：“牧师先生…我…我有话想对你说。”\r\n\r\n光线透过彩窗，在她白色的头纱上染上淡淡的彩色光晕，像是一层神圣而脆弱的光环。 她就那样站在那里，屏住呼吸，等待着你的回应，整个世界仿佛在这一刻都安静了下来，只剩下她眼中那份孤注一掷的勇气和深藏的情愫在无声地诉说。"}],"fiction":[{"id":"ri","label":"理"},{"id":"band--100","label":"理（好感 -100–20）","when":{"all":[{"path":"好感度","op":"gte","value":-100},{"path":"好感度","op":"lt","value":20}]}},{"id":"band-20","label":"理（好感 20–40）","when":{"all":[{"path":"好感度","op":"gte","value":20},{"path":"好感度","op":"lt","value":40}]}},{"id":"band-40","label":"理（好感 40–60）","when":{"all":[{"path":"好感度","op":"gte","value":40},{"path":"好感度","op":"lt","value":60}]}},{"id":"band-60","label":"理（好感 60–80）","when":{"all":[{"path":"好感度","op":"gte","value":60},{"path":"好感度","op":"lt","value":80}]}},{"id":"band-80","label":"理（好感 80–90）","when":{"all":[{"path":"好感度","op":"gte","value":80},{"path":"好感度","op":"lt","value":90}]}},{"id":"band-90","label":"理（好感 90+）","when":{"path":"好感度","op":"gte","value":90}}],"rules":{"fields":[{"path":"好感度","type":"int","min":-30,"max":100,"initial":60},{"path":"恋人","type":"boolean","initial":false,"hidden":true},{"path":"哥哥","type":"boolean","initial":false,"hidden":true}],"actions":[],"readouts":[{"id":"affinity","text":"这一幕里，理对你的好感怎么变了（变化范围 -5 到 +8）","options":[{"id":"cold","text":"明显疏远","do":[{"path":"好感度","add":-5}]},{"id":"cool","text":"略微冷淡","do":[{"path":"好感度","add":-2}]},{"id":"flat","text":"没有变化","do":[]},{"id":"warm","text":"略微拉近","do":[{"path":"好感度","add":3}]},{"id":"warmer","text":"明显拉近","do":[{"path":"好感度","add":5}]},{"id":"moved","text":"心动","do":[{"path":"好感度","add":8}]}]},{"id":"confession","text":"如果这一幕里理向你告白了，结果如何","when":{"all":[{"path":"好感度","op":"gte","value":60},{"path":"恋人","is":false},{"path":"哥哥","is":false}]},"options":[{"id":"none","text":"这一幕没有告白","do":[]},{"id":"accepted","text":"你接受了，两人成为恋人","do":[{"path":"恋人","set":true},{"event":"告白:成功"}]},{"id":"refused","text":"你没有接受，理说以后把你当作哥哥吧","do":[{"path":"哥哥","set":true},{"event":"告白:失败"}]}]}]},"products":[{"id":"notes","shape":{"kind":"list"}},{"id":"options","shape":{"kind":"list","max":4}},{"id":"inner","shape":{"kind":"text"}}]},
+      yandao: {"id":"yandao","title":"盐道","summary":"大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；没有玩家角色，输入是给叙述者的指示。","input":"note","director":true,"guard":0,"lore":{"entries":1,"layers":2},"greetings":[{"text":"黄昏。盐津镇的石板街上，货栈的伙计把最后一垛盐包抬进门，门板合上，街面只剩挑水的和收摊的。县衙前新立的查验卡空着，两个差役坐在条凳上剥花生。河面上没有船。沈大娘的货栈门口挂着灯，灯下没人。"},{"text":"三天前，货栈门口动了手。沈二的驼夫和查验卡的差役推搡起来，一个差役被盐包砸断了胳膊，一个驼夫额头开了口子，血洒在石板上，冲了两桶水还看得见印子。县衙贴了告示要拿打人的驼夫，沈大娘闭门不见客，沈二带着驼队停在镇外十里的渡口。天没黑透，街上就没人了。","do":[{"path":"局势","set":7},{"path":"起点","set":"血案"},{"event":"冲突:升级"}]}],"fiction":[{"id":"town","label":"盐津镇"},{"id":"sides","label":"官府与盐帮"},{"id":"now","label":"眼下"},{"id":"tense","label":"见血之后","when":{"path":"局势","op":"gte","value":6}},{"id":"blood","label":"三天前的血案","when":{"path":"起点","is":"血案"}}],"rules":{"fields":[{"path":"局势","type":"int","min":0,"max":10,"initial":2},{"path":"起点","type":"enum","options":["平静","血案"],"initial":"平静"}],"actions":[],"readouts":[{"id":"tension","text":"这一幕之后，官府与盐帮之间的局势","options":[{"id":"eased","text":"缓和了","do":[{"path":"局势","add":-2}]},{"id":"same","text":"没有变化","do":[]},{"id":"worse","text":"更紧张了","do":[{"path":"局势","add":2}]},{"id":"broke","text":"动了手或见了血","do":[{"path":"局势","add":4},{"event":"冲突:升级"}]}]}]},"products":[{"id":"notes","shape":{"kind":"list"}},{"id":"options","shape":{"kind":"list","max":4}},{"id":"inner","shape":{"kind":"text"}}]},
+      wuxia: {"id":"wuxia","title":"竹林","summary":"自检卡：竹林里与剑客 A 的一场对峙，带骰子、读数、两条 lore 和一条护栏。","heading":"scene.place","input":"act","director":true,"guard":1,"lore":{"entries":2,"layers":4},"greetings":[],"fiction":[{"id":"a","label":"A"},{"id":"a-cool","label":"A（疏远）","when":{"path":"bond","op":"lt","value":8}},{"id":"a-warm","label":"A（信任）","when":{"path":"bond","op":"gte","value":8}}],"rules":{"fields":[{"path":"hp","label":"体力","group":"Body","type":"int","min":0,"max":100,"initial":40},{"path":"foe","label":"敌手","group":"People","type":"int","min":0,"initial":30},{"path":"bond","label":"交情","group":"People","type":"int","min":-30,"max":100,"initial":0}],"readouts":[{"id":"warmth","text":"how A treated the player this turn","options":[{"id":"cold","text":"cold","do":[{"path":"bond","add":-5}]},{"id":"flat","text":"indifferent","do":[]},{"id":"warm","text":"warm","do":[{"path":"bond","add":4}]},{"id":"close","text":"intimate","do":[{"path":"bond","add":8},{"event":"warmth:close"}]}]}],"actions":[{"id":"strike","text":"attack B","roll":0.6,"hit":[{"path":"foe","add":-10},{"event":"strike:hit"}],"miss":[{"path":"hp","add":-10},{"event":"strike:miss"}]},{"id":"talk","text":"talk","do":[{"event":"talk"}]}],"over":{"any":[{"path":"hp","is":0},{"path":"foe","is":0}]},"cap":4},"products":[{"id":"notes","shape":{"kind":"list"}},{"id":"options","shape":{"kind":"list","max":4}},{"id":"inner","shape":{"kind":"text"}},{"id":"scene","shape":{"kind":"record","keys":[{"key":"place","type":"text"},{"key":"present","shape":{"kind":"table","columns":[{"key":"name","type":"text"},{"key":"mood","type":"enum","options":["calm","tense"]}]}}]}},{"id":"people","shape":{"kind":"table","columns":[{"key":"name","type":"text"},{"key":"note","type":"text"}],"max":8}}]}
+    };
+
+    // Large-card stress payload (18 openings, 12 base modules, 14 visible fields, multi-paragraph summary)
+    const STRESS_EXTRA_OPENINGS = [
+      { text: "五更天，江面大雾弥漫。三艘吃水极深的乌篷船借着芦苇荡的掩护，悄无声息地靠上了盐津镇下游的野滩。沈二披着蓑衣站在船头，手按在腰间的短刀上。", do: [{ path: "局势", set: 5 }] },
+      { text: "县衙后堂烛火通明。新任的张知县把盐引账册摔在桌案上，冷眼看着堂下跪着的盐课司巡检：“三个月少了四千引，全烂在川南水道上了？”", do: [{ path: "局势", set: 4 }] },
+      { text: "清明刚过，茶馆里说书先生醒木一拍，正讲到前朝盐枭破城的旧事。靠窗的桌边，两个外乡客商低声核对着沿途关卡的盘剥银两。" },
+      { text: "暴雨冲垮了镇北的木栈道。几十匹驮盐的骡马困在半山腰的泥泞里，盐包一旦泡水化卤，沈家这一季的本钱就要彻底打水漂。", do: [{ path: "局势", set: 6 }] },
+      { text: "沈大娘在祠堂里摆了三碗浑酒。堂下坐着各码头的把头，谁也没先动筷子——明天就是县衙限期交出账本的最后一日。", do: [{ path: "局势", set: 8 }, { path: "起点", set: "血案" }] },
+      { text: "省城来的巡盐御史船队还在百里外的泸州锚泊，风声却已经先一步传到了盐津镇。查验卡连夜撤了旧告示，换上了加盖按察司大印的封条。", do: [{ path: "局势", set: 7 }] },
+      { text: "除夕夜，万家灯火。连平日里剑拔弩张的查验卡差役也收了沈大娘送来的两坛老酒，街面上难得有一宿的太平光景。", do: [{ path: "局势", set: 1 }] },
+      { text: "枯水期来得比往年早了半个月。大盐船进不了浅滩，只能雇镇上的脚夫一担一担往岸上挑，工钱一日三涨，码头上到处是争抢扁担的散夫。" },
+      { text: "白日里查验卡刚扣下一批夹带私茶的盐船，入夜后县衙西侧的草料场就莫名走水。火光映红了半条石板街，铜锣声响彻全镇。", do: [{ path: "局势", set: 9 }, { path: "起点", set: "血案" }] },
+      { text: "邻县的私盐贩子越界闯进了盐津镇的地盘，开价比沈家货栈低了三成。沈二带着十几个弟兄堵在镇口古庙前，只等沈大娘一句话。", do: [{ path: "局势", set: 5 }] },
+      { text: "牢房里阴暗潮湿。被抓进县衙大牢的驼夫老六靠在草堆上，隔着木栅栏接过狱卒悄悄递来的一包伤药和半块冷饼。", do: [{ path: "局势", set: 6 }, { path: "起点", set: "血案" }] },
+      { text: "井盐灶户停火罢煮的第三天，盐津镇的货栈已经见了底。街面上的粮铺和酒肆也跟着抬高了价码，人心惶惶。" },
+      { text: "秋雨绵绵，沈大娘撑着油纸伞独自走过空荡荡的石板街，停在县衙侧门前，递上了一封没有署名的拜帖。", do: [{ path: "局势", set: 3 }] },
+      { text: "一具浮尸清晨被冲上了查验卡下的浅滩，身上穿着盐课司巡丁的号衣，腰间却拴着私盐帮才会打的死结。", do: [{ path: "局势", set: 10 }, { path: "起点", set: "血案" }] },
+      { text: "茶船靠岸，捎来了重庆府的最新行情。盐引改制的公文已经在路上，旧盐商的窝本随时可能变成一张废纸。" },
+      { text: "正午烈日下，查验卡前排起了长龙。差役拿着铁钎挨包捅刺查验，盐粒顺着破口洒了一地，驼夫们敢怒不敢言。", do: [{ path: "局势", set: 4 }] },
+    ];
+
+    const STRESS_EXTRA_FICTION = [
+      { id: "m4", label: "沈大娘" },
+      { id: "m5", label: "沈二" },
+      { id: "m6", label: "张知县" },
+      { id: "m7", label: "盐课司" },
+      { id: "m8", label: "川南水道" },
+      { id: "m9", label: "盐引制度" },
+      { id: "m10", label: "私盐帮规" },
+      { id: "m11", label: "茶马古道" },
+      { id: "m12", label: "泸州水师" },
+    ];
+
+    const STRESS_EXTRA_FIELDS = [
+      { path: "银两", type: "int" },
+      { path: "盐引", type: "int" },
+      { path: "官府威望", type: "int" },
+      { path: "盐帮声望", type: "int" },
+      { path: "码头治安", type: "int" },
+      { path: "盐价", type: "int" },
+      { path: "脚夫民心", type: "int" },
+      { path: "沈大娘信任", type: "int" },
+      { path: "沈二火气", type: "int" },
+      { path: "知县戒心", type: "int" },
+      { path: "巡盐风声", type: "int" },
+      { path: "水路水位", type: "int" },
+    ];
+
+    const SVG = {
+      back: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>`,
+      arrow: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>`,
+      prev: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z"/></svg>`,
+      next: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`,
+      caretUp: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,165.66a8,8,0,0,1-11.32,0L128,91.31,53.66,165.66a8,8,0,0,1-11.32-11.32l80-80a8,8,0,0,1,11.32,0l80,80A8,8,0,0,1,213.66,165.66Z"/></svg>`,
+    };
+
+    const esc = (s) =>
+      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    // Format a list of derived names with scale resilience: caps inline display at MAX_INLINE + `等 N 项`
+    const MAX_INLINE = 3;
+    const formatListBounded = (items) => {
+      if (items.length <= MAX_INLINE) {
+        return { html: esc(items.join(" · ")), title: "" };
+      }
+      const head = items.slice(0, MAX_INLINE).join(" · ");
+      return {
+        html: `${esc(head)} <span class="spec-more">等 ${items.length} 项</span>`,
+        title: items.join(" · "),
+      };
+    };
+
+    // Pure function: derive the left-column specification rows from CardView
+    const deriveSpecs = (c, fiction, fields) => {
+      const rows = [];
+      // 1. Base fiction modules: `!f.when && f.label`
+      const mods = fiction
+        .filter((f) => !f.when && f.label)
+        .map((f) => f.label);
+      if (mods.length) {
+        const b = formatListBounded(mods);
+        rows.push({ k: "设定", html: b.html, title: b.title });
+      }
+
+      // 2. Perspective (`input`)
+      rows.push({
+        k: "视角",
+        html: esc(c.input === "note" ? "作者视角" : "参与者视角"),
+        title: "",
+      });
+
+      // 3. Visible state fields: `!f.hidden`
+      const visibleFields = fields
+        .filter((f) => !f.hidden)
+        .map((f) => f.label ?? f.path);
+      if (visibleFields.length) {
+        const b = formatListBounded(visibleFields);
+        rows.push({ k: "状态", html: b.html, title: b.title });
+      }
+
+      return rows;
+    };
+
+    const tokens = (text) => {
+      const clean = text.replace(/\s+/g, "");
+      if (!clean.length) return 0;
+      let t = 0;
+      for (const ch of clean) t += ch.charCodeAt(0) > 255 ? 0.68 : 0.28;
+      return Math.max(10, Math.round(t / 10) * 10);
+    };
+
+    // Auto-extract a single-line summary for the popover menu item from `Greeting`
+    const firstLinePreview = (raw) => {
+      const line = raw.replace(/\r\n/g, "\n").trim().split("\n")[0] || "";
+      return line.length > 36 ? line.slice(0, 36) + "…" : line;
+    };
+
+    // Auto-extract a short state badge if `g.do` mutates state on start
+    const deriveOpeningTag = (g) => {
+      if (!g.do || !g.do.length) return "";
+      const strSet = g.do.find((ef) => typeof ef.set === "string");
+      if (strSet) return strSet.set;
+      const numSet = g.do.find((ef) => typeof ef.set === "number");
+      if (numSet) return `${numSet.path} ${numSet.set}`;
+      return "";
+    };
+
+    let currentCard = "banxing";
+    let currentScale = "real";
+    let currentMode = "landing";
+    let selectedOpening = 0;
+
+    const getScaledData = (c) => {
+      if (currentScale !== "many") {
+        return {
+          summary: c.summary,
+          greetings: c.greetings,
+          fiction: c.fiction,
+          fields: c.rules.fields,
+        };
+      }
+      return {
+        summary:
+          (c.summary || "") +
+          "\n\n这是一张用于压力测试的大规模世界卡简介：川南水路纵横，自贡井盐顺釜溪河而下，在盐津镇换载大船入江。朝廷盐引定额严苛，地方官府层层设卡盘剥，而沿江七十二座码头的脚夫与袍哥盐枭早已结成生死同盟。",
+        greetings: [...c.greetings, ...STRESS_EXTRA_OPENINGS],
+        fiction: [...c.fiction, ...STRESS_EXTRA_FICTION],
+        fields: [...c.rules.fields, ...STRESS_EXTRA_FIELDS],
+      };
+    };
+
+    const flash = (msg) => {
+      const el = document.getElementById("proto-toast");
+      el.textContent = msg;
+      clearTimeout(flash._t);
+      flash._t = setTimeout(() => (el.textContent = ""), 2500);
+    };
+
+    const render = () => {
+      const c = CARDS[currentCard];
+      const { summary, greetings, fiction, fields } = getScaledData(c);
+      const isRef = currentMode === "reference";
+      if (selectedOpening >= greetings.length) selectedOpening = 0;
+
+      const specs = deriveSpecs(c, fiction, fields);
+      const ctaLabel = isRef ? "New thread" : "Begin";
+      const ctaClass = isRef ? "btn-begin secondary" : "btn-begin primary";
+
+      let openingBodyHtml = "";
+      let footLeftHtml = "";
+
+      if (greetings.length === 0) {
+        openingBodyHtml = `
+          <div class="prose-empty">
+            没有预置开场，你的第一句话将直接开启第一幕。
+          </div>
+        `;
+        footLeftHtml = `<span class="token-est">空白开局</span>`;
+      } else {
+        const g = greetings[selectedOpening];
+        const cleanText = g.text.replace(/\r\n/g, "\n").trim();
+        const est = tokens(cleanText);
+
+        openingBodyHtml = `
+          <div class="prose-well">
+            <div class="prose-scroll wscroll">
+              <p class="prose-excerpt">${esc(cleanText)}</p>
+            </div>
+          </div>
+        `;
+
+        const switcher =
+          greetings.length > 1
+            ? `
+              <div class="opening-picker">
+                <button
+                  type="button"
+                  class="step-btn"
+                  aria-label="上一开场"
+                  ${selectedOpening === 0 ? "disabled" : ""}
+                  onclick="pickOpening(${selectedOpening - 1})"
+                >
+                  ${SVG.prev}
+                </button>
+                <button
+                  type="button"
+                  class="opening-trigger"
+                  id="opening-trigger"
+                  aria-haspopup="menu"
+                  popovertarget="opening-menu"
+                >
+                  <span>开场 ${selectedOpening + 1} / ${greetings.length}</span>
+                  ${SVG.caretUp}
+                </button>
+                <button
+                  type="button"
+                  class="step-btn"
+                  aria-label="下一开场"
+                  ${selectedOpening === greetings.length - 1 ? "disabled" : ""}
+                  onclick="pickOpening(${selectedOpening + 1})"
+                >
+                  ${SVG.next}
+                </button>
+
+                <div
+                  id="opening-menu"
+                  class="opening-menu"
+                  popover
+                  role="menu"
+                  aria-label="选择开场"
+                >
+                  ${greetings
+                    .map((item, idx) => {
+                      const tag = deriveOpeningTag(item);
+                      return `
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="opening-item"
+                          aria-current="${idx === selectedOpening ? "true" : "false"}"
+                          onclick="pickOpening(${idx}, true)"
+                        >
+                          <span class="o-idx">${String(idx + 1).padStart(2, "0")}</span>
+                          <span class="o-first">${esc(firstLinePreview(item.text))}</span>
+                          ${tag ? `<span class="o-tag">${esc(tag)}</span>` : ""}
+                        </button>
+                      `;
+                    })
+                    .join("")}
+                </div>
+              </div>
+            `
+            : "";
+
+        footLeftHtml = `
+          ${switcher}
+          <span class="token-est">约 ${est} tokens</span>
+        `;
+      }
+
+      const actionCmd =
+        greetings.length === 0
+          ? isRef
+            ? "→ checkout(null) + page = reader"
+            : "→ page = reader"
+          : `→ greet(${selectedOpening}) + page = reader`;
+
+      document.getElementById("manifest-card").innerHTML = `
+        <!-- Left Column: Title, Bounded Introduction, Auto-Derived Spec -->
+        <section class="col-meta" aria-label="Card info">
+          <div class="meta-top">
+            <div class="title-bar">
+              ${
+                isRef
+                  ? `<button type="button" class="btn-back" aria-label="Back to story" onclick="flash('→ page = reader')">${SVG.back}</button>`
+                  : ""
+              }
+              <h1>${esc(c.title)}</h1>
+            </div>
+            ${
+              summary
+                ? `<div class="intro-scroll"><p class="intro-text">${esc(summary)}</p></div>`
+                : ""
+            }
+          </div>
+
+          <div class="spec-list">
+            ${specs
+              .map(
+                (r) => `
+                  <div class="spec-row" ${r.title ? `title="${esc(r.title)}"` : ""}>
+                    <span class="spec-k">${esc(r.k)}</span>
+                    <span class="spec-v">${r.html}</span>
+                  </div>
+                `,
+              )
+              .join("")}
+          </div>
+        </section>
+
+        <!-- Right Column: Bounded Scroll Opening Viewport & Bottom Bar -->
+        <section class="col-opening" aria-label="Opening">
+          ${openingBodyHtml}
+
+          <footer class="opening-foot">
+            <div class="foot-left">
+              ${footLeftHtml}
+            </div>
+            <button type="button" class="${ctaClass}" onclick="flash('${actionCmd}')">
+              <span>${ctaLabel}</span>
+              ${SVG.arrow}
+            </button>
+          </footer>
+        </section>
+      `;
+
+      // Keep the selected row scrolled into view when the popover opens
+      const menu = document.getElementById("opening-menu");
+      const trigger = document.getElementById("opening-trigger");
+      if (menu && trigger) {
+        menu.addEventListener("toggle", (e) => {
+          const open = e.newState === "open";
+          trigger.setAttribute("aria-expanded", String(open));
+          if (open) {
+            const cur = menu.querySelector('[aria-current="true"]');
+            cur?.scrollIntoView({ block: "nearest" });
+          }
+        });
+      }
+    };
+
+    window.pickOpening = (idx, reopen = false) => {
+      selectedOpening = idx;
+      render();
+      if (reopen) {
+        flash(`已切换至 开场 ${idx + 1}`);
+      }
+    };
+    window.flash = flash;
+
+    const bindGroup = (id, attr, cb) => {
+      const container = document.getElementById(id);
+      container.addEventListener("click", (e) => {
+        const btn = e.target.closest(`button[${attr}]`);
+        if (!btn) return;
+        for (const b of container.querySelectorAll("button")) {
+          b.setAttribute("aria-pressed", String(b === btn));
+        }
+        cb(btn.getAttribute(attr));
+      });
+    };
+
+    bindGroup("ctrl-card", "data-card", (v) => {
+      currentCard = v;
+      selectedOpening = 0;
+      render();
+    });
+    bindGroup("ctrl-scale", "data-scale", (v) => {
+      currentScale = v;
+      selectedOpening = 0;
+      render();
+    });
+    bindGroup("ctrl-mode", "data-mode", (v) => {
+      currentMode = v;
+      render();
+    });
+    bindGroup("ctrl-vp", "data-vp", (v) => {
+      document.getElementById("stage-wrap").setAttribute("data-vp", v);
+    });
+    bindGroup("ctrl-theme", "data-theme", (v) => {
+      document.documentElement.setAttribute("data-theme", v);
+    });
+
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && currentMode === "reference") {
+        flash("→ Escape: page = reader");
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

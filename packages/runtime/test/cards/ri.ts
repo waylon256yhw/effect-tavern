@@ -118,8 +118,8 @@ export const load = (dir = join(homedir(), "MagVarUpdate", "example"), greetingI
     rules: {
       fields: [
         { path: "好感度", type: "int", min: -30, max: 100, initial: g.affinity },
-        { path: "恋人", type: "boolean", initial: false },
-        { path: "哥哥", type: "boolean", initial: false },
+        { path: "恋人", type: "boolean", initial: false, hidden: true }, // ending switches: not on the status table or the card page
+        { path: "哥哥", type: "boolean", initial: false, hidden: true },
       ],
       actions: [],
       readouts: [

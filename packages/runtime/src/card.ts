@@ -29,6 +29,7 @@ export const Field = Schema.Struct({
   max: Schema.optionalKey(Num),
   options: Schema.optionalKey(Schema.Array(Schema.String)),
   initial: Scalar,
+  hidden: Schema.optionalKey(Schema.Boolean), // never shown (the status table and the card page skip it): an ending switch the player should not see coming. Settlement reads it like any field
 })
 export const Chance = Schema.Union([
   Num,

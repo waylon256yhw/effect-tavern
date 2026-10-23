@@ -42,6 +42,7 @@ import {
   type Usage,
 } from "@effect-tavern/provider"
 import { Effect, Queue, Schema, Stream } from "effect"
+import { tokens } from "./tokens.ts"
 import { Effect_, makeCard, type Answers, type Beat, type Card, type Check, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
 import {
@@ -744,6 +745,8 @@ export const makeSession = ({
       director: !!card.director,
       guard: card.guard.length,
       lore: { entries: card.lore.length, layers: card.lore.reduce((n, e) => n + e.layers.length, 0) }, // the card's size; what is readable now is on the node
+      // what the card's own text costs each turn, estimated (tokens.ts): every frame and fiction fragment, as if all held
+      tokens: { head: tokens([...card.frame, ...card.fiction].map((f) => f.text ?? "").join("\n")) },
     }, // leaves as JSON, which drops undefined
     /** The fiction's modules without their text: id, shown name, and the state condition that makes one a variant. */
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),

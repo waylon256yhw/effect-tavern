@@ -36,6 +36,7 @@ export interface CardView {
   director: boolean
   guard: number // must-nots check enforces: a count, never the words
   lore: { entries: number; layers: number } // the card's size; what is readable now is on the node
+  tokens: { head: number } // what the card's own text costs each turn, estimated
   fiction: readonly { id: string; label?: string; when?: Cond }[] // the fiction's modules without their text
   rules: Rules
   products: readonly { id: string; shape: Shape }[] // record products by declared shape: how the inspector draws them
@@ -55,9 +56,9 @@ export const revising = Atom.make<{
   previous: { text: string; aside: boolean }
 } | null>(null)
 export const error = Atom.make<string | null>(null)
-/** The page over the reader: none, the Timeline, or the Inspect page on one node. The reader stays mounted under it,
- *  so a turn in flight keeps streaming. */
-export type Page = "reader" | "timeline" | { inspect: Id }
+/** The page over the reader: none, the card page, the Timeline, or the Inspect page on one node. The reader stays
+ *  mounted under it, so a turn in flight keeps streaming. */
+export type Page = "reader" | "card" | "timeline" | { inspect: Id }
 export const page = Atom.make<Page>("reader")
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())

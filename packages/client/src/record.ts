@@ -35,6 +35,7 @@ export const record = (rules: Rules, node: Node, prev: Node | undefined): Elemen
   const before: State = prev?.state ?? Object.fromEntries(rules.fields.map((f) => [f.path, f.initial]))
   const out: Element[] = []
   for (const f of rules.fields) {
+    if (f.hidden) continue
     const was = before[f.path]!
     const now = node.state[f.path]!
     if (was !== now) out.push(reading(f, was, now))
@@ -54,6 +55,7 @@ export const record = (rules: Rules, node: Node, prev: Node | undefined): Elemen
 export const status = (rules: Rules, state: State): { group?: string; items: Element[] }[] => {
   const groups = new Map<string | undefined, Element[]>([[undefined, []]])
   for (const f of rules.fields) {
+    if (f.hidden) continue
     const v = state[f.path]!
     groups.set(f.group, [...(groups.get(f.group) ?? []), reading(f, v, v)])
   }

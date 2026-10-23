@@ -3,12 +3,13 @@
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
+import { openCard } from "./card.tsx"
 import { Check, Close, Edit, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { openInspector } from "./inspector.tsx"
 import { openTimeline } from "./timeline.tsx"
 import { aside, card, compose, error, log, path, pin, registry, revising, started, turnOf } from "./store.ts"
-import { dropNodes, send } from "./wire.ts"
+import { dropNodes } from "./wire.ts"
 
 export const Composer = (props: {
   busy: boolean
@@ -38,25 +39,24 @@ export const Composer = (props: {
   const line = read(path)
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
-  // A thread is a root's subtree, so starting over is a new root: the card's opening when it has one, else the
-  // player's next line (the reading line empties until it lands). The old thread stays as the first turn's version.
-  // Deleting a thread drops its root; an empty journal on a card with an opening greets again. Neither acts on a
-  // thread with no player turn yet: there is nothing to leave behind or take.
+  // A thread is a root's subtree, so starting over is a new root: the card page, where the opening is picked (or the
+  // story begun on an empty line); the old thread stays as the first turn's version. Deleting a thread drops its root;
+  // an emptied journal lands on the card page too. Neither acts on a thread with no player turn yet: there is nothing
+  // to leave behind or take.
   const begun = read(started)
-  const open = () => (view()?.greetings.length ?? 0) > 0
   const clean = () => {
     registry.set(pin, null)
     registry.set(error, null)
   }
   const startOver = () => {
     clean()
-    send(open() ? { kind: "greet" } : { kind: "checkout", node: null })
+    openCard()
   }
   let confirmDrop!: HTMLDialogElement
   const deleteStory = async () => {
     clean()
     await dropNodes(registry.get(path)[0]!.turn.id) // the item is disabled while the line is empty
-    if (registry.get(log).nodes.size === 0 && open()) send({ kind: "greet" })
+    if (registry.get(log).nodes.size === 0) openCard()
   }
   const isNote = () => !acting() || toNarratorOn()
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
@@ -222,6 +222,7 @@ export const Composer = (props: {
           >
             <For
               each={[
+                { name: "Card", hint: "What this card is, and its openings", go: openCard },
                 { name: "Inspector", hint: "What the engine did this turn", go: openInspector },
                 { name: "Timeline", hint: "Every thread, branch and version of this story", go: openTimeline },
                 { name: "Start over", hint: "A new story; this one stays as a version", go: startOver, off: true },
