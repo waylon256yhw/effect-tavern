@@ -1,0 +1,2238 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timeline · 竹林 (Session Log Tree & Sandbox)</title>
+  <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+    TIMELINE LAYOUT ALGORITHM & PORTING NOTES (for packages/client/src/lanes.ts)
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    1. STATIC COORDINATE INVARIANT (Constraint 1)
+       Coordinates (row, lane, thread) are a pure stateless function of committed
+       nodes' { id, parent, input } ONLY. They NEVER read `head` or `draft`.
+       - `head`, the reading line `path(log)` (root → head), and `draft` are pure
+         visual overlays on top of this static geometry.
+       - `checkout(id)` never changes any node's coordinate.
+       - `drop(id)` simply re-runs the pure layout function on the surviving nodes.
+
+    2. CLUSTERS vs. BRANCHES (Constraint 3)
+       Under a non-null parent P, let `kids = children(log, P)` in ascending `id` order:
+       - A child `k` with `children(log, k).length > 0` has a subtree → standalone
+         Branch cell `[k]`.
+       - Childless children (`children(log, k).length === 0`) are grouped by
+         `k.input.text || k.input.note || ""`:
+         * Childless siblings sharing the same line collapse into one Version Cluster
+           cell `[k1, k2, ...]` at the position of `k1` (including Reword retries that
+           add a style `input.note` like #10 on top of the same `input.text`).
+         * A childless sibling whose line differs (e.g. #11 revised via Edit/Revise)
+           becomes its own Branch cell `[k]`.
+
+    3. THREAD STACKING & COMPACT CARD GEOMETRY
+       - Each Root (`parent === null`) is a separate Thread (`ThreadLayout`) stacked
+         vertically and starting at `lane = 0, row = 0` with its own `T1..Tn` turn ruler.
+         Stacking threads vertically guarantees every thread starts at the left edge
+         (never hidden off-screen to the right) and never wastes full-height columns.
+       - Within each Thread's DFS traversal:
+         * `row = depth` (root at row 0, children at `parent.row + 1`). Every edge
+           connects `row r` bottom to `row r + 1` top inside the 16px inter-row gap.
+         * First unit (`i === 0`) continues `parent.lane`; later units (`i > 0`) take
+           the first lane `l > parent.lane` where `end[l] < row`.
+       - Compact Card Geometry (`LANE_W = 136px`, `LANE_GAP = 10px`, `ROW_H = 52px`,
+         `ROW_GAP = 16px`):
+         * 4 lanes = 634px total width (fits 100% inside the 749px desktop left pane
+           with zero horizontal scrolling; fits 2.4 lanes on a 390px phone screen).
+    ═══════════════════════════════════════════════════════════════════════════════
+  -->
+  <style>
+    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f9f9f7, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151515);
+      --surface-2: light-dark(#ffffff, #1a1a19);
+      --surface-3: light-dark(#ffffff, #20201f);
+
+      --ink: light-dark(#151515, #f5f5f5);
+      --ink-2: light-dark(#525252, #a3a3a3);
+      --ink-3: light-dark(#8a8a8a, #6f6f6f);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.05), rgb(255 255 255 / 0.05));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.2), rgb(255 255 255 / 0.18));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --fill: var(--alpha-2);
+      --ghost-hover: var(--alpha-1);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --danger: light-dark(#dc2626, #f87171);
+      --danger-soft: light-dark(rgb(220 38 38 / 0.1), rgb(248 113 113 / 0.14));
+      --ok: light-dark(#1f7a3f, #4ade80);
+      --ok-soft: light-dark(rgb(31 122 63 / 0.14), rgb(74 222 128 / 0.16));
+      --scrim: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.5));
+      --ring: var(--alpha-4);
+
+      --hairline: 1px;
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-2:
+        0 2px 4px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 6px 16px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-pop:
+        inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)),
+        0 0 0 1px light-dark(var(--line), transparent),
+        0 8px 24px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.65)),
+        0 2px 6px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+      --shadow-well:
+        inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+        inset 0 0 0 var(--hairline) var(--line);
+
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-card: 12px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control: 32px;
+      --control-sm: 24px;
+      --icon: 20px;
+      --icon-sm: 16px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      --text-caption: 0.6875rem;
+      --text-footnote: 0.75rem;
+      --text-body: 0.875rem;
+      --text-heading: 0.9375rem;
+      --text-prose: 1rem;
+      --text-title: 1.25rem;
+      --leading-body: 1.45;
+      --leading-prose: 1.7;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --topbar: 48px;
+      --fade: 20px;
+
+      --dur-2: 120ms;
+      --dur-3: 200ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    @media (resolution >= 2x) {
+      :root { --hairline: 0.5px; }
+    }
+
+    /* ───────── 2. Base Reset & Prototype Rig Bar ───────── */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--text-footnote);
+      line-height: var(--leading-body);
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+    }
+    button {
+      cursor: pointer;
+      border-radius: var(--radius);
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+    }
+    button:disabled { opacity: 0.35; cursor: default; }
+    button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    p, h1, h2, h3, dl, dd, ul { margin: 0; }
+
+    /* Hover hint ([data-hint]): matches reader.css, with position: relative on host */
+    @media (hover: hover) {
+      [data-hint] { position: relative; }
+      [data-hint]::after {
+        content: attr(data-hint);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        translate: -50% 0;
+        z-index: 40;
+        padding: 3px 8px;
+        border-radius: var(--radius-sm);
+        background: var(--ink);
+        color: var(--surface-1);
+        font-family: var(--font-sans);
+        font-size: var(--text-caption);
+        font-weight: 400;
+        line-height: 1.4;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity var(--dur-2) var(--ease);
+      }
+      [data-hint]:is(:hover, :focus-visible):not(:disabled)::after {
+        opacity: 1;
+        transition-delay: 220ms;
+      }
+    }
+
+    /* Prototype Harness Bar (outside the app page, for testing states & viewports) */
+    .rig-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      padding: 6px var(--space-3);
+      background: #18181b;
+      color: #f4f4f5;
+      font-size: var(--text-footnote);
+    }
+    .rig-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: rgb(255 255 255 / 0.11);
+      padding: 2px;
+      border-radius: 6px;
+    }
+    .rig-group > span { padding: 0 6px; opacity: 0.65; font-size: var(--text-caption); }
+    .rig-group button {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: var(--text-caption);
+      color: inherit;
+      opacity: 0.8;
+    }
+    .rig-group button:hover:not(:disabled) { opacity: 1; background: rgb(255 255 255 / 0.12); }
+    .rig-group button[aria-pressed="true"] {
+      background: #f4f4f5;
+      color: #18181b;
+      font-weight: 600;
+      opacity: 1;
+    }
+    .rig-toast {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: #a1a1aa;
+      padding: 0 6px;
+    }
+
+    .stage-frame {
+      margin: 0 auto;
+      transition: width var(--dur-3) var(--ease);
+    }
+    .stage-frame[data-vp="desktop"] {
+      width: 1280px;
+      max-width: 100%;
+      height: calc(100dvh - 36px);
+    }
+    .stage-frame[data-vp="mobile"] {
+      width: 390px;
+      height: 844px;
+      margin: var(--space-3) auto;
+      border-radius: 28px;
+      box-shadow: var(--shadow-2), 0 0 0 6px var(--alpha-2);
+      overflow: hidden;
+      background: var(--surface-1);
+    }
+
+    /* ───────── 3. Full-Page Timeline Shell (matches .inspect in inspector.css) ───────── */
+    .timeline-page {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface-0);
+      color: var(--ink);
+    }
+    .stage-frame[data-vp="mobile"] .timeline-page {
+      background: var(--surface-1);
+    }
+
+    .top {
+      flex: none;
+      height: var(--topbar);
+      padding: 0 var(--space-5) 0 var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .icon {
+      width: var(--control);
+      height: var(--control);
+      display: grid;
+      place-items: center;
+      color: var(--ink-2);
+    }
+    .icon:hover:not(:disabled) { background: var(--ghost-hover); color: var(--ink); }
+    .icon svg { width: var(--icon); height: var(--icon); }
+
+    .top h1 {
+      font-size: var(--text-heading);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .page-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+    }
+    .page-badge svg { width: 14px; height: 14px; color: var(--ink-3); }
+
+    .spacer { flex: 1; }
+
+    /* Top summary pill (mirrors Inspector's .sums) */
+    .sums {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      white-space: nowrap;
+    }
+    .sums b { color: var(--ink); font-weight: 600; }
+
+    /* Segmented switch on mobile (Timeline | Node) */
+    .seg {
+      display: none;
+      padding: 2px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+    }
+    .seg button {
+      height: var(--control-sm);
+      padding: 0 10px;
+      border-radius: 6px;
+      color: var(--ink-2);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .seg button[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .seg .v {
+      font-family: var(--font-mono);
+      color: var(--ink-3);
+    }
+
+    /* ───────── 4. Two-Card Canvas Layout (Left: 2D Scrollable Tree, Right: Node Detail) ───────── */
+    .cols {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 7.5fr) minmax(21rem, 4.5fr);
+      gap: var(--space-4);
+      padding: 0 var(--space-5) var(--space-5);
+    }
+    .pane {
+      min-height: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Section Header bar inside cards */
+    .sechead {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: var(--control-sm);
+      white-space: nowrap;
+    }
+    .sechead .lbl {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .sechead .meta {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+      font-family: var(--font-mono);
+      color: var(--ink-3);
+    }
+
+    /* ───────── 5. Left Card: The 2D Native-Scroll Graph Canvas ───────── */
+    .graph-bar {
+      flex: none;
+      padding: var(--space-3) var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      box-shadow: 0 var(--hairline) 0 var(--line);
+    }
+    .legend {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ink-3);
+    }
+    .legend-dot.line { background: var(--ink); }
+    .legend-dot.head {
+      background: var(--surface-1);
+      box-shadow: inset 0 0 0 2.5px var(--ink);
+    }
+    .legend-dot.draft {
+      background: transparent;
+      border: 1.5px dashed var(--ink-3);
+    }
+
+    /* Native 2D scroller: vertical = time (turns), horizontal = branches & threads */
+    .graph-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      position: relative;
+      scrollbar-width: thin;
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+    .graph-scroll:hover {
+      scrollbar-color: var(--alpha-3) transparent;
+    }
+
+    .graph-stage {
+      position: relative;
+      min-width: 100%;
+    }
+
+    /* Sticky Thread Headers along the top of the scroll area */
+    .thread-headers {
+      position: sticky;
+      top: 0;
+      z-index: 6;
+      height: 32px;
+      background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 var(--hairline) 0 var(--line);
+    }
+    .thread-band {
+      position: absolute;
+      top: 4px;
+      height: 22px;
+      padding: 0 2px;
+      border-bottom: var(--hairline) solid var(--line);
+      background: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .thread-band.active {
+      color: var(--ink);
+      font-weight: 600;
+      border-bottom-color: var(--line-strong);
+    }
+    .thread-band .t-root {
+      color: var(--ink-3);
+      font-weight: 400;
+    }
+
+    /* Sticky Turn Ruler down the left edge (T1, T2, T3...) */
+    .turn-ruler {
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      width: 40px;
+      pointer-events: none;
+    }
+    .turn-tick {
+      position: absolute;
+      left: 0;
+      width: 40px;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      background: linear-gradient(to right, var(--surface-1) 75%, transparent);
+    }
+    .turn-tick.on-line {
+      color: var(--ink-2);
+      font-weight: 600;
+    }
+
+    /* SVG Edges Layer */
+    .edges-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .edge-path {
+      fill: none;
+      stroke: var(--line-strong);
+      stroke-width: 1.5;
+    }
+    .edge-path.on-line {
+      stroke: var(--ink);
+      stroke-width: 2;
+    }
+    .edge-path.draft-edge {
+      stroke: var(--ink-3);
+      stroke-width: 1.5;
+      stroke-dasharray: 3 3;
+    }
+    .thread-sep {
+      stroke: var(--line);
+      stroke-width: 1;
+      stroke-dasharray: 4 4;
+    }
+
+    /* ───────── 6. Node Stations & Version Clusters (Rail & Knot vs Solid Invert) ───────── */
+    /* Knot circles on the SVG rail */
+    .knot-circle {
+      fill: var(--surface-1);
+      stroke: var(--ink-3);
+      stroke-width: 1.5;
+    }
+    .knot-circle.on-line {
+      fill: var(--ink);
+      stroke: var(--ink);
+    }
+    .knot-circle.target {
+      fill: var(--surface-1);
+      stroke: var(--ok);
+      stroke-width: 2;
+    }
+    .knot-ring {
+      fill: none;
+      stroke: var(--ink);
+      stroke-width: 1.5;
+    }
+    .knot-ring.target {
+      stroke: var(--ok);
+    }
+
+    /* Base station cell: in "rail" mode (default), NO hollow card box or left stripe! */
+    .cell {
+      position: absolute;
+      height: 46px;
+      z-index: 2;
+      border-radius: var(--radius);
+      background: transparent;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4px 8px 4px 18px;
+      gap: 2px;
+      text-align: left;
+      user-select: none;
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+    }
+    button.cell:hover:not(:disabled) {
+      background: var(--alpha-1);
+    }
+
+    /* Off-line stations recede in ink, zero box */
+    .cell.off-line {
+      color: var(--ink-3);
+    }
+    .cell.off-line:hover {
+      color: var(--ink);
+    }
+
+    /* On-line stations: crisp ink text on the continuous rail, still NO hollow card box or 3px stripe */
+    .cell.on-line {
+      color: var(--ink);
+    }
+
+    /* Selected station in "rail" mode: ONLY the selected node gets a raised pill surface */
+    .cell.selected {
+      background: var(--alpha-2);
+      color: var(--ink);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      z-index: 3;
+    }
+    .cell.selected .nid {
+      background: var(--ink);
+      color: var(--surface-1);
+      padding: 0 5px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* Alternative Style B ("invert"): Solid Inverted Pill Selection */
+    .timeline-page[data-style="invert"] .cell {
+      padding: 5px 8px;
+      background: var(--alpha-1);
+    }
+    .timeline-page[data-style="invert"] .cell.on-line {
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong), var(--shadow-1);
+    }
+    .timeline-page[data-style="invert"] .cell.selected {
+      background: var(--ink);
+      color: var(--surface-1);
+      box-shadow: var(--shadow-2);
+    }
+    .timeline-page[data-style="invert"] .cell.selected .nid,
+    .timeline-page[data-style="invert"] .cell.selected .cell-line,
+    .timeline-page[data-style="invert"] .cell.selected .scene-tag,
+    .timeline-page[data-style="invert"] .cell.selected .kind-badge {
+      color: var(--surface-1);
+      background: transparent;
+      padding: 0;
+    }
+    .timeline-page[data-style="invert"] .cell.selected .badge-head {
+      background: var(--surface-1);
+      color: var(--ink);
+    }
+
+    /* Checkout Target Preview: subtle green text/ring, no heavy box */
+    .cell.checkout-target:not(.selected) .nid {
+      color: var(--ok);
+    }
+
+    /* Draft station */
+    .cell.draft-cell {
+      color: var(--ink-3);
+      font-style: italic;
+    }
+    .cell.draft-cell.selected {
+      background: var(--alpha-2);
+      color: var(--ink);
+    }
+
+    /* Line 1 of a Station: ID, Sibling kind icon, Scene or Status badges */
+    .cell-top {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      line-height: 1.2;
+    }
+    .nid {
+      font-weight: 600;
+      color: var(--ink);
+      flex: none;
+      transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .cell.off-line .nid { color: var(--ink-2); }
+
+    .kind-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      color: var(--ink-3);
+      flex: none;
+    }
+    .kind-badge svg { width: 11px; height: 11px; }
+
+    .scene-tag {
+      color: var(--ink-3);
+      font-family: var(--font-sans);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .badge-head {
+      margin-left: auto;
+      padding: 0 5px;
+      border-radius: var(--radius-pill);
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      flex: none;
+    }
+    .badge-target {
+      margin-left: auto;
+      color: var(--ok);
+      font-weight: 600;
+      font-size: 10px;
+      flex: none;
+    }
+    .badge-stopped {
+      margin-left: auto;
+      color: var(--danger);
+      font-weight: 600;
+      font-size: 10px;
+      flex: none;
+    }
+
+    /* Line 2 of a Station: Player's line (or opening prose), strictly 1 line clipped */
+    .cell-line {
+      font-size: var(--text-footnote);
+      line-height: 1.3;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
+    .cell.off-line .cell-line { color: var(--ink-3); }
+    .cell.on-line .cell-line { color: var(--ink); font-weight: 450; }
+    .cell-line .note-chip {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 0 4px;
+      margin-right: 4px;
+      border-radius: 3px;
+      background: var(--alpha-2);
+      color: var(--ink-2);
+    }
+
+    /* Version Cluster Station: holds 2+ childless siblings sharing the same line */
+    .cell.cluster-cell {
+      cursor: default;
+    }
+    .cluster-pills {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .cluster-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--ink-3);
+      margin-right: 1px;
+      flex: none;
+    }
+    .v-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      flex: none;
+    }
+    .v-pill:hover {
+      background: var(--alpha-2);
+      color: var(--ink);
+    }
+    .v-pill svg { width: 10px; height: 10px; color: var(--ink-3); }
+    .v-pill[data-selected="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+    .v-pill[data-selected="true"] svg { color: var(--surface-1); }
+    .v-pill[data-head="true"]:not([data-selected="true"]) {
+      box-shadow: inset 0 0 0 1px var(--ink);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .v-pill .stop-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+
+    /* Mobile bottom mini-bar inside Timeline pane */
+    .mobile-bar {
+      display: none;
+      flex: none;
+      padding: var(--space-2) var(--space-3);
+      background: var(--surface-2);
+      box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .mobile-bar-info {
+      min-width: 0;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mobile-bar-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+    }
+
+    /* ───────── 7. Right Card: De-boxed Editorial Node Preview ───────── */
+    .detail-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: var(--fade) var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .detail-scroll:hover { scrollbar-color: var(--alpha-2) transparent; }
+
+    /* Compact Header + Toolbar (no gray box, no full-width bars) */
+    .node-header {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-bottom: var(--space-3);
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .node-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .node-bar h2 {
+      font-size: var(--text-heading);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .node-bar .mono-id {
+      font-family: var(--font-mono);
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+    .node-meta-line {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .node-meta-line b { color: var(--ink-2); font-weight: 600; }
+
+    /* Compact Action Toolbar on the right of the header */
+    .action-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-checkout {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+      font-size: var(--text-caption);
+      font-family: var(--font-mono);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-checkout:hover { opacity: 0.9; }
+    .btn-checkout svg { width: 13px; height: 13px; }
+    .at-head-tag {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      padding: 0 6px;
+    }
+
+    .btn-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      display: grid;
+      place-items: center;
+      flex: none;
+    }
+    .btn-icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .btn-icon.danger:hover:not(:disabled) {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+    .btn-icon svg { width: 15px; height: 15px; }
+
+    /* Editorial Player Quote & Story Prose (zero boxes!) */
+    .player-quote {
+      padding-left: 10px;
+      border-left: 2px solid var(--ink);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .line-text {
+      font-size: var(--text-body);
+      line-height: 1.5;
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+    .note-inline {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      font-style: italic;
+    }
+    .prose-editorial {
+      font-size: var(--text-prose);
+      line-height: var(--leading-prose);
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .pill svg { width: 11px; height: 11px; color: var(--ink-3); }
+    .pill.ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+    .pill.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+    .pill.solid { background: var(--ink); color: var(--surface-1); font-weight: 600; }
+
+    /* Sibling Versions list (clean ghost rows, no heavy boxes) */
+    .sib-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-top: var(--space-2);
+      border-top: var(--hairline) solid var(--line);
+    }
+    .sib-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 5px 8px;
+      border-radius: var(--radius);
+      background: transparent;
+      text-align: left;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+    }
+    .sib-row:hover { background: var(--ghost-hover); color: var(--ink); }
+    .sib-row[aria-current="true"] {
+      background: var(--alpha-2);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .sib-row .sib-id {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      flex: none;
+    }
+    .sib-row .sib-txt {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sib-row .sib-below {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      flex: none;
+    }
+
+    /* ───────── 8. Confirm Dialog (matches chrome.css .confirm) ───────── */
+    dialog.confirm {
+      width: min(23rem, calc(100% - 2 * var(--space-4)));
+      margin: auto;
+      padding: var(--space-4);
+      border: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      outline: none;
+    }
+    dialog.confirm::backdrop { background: var(--scrim); }
+    dialog.confirm p { margin: 0 0 var(--space-2); }
+    dialog.confirm .sub-note {
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      margin-bottom: var(--space-4);
+    }
+    dialog.confirm .row {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+    }
+    .chip-btn {
+      height: var(--control);
+      padding: 0 var(--space-4);
+      border-radius: var(--radius-pill);
+      font-size: var(--text-body);
+      font-weight: 500;
+    }
+    .chip-btn.cancel {
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink);
+    }
+    .chip-btn.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    /* ───────── 9. Responsive / Phone 390px Collapse ───────── */
+    @media (max-width: 63.99rem) {
+      .sums, .legend { display: none; }
+      .seg { display: inline-flex; }
+      .cols { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 0; }
+      .pane { border-radius: 0; box-shadow: none; }
+      .timeline-page[data-pane="timeline"] .pane.node-pane { display: none; }
+      .timeline-page[data-pane="node"] .pane.graph-pane { display: none; }
+      .mobile-bar { display: flex; }
+    }
+    .stage-frame[data-vp="mobile"] .sums,
+    .stage-frame[data-vp="mobile"] .legend { display: none; }
+    .stage-frame[data-vp="mobile"] .seg { display: inline-flex; }
+    .stage-frame[data-vp="mobile"] .cols { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 0; }
+    .stage-frame[data-vp="mobile"] .pane { border-radius: 0; box-shadow: none; }
+    .stage-frame[data-vp="mobile"] .timeline-page[data-pane="timeline"] .pane.node-pane { display: none; }
+    .stage-frame[data-vp="mobile"] .timeline-page[data-pane="node"] .pane.graph-pane { display: none; }
+    .stage-frame[data-vp="mobile"] .mobile-bar { display: flex; }
+  </style>
+</head>
+<body>
+
+  <!-- Prototype Rig Bar (for testing viewports, themes, scale, and log.ts operations) -->
+  <div class="rig-bar" role="region" aria-label="Prototype Controls">
+    <div class="rig-group">
+      <span>Viewport</span>
+      <button type="button" id="vp-desktop" aria-pressed="true">Desktop 1280</button>
+      <button type="button" id="vp-mobile" aria-pressed="false">Phone 390</button>
+    </div>
+    <div class="rig-group">
+      <span>Theme</span>
+      <button type="button" id="th-light" aria-pressed="true">Light</button>
+      <button type="button" id="th-dark" aria-pressed="false">Dark</button>
+    </div>
+    <div class="rig-group">
+      <span>Style</span>
+      <button type="button" id="st-rail" aria-pressed="true">Rail &amp; Knot (No Boxes)</button>
+      <button type="button" id="st-invert" aria-pressed="false">Solid Invert</button>
+    </div>
+    <div class="rig-group">
+      <span>Layout</span>
+      <button type="button" id="ly-stacked" aria-pressed="true">Stacked · 136px</button>
+      <button type="button" id="ly-parallel" aria-pressed="false">Parallel · 192px</button>
+    </div>
+    <div class="rig-group">
+      <span>Scale</span>
+      <button type="button" id="sc-sample" aria-pressed="true">Sample (13 nodes)</button>
+      <button type="button" id="sc-stress" aria-pressed="false">300 Turns (Stress)</button>
+    </div>
+    <div class="rig-group">
+      <span>Draft</span>
+      <button type="button" id="dr-toggle" aria-pressed="true">Draft: On</button>
+    </div>
+    <div class="rig-group">
+      <span>Sandbox</span>
+      <button type="button" id="sb-null">checkout(null)</button>
+      <button type="button" id="sb-reset">Reset Tree</button>
+    </div>
+    <span class="rig-toast" id="rig-toast">Ready · click any node to inspect, Checkout or Drop to test log.ts</span>
+  </div>
+
+  <div class="stage-frame" id="stage-frame" data-vp="desktop">
+    <div class="timeline-page" id="timeline-page" data-pane="timeline">
+
+      <!-- Top Bar -->
+      <header class="top">
+        <!-- ph:arrow-left -->
+        <button type="button" class="icon" aria-label="Back to story" data-hint="Back to story Esc" id="btn-back">
+          <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>
+        </button>
+        <h1>竹林</h1>
+        <span class="page-badge">
+          <!-- ph:git-branch -->
+          <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,64a32,32,0,1,0-40,31v17a16,16,0,0,1-16,16H96a31.82,31.82,0,0,0-16,4.29V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V160a16,16,0,0,1,16-16h80a32,32,0,0,0,32-32V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64Zm16,128a16,16,0,1,1-16-16A16,16,0,0,1,80,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
+          Timeline
+        </span>
+        <span class="spacer"></span>
+        <span class="sums" id="top-sums"></span>
+        <span class="seg" role="tablist" aria-label="View">
+          <button type="button" role="tab" id="tab-timeline" aria-selected="true">Timeline</button>
+          <button type="button" role="tab" id="tab-node" aria-selected="false">
+            Node <span class="v" id="tab-node-id">#6</span>
+          </button>
+        </span>
+      </header>
+
+      <!-- Main Workspace: Left = 2D Tree Canvas, Right = Selected Node Detail -->
+      <div class="cols">
+
+        <!-- Left Card: The Static-Coordinate Tree Map -->
+        <section class="pane graph-pane" aria-label="Timeline">
+          <div class="graph-bar">
+            <div class="sechead" style="flex:1">
+              <span class="lbl">Log Tree</span>
+              <span class="meta" id="graph-meta"></span>
+            </div>
+            <div class="legend" aria-hidden="true">
+              <span class="legend-item"><i class="legend-dot head"></i>head</span>
+              <span class="legend-item"><i class="legend-dot line"></i>reading line</span>
+              <span class="legend-item"><i class="legend-dot"></i>branch / cluster</span>
+              <span class="legend-item"><i class="legend-dot draft"></i>draft</span>
+            </div>
+          </div>
+
+          <div class="graph-scroll" id="graph-scroll">
+            <div class="graph-stage" id="graph-stage"></div>
+          </div>
+
+          <!-- Phone Quick-Bar at bottom of Timeline tab -->
+          <div class="mobile-bar" id="mobile-bar"></div>
+        </section>
+
+        <!-- Right Card: Selected Node Preview & Sandbox Actions -->
+        <aside class="pane node-pane" aria-label="Node">
+          <div class="detail-scroll" id="detail-scroll"></div>
+        </aside>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Native Confirm Dialog for Drop Subtree (Constraint 4 & 6) -->
+  <dialog class="confirm" id="confirm-dialog" closedby="any">
+    <p id="confirm-text"></p>
+    <div class="sub-note" id="confirm-sub"></div>
+    <div class="row">
+      <button type="button" class="chip-btn cancel" id="confirm-cancel">Cancel</button>
+      <button type="button" class="chip-btn danger" id="confirm-delete">Delete</button>
+    </div>
+  </dialog>
+
+  <script>
+    // ───────── 1. Sample Data (exact snapshot from docs/timeline-prototype-brief.md) ─────────
+    const INITIAL_SAMPLE = {
+      head: 6,
+      nodes: [
+        { id: 0, parent: null, input: { text: "hi" }, sibling: null, end: "end", prose: "第2段。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 2" },
+        { id: 1, parent: 0, input: { text: "重写" }, sibling: null, end: "end", prose: "第5段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 5" },
+        { id: 2, parent: 1, input: { text: "我走进竹林深处，侧耳听风。" }, sibling: null, end: "end", prose: "第6段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 6" },
+        { id: 3, parent: 2, input: { text: "我拔剑，向林中暗影喝问。" }, sibling: null, end: "end", prose: "第8段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 8" },
+        { id: 4, parent: 3, input: { text: "我收剑入鞘，继续前行。" }, sibling: null, end: "end", prose: "第10段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 10" },
+        { id: 5, parent: 2, input: { text: "我拔剑，向林中暗影喝问。" }, sibling: "swipe", end: "end", prose: "第12段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 12" },
+        { id: 6, parent: 5, input: { text: "我蹲下查看脚印。" }, sibling: null, end: "end", prose: "第14段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 14" },
+        { id: 7, parent: null, input: { text: "另一个开头：我在山脚的茶棚歇脚。" }, sibling: null, end: "end", prose: "第15段。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 15" },
+        { id: 8, parent: 2, input: { text: "我拔剑，向林中暗影喝问。" }, sibling: "swipe", end: "end", prose: "第17段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 17" },
+        { id: 9, parent: 2, input: { text: "我拔剑，向林中暗影喝问。" }, sibling: "swipe", end: "stopped", prose: "第19段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人", heading: "竹林深处 19" },
+        { id: 10, parent: 3, input: { text: "我收剑入鞘，继续前行。", note: "更冷一些" }, sibling: "reword", end: "end", prose: "第21段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 21" },
+        { id: 11, parent: 3, input: { text: "我收剑，却没有走，蹲在原地。" }, sibling: "edit", end: "end", prose: "第10段。二稿。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 21" },
+        { id: 12, parent: 7, input: { text: "茶棚老板打量我的剑。" }, sibling: null, end: "end", prose: "第22段。竹叶在风里翻了一遍又一遍，你听见远处有人踏着落叶走来。", heading: "竹林深处 22" }
+      ],
+      draft: {
+        parent: 6,
+        input: { text: "我顺着脚印往林子更深处走。" },
+        text: "第23段。脚印在一块青石前断了，"
+      }
+    };
+
+    // 300-Turn Stress Dataset Generator (tests Constraint 2: 300 turns vertical density & scrolling)
+    function makeStressDataset() {
+      const nodes = [];
+      let id = 0;
+      const scenes = ["竹林外围", "竹林深处", "青石残碑", "山涧木桥", "破败山神庙", "后山悬崖"];
+      let parent = null;
+      for (let t = 0; t < 300; t++) {
+        const cur = id++;
+        const scene = scenes[Math.floor(t / 50) % scenes.length];
+        nodes.push({
+          id: cur,
+          parent,
+          input: { text: `第 ${t + 1} 轮：我循着竹叶声向${scene}探去。` },
+          sibling: null,
+          end: "end",
+          prose: `第 ${t + 1} 轮正文。风声渐紧，${scene}的雾气愈发浓重，剑柄微凉。`,
+          heading: scene
+        });
+        // Add occasional realistic swipe clusters and mid-stream branches
+        if (t === 12 || t === 85 || t === 190 || t === 260) {
+          const b1 = id++;
+          nodes.push({
+            id: b1, parent: cur,
+            input: { text: `第 ${t + 2} 轮（分支）：我转身跃上竹梢俯瞰。` },
+            sibling: null, end: "end",
+            prose: `分支正文：你在竹梢稳住身形，看见林间火把晃动。`, heading: scene
+          });
+          nodes.push({
+            id: id++, parent: b1,
+            input: { text: `第 ${t + 3} 轮（分支续）：屏息凝神，枚石问路。` },
+            sibling: null, end: "end",
+            prose: `分支续正文：石子落处惊起飞鸟。`, heading: scene
+          });
+          // And a 2-swipe cluster on the same turn
+          nodes.push({
+            id: id++, parent,
+            input: { text: `第 ${t + 1} 轮：我循着竹叶声向${scene}探去。` },
+            sibling: "swipe", end: "end",
+            prose: `第 ${t + 1} 轮另一版本正文。`, heading: scene
+          });
+          nodes.push({
+            id: id++, parent,
+            input: { text: `第 ${t + 1} 轮：我循着竹叶声向${scene}探去。` },
+            sibling: "reword", end: "stopped",
+            prose: `第 ${t + 1} 轮半途截断的正文…`, heading: scene
+          });
+        }
+        parent = cur;
+      }
+      // Second root thread
+      const r2 = id++;
+      nodes.push({
+        id: r2, parent: null,
+        input: { text: "二周目：我在山脚茶棚听雨。" },
+        sibling: null, end: "end",
+        prose: "茶棚外雨如帘幕。", heading: "山脚茶棚"
+      });
+      return {
+        head: parent,
+        nodes,
+        draft: { parent, input: { text: "第 301 轮：我推开石门。" }, text: "门轴发出低沉的摩擦声，" }
+      };
+    }
+
+    // ───────── 2. Pure log.ts Operations (exact match with packages/runtime/src/log.ts) ─────────
+    const DRAFT_ID = -1;
+
+    function getMap(nodes) {
+      return new Map(nodes.map((n) => [n.id, n]));
+    }
+    function chain(map, id) {
+      const out = [];
+      for (let n = id === null ? undefined : map.get(id); n; n = n.parent === null ? undefined : map.get(n.parent)) {
+        out.unshift(n);
+      }
+      return out;
+    }
+    function childrenOf(nodes, parent) {
+      return nodes.filter((n) => n.parent === parent).sort((a, b) => a.id - b.id);
+    }
+    function under(nodes, map, id) {
+      return nodes.filter((n) => chain(map, n.id).some((a) => a.id === id)).sort((a, b) => a.id - b.id);
+    }
+    function belowCount(nodes, map, id) {
+      return under(nodes, map, id).length - 1;
+    }
+    function leafOf(nodes, map, id) {
+      return under(nodes, map, id).at(-1).id;
+    }
+    function rootOf(map, id) {
+      return chain(map, id)[0]?.id ?? id;
+    }
+
+    // ───────── 3. Pure Static Layout & Version Clustering (Constraint 1 & 3) ─────────
+    const ROW_H = 54;
+    const ROW_GAP = 16;
+    const ROW_STEP = ROW_H + ROW_GAP; // 70px per turn row
+    const PAD_LEFT = 42;
+    const PAD_TOP = 38;
+    const PAD_BOTTOM = 24;
+    const PAD_RIGHT = 24;
+
+    /**
+     * Groups a parent's children into layout units:
+     * - Children with their own descendants are standalone Branch units `[child]`.
+     * - Childless children sharing the exact same `input.text || input.note` fold into one Cluster unit `[c1, c2, ...]`.
+     * - Childless children with distinct line (e.g. #11 revised line) stay standalone `[child]`.
+     */
+    function groupUnits(nodes, parent, hasChildrenSet) {
+      const kids = childrenOf(nodes, parent);
+      if (parent === null) return kids.map((k) => [k]); // roots are always separate threads
+      const units = [];
+      const clusterByText = new Map();
+      for (const k of kids) {
+        if (hasChildrenSet.has(k.id)) {
+          units.push([k]);
+        } else {
+          const key = k.input.text || k.input.note || "";
+          let cluster = clusterByText.get(key);
+          if (!cluster) {
+            cluster = [];
+            clusterByText.set(key, cluster);
+            units.push(cluster);
+          }
+          cluster.push(k);
+        }
+      }
+      return units;
+    }
+
+    /**
+     * Pure stateless layout function: depends ONLY on `nodes` and `draft`, NEVER on `head`.
+     * Supports two modes:
+     * - "stacked" (default): LANE_W = 136px, each Root Thread starts at lane 0 and stacks vertically.
+     * - "parallel": LANE_W = 192px, Root Threads sit side-by-side in disjoint lane blocks.
+     */
+    function layoutGraph(nodes, draft, showDraft, layoutMode = "stacked") {
+      const isStacked = layoutMode === "stacked";
+      const laneW = isStacked ? 136 : 192;
+      const laneGap = isStacked ? 10 : 14;
+      const threadGap = isStacked ? 0 : 24;
+
+      const hasChildrenSet = new Set(nodes.filter((n) => n.parent !== null).map((n) => n.parent));
+      const rootUnits = groupUnits(nodes, null, hasChildrenSet);
+
+      // Lay out each root thread independently in DFS order
+      const threads = [];
+      let globalLaneOffset = 0;
+
+      rootUnits.forEach((ru, tIdx) => {
+        const end = [];
+        const threadCells = [];
+        const cellByKey = new Map();
+
+        const freeLane = (fromLane, row) => {
+          let l = fromLane;
+          while ((end[l] ?? -1) >= row) l++;
+          return l;
+        };
+
+        const visitUnit = (unit, row, localLane) => {
+          end[localLane] = Math.max(end[localLane] ?? -1, row);
+          const cell = {
+            key: `${tIdx}:${row}:${localLane}`,
+            thread: tIdx,
+            row,
+            localLane,
+            lane: isStacked ? localLane : globalLaneOffset + localLane,
+            members: [...unit].sort((a, b) => a.id - b.id),
+            parent: unit[0].parent,
+            isDraft: false
+          };
+          threadCells.push(cell);
+          cellByKey.set(`${row}:${localLane}`, cell);
+
+          if (unit.length === 1) {
+            const parentId = unit[0].id;
+            const childUnits = groupUnits(nodes, parentId, hasChildrenSet);
+            childUnits.forEach((cu, idx) => {
+              const targetLane = idx === 0 ? localLane : freeLane(localLane + 1, row + 1);
+              visitUnit(cu, row + 1, targetLane);
+            });
+          }
+        };
+
+        visitUnit(ru, 0, 0);
+        const lanesUsed = Math.max(1, end.length);
+        const rowsUsed = Math.max(1, ...threadCells.map((c) => c.row + 1));
+        threads.push({
+          tIdx,
+          rootId: ru[0].id,
+          cells: threadCells,
+          cellByKey,
+          lanesUsed,
+          rowsUsed,
+          minLane: isStacked ? 0 : globalLaneOffset,
+          maxLane: isStacked ? lanesUsed - 1 : globalLaneOffset + lanesUsed - 1
+        });
+        globalLaneOffset += lanesUsed;
+      });
+
+      // Map nodeId -> cell & thread
+      const cellByNodeId = new Map();
+      const threadByNodeId = new Map();
+      for (const th of threads) {
+        for (const c of th.cells) {
+          for (const m of c.members) {
+            cellByNodeId.set(m.id, c);
+            threadByNodeId.set(m.id, th);
+          }
+        }
+      }
+
+      // Attach Draft without shifting any committed node
+      if (showDraft && draft) {
+        if (draft.parent === null) {
+          const tIdx = threads.length;
+          const lane = isStacked ? 0 : globalLaneOffset;
+          const draftCell = {
+            key: "draft",
+            thread: tIdx,
+            row: 0,
+            localLane: 0,
+            lane,
+            members: [{ id: DRAFT_ID, parent: null, input: draft.input, prose: draft.text, sibling: null, end: "end" }],
+            parent: null,
+            isDraft: true
+          };
+          threads.push({
+            tIdx,
+            rootId: null,
+            cells: [draftCell],
+            cellByKey: new Map([["0:0", draftCell]]),
+            lanesUsed: 1,
+            rowsUsed: 1,
+            minLane: lane,
+            maxLane: lane
+          });
+          cellByNodeId.set(DRAFT_ID, draftCell);
+        } else if (cellByNodeId.has(draft.parent)) {
+          const pCell = cellByNodeId.get(draft.parent);
+          const th = threadByNodeId.get(draft.parent);
+          const row = pCell.row + 1;
+          let localLane = pCell.localLane;
+          while (th.cellByKey.has(`${row}:${localLane}`)) localLane++;
+          const lane = isStacked ? localLane : th.minLane + localLane;
+          const draftCell = {
+            key: "draft",
+            thread: th.tIdx,
+            row,
+            localLane,
+            lane,
+            members: [{ id: DRAFT_ID, parent: draft.parent, input: draft.input, prose: draft.text, sibling: null, end: "end" }],
+            parent: draft.parent,
+            isDraft: true
+          };
+          th.cells.push(draftCell);
+          th.cellByKey.set(`${row}:${localLane}`, draftCell);
+          th.lanesUsed = Math.max(th.lanesUsed, localLane + 1);
+          th.rowsUsed = Math.max(th.rowsUsed, row + 1);
+          th.maxLane = Math.max(th.maxLane, lane);
+          cellByNodeId.set(DRAFT_ID, draftCell);
+        }
+      }
+
+      const xOf = (lane, threadIdx) =>
+        PAD_LEFT + lane * (laneW + laneGap) + (isStacked ? 0 : threadIdx * threadGap);
+
+      // Compute pixel coordinates for cells, thread header bands, and ruler ticks
+      const cells = [];
+      const threadBands = [];
+      const rulerTicks = [];
+      let yCursor = 10;
+      let maxRight = 400;
+      let totalRows = 0;
+
+      if (isStacked) {
+        // Vertically stacked threads: every thread starts at lane 0 on the left
+        for (const th of threads) {
+          const bandY = yCursor;
+          const rowsStartY = bandY + 32;
+          const bandW = Math.max(260, th.lanesUsed * laneW + (th.lanesUsed - 1) * laneGap);
+          threadBands.push({
+            tIdx: th.tIdx,
+            rootId: th.rootId,
+            x: PAD_LEFT,
+            y: bandY,
+            w: bandW,
+            isStacked: true
+          });
+          for (let r = 0; r < th.rowsUsed; r++) {
+            rulerTicks.push({
+              thread: th.tIdx,
+              rootId: th.rootId,
+              row: r,
+              y: rowsStartY + r * ROW_STEP
+            });
+          }
+          for (const cell of th.cells) {
+            cell.x = xOf(cell.localLane, th.tIdx);
+            cell.y = rowsStartY + cell.row * ROW_STEP;
+            cells.push(cell);
+            maxRight = Math.max(maxRight, cell.x + laneW + PAD_RIGHT);
+          }
+          totalRows = Math.max(totalRows, th.rowsUsed);
+          yCursor = rowsStartY + th.rowsUsed * ROW_STEP + 14;
+        }
+      } else {
+        // Parallel side-by-side threads
+        for (const th of threads) {
+          const bx = xOf(th.minLane, th.tIdx);
+          const bw = xOf(th.maxLane, th.tIdx) + laneW - bx;
+          threadBands.push({
+            tIdx: th.tIdx,
+            rootId: th.rootId,
+            x: bx,
+            y: 4,
+            w: bw,
+            isStacked: false,
+            minLane: th.minLane,
+            maxLane: th.maxLane
+          });
+          for (const cell of th.cells) {
+            cell.x = xOf(cell.lane, th.tIdx);
+            cell.y = PAD_TOP + cell.row * ROW_STEP;
+            cells.push(cell);
+            maxRight = Math.max(maxRight, cell.x + laneW + PAD_RIGHT);
+          }
+          totalRows = Math.max(totalRows, th.rowsUsed);
+        }
+        for (let r = 0; r < totalRows; r++) {
+          rulerTicks.push({
+            thread: 0,
+            rootId: threads[0]?.rootId ?? null,
+            row: r,
+            y: PAD_TOP + r * ROW_STEP
+          });
+        }
+        yCursor = PAD_TOP + totalRows * ROW_STEP + PAD_BOTTOM;
+      }
+
+      const width = cells.length ? maxRight : 400;
+      const height = cells.length ? yCursor + 8 : 240;
+
+      return { cells, cellByNodeId, threadBands, rulerTicks, totalRows, width, height, laneW, isStacked, xOf };
+    }
+
+    // ───────── 4. Phosphor Icons (Inline SVGs with exact names) ─────────
+    const ICONS = {
+      // ph:arrows-clockwise (Swipe)
+      swipe: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64l-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,0,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60L224,85.8V56a8,8,0,1,1,16,0Z"/></svg>`,
+      // ph:magic-wand (Reword)
+      reword: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M248,152a8,8,0,0,1-8,8H224v16a8,8,0,0,1-16,0V160H192a8,8,0,0,1,0-16h16V128a8,8,0,0,1,16,0v16h16A8,8,0,0,1,248,152ZM56,72H72V88a8,8,0,0,0,16,0V72h16a8,8,0,0,0,0-16H88V40a8,8,0,0,0-16,0V56H56a8,8,0,0,0,0,16ZM184,192h-8v-8a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM219.31,80,80,219.31a16,16,0,0,1-22.62,0L36.68,198.63a16,16,0,0,1,0-22.63L176,36.69a16,16,0,0,1,22.63,0l20.68,20.68A16,16,0,0,1,219.31,80Zm-54.63-12L144,88.69,167.31,112l20.69-20.69Z"/></svg>`,
+      // ph:pencil-simple (Edit / Revise)
+      edit: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z"/></svg>`,
+      // ph:git-commit (Checkout)
+      checkout: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M248,128a8,8,0,0,1-8,8H183.42a56,56,0,0,1-110.84,0H16a8,8,0,0,1,0-16H72.58a56,56,0,0,1,110.84,0H240A8,8,0,0,1,248,128Zm-120,40a40,40,0,1,0-40-40A40,40,0,0,0,128,168Z"/></svg>`,
+      // ph:book-open-text (Open in reader)
+      reader: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,48H160a40,40,0,0,0-32,16A40,40,0,0,0,96,48H24a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H96a24,24,0,0,1,24,24,8,8,0,0,0,16,0,24,24,0,0,1,24-24h72a8,8,0,0,0,8-8V56A8,8,0,0,0,232,48ZM96,192H32V64H96a24,24,0,0,1,24,24V200A39.81,39.81,0,0,0,96,192Zm128,0H160a39.81,39.81,0,0,0-24,8V88a24,24,0,0,1,24-24h64Z"/></svg>`,
+      // ph:magnifying-glass (Inspect)
+      inspect: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
+      // ph:trash (Drop subtree)
+      trash: `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg>`
+    };
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // ───────── 5. Interactive State & Rendering ─────────
+    let state = {
+      dataset: "sample", // "sample" | "stress"
+      styleMode: "rail", // "rail" (Rail & Knot, zero hollow cards) | "invert" (Solid Invert cells)
+      layoutMode: "stacked", // "stacked" (136px, threads stacked) | "parallel" (192px, threads side-by-side)
+      head: INITIAL_SAMPLE.head,
+      nodes: structuredClone(INITIAL_SAMPLE.nodes),
+      draft: structuredClone(INITIAL_SAMPLE.draft),
+      showDraft: true,
+      selectedId: INITIAL_SAMPLE.head,
+      pane: "timeline" // "timeline" | "node" (for mobile)
+    };
+
+    function loadDataset(kind) {
+      const src = kind === "stress" ? makeStressDataset() : INITIAL_SAMPLE;
+      state.dataset = kind;
+      state.head = src.head;
+      state.nodes = structuredClone(src.nodes);
+      state.draft = structuredClone(src.draft);
+      state.selectedId = src.head;
+      render();
+      scrollToSelected();
+    }
+
+    function setToast(msg) {
+      document.getElementById("rig-toast").textContent = msg;
+    }
+
+    function performCheckout(id) {
+      const map = getMap(state.nodes);
+      const nextHead = id === null ? null : leafOf(state.nodes, map, id);
+      state.head = nextHead;
+      if (nextHead !== null) state.selectedId = nextHead;
+      setToast(
+        id === null
+          ? `log.checkout(null) → head is now null (empty reading line)`
+          : `log.checkout(#${id}) → head moved to newest leaf #${nextHead}`
+      );
+      render();
+    }
+
+    function performDrop(id) {
+      const map = getMap(state.nodes);
+      const dropped = under(state.nodes, map, id).map((n) => n.id);
+      const surviving = state.nodes.filter((n) => !dropped.includes(n.id));
+      const top = Math.max(-1, ...surviving.map((n) => n.id));
+      const nextHead =
+        state.head !== null && dropped.includes(state.head) ? (top < 0 ? null : top) : state.head;
+
+      if (state.draft && state.draft.parent !== null && dropped.includes(state.draft.parent)) {
+        state.draft = null;
+      }
+      state.nodes = surviving;
+      state.head = nextHead;
+      if (dropped.includes(state.selectedId)) {
+        state.selectedId = nextHead ?? surviving.at(-1)?.id ?? null;
+      }
+      setToast(
+        `log.drop(#${id}) → dropped [${dropped.map((d) => "#" + d).join(", ")}], head = ${nextHead === null ? "null" : "#" + nextHead}`
+      );
+      render();
+    }
+
+    function render() {
+      const map = getMap(state.nodes);
+      const readingPath = chain(map, state.head);
+      const lineSet = new Set(readingPath.map((n) => n.id));
+      const roots = childrenOf(state.nodes, null);
+      const activeRootId = readingPath[0]?.id ?? null;
+
+      document.getElementById("timeline-page").setAttribute("data-style", state.styleMode);
+
+      // Ensure selectedId is valid
+      if (state.selectedId !== DRAFT_ID && (state.selectedId === null || !map.has(state.selectedId))) {
+        state.selectedId = state.head ?? state.nodes.at(-1)?.id ?? (state.showDraft && state.draft ? DRAFT_ID : null);
+      }
+
+      // What leaf would checkout(selectedId) land on?
+      const selectedCheckoutTarget =
+        state.selectedId !== null && state.selectedId !== DRAFT_ID && map.has(state.selectedId)
+          ? leafOf(state.nodes, map, state.selectedId)
+          : null;
+
+      const laid = layoutGraph(state.nodes, state.draft, state.showDraft, state.layoutMode);
+      const curLaneW = laid.laneW;
+      const isRail = state.styleMode === "rail";
+
+      // 1. Update Top Bar Summary
+      const topSums = document.getElementById("top-sums");
+      topSums.innerHTML = [
+        `<b>${roots.length}</b> ${roots.length === 1 ? "thread" : "threads"}`,
+        `<b>${state.nodes.length}</b> nodes`,
+        state.head !== null
+          ? `head <b>#${state.head}</b> (T${readingPath.length})`
+          : `head <b>null</b> (empty line)`
+      ].join(" · ");
+
+      document.getElementById("tab-node-id").textContent =
+        state.selectedId === DRAFT_ID ? "Draft" : state.selectedId !== null ? `#${state.selectedId}` : "—";
+
+      const clusterCount = laid.cells.filter((c) => c.members.length > 1).length;
+      document.getElementById("graph-meta").textContent =
+        `${laid.totalRows} turns · ${clusterCount} ${clusterCount === 1 ? "cluster" : "clusters"} · ${isRail ? "rail & knot" : "solid invert"}`;
+
+      // 2. Render 2D Graph Stage (Thread headers + Turn ruler + SVG continuous rails/knots + Station labels)
+      const stage = document.getElementById("graph-stage");
+      stage.style.width = `${laid.width}px`;
+      stage.style.height = `${laid.height}px`;
+
+      // Thread header bands (typographic section dividers)
+      const threadBandsHtml = laid.threadBands
+        .map((tb) => {
+          const isCurrentThread = tb.rootId !== null && tb.rootId === activeRootId;
+          const rootNode = tb.rootId !== null ? map.get(tb.rootId) : null;
+          const threadNodes = tb.rootId !== null ? under(state.nodes, map, tb.rootId).length : 1;
+          return `
+            <div class="thread-band ${isCurrentThread ? "active" : ""}" style="left:${tb.x}px; top:${tb.y}px; width:${tb.w}px">
+              <span>Thread ${tb.tIdx + 1} <span class="t-root">· root #${tb.rootId ?? "draft"}</span></span>
+              <span class="t-root">${threadNodes} ${threadNodes === 1 ? "node" : "nodes"}${rootNode?.heading ? " · " + escapeHtml(rootNode.heading) : ""}</span>
+            </div>
+          `;
+        })
+        .join("");
+
+      // Sticky Turn Ruler ticks
+      const rulerTicksHtml = laid.rulerTicks
+        .map((tk) => {
+          const onLineRow = tk.rootId === activeRootId && tk.row < readingPath.length;
+          return `<div class="turn-tick ${onLineRow ? "on-line" : ""}" style="top:${tk.y}px">T${tk.row + 1}</div>`;
+        })
+        .join("");
+
+      // SVG Continuous Rails & Station Knots
+      const edgesHtml = [];
+      const knotsHtml = [];
+      if (!laid.isStacked) {
+        for (let i = 1; i < laid.threadBands.length; i++) {
+          const prevTb = laid.threadBands[i - 1];
+          const curTb = laid.threadBands[i];
+          const sepX = (prevTb.x + prevTb.w + curTb.x) / 2;
+          edgesHtml.push(`<line class="thread-sep" x1="${sepX}" y1="${PAD_TOP - 8}" x2="${sepX}" y2="${laid.height - 12}" />`);
+        }
+      }
+
+      const KNOT_X = 7;
+      const KNOT_Y = 14;
+
+      for (const cell of laid.cells) {
+        const bx = cell.x + (isRail ? KNOT_X : 20);
+        const by = cell.y + (isRail ? KNOT_Y : 0);
+
+        if (cell.parent !== null) {
+          const pCell = laid.cellByNodeId.get(cell.parent);
+          if (pCell) {
+            const ax = pCell.x + (isRail ? KNOT_X : 20);
+            const ay = pCell.y + (isRail ? KNOT_Y : 46);
+            const elbowY = pCell.y + 44;
+            const d =
+              ax === bx
+                ? `M ${ax} ${ay} V ${by}`
+                : `M ${ax} ${ay} V ${elbowY - 8} C ${ax} ${elbowY + 4}, ${bx} ${elbowY - 4}, ${bx} ${elbowY + 8} V ${by}`;
+            const isLineEdge =
+              !cell.isDraft &&
+              cell.members.some((m) => lineSet.has(m.id)) &&
+              pCell.members.some((m) => lineSet.has(m.id));
+            const cls = cell.isDraft ? "edge-path draft-edge" : isLineEdge ? "edge-path on-line" : "edge-path";
+            edgesHtml.push(`<path class="${cls}" d="${d}" />`);
+          }
+        }
+
+        // Draw station knot on the continuous rail in "rail" mode
+        if (isRail) {
+          const hasLine = !cell.isDraft && cell.members.some((m) => lineSet.has(m.id));
+          const hasHead = !cell.isDraft && cell.members.some((m) => m.id === state.head);
+          const hasTarget =
+            !cell.isDraft &&
+            selectedCheckoutTarget !== null &&
+            cell.members.some((m) => m.id === selectedCheckoutTarget) &&
+            !cell.members.some((m) => m.id === state.selectedId);
+
+          if (cell.isDraft) {
+            knotsHtml.push(`<circle cx="${bx}" cy="${by}" r="3.5" fill="var(--surface-1)" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="2 2" />`);
+          } else if (hasHead) {
+            knotsHtml.push(`<circle class="knot-ring" cx="${bx}" cy="${by}" r="6.5" />`);
+            knotsHtml.push(`<circle class="knot-circle on-line" cx="${bx}" cy="${by}" r="3.5" />`);
+          } else if (hasTarget) {
+            knotsHtml.push(`<circle class="knot-ring target" cx="${bx}" cy="${by}" r="6" />`);
+            knotsHtml.push(`<circle class="knot-circle target" cx="${bx}" cy="${by}" r="3" />`);
+          } else {
+            knotsHtml.push(`<circle class="knot-circle ${hasLine ? "on-line" : ""}" cx="${bx}" cy="${by}" r="${hasLine ? 3.5 : 3}" />`);
+          }
+        }
+      }
+
+      // Station Cells & Version Clusters
+      const cellsHtml = laid.cells
+        .map((cell) => {
+          if (cell.isDraft) {
+            const m = cell.members[0];
+            const isSel = state.selectedId === DRAFT_ID;
+            const summary = m.input?.text || m.input?.note || m.prose || "Writing…";
+            return `
+              <button
+                type="button"
+                class="cell draft-cell ${isSel ? "selected" : ""}"
+                style="left:${cell.x}px; top:${cell.y}px; width:${curLaneW}px"
+                data-select-id="${DRAFT_ID}"
+                aria-label="Draft turn ${cell.row + 1}"
+              >
+                <div class="cell-top">
+                  <span class="nid">Draft</span>
+                  <span class="scene-tag">#${cell.parent ?? "root"}</span>
+                </div>
+                <div class="cell-line">${escapeHtml(summary)}</div>
+              </button>
+            `;
+          }
+
+          // Version Cluster cell (2+ childless siblings sharing the same player line)
+          if (cell.members.length > 1) {
+            const hasLine = cell.members.some((m) => lineSet.has(m.id));
+            const hasSel = cell.members.some((m) => m.id === state.selectedId);
+            const hasTarget =
+              selectedCheckoutTarget !== null &&
+              cell.members.some((m) => m.id === selectedCheckoutTarget) &&
+              !hasSel;
+            const activeMember =
+              cell.members.find((m) => m.id === state.selectedId) ??
+              cell.members.find((m) => m.id === state.head) ??
+              cell.members[0];
+            const sharedLine = activeMember.input.text || activeMember.input.note || activeMember.prose;
+            const noteChip = activeMember.input.note
+              ? `<span class="note-chip">note</span>`
+              : "";
+
+            const pills = cell.members
+              .map((m) => {
+                const isSel = m.id === state.selectedId;
+                const isHead = m.id === state.head;
+                const icon = m.sibling ? ICONS[m.sibling] ?? "" : "";
+                const hasNote = Boolean(m.input.note) ? `<span title="note: ${escapeHtml(m.input.note)}">✦</span>` : "";
+                const stopDot = m.end === "stopped" ? `<i class="stop-dot" title="Stopped"></i>` : "";
+                return `
+                  <button
+                    type="button"
+                    class="v-pill"
+                    data-select-id="${m.id}"
+                    data-selected="${isSel}"
+                    data-head="${isHead}"
+                    aria-label="Select node #${m.id}"
+                  >
+                    ${icon}#${m.id}${hasNote}${stopDot}
+                  </button>
+                `;
+              })
+              .join("");
+
+            return `
+              <div
+                class="cell cluster-cell ${hasLine ? "on-line" : "off-line"} ${hasSel ? "selected" : ""} ${hasTarget ? "checkout-target" : ""}"
+                style="left:${cell.x}px; top:${cell.y}px; width:${curLaneW}px"
+                role="group"
+                aria-label="Version cluster at turn ${cell.row + 1}"
+              >
+                <div class="cluster-pills">
+                  <span class="cluster-tag">${cell.members.length}v</span>
+                  ${pills}
+                </div>
+                <div class="cell-line">${noteChip}${escapeHtml(sharedLine)}</div>
+              </div>
+            `;
+          }
+
+          // Single Node Station
+          const m = cell.members[0];
+          const isLine = lineSet.has(m.id);
+          const isHead = m.id === state.head;
+          const isSel = m.id === state.selectedId;
+          const isTarget = selectedCheckoutTarget === m.id && !isSel && !isHead;
+          const parentNode = m.parent !== null ? map.get(m.parent) : null;
+          const showScene = m.heading && (!parentNode || parentNode.heading !== m.heading);
+          const kindBadge = m.sibling
+            ? `<span class="kind-badge" title="${m.sibling}">${ICONS[m.sibling] ?? ""}</span>`
+            : "";
+          const rightBadge = isHead
+            ? `<span class="badge-head">HEAD</span>`
+            : isTarget
+              ? `<span class="badge-target">→leaf</span>`
+              : m.end === "stopped"
+                ? `<span class="badge-stopped">stop</span>`
+                : "";
+          const summary = m.input.text || m.input.note || m.prose;
+          const noteChip = m.input.note ? `<span class="note-chip">note</span>` : "";
+
+          return `
+            <button
+              type="button"
+              class="cell ${isLine ? "on-line" : "off-line"} ${isSel ? "selected" : ""} ${isTarget ? "checkout-target" : ""}"
+              style="left:${cell.x}px; top:${cell.y}px; width:${curLaneW}px"
+              data-select-id="${m.id}"
+              aria-current="${isHead ? "true" : "false"}"
+            >
+              <div class="cell-top">
+                <span class="nid">#${m.id}</span>
+                ${kindBadge}
+                <span class="scene-tag">${showScene ? escapeHtml(m.heading) : ""}</span>
+                ${rightBadge}
+              </div>
+              <div class="cell-line">${noteChip}${escapeHtml(summary)}</div>
+            </button>
+          `;
+        })
+        .join("");
+
+      stage.innerHTML = `
+        <div class="${laid.isStacked ? "" : "thread-headers"}" style="width:${laid.width}px">${threadBandsHtml}</div>
+        <div class="turn-ruler" style="height:${laid.height}px">${rulerTicksHtml}</div>
+        <svg class="edges-svg" width="${laid.width}" height="${laid.height}" aria-hidden="true">
+          ${edgesHtml.join("")}
+          ${knotsHtml.join("")}
+        </svg>
+        ${cellsHtml}
+      `;
+
+      // 3. Render Mobile Quick-Bar & De-boxed Right Detail Pane
+      renderDetailPane(map, lineSet, laid);
+    }
+
+    function renderDetailPane(map, lineSet, laid) {
+      const detailEl = document.getElementById("detail-scroll");
+      const mobileBar = document.getElementById("mobile-bar");
+
+      if (state.selectedId === null) {
+        detailEl.innerHTML = `<p style="color:var(--ink-3)">No node in log.</p>`;
+        mobileBar.innerHTML = `<span>Empty log</span>`;
+        return;
+      }
+
+      // Draft selected
+      if (state.selectedId === DRAFT_ID && state.draft) {
+        const pDepth = state.draft.parent !== null ? chain(map, state.draft.parent).length : 0;
+        detailEl.innerHTML = `
+          <div class="node-header">
+            <div class="node-bar">
+              <h2>Turn ${pDepth + 1} <span class="mono-id">· Draft</span></h2>
+              <span class="pill">streaming</span>
+            </div>
+            <div class="node-meta-line">
+              <span>parent <b>${state.draft.parent === null ? "none (new thread)" : "#" + state.draft.parent}</b></span>
+              <span>·</span>
+              <span>${state.draft.text.length} chars in flight</span>
+            </div>
+          </div>
+          <div class="player-quote">
+            <p class="line-text">${escapeHtml(state.draft.input.text)}</p>
+          </div>
+          <div class="prose-editorial">${escapeHtml(state.draft.text)}</div>
+        `;
+        mobileBar.innerHTML = `
+          <div class="mobile-bar-info"><b>Draft</b> · Turn ${pDepth + 1}</div>
+          <button type="button" class="chip-btn cancel" id="mob-open-detail" style="height:28px;padding:0 10px;font-size:12px">Details →</button>
+        `;
+        document.getElementById("mob-open-detail")?.addEventListener("click", () => setMobilePane("node"));
+        return;
+      }
+
+      const node = map.get(state.selectedId);
+      if (!node) return;
+
+      const nodePath = chain(map, node.id);
+      const turnNum = nodePath.length;
+      const siblings = childrenOf(state.nodes, node.parent);
+      const verIdx = siblings.findIndex((s) => s.id === node.id) + 1;
+      const below = belowCount(state.nodes, map, node.id);
+      const targetLeaf = leafOf(state.nodes, map, node.id);
+      const isHead = node.id === state.head;
+      const isOnLine = lineSet.has(node.id);
+      const alreadyAtTarget = state.head === targetLeaf;
+      const threadIdx = (laid.cellByNodeId.get(node.id)?.thread ?? 0) + 1;
+
+      const originTag = node.sibling
+        ? `${node.sibling}${siblings.length > 1 ? ` ${verIdx}/${siblings.length}` : ""}`
+        : node.parent === null
+          ? "root"
+          : "act";
+
+      const sibRowsHtml =
+        siblings.length > 1
+          ? `
+            <div class="sib-list">
+              <div class="sechead" style="margin:0 0 2px">
+                <span class="lbl">${node.parent === null ? "Threads" : `Versions under #${node.parent}`}</span>
+                <span class="meta">${verIdx}/${siblings.length}</span>
+              </div>
+              ${siblings
+                .map((s, idx) => {
+                  const sBelow = belowCount(state.nodes, map, s.id);
+                  const sIcon = s.sibling ? ICONS[s.sibling] ?? "" : "";
+                  const label = s.input.text || s.input.note || s.prose;
+                  return `
+                    <button
+                      type="button"
+                      class="sib-row"
+                      data-select-id="${s.id}"
+                      aria-current="${s.id === node.id ? "true" : "false"}"
+                    >
+                      <span class="sib-id">${idx + 1}/${siblings.length} · #${s.id}</span>
+                      ${sIcon ? `<span class="kind-badge">${sIcon}</span>` : ""}
+                      <span class="sib-txt">${escapeHtml(label)}</span>
+                      <span class="sib-below">${sBelow ? `+${sBelow}` : "leaf"}</span>
+                    </button>
+                  `;
+                })
+                .join("")}
+            </div>
+          `
+          : "";
+
+      detailEl.innerHTML = `
+        <div class="node-header">
+          <div class="node-bar">
+            <h2>
+              Turn ${turnNum} <span class="mono-id">· #${node.id}</span>
+              ${
+                isHead
+                  ? `<span class="pill solid">HEAD</span>`
+                  : isOnLine
+                    ? `<span class="pill ok">on line</span>`
+                    : ""
+              }
+              ${node.end === "stopped" ? `<span class="pill bad">stopped</span>` : ""}
+            </h2>
+
+            <!-- Compact Action Toolbar (no full-width stretched bars!) -->
+            <div class="action-bar">
+              ${
+                alreadyAtTarget
+                  ? `<span class="at-head-tag">at #${targetLeaf}</span>`
+                  : `<button type="button" class="btn-checkout" id="act-checkout" data-hint="Move head to #${targetLeaf}">
+                       ${ICONS.checkout}<span>Checkout #${targetLeaf}</span>
+                     </button>`
+              }
+              <button type="button" class="btn-icon" id="act-reader" aria-label="Open in reader" data-hint="Open in reader">
+                ${ICONS.reader}
+              </button>
+              <button type="button" class="btn-icon" id="act-inspect" aria-label="Inspect" data-hint="Inspect turn">
+                ${ICONS.inspect}
+              </button>
+              <button type="button" class="btn-icon danger" id="act-drop" aria-label="Drop subtree" data-hint="Drop #${node.id} and ${below} below">
+                ${ICONS.trash}
+              </button>
+            </div>
+          </div>
+
+          <!-- Single-line typographic facts (replaces chips + gray .facts bar + ORIGIN card!) -->
+          <div class="node-meta-line">
+            <span>parent <b>${node.parent === null ? "none" : "#" + node.parent}</b></span>
+            <span>·</span>
+            <span>thread ${threadIdx}</span>
+            <span>·</span>
+            <span><b>${escapeHtml(originTag)}</b></span>
+            ${node.heading ? `<span>·</span><span>${escapeHtml(node.heading)}</span>` : ""}
+            <span>·</span>
+            <span><b>${below}</b> below${targetLeaf !== node.id ? ` (leaf <b>#${targetLeaf}</b>)` : ""}</span>
+          </div>
+        </div>
+
+        <!-- Editorial Player Quote (left rule, zero box) -->
+        <div class="player-quote">
+          <p class="line-text">${escapeHtml(node.input.text || node.input.note || "(opening)")}</p>
+          ${
+            node.input.text && node.input.note
+              ? `<span class="note-inline">note: ${escapeHtml(node.input.note)}</span>`
+              : ""
+          }
+        </div>
+
+        <!-- Clean Story Prose (zero box) -->
+        <div class="prose-editorial">${escapeHtml(node.prose)}</div>
+
+        ${sibRowsHtml}
+      `;
+
+      // Wire Detail Actions
+      const btnCheckout = document.getElementById("act-checkout");
+      if (btnCheckout && !alreadyAtTarget) {
+        btnCheckout.onclick = () => performCheckout(node.id);
+      }
+      document.getElementById("act-reader")?.addEventListener("click", () => {
+        if (!isOnLine) performCheckout(node.id);
+        setToast(`→ Open in reader: scrolled to #node-${node.id} (Turn ${turnNum})`);
+      });
+      document.getElementById("act-inspect")?.addEventListener("click", () => {
+        setToast(`→ Inspect: opened Inspector on node #${node.id} (Turn ${turnNum})`);
+      });
+      document.getElementById("act-drop")?.addEventListener("click", () => {
+        openConfirmDrop(node.id, map);
+      });
+
+      // Mobile Quick Bar
+      mobileBar.innerHTML = `
+        <div class="mobile-bar-info">
+          <b>#${node.id}</b> · Turn ${turnNum} ${isHead ? "(HEAD)" : `→ checkout #${targetLeaf}`}
+        </div>
+        <div class="mobile-bar-actions">
+          ${
+            !alreadyAtTarget
+              ? `<button type="button" class="chip-btn" id="mob-checkout" style="height:28px;padding:0 10px;font-size:12px;background:var(--ink);color:var(--surface-1)">Checkout #${targetLeaf}</button>`
+              : ""
+          }
+          <button type="button" class="chip-btn cancel" id="mob-detail" style="height:28px;padding:0 10px;font-size:12px">Node →</button>
+        </div>
+      `;
+      document.getElementById("mob-checkout")?.addEventListener("click", () => performCheckout(node.id));
+      document.getElementById("mob-detail")?.addEventListener("click", () => setMobilePane("node"));
+    }
+
+    // Confirm Dialog for Drop Subtree
+    let pendingDropId = null;
+    function openConfirmDrop(id, map) {
+      pendingDropId = id;
+      const dropped = under(state.nodes, map, id).map((n) => n.id);
+      const surviving = state.nodes.filter((n) => !dropped.includes(n.id));
+      const top = Math.max(-1, ...surviving.map((n) => n.id));
+      const headAffected = state.head !== null && dropped.includes(state.head);
+      const nextHead = headAffected ? (top < 0 ? null : top) : state.head;
+
+      document.getElementById("confirm-text").textContent =
+        dropped.length === 1
+          ? `Drop node #${id}? It is gone for good.`
+          : `Drop node #${id} and the ${dropped.length - 1} ${dropped.length - 1 === 1 ? "node" : "nodes"} under it? Every turn in this subtree is gone for good.`;
+
+      document.getElementById("confirm-sub").textContent =
+        `dropping: [${dropped.map((d) => "#" + d).join(", ")}] · ` +
+        (headAffected
+          ? `head (#${state.head}) is inside → falls back to ${nextHead === null ? "null" : "#" + nextHead}`
+          : `head (#${state.head ?? "null"}) is untouched`);
+
+      document.getElementById("confirm-dialog").showModal();
+    }
+
+    document.getElementById("confirm-cancel").addEventListener("click", () => {
+      document.getElementById("confirm-dialog").close();
+    });
+    document.getElementById("confirm-delete").addEventListener("click", () => {
+      document.getElementById("confirm-dialog").close();
+      if (pendingDropId !== null) performDrop(pendingDropId);
+    });
+
+    // Event delegation for clicking nodes / version pills / sibling rows
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-select-id]");
+      if (!btn) return;
+      const raw = btn.getAttribute("data-select-id");
+      const id = raw === String(DRAFT_ID) ? DRAFT_ID : Number(raw);
+      state.selectedId = id;
+      render();
+    });
+
+    function setMobilePane(pane) {
+      state.pane = pane;
+      document.getElementById("timeline-page").setAttribute("data-pane", pane);
+      document.getElementById("tab-timeline").setAttribute("aria-selected", String(pane === "timeline"));
+      document.getElementById("tab-node").setAttribute("aria-selected", String(pane === "node"));
+    }
+
+    function scrollToSelected() {
+      const scroller = document.getElementById("graph-scroll");
+      const selEl = scroller.querySelector(".cell.selected");
+      if (selEl) {
+        selEl.scrollIntoView({ block: "center", inline: "nearest" });
+      }
+    }
+
+    // Wire Mobile Segmented Tabs
+    document.getElementById("tab-timeline").addEventListener("click", () => setMobilePane("timeline"));
+    document.getElementById("tab-node").addEventListener("click", () => setMobilePane("node"));
+
+    // Wire Prototype Rig Controls
+    document.getElementById("vp-desktop").addEventListener("click", () => {
+      document.getElementById("stage-frame").setAttribute("data-vp", "desktop");
+      document.getElementById("vp-desktop").setAttribute("aria-pressed", "true");
+      document.getElementById("vp-mobile").setAttribute("aria-pressed", "false");
+    });
+    document.getElementById("vp-mobile").addEventListener("click", () => {
+      document.getElementById("stage-frame").setAttribute("data-vp", "mobile");
+      document.getElementById("vp-mobile").setAttribute("aria-pressed", "true");
+      document.getElementById("vp-desktop").setAttribute("aria-pressed", "false");
+    });
+    document.getElementById("th-light").addEventListener("click", () => {
+      document.documentElement.setAttribute("data-theme", "light");
+      document.getElementById("th-light").setAttribute("aria-pressed", "true");
+      document.getElementById("th-dark").setAttribute("aria-pressed", "false");
+    });
+    document.getElementById("th-dark").addEventListener("click", () => {
+      document.documentElement.setAttribute("data-theme", "dark");
+      document.getElementById("th-dark").setAttribute("aria-pressed", "true");
+      document.getElementById("th-light").setAttribute("aria-pressed", "false");
+    });
+    document.getElementById("st-rail").addEventListener("click", () => {
+      state.styleMode = "rail";
+      document.getElementById("st-rail").setAttribute("aria-pressed", "true");
+      document.getElementById("st-invert").setAttribute("aria-pressed", "false");
+      render();
+    });
+    document.getElementById("st-invert").addEventListener("click", () => {
+      state.styleMode = "invert";
+      document.getElementById("st-invert").setAttribute("aria-pressed", "true");
+      document.getElementById("st-rail").setAttribute("aria-pressed", "false");
+      render();
+    });
+    document.getElementById("ly-stacked").addEventListener("click", () => {
+      state.layoutMode = "stacked";
+      document.getElementById("ly-stacked").setAttribute("aria-pressed", "true");
+      document.getElementById("ly-parallel").setAttribute("aria-pressed", "false");
+      render();
+    });
+    document.getElementById("ly-parallel").addEventListener("click", () => {
+      state.layoutMode = "parallel";
+      document.getElementById("ly-parallel").setAttribute("aria-pressed", "true");
+      document.getElementById("ly-stacked").setAttribute("aria-pressed", "false");
+      render();
+    });
+    document.getElementById("sc-sample").addEventListener("click", () => {
+      document.getElementById("sc-sample").setAttribute("aria-pressed", "true");
+      document.getElementById("sc-stress").setAttribute("aria-pressed", "false");
+      loadDataset("sample");
+    });
+    document.getElementById("sc-stress").addEventListener("click", () => {
+      document.getElementById("sc-stress").setAttribute("aria-pressed", "true");
+      document.getElementById("sc-sample").setAttribute("aria-pressed", "false");
+      loadDataset("stress");
+    });
+    document.getElementById("dr-toggle").addEventListener("click", (e) => {
+      state.showDraft = !state.showDraft;
+      e.currentTarget.setAttribute("aria-pressed", String(state.showDraft));
+      e.currentTarget.textContent = state.showDraft ? "Draft: On" : "Draft: Off";
+      render();
+    });
+    document.getElementById("sb-null").addEventListener("click", () => performCheckout(null));
+    document.getElementById("sb-reset").addEventListener("click", () => loadDataset(state.dataset));
+
+    // Boot
+    loadDataset("sample");
+  </script>
+</body>
+</html>

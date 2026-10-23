@@ -6,6 +6,7 @@ import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { openInspector } from "./inspector.tsx"
+import { openTimeline } from "./timeline.tsx"
 import { aside, card, compose, error, log, path, pin, registry, revising, started, turnOf } from "./store.ts"
 import { dropNodes, send } from "./wire.ts"
 
@@ -222,6 +223,7 @@ export const Composer = (props: {
             <For
               each={[
                 { name: "Inspector", hint: "What the engine did this turn", go: openInspector },
+                { name: "Timeline", hint: "Every thread, branch and version of this story", go: openTimeline },
                 { name: "Start over", hint: "A new story; this one stays as a version", go: startOver, off: true },
                 {
                   name: "Delete story",

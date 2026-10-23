@@ -1,0 +1,386 @@
+/* ───────── Timeline: the log tree as a page over the reader (docs/timeline-prototype.html, on the tokens) ─────────
+   The page is an .inspect (inspector.css: top bar, panes, section heads, pills); this file adds the graph pane and the
+   node pane's own pieces. The graph is a stage sized by timeline.tsx: thread bands and turn ticks, one SVG of rails
+   and knots, and the stations (two lines each: id, kind, scene or status; then the player's line). No boxes: a station
+   is text beside its knot, the line's stations in ink, the others in grey; only the selected one sits on a surface
+   with its id inverted. A cluster station holds the versions of a turn as pills. Head is a ringed knot, the checkout
+   target a green one. The node pane is editorial: a title row with the actions, one mono line of facts, the player's
+   line as a quote with a rule, the prose plain, the versions as ghost rows under a rule. The graph pane is the
+   inspector's "pipeline" pane by class, so its phone/desktop switch is inherited. */
+.timeline .pane.graph {
+  padding: 0;
+  overflow: auto;
+  mask-image: none;
+}
+.timeline .stage {
+  position: relative;
+  flex: none;
+  min-width: 100%;
+}
+.timeline .stage svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.timeline .stage path {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+.timeline .stage path.line {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+.timeline .stage path.draft {
+  stroke: var(--ink-3);
+  stroke-dasharray: 3 3;
+}
+.timeline .knot {
+  fill: var(--surface-1);
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+}
+.timeline .knot.line {
+  fill: var(--ink);
+  stroke: var(--ink);
+}
+.timeline .knot.target {
+  stroke: var(--ok);
+  stroke-width: 2;
+}
+.timeline .knot.draft {
+  stroke-dasharray: 2 2;
+}
+.timeline .ring {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.timeline .ring.target {
+  stroke: var(--ok);
+}
+.timeline .band {
+  position: absolute;
+  height: 22px;
+  padding: 0 2px;
+  border-bottom: var(--hairline) solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.timeline .band.active {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--line-strong);
+}
+.timeline .band .dim {
+  font-weight: 400;
+}
+.timeline .tick {
+  position: absolute;
+  left: 0;
+  width: 40px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.timeline .tick.line {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.timeline .cell {
+  position: absolute;
+  box-sizing: border-box;
+  height: 46px;
+  padding: 4px 8px 4px 18px;
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  text-align: left;
+}
+button.cell:hover {
+  background: var(--alpha-1);
+  color: var(--ink);
+}
+.timeline .cell.line {
+  color: var(--ink);
+}
+.timeline .cell.selected {
+  background: var(--alpha-2);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+  z-index: 1;
+}
+.timeline .cell.selected .nid {
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--surface-1);
+}
+.timeline .cell.draft {
+  color: var(--ink-2);
+  font-style: italic;
+}
+.timeline .row1 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  line-height: 1.2;
+}
+.timeline .nid {
+  flex: none;
+  font-weight: 600;
+}
+.timeline .how {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-3);
+}
+.timeline .how svg,
+.timeline .vpill svg,
+.timeline .vrow svg {
+  width: 11px;
+  height: 11px;
+}
+.timeline .where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-sans);
+  color: var(--ink-3);
+}
+.timeline .badge {
+  flex: none;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 600;
+}
+.timeline .badge.head {
+  background: var(--ink);
+  color: var(--surface-1);
+}
+.timeline .badge.target {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.timeline .badge.stop {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.timeline .row2 {
+  font-size: var(--text-footnote);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timeline .row2 .pill {
+  margin-right: 4px;
+}
+.timeline .pills {
+  gap: 3px;
+  overflow: hidden;
+}
+.timeline .tag {
+  flex: none;
+  color: var(--ink-3);
+}
+.timeline .vpill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font: inherit;
+}
+.timeline .vpill:hover {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.timeline .vpill.head {
+  box-shadow: inset 0 0 0 var(--hairline) var(--ink);
+}
+.timeline .vpill.selected {
+  background: var(--ink);
+  color: var(--surface-1);
+}
+.timeline .stopdot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* the node pane: the title row with the actions, the facts line, the quote, the prose, the versions */
+.timeline .nodehead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline) solid var(--line);
+}
+.timeline .bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.timeline .bar h2 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-heading);
+  font-weight: 600;
+  color: var(--ink);
+}
+.timeline .pill.solid {
+  background: var(--ink);
+  color: var(--surface-1);
+  font-weight: 600;
+}
+.timeline .acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.timeline .acts .checkout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--surface-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+.timeline .acts .checkout svg {
+  width: 13px;
+  height: 13px;
+}
+.timeline .acts .at {
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.timeline .acts .icon {
+  width: 28px;
+  height: 28px;
+  color: var(--ink-2);
+}
+.timeline .acts .icon svg {
+  width: 15px;
+  height: 15px;
+}
+.timeline .acts .icon.danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.timeline .facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.timeline .facts > span + span::before {
+  content: "· ";
+}
+.timeline .facts b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.timeline .quote {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--ink);
+}
+.timeline .quote .aside {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-style: italic;
+  color: var(--ink-3);
+}
+.timeline .prose {
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.timeline .vlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--line);
+}
+.timeline .vlist .sechead:not(:first-child) {
+  margin-top: 0;
+}
+.timeline .vrow {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  text-align: left;
+  font: inherit;
+}
+.timeline .vrow:hover {
+  background: var(--alpha-1);
+  color: var(--ink);
+}
+.timeline .vrow[aria-current="true"] {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.timeline .vrow .text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-body);
+}
+.timeline .vrow .meta {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}

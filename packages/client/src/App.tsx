@@ -31,6 +31,7 @@ import {
   Warning,
 } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
+import { Timeline } from "./timeline.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record, scenes } from "./record.ts"
 import {
@@ -52,6 +53,7 @@ import {
   registry,
   revising,
   stage,
+  timeline,
   withdraw,
 } from "./store.ts"
 import { fetchCard, fetchNodes, send } from "./wire.ts"
@@ -622,6 +624,7 @@ const Glance = (props: {
 
 export const App = () => {
   const id = read(inspecting)
+  const viewing = read(timeline)
   return (
     <>
       <div class="canvas">
@@ -629,6 +632,9 @@ export const App = () => {
         <Side />
         <Reader />
       </div>
+      <Show when={viewing()}>
+        <Timeline />
+      </Show>
       <Show when={id() !== null}>
         <Inspect id={id()!} />
       </Show>

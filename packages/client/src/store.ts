@@ -50,6 +50,7 @@ export const revising = Atom.make<{
 export const error = Atom.make<string | null>(null)
 /** The Inspect page: the node under inspection, or null while reading; the calls by node (GET /calls), read on open. */
 export const inspecting = Atom.make<Id | null>(null)
+export const timeline = Atom.make(false) // the Timeline page: the whole log tree over the reader
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
 /** The reading line: root → head. */
