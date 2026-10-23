@@ -1,0 +1,501 @@
+/* The Record pill and sheet, the readings, the scene list, Options, the snippets menu, the desktop cards. */
+/* the Record pill under each section: the one labelled entry, every section the same */
+.record-pill {
+  position: relative;
+  height: var(--control-sm);
+  padding: 0 10px 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-footnote);
+  color: var(--ink-2);
+}
+.record-pill:hover {
+  background: var(--ghost-active);
+}
+.record-pill svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+/* the sheet: a native modal dialog, its backdrop the scrim, a full-page panel rising from the bottom to 56px under the
+   top; the prose never moves (the page does not scroll while one is open) */
+.sheet {
+  position: fixed;
+  inset: calc(56px + var(--safe-top)) 0 0;
+  width: 100%;
+  max-width: var(--measure);
+  height: auto;
+  max-height: none;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  flex-direction: column;
+  background: var(--surface-3);
+  color: inherit;
+  border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+  box-shadow: var(--shadow-pop);
+  outline: none;
+  transform: translateY(100%);
+  transition:
+    transform var(--dur-4) var(--ease),
+    overlay var(--dur-4) allow-discrete,
+    display var(--dur-4) allow-discrete;
+}
+.sheet[open] {
+  display: flex;
+  transform: none;
+}
+.sheet::backdrop {
+  background: var(--scrim);
+  opacity: 0;
+  transition:
+    opacity var(--dur-4) var(--ease),
+    overlay var(--dur-4) allow-discrete,
+    display var(--dur-4) allow-discrete;
+}
+.sheet[open]::backdrop {
+  opacity: 1;
+}
+@starting-style {
+  .sheet[open] {
+    transform: translateY(100%);
+  }
+  .sheet[open]::backdrop {
+    opacity: 0;
+  }
+}
+.sheet header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  font-size: var(--text-heading);
+  font-weight: 600;
+}
+.sheet header h2 {
+  flex: 1;
+  margin: 0;
+  font: inherit;
+}
+.sheet .record {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+.sheet footer {
+  padding: var(--space-1) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
+  box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+}
+
+/* the readings: one element per data shape, all on the gray ramp; green only for a hit */
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+.record .group {
+  display: contents;
+}
+.record .group h3 {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.record .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+}
+.record .row > svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-3);
+  flex: none;
+}
+.record .label {
+  font-weight: 600;
+  max-width: 7em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.record .num {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.record .num svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-3);
+}
+.record .track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--alpha-2);
+}
+.steps .track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  background: none;
+}
+.steps .track i {
+  border-radius: 2px;
+  background: var(--alpha-2);
+}
+.steps .track i[data-reached] {
+  background: var(--alpha-4);
+}
+.steps .track i[data-new] {
+  background: var(--ink);
+}
+.steps .names {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr); /* a long name clips in its own cell instead of pushing the row past the track */
+  gap: 3px;
+  margin-top: var(--space-1);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.steps .names > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.steps .names b {
+  color: var(--ink);
+}
+.meter .track {
+  overflow: hidden;
+}
+.meter .fill {
+  height: 100%;
+  background: var(--ink);
+  transition: width var(--dur-4) var(--ease);
+}
+.check .zone {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--ok-soft);
+}
+.check .dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink);
+  translate: -50% -50%;
+  box-shadow: 0 0 0 2px var(--surface-3);
+}
+.badge {
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--danger);
+}
+.badge[data-hit] {
+  color: var(--ok);
+}
+.clue,
+.notes {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+}
+.clue > svg,
+.notes > svg {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+.clue p {
+  flex: 1;
+  text-align: left;
+}
+.clue .icon {
+  margin: -6px -8px -6px 0;
+}
+.clue .badge {
+  margin-top: 2px;
+}
+
+/* the scene list: one ghost row per run of a title; the Contents sheet on phones, the left card on desktop */
+.scenes {
+  display: grid;
+}
+.scene {
+  min-height: var(--control);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius);
+  text-align: left;
+  font-size: var(--text-body);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scene:hover {
+  background: var(--alpha-1);
+}
+.icon[aria-pressed="true"] {
+  color: var(--ink);
+}
+.notes ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+/* the Options container: the only raised thing in the flow; a row fills the box */
+.options {
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-1);
+}
+.options header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.options header svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  text-align: left;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+.option + .option {
+  box-shadow: inset 0 var(--hairline) 0 var(--line);
+}
+.option:hover {
+  background: var(--ghost-hover);
+}
+.option .n {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.option > span:nth-child(2) {
+  flex: 1;
+}
+.option > svg {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-3);
+}
+
+/* the snippets menu: above the composer box, left edges aligned; a pick inserts into the box and never sends */
+.composer .box {
+  anchor-name: --composer;
+}
+.icon[popovertarget="snippets"]:has(+ .snippets:popover-open) {
+  background: var(--ghost-hover);
+  color: var(--ink);
+}
+.snippets {
+  position-anchor: --composer;
+  position-area: top span-right;
+  inset: auto;
+  margin: 0 0 var(--space-2);
+  min-width: 10rem;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-3);
+  color: inherit;
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 var(--hairline) var(--line);
+  outline: none;
+  /* rises 8px as it fades in, drops back as it leaves; leaving is quicker (Cherry Studio's quick panel) */
+  opacity: 0;
+  translate: 0 8px;
+  transition:
+    translate 80ms var(--ease-pulse),
+    opacity 100ms ease-out,
+    overlay 100ms allow-discrete,
+    display 100ms allow-discrete;
+}
+.snippets:popover-open {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    translate 140ms var(--ease),
+    opacity var(--dur-3) ease-out,
+    overlay var(--dur-3) allow-discrete,
+    display var(--dur-3) allow-discrete;
+}
+@starting-style {
+  .snippets:popover-open {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+/* a row: the name in a fixed column (four CJK characters), the hint aligned after it, the fill glyph at the end */
+.snippets .item {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 26rem;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  font-size: var(--text-body);
+  line-height: var(--control);
+  text-align: left;
+  white-space: nowrap;
+  outline: none;
+}
+.snippets .name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.snippets .hint {
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.snippets .item svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+}
+.snippets hr:is(:first-child, :last-child) {
+  display: none;
+}
+.snippets hr {
+  margin: var(--space-1) var(--space-2);
+  border: 0;
+  border-top: var(--hairline) solid var(--line);
+}
+.snippets .item:is(:hover, :focus-visible) {
+  background: var(--ghost-hover);
+}
+
+/* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */
+@media (min-width: 64rem) {
+  :root {
+    background: var(--surface-0);
+  }
+  .topbar {
+    display: none;
+  }
+  /* the latest turn's Record and actions sit in the right card: its pill would open the same thing twice */
+  main > section:last-of-type .record-pill {
+    display: none;
+  }
+  .canvas {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr) 19rem;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-5);
+    padding: var(--space-5);
+  }
+  .side {
+    box-sizing: border-box;
+    max-height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    padding: var(--space-5);
+    border-radius: var(--radius-dialog);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-1);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+  }
+  .side h1 {
+    margin: 0;
+    font-size: var(--text-title);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .side h2 {
+    margin: 0;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .side section {
+    gap: var(--space-2);
+  }
+  .pinned p {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--ink-2);
+    text-align: left;
+  }
+  .pinned svg {
+    flex: none;
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+  }
+  .pinned span {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .panel {
+    align-self: stretch;
+    border-radius: var(--radius-dialog);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-2);
+  }
+  main {
+    padding-inline: var(--space-6);
+  }
+  .composer {
+    padding: var(--space-4) var(--space-6) var(--space-5);
+  }
+}

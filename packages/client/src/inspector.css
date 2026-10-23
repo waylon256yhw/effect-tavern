@@ -1,0 +1,712 @@
+/* ───────── Inspect: a tool page over the reader (docs/inspector-prototype.html, on the tokens) ─────────
+   Two cards on the canvas, like the reader's desktop: the pipeline and the node. The page never scrolls; each card
+   does, with the reader's thin hover-only bar and the fade at both ends. A step opens into a well (surface-0, inset)
+   whose one scroller is bounded, so a long head never pushes the pipeline apart. Dense: UI at footnote size,
+   numbers tabular and mono, status green / red on dots and pills, nothing else colored. */
+.inspect {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-1);
+  color: var(--ink);
+  font-size: var(--text-footnote);
+  line-height: var(--leading-body);
+  font-variant-numeric: tabular-nums;
+}
+.inspect .dim,
+.inspect .meta,
+.inspect .chars {
+  color: var(--ink-3);
+}
+.inspect .meta,
+.inspect .chars,
+.inspect .sums,
+.inspect .metrics,
+.inspect .pill,
+.inspect .role,
+.inspect .pid,
+.inspect .hid,
+.inspect .kv,
+.inspect .rows th,
+.inspect .bar {
+  font-family: var(--font-mono);
+}
+.inspect .pill {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-caption);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect .pill.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 600;
+}
+.inspect .pill.bad {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* top: back, title, the node stepper, the turn's sums; on the phone the Pipeline | Node switch instead */
+.inspect .top {
+  flex: none;
+  box-sizing: border-box;
+  height: calc(var(--topbar) + var(--safe-top));
+  padding: var(--safe-top) var(--space-3) 0 var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.inspect .top h1 {
+  display: none;
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect .nodenav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  white-space: nowrap;
+}
+.inspect .nodenav .icon {
+  width: var(--control-sm);
+  height: var(--control-sm);
+}
+.inspect .nodenav .icon svg {
+  width: 14px;
+  height: 14px;
+}
+.inspect .nodenav .n {
+  padding: 0 var(--space-2);
+  color: var(--ink-2);
+  display: inline-flex;
+  gap: 6px;
+}
+.inspect .nodenav b {
+  color: var(--ink);
+}
+.inspect .v {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}
+.inspect .spacer {
+  flex: 1;
+}
+.inspect .sums {
+  display: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.inspect .seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+}
+.inspect .seg button {
+  height: var(--control-sm);
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.inspect .seg button[aria-selected="true"] {
+  background: var(--surface-3);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+
+/* the two cards; the phone shows one at a time */
+.inspect .cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.inspect .pane {
+  box-sizing: border-box;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--fade) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.inspect .pane,
+.inspect .wscroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color var(--dur-3) var(--ease);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+}
+.inspect .pane:hover,
+.inspect .wscroll:hover {
+  scrollbar-color: var(--alpha-2) transparent;
+}
+.inspect[data-pane="pipeline"] .pane.node,
+.inspect[data-pane="node"] .pane.pipeline {
+  display: none;
+}
+.inspect .sechead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  white-space: nowrap;
+}
+.inspect .sechead .lbl {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.inspect .sechead .meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+.inspect .sechead:not(:first-child) {
+  margin-top: var(--space-3);
+}
+.inspect .search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: var(--ink-3);
+}
+.inspect .search:focus-within {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+  color: var(--ink);
+}
+.inspect .search svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+.inspect .search input {
+  width: 8rem;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+}
+
+/* the spine: one line down the left, a knot per top-level step or tray, colored by status */
+.inspect .spine {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 18px;
+}
+.inspect .spine::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 14px;
+  bottom: 14px;
+  width: 1.5px;
+  background: var(--alpha-2);
+}
+.inspect .knot {
+  position: relative;
+}
+.inspect .knot::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 15px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--surface-1);
+  box-shadow: 0 0 0 2px var(--ok);
+  z-index: 1;
+}
+.inspect .knot.bad::before {
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--danger);
+}
+/* a draft's tray: the discarded one steps back */
+.inspect .tray {
+  padding: 8px;
+  border-radius: var(--radius-card);
+  background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inspect .tray.discarded {
+  background: transparent;
+}
+.inspect .tray .thead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 6px;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.inspect .tray.discarded .thead {
+  color: var(--ink-3);
+}
+.inspect .tray.discarded .step:not([open]) {
+  opacity: 0.8;
+}
+
+/* a step: flush when closed, raised when open, its head sticky at the card's top */
+.inspect .step {
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.inspect .step[open] {
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
+  z-index: 2;
+}
+.inspect .step > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: 3px;
+  border-radius: var(--radius);
+  user-select: none;
+}
+.inspect .step > summary::-webkit-details-marker {
+  display: none;
+}
+.inspect .step:not([open]) > summary:hover {
+  background: var(--ghost-hover);
+}
+.inspect .step[open] > summary {
+  position: sticky;
+  top: calc(-1 * var(--fade));
+  z-index: 3;
+  background: var(--surface-2);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 var(--hairline) 0 var(--line);
+}
+.inspect .step.flat > summary {
+  cursor: default;
+}
+.inspect .step.flat .chev {
+  visibility: hidden;
+}
+.inspect .stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-body);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.inspect .chev {
+  width: 11px;
+  height: 11px;
+  color: var(--ink-3);
+  transition: transform var(--dur-2) var(--ease);
+}
+.inspect details[open] > summary .chev {
+  transform: rotate(90deg);
+}
+.inspect .hits {
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--surface-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+}
+.inspect .digest {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  overflow: hidden;
+}
+.inspect .dtext,
+.inspect .dprose {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect .dprose {
+  color: var(--ink-3);
+}
+.inspect .metrics {
+  grid-column: 2;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect .metrics .ms {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+/* the body: the call's numbers, then the well */
+.inspect .body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inspect .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.inspect .bar b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.inspect .cp {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-caption);
+}
+.inspect .cp:hover {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.inspect .well {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: var(--surface-0);
+  box-shadow:
+    inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+    inset 0 0 0 var(--hairline) var(--line);
+  overflow: hidden;
+}
+.inspect .rtabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--alpha-1);
+  box-shadow: 0 var(--hairline) 0 var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.inspect .rtabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--ink-2);
+  font-size: var(--text-caption);
+  white-space: nowrap;
+}
+.inspect .rtabs button:hover {
+  background: var(--ghost-hover);
+  color: var(--ink);
+}
+.inspect .rtabs button[aria-selected="true"] {
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+.inspect .rtabs button[aria-selected="true"] .chars {
+  font-weight: 400;
+}
+.inspect .bp {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.inspect .rtabs button[aria-selected="true"] .bp {
+  background: var(--ink);
+}
+/* the one scroller inside a step, bounded by the viewport, the fade at its ends */
+.inspect .wscroll {
+  box-sizing: border-box;
+  max-height: 50dvh;
+  overflow-y: auto;
+  padding: var(--fade) 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inspect .msg {
+  padding-left: 9px;
+  border-left: 2px solid var(--alpha-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inspect .msg[data-role="user"] {
+  border-left-color: var(--ink);
+}
+.inspect .msg[data-role="assistant"] {
+  border-left-color: var(--ok);
+}
+.inspect .role {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.inspect .bptag {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--alpha-2);
+  color: var(--ink-2);
+  font-size: 10px;
+}
+.inspect .txt {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.inspect mark {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: light-dark(#fde047, #a16207);
+  color: var(--ink);
+}
+.inspect .answer {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inspect .answer .role {
+  justify-content: space-between;
+}
+.inspect .answer .prose {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: var(--leading-prose);
+  white-space: pre-wrap;
+}
+.inspect .kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px var(--space-3);
+  align-items: baseline;
+}
+.inspect .kv dt {
+  color: var(--ink-3);
+  font-size: var(--text-caption);
+}
+.inspect .kv dd {
+  margin: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* the node card */
+.inspect .inwell {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-0);
+  box-shadow:
+    inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+    inset 0 0 0 var(--hairline) var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inspect .line,
+.inspect .val {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+.inspect .pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inspect .hook {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  line-height: 1.5;
+}
+.inspect .hooks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inspect .hook.armed {
+  background: var(--surface-2);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 0 0 1px var(--ink);
+}
+.inspect .hb {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inspect .hid {
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.inspect .hook .icon {
+  width: 26px;
+  height: 26px;
+  color: var(--ink-3);
+  border-radius: var(--radius-sm);
+}
+.inspect .hook .icon:hover {
+  background: var(--ghost-hover);
+  color: var(--ink);
+}
+.inspect .hook .icon[aria-pressed="true"] {
+  color: var(--ink);
+}
+.inspect .hook .icon svg {
+  width: 15px;
+  height: 15px;
+}
+.inspect .record {
+  font-size: var(--text-footnote);
+  gap: var(--space-3);
+}
+.inspect .prod {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inspect .prod + .prod {
+  margin-top: 2px;
+}
+.inspect .pid {
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.inspect .items {
+  margin: 0;
+  padding-left: 1.15rem;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.inspect .prod .kv {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+}
+.inspect .rows {
+  width: 100%;
+  border-collapse: collapse;
+}
+.inspect .rows th {
+  text-align: left;
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--ink-3);
+  padding: 2px 8px 4px 0;
+  border-bottom: var(--hairline) solid var(--line);
+}
+.inspect .rows td {
+  padding: 4px 8px 2px 0;
+}
+
+/* desktop: the canvas, two cards, the title and the sums in the bar, no switch */
+@media (min-width: 64rem) {
+  .inspect {
+    background: var(--surface-0);
+  }
+  .inspect .top {
+    padding-inline: var(--space-4) var(--space-5);
+  }
+  .inspect .top h1,
+  .inspect .sums {
+    display: inline-flex;
+  }
+  .inspect .seg {
+    display: none;
+  }
+  .inspect .cols {
+    grid-template-columns: minmax(0, 7fr) minmax(21rem, 5fr);
+    gap: var(--space-4);
+    padding: 0 var(--space-5) var(--space-5);
+  }
+  .inspect .pane {
+    padding-inline: var(--space-5);
+    border-radius: var(--radius-dialog);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-1);
+  }
+  .inspect[data-pane] .pane.node,
+  .inspect[data-pane] .pane.pipeline {
+    display: flex;
+  }
+  .inspect .step > summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .inspect .metrics {
+    grid-column: auto;
+  }
+}

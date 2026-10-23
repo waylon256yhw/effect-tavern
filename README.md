@@ -144,7 +144,7 @@ demo 的顺序：过线的协议已定（session 的接口，第四节），serv
 
 ## 六、仓库
 
-pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端是 Solid 2.0（RC，钉死版本）加 Vite，store 是 Effect 自己的 `Atom`，`packages/client/src/App.tsx` 顶部十行把 atom 桥成 Solid accessor；组件库是平台本身（`<dialog>`、popover 加 anchor positioning、`role=meter`），图标是 Iconify 的 `ph` 集经 unplugin-icons 编译（2026-10-19 的选型记录在 `docs/frontend-stack-reading.md`，2026-10-21 从 React 迁过来：同样的 atom、同样的 CSS，少了三个依赖）。
+pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端是 Solid 2.0（RC，钉死版本）加 Vite，store 是 Effect 自己的 `Atom`，`packages/client/src/bridge.ts` 十行把 atom 桥成 Solid accessor（页面分四个模块：App.tsx 是阅读器，readings.tsx 是 Record 的元件与 sheet，composer.tsx 是输入框，inspector.tsx 是检查器；CSS 同样按 reader / chrome / inspector 三份进 components 层，app.css 只剩层表）；组件库是平台本身（`<dialog>`、popover 加 anchor positioning、`role=meter`），图标是 Iconify 的 `ph` 集经 unplugin-icons 编译（2026-10-19 的选型记录在 `docs/frontend-stack-reading.md`，2026-10-21 从 React 迁过来：同样的 atom、同样的 CSS，少了三个依赖）。
 
 ```
 packages/runtime/   运行时模块与自检

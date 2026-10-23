@@ -1,0 +1,539 @@
+/* The frame, the flow and the composer: see app.css for the layer map. */
+:root {
+  font-family: var(--font-sans);
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
+  color: var(--ink);
+  background: var(--surface-1);
+}
+body {
+  margin: 0;
+}
+/* the frame holds still: the bar, the column and the composer fill the viewport, and only the column scrolls */
+.canvas,
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+.canvas {
+  height: 100dvh;
+}
+.panel {
+  flex: 1;
+  min-height: 0;
+}
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden; /* dust in flight (dust.ts) must not raise a horizontal scrollbar */
+  container-type: size;
+  /* a thin thumb at the column's edge, only while the pointer is over it (the mask fades its ends) */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color var(--dur-3) var(--ease);
+  /* the prose fades out over the column's padding at both ends, like the composer's text, instead of cutting
+     under the bar or the composer */
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+}
+.scroll:hover {
+  scrollbar-color: var(--alpha-2) transparent;
+}
+main {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: var(--fade) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-turn);
+  overflow-wrap: anywhere;
+}
+section {
+  scroll-margin-top: var(--fade); /* a scene jump lands below the fade */
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-item);
+}
+/* only the sections near the viewport are laid out and painted; one scrolled far away keeps its last size (a guess
+   before its first paint), so a long story costs what is on screen. The latest section stays out: its Options
+   container's shadow and the dust in flight paint past its box, which containment would clip. */
+main > section:not(:last-of-type) {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 20rem;
+}
+/* the latest section fills the column: scrolled to its start, the blank under it is where the prose grows, and
+   the column holds still while it does */
+main > section:last-of-type {
+  min-height: calc(100cqh - 2 * var(--fade));
+}
+.cursor {
+  display: inline-block;
+  vertical-align: text-bottom;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  background: var(--ink-2);
+  animation: blink 1s steps(2, jump-none) infinite;
+}
+.cursor:has(svg) {
+  width: auto;
+  background: none;
+  color: var(--ink-2);
+}
+.cursor svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+/* a rewrite: the first draft greys where it lies and goes to dust (dust.ts draws it on a canvas over the block),
+   the second is written over its place from the top, the block as tall as the taller; a failed turn is the same grey
+   ghost, kept. The dimming is Telegram's inactive alpha, in ink-3 */
+.drafts {
+  display: grid;
+  position: relative;
+}
+.drafts > * {
+  grid-area: 1 / 1;
+}
+.drafts .now {
+  align-self: start;
+  background: var(--surface-1);
+}
+.drafts .prev,
+.dead .now {
+  color: var(--ink-3);
+  transition: color var(--dur-3) var(--ease);
+}
+/* the Record slot waiting for the turn to settle: three dots in the pill (Claude Desktop's quiet dots) */
+.dots {
+  display: inline-flex;
+  gap: 3.5px;
+  height: var(--icon-sm);
+  align-items: center;
+}
+.dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  animation: dot 1.9s var(--ease-pulse) infinite;
+}
+.dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dot {
+  0%,
+  8% {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  22% {
+    opacity: 1;
+    transform: translateY(-2.5px);
+  }
+  36%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cursor,
+  .dots span {
+    animation: none;
+  }
+  .dots span {
+    opacity: 1;
+  }
+}
+.latest {
+  position: fixed;
+  position-anchor: --composer;
+  position-area: top;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-1);
+}
+/* left-aligned: justified CJK re-spaces the whole line on every character that streams in, then snaps it at the
+   wrap; no chat reader justifies */
+p {
+  margin: 0;
+  line-break: strict;
+}
+
+/* the bar on top (phone): the card's title, and Status with a dot when this turn moved the state */
+.topbar {
+  box-sizing: border-box;
+  height: calc(var(--topbar) + var(--safe-top));
+  padding: var(--safe-top) var(--space-2) 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-1);
+}
+.topbar h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar .icon {
+  position: relative;
+}
+.topbar .dot,
+.record-pill .dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+/* the side cards exist on desktop only */
+.side {
+  display: none;
+}
+
+/* the reader's line: a sunken block, the only framed thing in the flow */
+.said {
+  background: var(--alpha-1);
+  border-radius: var(--radius-card);
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: left;
+}
+.said.note {
+  color: var(--ink-2);
+}
+
+/* under each section: version nav on the left, actions on the right, all ghost */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  font-size: var(--text-body);
+  color: var(--ink-3);
+}
+.actions .spacer,
+.composer .spacer {
+  flex: 1;
+}
+.siblings {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.siblings .count {
+  height: var(--control-sm);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.siblings .count:hover,
+.siblings .count:has(+ .versions:popover-open) {
+  background: var(--ghost-hover);
+}
+/* the version list: a menu under the counter (its invoker is the implicit anchor); a row is the action that made
+   the version, its opening on one line, and the count of nodes that follow it */
+.versions {
+  position-area: top;
+  inset: auto;
+  margin: 0 0 var(--space-2);
+  width: min(20rem, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 var(--hairline) var(--line);
+  outline: none;
+}
+.version {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+.version:hover,
+.version:focus-visible {
+  background: var(--ghost-hover);
+  outline: none;
+}
+.version[aria-current] {
+  font-weight: 600;
+}
+.version .kind {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-3);
+}
+.version .first {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.version .below {
+  flex: none;
+  font-size: var(--text-footnote);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.actions .direction {
+  flex: 1;
+  min-width: 0;
+  height: var(--control);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-prose); /* never below 16 in an input (iOS zoom) */
+  outline: none;
+}
+.actions .direction::placeholder {
+  color: var(--ink-3);
+}
+.actions .direction:focus {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+}
+.end {
+  font-size: var(--text-footnote);
+  color: var(--ink-3);
+}
+/* a failed turn: Cherry Studio's error card, the accent on its left edge, the message in body size */
+.error {
+  display: flex;
+  gap: var(--space-2);
+  padding: 10px 14px;
+  border-left: 3px solid var(--danger);
+  background: var(--alpha-1);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--ink-2);
+  text-align: left;
+}
+.error svg {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: 2px;
+  color: var(--danger);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0;
+  cursor: pointer;
+  transition: background var(--dur-3) var(--ease);
+}
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.icon {
+  width: var(--control);
+  height: var(--control);
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+}
+.icon:hover:not(:disabled) {
+  background: var(--ghost-hover);
+}
+.icon svg {
+  width: var(--icon);
+  height: var(--icon);
+}
+
+/* the composer: the one raised object, under the column */
+.composer {
+  padding: var(--space-2) var(--space-3) calc(var(--space-4) + var(--safe-bottom));
+}
+.composer .box {
+  max-width: var(--measure);
+  margin: 0 auto;
+  background: var(--surface-3);
+  border-radius: var(--radius-composer);
+  box-shadow: var(--shadow-composer);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  transition: box-shadow var(--dur-3) var(--ease);
+}
+.composer .box:focus-within {
+  box-shadow: var(--shadow-composer-focus);
+}
+.composer textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  /* two lines at rest: room to write a passage, not a reply */
+  min-height: calc(2 * 1.5 * var(--text-prose) + 2 * var(--space-2));
+  max-height: 35dvh;
+  padding: var(--space-2);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-prose);
+  line-height: 1.5;
+  color: var(--ink);
+  resize: none;
+  outline: none;
+  field-sizing: content;
+  /* a thin thumb on no track: the mask below fades the element's ends, and a track would look cut there */
+  scrollbar-width: thin;
+  scrollbar-color: var(--alpha-3) transparent;
+  /* once the text scrolls, its edges fade into the box's padding instead of cutting under the keys */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--space-2),
+    #000 calc(100% - var(--space-2)),
+    transparent
+  );
+}
+.composer .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* the channel chip: shown while this send is a note; the × returns to the line */
+.chip {
+  height: var(--control-sm);
+  padding: 0 6px 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.chip svg {
+  width: 12px;
+  height: 12px;
+}
+/* the state chip is outlined, so it does not read as one more key */
+.chip.state {
+  background: none;
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+  color: var(--ink);
+}
+/* the format keys: a row of glyph chips above the text, always there (SillyTavern's bar), so nothing jumps */
+.format {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--space-1) var(--space-2) 0;
+  transition: opacity var(--dur-3) var(--ease);
+}
+/* the keys serve the typing, so they sit close to the text, and recede while nothing is being written */
+.format + textarea {
+  padding-top: var(--space-1);
+}
+.box:not(:focus-within):has(textarea:placeholder-shown) .format {
+  opacity: 0.55;
+}
+.composer textarea::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+.format .chip {
+  min-width: 3.5em; /* the same width whatever the pair's glyphs weigh */
+  padding: 0 6px;
+  justify-content: center;
+  font-size: var(--text-body);
+  letter-spacing: 0.2em; /* air between the two halves of a pair: it reads as a container */
+  text-indent: 0.2em;
+}
+/* a key hint over a button: the platform's title tooltip waits a second, this one a quarter; pointer devices only */
+@media (hover: hover) {
+  [data-hint]::after {
+    content: attr(data-hint);
+    position: absolute;
+    position-area: top;
+    margin-bottom: 6px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--ink);
+    color: var(--surface-1);
+    font-size: var(--text-caption);
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--dur-2) var(--ease);
+  }
+  [data-hint]:is(:hover, :focus-visible)::after {
+    opacity: 1;
+    transition-delay: 250ms;
+  }
+}
+.send {
+  width: var(--control);
+  height: var(--control);
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: var(--primary-ink);
+  display: grid;
+  place-items: center;
+}
+.send:disabled {
+  opacity: 1;
+  background: var(--fill);
+  color: var(--ink-3);
+}
+.send svg {
+  width: var(--icon);
+  height: var(--icon);
+}
