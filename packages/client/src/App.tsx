@@ -39,7 +39,7 @@ import {
 } from "./icons.tsx"
 import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
-import { groups, isTray, missing, regions, rows, textOf, totals, type Message, type Row, type Tray } from "./inspect.ts"
+import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type Tray } from "./inspect.ts"
 import { heading, record, scenes, status, type Element } from "./record.ts"
 import {
   active,
@@ -1017,31 +1017,30 @@ const Shaped = (props: { shape: Shape; value: unknown }) => {
           </ul>
         </Show>
       </Match>
-      <Match when={table() && ((props.value as unknown[] | undefined) ?? []).length === 0}>
-        <p class="dim">none</p>
-      </Match>
       <Match when={table()}>
         {(t) => (
-          <table class="rows">
-            <thead>
-              <tr>
-                <For each={t().columns} keyed={(c) => c.key}>
-                  {(c) => <th>{c().key}</th>}
+          <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
+            <table class="rows">
+              <thead>
+                <tr>
+                  <For each={t().columns} keyed={(c) => c.key}>
+                    {(c) => <th>{c().key}</th>}
+                  </For>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={(props.value as Record<string, unknown>[] | undefined) ?? []} keyed={false}>
+                  {(r) => (
+                    <tr>
+                      <For each={t().columns} keyed={(c) => c.key}>
+                        {(c) => <td>{cell(r()[c().key])}</td>}
+                      </For>
+                    </tr>
+                  )}
                 </For>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={(props.value as Record<string, unknown>[] | undefined) ?? []} keyed={false}>
-                {(r) => (
-                  <tr>
-                    <For each={t().columns} keyed={(c) => c.key}>
-                      {(c) => <td>{cell(r()[c().key])}</td>}
-                    </For>
-                  </tr>
-                )}
-              </For>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </Show>
         )}
       </Match>
       <Match when={rec()}>
@@ -1076,13 +1075,15 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
   const out = () => props.row.call.out as Record<string, unknown>
   const ids = (v: unknown) => (Array.isArray(v) ? (v as string[]).join(", ") : "")
   // decide: the nth beat of the turn; its judged check is the one among the beats with a chance up to it
-  const beat = () => props.node.turn.beats[props.nth]
-  const check = () => {
-    const b = beat()
-    if (!b || b.chance === undefined) return undefined
-    const ci = props.node.turn.beats.slice(0, props.nth + 1).filter((x) => x.chance !== undefined).length - 1
-    return props.node.checks[ci]
-  }
+  const beats = () => props.node.turn.beats
+  const check = () =>
+    beats()[props.nth]?.chance === undefined
+      ? undefined
+      : props.node.checks[
+          beats()
+            .slice(0, props.nth + 1)
+            .filter((x) => x.chance !== undefined).length - 1
+        ]
   const fired = () => (out().fired as string[] | undefined) ?? []
   const missed = () => props.node.turn.brief.must.filter((id) => !fired().includes(id))
   const violated = () => (out().violated as string[] | undefined) ?? []
@@ -1101,21 +1102,15 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         </Show>
       </Match>
       <Match when={props.row.phase === "decide"}>
-        <Show when={beat()} fallback={<span class="pill">end</span>}>
-          {(b) => (
+        <Show when={check()} fallback={<span class="pill">{beats()[props.nth]?.next ?? "end"}</span>}>
+          {(c) => (
             <>
-              <Show when={check()} fallback={<span class="pill">{b().next}</span>}>
-                {(c) => (
-                  <>
-                    <span class={{ pill: true, ok: c().hit, bad: !c().hit }}>
-                      {c().action} · {c().hit ? "Hit" : "Miss"}
-                    </span>
-                    <span class="dtext">
-                      roll {c().roll.toFixed(2)} vs {Math.round(c().chance * 100)}%
-                    </span>
-                  </>
-                )}
-              </Show>
+              <span class={{ pill: true, ok: c().hit, bad: !c().hit }}>
+                {c().action} · {c().hit ? "Hit" : "Miss"}
+              </span>
+              <span class="dtext">
+                roll {c().roll.toFixed(2)} vs {Math.round(c().chance * 100)}%
+              </span>
             </>
           )}
         </Show>
@@ -1126,9 +1121,9 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         </Show>
         <Show when={props.dev}>
           <span class="dtext">
-            {ids(out().may) ? `may: ${ids(out().may)}` : ""}
-            {ids(out().may) && out().tone ? " · " : ""}
-            {out().tone ? `tone: ${String(out().tone)}` : ""}
+            {[ids(out().may) && `may: ${ids(out().may)}`, out().tone && `tone: ${String(out().tone)}`]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </Show>
       </Match>
@@ -1172,8 +1167,10 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
 const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: string; open: boolean }) => {
   const c = () => props.row.call
   const regs = createMemo(() => regions(c().msgs))
-  const hit = (msgs: readonly Message[], q: string) => msgs.reduce((n, m) => n + count(textOf(m), q), 0)
-  const hits = createMemo(() => hit(c().msgs, props.q))
+  const hits = createMemo(() => {
+    const q = props.q
+    return c().msgs.reduce((n, m) => n + count(textOf(m), q), 0)
+  })
   // the brief is the one answer that stays closed without `inspect`; a stage without a body or an answer has nothing to open
   const opens = () => (props.dev && c().msgs.length > 0) || props.row.phase !== "direct"
   const [tab, setTab] = createSignal<number | null>(null) // a region, or null for all
@@ -1184,24 +1181,19 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
       .reduce((n, r) => n + r.chars, 0)
   const [copied, setCopied] = createSignal(false)
   const copy = () => {
-    const out = {
-      node: props.node.turn.id,
-      stage: props.row.phase,
-      draft: props.row.draft ?? 1,
-      regions: regs().map((r) => ({ name: r.name, chars: r.chars, breakpoint: r.breakpoint, messages: r.msgs })),
-      answer: c().out,
-    }
+    const out = { regions: regs().map(({ msgs, ...r }) => ({ ...r, messages: msgs })), answer: c().out }
     void navigator.clipboard.writeText(JSON.stringify(out, null, 2)).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })
   }
   const u = () => c().usage
-  const tokens = () =>
+  // the call's numbers in one line: tokens, and the chars before the last breakpoint beside cache read to compare
+  const bar = () =>
     [
-      u().cacheRead ? `${compact.format(u().cacheRead)} r` : "",
-      u().cacheWrite ? `+${compact.format(u().cacheWrite)} w` : "",
-      `${fmt(u().input)} in → ${fmt(u().output)} out`,
+      `tokens · in ${fmt(u().input)} · out ${fmt(u().output)} · cache read ${fmt(u().cacheRead)}`,
+      u().cacheWrite && `cache write ${fmt(u().cacheWrite)}`,
+      props.dev && prefix() && `prefix to the last breakpoint ${fmt(prefix())} chars`,
     ]
       .filter(Boolean)
       .join(" · ")
@@ -1220,24 +1212,13 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
           <Digest row={props.row} node={props.node} nth={props.nth} dev={props.dev} />
         </span>
         <span class="metrics">
-          <span class="ms">{secs(c().ms)}</span> · {tokens()}
+          <span class="ms">{secs(c().ms)}</span> · {fmt(u().input)} in → {fmt(u().output)} out
         </span>
       </summary>
       <Show when={opens()}>
         <div class="body">
           <div class="bar">
-            <span>
-              tokens · in <b>{fmt(u().input)}</b> · out <b>{fmt(u().output)}</b> · cache read{" "}
-              <b>{fmt(u().cacheRead)}</b>
-              <Show when={u().cacheWrite}>
-                {" "}
-                · cache write <b>{fmt(u().cacheWrite)}</b>
-              </Show>
-              <Show when={props.dev && prefix()}>
-                {" "}
-                <span class="dim">· prefix to the last breakpoint {fmt(prefix())} chars</span>
-              </Show>
-            </span>
+            <span>{bar()}</span>
             <Show when={props.dev && c().msgs.length > 0}>
               <button class="cp" onClick={copy}>
                 {copied() ? "Copied" : "Copy JSON"}
@@ -1343,7 +1324,6 @@ const Inspect = (props: { id: Id }) => {
       .slice(0, trows().indexOf(r))
       .filter((x) => x.phase === r.phase).length
   const lastNarrate = () => trows().findLast((r) => r.phase === "narrate")
-  const trayMs = (rs: readonly Row[]) => rs.reduce((t, r) => t + r.call.ms, 0)
   // the node's readings, drawn by the Record's own elements; only the fields here (checks and clues sit in the pipeline)
   const fields = createMemo(() => {
     const r = view()?.rules
@@ -1351,6 +1331,9 @@ const Inspect = (props: { id: Id }) => {
     return r && x ? record(r, x, parent()).filter((e) => "path" in e) : []
   })
   const shapeOf = (id: string) => view()?.products.find((p) => p.id === id)?.shape
+  const One = (p: { row: Row }) => (
+    <Step row={p.row} node={node()!} nth={nth(p.row)} dev={dev()} q={q()} open={p.row === lastNarrate()} />
+  )
   onSettled(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
@@ -1445,16 +1428,7 @@ const Inspect = (props: { id: Id }) => {
                         when={isTray(g()) ? (g() as Tray) : undefined}
                         fallback={
                           <div class={{ knot: true, bad: (g() as Row).status !== "ok" }}>
-                            {
-                              <Step
-                                row={g() as Row}
-                                node={x()}
-                                nth={nth(g() as Row)}
-                                dev={dev()}
-                                q={q()}
-                                open={g() === lastNarrate()}
-                              />
-                            }
+                            <One row={g() as Row} />
                           </div>
                         }
                       >
@@ -1465,7 +1439,7 @@ const Inspect = (props: { id: Id }) => {
                                 Draft {t().draft} · {t().failed ? "Discarded" : "Final"}
                               </span>
                               <span class="meta">
-                                {secs(trayMs(t().rows))} ·{" "}
+                                {secs(t().rows.reduce((n, r) => n + r.call.ms, 0))} ·{" "}
                                 {t().rows.some((r) => r.status === "stopped")
                                   ? "stopped"
                                   : t().failed
@@ -1474,16 +1448,7 @@ const Inspect = (props: { id: Id }) => {
                               </span>
                             </div>
                             <For each={t().rows} keyed={false}>
-                              {(r) => (
-                                <Step
-                                  row={r()}
-                                  node={x()}
-                                  nth={nth(r())}
-                                  dev={dev()}
-                                  q={q()}
-                                  open={r() === lastNarrate()}
-                                />
-                              )}
+                              {(r) => <One row={r()} />}
                             </For>
                           </div>
                         )}
@@ -1524,20 +1489,22 @@ const Inspect = (props: { id: Id }) => {
                   {x().readable.length ? `${x().readable.length} readable · pin for next turn` : "nothing left to tell"}
                 </span>
               </div>
-              <For each={x().readable} keyed={(r) => r.id}>
-                {(r) => (
-                  <div class={{ hook: true, armed: pinned() === r().id }}>
-                    <span class="hb">
-                      <span class="hid">
-                        {r().id}
-                        {pinned() === r().id ? " · armed for the next send" : ""}
+              <div class="hooks">
+                <For each={x().readable} keyed={(r) => r.id}>
+                  {(r) => (
+                    <div class={{ hook: true, armed: pinned() === r().id }}>
+                      <span class="hb">
+                        <span class="hid">
+                          {r().id}
+                          {pinned() === r().id ? " · armed for the next send" : ""}
+                        </span>
+                        <span class="ht">{r().hook}</span>
                       </span>
-                      <span class="ht">{r().hook}</span>
-                    </span>
-                    <PinButton id={r().id} />
-                  </div>
-                )}
-              </For>
+                      <PinButton id={r().id} />
+                    </div>
+                  )}
+                </For>
+              </div>
               <div class="sechead">
                 <span class="lbl">State</span>
                 <span class="meta">

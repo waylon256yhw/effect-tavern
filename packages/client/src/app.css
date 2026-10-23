@@ -1242,8 +1242,7 @@
     text-overflow: ellipsis;
     text-align: right;
   }
-  .inspect .sechead + .sechead,
-  .inspect :not(.sechead) + .sechead {
+  .inspect .sechead:not(:first-child) {
     margin-top: var(--space-3);
   }
   .inspect .search {
@@ -1338,16 +1337,12 @@
   .inspect .tray.discarded .step:not([open]) {
     opacity: 0.8;
   }
-  .inspect .tray.discarded .step:not([open]):hover {
-    opacity: 1;
-  }
 
   /* a step: flush when closed, raised when open, its head sticky at the card's top */
   .inspect .step {
     border-radius: var(--radius);
     background: var(--surface-1);
     box-shadow: inset 0 0 0 var(--hairline) var(--line);
-    transition: box-shadow var(--dur-2) var(--ease);
   }
   .inspect .step[open] {
     background: var(--surface-2);
@@ -1642,8 +1637,10 @@
     background: var(--alpha-1);
     line-height: 1.5;
   }
-  .inspect .hook + .hook {
-    margin-top: -6px;
+  .inspect .hooks {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
   .inspect .hook.armed {
     background: var(--surface-2);
@@ -1759,9 +1756,6 @@
     }
     .inspect .metrics {
       grid-column: auto;
-    }
-    .inspect .knot::before {
-      background: var(--surface-1);
     }
   }
 }
