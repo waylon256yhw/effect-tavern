@@ -4,7 +4,7 @@
 // openings writes nothing: Begin greets the one shown, and it lands as a root; mid-story the same pick opens a new
 // thread beside the old one. A card with no opening begins on an empty line, the player's first words start it.
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
-import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
+import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
@@ -40,11 +40,9 @@ export const CardPage = () => {
   const inStory = () => all().nodes.size > 0
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
-  const rows = createMemo(() => (view() ? specs(view()!) : []))
   const back = () => registry.set(page, "reader")
   const begin = () => {
-    if (openings().length) send({ kind: "greet", greeting: at() })
-    else if (all().head !== null) send({ kind: "checkout", node: null }) // mid-story on a card with no opening: an empty line
+    send(openings().length ? { kind: "greet", greeting: at() } : { kind: "checkout", node: null }) // none: an empty line
     back()
   }
   onSettled(() => {
@@ -78,7 +76,7 @@ export const CardPage = () => {
                 </Show>
               </div>
               <dl class="specs">
-                <For each={rows()} keyed={(r) => r.key}>
+                <For each={specs(c())} keyed={(r) => r.key}>
                   {(r) => (
                     <div class="row">
                       <dt>{r().key}</dt>
@@ -123,7 +121,6 @@ export const CardPage = () => {
                       <Prev />
                     </button>
                     <button class="count" popovertarget="openings" aria-label="Pick an opening">
-                      <span class="word">Opening </span>
                       {at() + 1} / {openings().length}
                       <Up />
                     </button>
