@@ -8,7 +8,7 @@
 //                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
 //                 outputs-only, and a restart starts the trace over.
 //   GET  /card    what a client draws the card by: id, title, the default channel, the rules as data (field bounds,
-//                 options, action ids), the quick inputs (snippets) and the format keys. Fragment bodies never leave the server.
+//                 options, action ids), the products' shapes, the quick inputs (snippets) and the format keys. Fragment bodies never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
 import { decodeAction, perform, type Event, type Session } from "@effect-tavern/runtime/src/session.ts"
@@ -46,7 +46,13 @@ export const handle = (session: Session, { inspect = false } = {}) => {
       res.end(JSON.stringify(v))
     }
     if (req.method === "GET" && req.url === "/card")
-      return json(200, { ...session.meta, rules: session.rules, snippets: session.snippets, format: session.format })
+      return json(200, {
+        ...session.meta,
+        rules: session.rules,
+        products: session.products,
+        snippets: session.snippets,
+        format: session.format,
+      })
     if (req.method === "GET" && req.url === "/nodes")
       return json(
         200,

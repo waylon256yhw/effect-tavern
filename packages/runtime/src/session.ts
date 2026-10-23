@@ -689,6 +689,8 @@ export const makeSession = ({
     node: (id: number): Node => project(journal.get(id)),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
+    /** The record products by id and shape, for a client that draws a node's products by their declared shape. */
+    products: products.map((p) => ({ id: p.id, shape: p.shape })),
     /** What the client's chrome shows about the card: the title and the turn-heading reference. Not the card: fragment bodies stay on the server. */
     // `input` is the card's default channel, the one client-facing coordinate of participant vs author mode: on `act`
     // the box is the player's line and a note or a thought is this turn's deviation; on `note` every input is direction.

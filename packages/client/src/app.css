@@ -1046,39 +1046,80 @@
     }
   }
 
-  /* ───────── Inspect: a tool page over the reader (the user's Artifact draft, on the tokens) ─────────
-     Header, the session's totals, then Trace and State; a phone shows them as two tabs and the page scrolls, from
-     64rem they are two panes scrolling on their own. Dense: UI at footnote size, numbers tabular and monospace, ink
-     bars on an alpha track, green for met / hit, red for failed / stopped, nothing else colored. */
+  /* ───────── Inspect: a tool page over the reader (docs/inspector-prototype.html, on the tokens) ─────────
+     Two cards on the canvas, like the reader's desktop: the pipeline and the node. The page never scrolls; each card
+     does, with the reader's thin hover-only bar and the fade at both ends. A step opens into a well (surface-0, inset)
+     whose one scroller is bounded, so a long head never pushes the pipeline apart. Dense: UI at footnote size,
+     numbers tabular and mono, status green / red on dots and pills, nothing else colored. */
   .inspect {
     position: fixed;
     inset: 0;
     z-index: 2;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
+    overflow: hidden;
     background: var(--surface-1);
+    color: var(--ink);
     font-size: var(--text-footnote);
     line-height: var(--leading-body);
     font-variant-numeric: tabular-nums;
   }
-  .inspect .top {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    box-sizing: border-box;
+  .inspect .dim,
+  .inspect .meta,
+  .inspect .chars {
+    color: var(--ink-3);
+  }
+  .inspect .meta,
+  .inspect .chars,
+  .inspect .sums,
+  .inspect .metrics,
+  .inspect .pill,
+  .inspect .role,
+  .inspect .pid,
+  .inspect .hid,
+  .inspect .kv,
+  .inspect .rows th,
+  .inspect .bar {
+    font-family: var(--font-mono);
+  }
+  .inspect .pill {
+    display: inline-flex;
+    align-items: center;
     flex: none;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--alpha-1);
+    color: var(--ink-2);
+    font-size: var(--text-caption);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inspect .pill.ok {
+    background: var(--ok-soft);
+    color: var(--ok);
+    font-weight: 600;
+  }
+  .inspect .pill.bad {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  /* top: back, title, the node stepper, the turn's sums; on the phone the Pipeline | Node switch instead */
+  .inspect .top {
+    flex: none;
+    box-sizing: border-box;
+    height: calc(var(--topbar) + var(--safe-top));
+    padding: var(--safe-top) var(--space-3) 0 var(--space-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    height: calc(var(--topbar) + var(--safe-top));
-    padding: var(--safe-top) var(--space-4) 0;
-    background: var(--surface-1);
-    box-shadow: 0 var(--hairline) 0 var(--line);
   }
   .inspect .top h1 {
+    display: none;
     margin: 0;
-    min-width: 0;
     font-size: var(--text-heading);
     font-weight: 600;
     white-space: nowrap;
@@ -1088,548 +1129,638 @@
   .inspect .nodenav {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
-    margin-left: auto;
-    font-family: var(--font-mono);
-    color: var(--ink-2);
-    white-space: nowrap;
-  }
-  .inspect .nodenav b {
-    color: var(--ink);
-    font-weight: 500;
-  }
-  .inspect .seg {
-    display: inline-flex;
     gap: 2px;
     padding: 2px;
     border-radius: var(--radius);
-    box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+    background: var(--alpha-1);
+    white-space: nowrap;
+  }
+  .inspect .nodenav .icon {
+    width: var(--control-sm);
+    height: var(--control-sm);
+  }
+  .inspect .nodenav .icon svg {
+    width: 14px;
+    height: 14px;
+  }
+  .inspect .nodenav .n {
+    padding: 0 var(--space-2);
+    color: var(--ink-2);
+    display: inline-flex;
+    gap: 6px;
+  }
+  .inspect .nodenav b {
+    color: var(--ink);
+  }
+  .inspect .v {
+    font-family: var(--font-mono);
+    color: var(--ink-3);
+  }
+  .inspect .spacer {
+    flex: 1;
+  }
+  .inspect .sums {
+    display: none;
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--alpha-1);
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .inspect .seg {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius);
+    background: var(--alpha-1);
   }
   .inspect .seg button {
-    padding: 2px var(--space-2);
-    border: 0;
-    border-radius: calc(var(--radius) - 2px);
-    background: none;
+    height: var(--control-sm);
+    padding: 0 10px;
+    border-radius: 6px;
     color: var(--ink-2);
-    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
-  .inspect .seg button[aria-pressed="true"] {
-    background: var(--primary);
-    color: var(--primary-ink);
-  }
-  .inspect .seg button:disabled {
-    color: var(--ink-3);
-  }
-  .inspect .lbl {
-    font-size: var(--text-caption);
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-2);
-  }
-  .inspect .totals {
-    flex: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-5);
-    padding: var(--space-2) var(--space-4);
-    box-shadow: 0 var(--hairline) 0 var(--line);
-  }
-  .inspect .tot {
-    display: flex;
-    flex-direction: column;
-  }
-  .inspect .tot .v {
-    font-family: var(--font-mono);
-  }
-  .inspect .tabs {
-    position: sticky;
-    top: calc(var(--topbar) + var(--safe-top));
-    z-index: 1;
-    display: flex;
-    gap: var(--space-5);
-    padding: 0 var(--space-4);
-    background: var(--surface-1);
-    box-shadow: 0 var(--hairline) 0 var(--line);
-  }
-  .inspect .tabs button {
-    padding: var(--space-2) 0;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: none;
-    color: var(--ink-3);
-    font: inherit;
-    font-size: var(--text-body);
-  }
-  .inspect .tabs button[aria-selected="true"] {
+  .inspect .seg button[aria-selected="true"] {
+    background: var(--surface-3);
     color: var(--ink);
-    border-bottom-color: var(--ink);
+    font-weight: 600;
+    box-shadow: var(--shadow-1);
+  }
+
+  /* the two cards; the phone shows one at a time */
+  .inspect .cols {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
   .inspect .pane {
-    padding: var(--space-4) var(--space-4) var(--space-6);
+    box-sizing: border-box;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--fade) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
-  .inspect[data-tab="trace"] .pane.state,
-  .inspect[data-tab="state"] .pane.trace {
+  .inspect .pane,
+  .inspect .wscroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--dur-3) var(--ease);
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  }
+  .inspect .pane:hover,
+  .inspect .wscroll:hover {
+    scrollbar-color: var(--alpha-2) transparent;
+  }
+  .inspect[data-pane="pipeline"] .pane.node,
+  .inspect[data-pane="node"] .pane.pipeline {
     display: none;
   }
   .inspect .sechead {
     display: flex;
-    align-items: baseline;
-    gap: var(--space-3);
-    min-height: 28px;
-    margin-bottom: var(--space-1);
-  }
-  .inspect .sechead.products {
-    margin-top: var(--space-5);
-    padding-top: var(--space-4);
-    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
-  }
-  .inspect .meta {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    color: var(--ink-3);
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-sm);
     white-space: nowrap;
+  }
+  .inspect .sechead .lbl {
+    font-size: var(--text-caption);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .inspect .sechead .meta {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+  }
+  .inspect .sechead + .sechead,
+  .inspect :not(.sechead) + .sechead {
+    margin-top: var(--space-3);
   }
   .inspect .search {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
-    margin-left: var(--space-2);
+    gap: 6px;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: var(--radius);
+    background: var(--alpha-1);
     color: var(--ink-3);
-    box-shadow: 0 var(--hairline) 0 var(--line-strong);
   }
   .inspect .search:focus-within {
-    color: var(--ink-2);
-    box-shadow: 0 var(--hairline) 0 var(--ink);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+    color: var(--ink);
   }
   .inspect .search svg {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
+    flex: none;
   }
   .inspect .search input {
-    width: 7rem;
-    padding: 0;
+    width: 8rem;
     border: 0;
+    outline: none;
     background: none;
     color: var(--ink);
     font: inherit;
-    font-family: var(--font-mono);
-    outline: 0;
-  }
-  .inspect mark {
-    background: var(--alpha-3);
-    color: inherit;
-    border-radius: 2px;
-  }
-  .inspect .dim,
-  .inspect .hid {
-    color: var(--ink-3);
-  }
-  .inspect .ok {
-    color: var(--ok);
-  }
-  .inspect .bad {
-    color: var(--danger);
-  }
-  .inspect .chip {
-    height: auto;
-    padding: 0 var(--space-2);
-    font-family: var(--font-mono);
-    font-size: inherit;
-    line-height: 1.6;
-  }
-  .inspect .chev {
-    flex: none;
-    width: 10px;
-    height: 10px;
-    color: var(--ink-3);
-    transition: rotate var(--dur-2) var(--ease);
-  }
-  .inspect details[open] > summary .chev {
-    rotate: 90deg;
-  }
-  .inspect summary {
-    list-style: none;
-    cursor: pointer;
-  }
-  .inspect summary::-webkit-details-marker {
-    display: none;
   }
 
-  /* the trace: one grid for the header and every row; a phone keeps the stage, the bar and the status */
-  .inspect .thead,
-  .inspect .trow > summary {
-    display: grid;
-    grid-template-columns: 6rem minmax(5rem, 1fr) 3.5rem 3.5rem 3rem 3.75rem 3.75rem 9rem;
-    gap: var(--space-3);
-    align-items: center;
-  }
-  .inspect .thead {
-    height: 24px;
-    color: var(--ink-3);
-    font-size: var(--text-caption);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    box-shadow: 0 var(--hairline) 0 var(--line);
-  }
-  .inspect .num {
-    font-family: var(--font-mono);
-    text-align: right;
-    white-space: nowrap;
-  }
-  .inspect .thead .num {
-    font-family: inherit;
-  }
-  .inspect .trow {
-    box-shadow: 0 var(--hairline) 0 var(--line);
-  }
-  .inspect .trow > summary {
-    min-height: 38px;
-    padding: var(--space-1) 0;
-  }
-  .inspect .trow > summary:hover,
-  .inspect .trow[open] > summary {
-    background: var(--alpha-1);
-  }
-  .inspect .trow.skipped {
-    color: var(--ink-3);
-  }
-  .inspect .stage {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-width: 0;
-  }
-  .inspect .stage .nm {
-    font-weight: 500;
-  }
-  .inspect .dr {
-    font-family: var(--font-mono);
-    font-size: var(--text-caption);
-    color: var(--ink-3);
-  }
-  .inspect .axis {
+  /* the spine: one line down the left, a knot per top-level step or tray, colored by status */
+  .inspect .spine {
     position: relative;
-    height: 16px;
-    border-radius: 2px;
-    background: var(--alpha-1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-left: 18px;
   }
-  .inspect .bar {
+  .inspect .spine::before {
+    content: "";
     position: absolute;
-    top: 4px;
-    height: 8px;
-    min-width: 2px;
-    border-radius: 2px;
-    background: var(--ink);
+    left: 5px;
+    top: 14px;
+    bottom: 14px;
+    width: 1.5px;
+    background: var(--alpha-2);
   }
-  .inspect .bar.skip {
-    top: 5px;
-    height: 6px;
-    width: 10px;
-    background: none;
-    box-shadow: inset 0 0 0 1px var(--ink-3);
-    opacity: 0.6;
+  .inspect .knot {
+    position: relative;
   }
-  .inspect .trow.bad .bar {
+  .inspect .knot::before {
+    content: "";
+    position: absolute;
+    left: -16px;
+    top: 15px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--surface-1);
+    box-shadow: 0 0 0 2px var(--ok);
+    z-index: 1;
+  }
+  .inspect .knot.bad::before {
     background: var(--danger);
+    box-shadow: 0 0 0 2px var(--danger);
   }
-  .inspect .status {
+  /* a draft's tray: the discarded one steps back */
+  .inspect .tray {
+    padding: 8px;
+    border-radius: var(--radius-card);
+    background: var(--alpha-1);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .inspect .tray.discarded {
+    background: transparent;
+  }
+  .inspect .tray .thead {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 0 6px;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .inspect .tray.discarded .thead {
     color: var(--ink-3);
-    white-space: nowrap;
   }
-  .inspect .trow.bad .status {
-    color: var(--danger);
+  .inspect .tray.discarded .step:not([open]) {
+    opacity: 0.8;
   }
-  .inspect .tok {
+  .inspect .tray.discarded .step:not([open]):hover {
+    opacity: 1;
+  }
+
+  /* a step: flush when closed, raised when open, its head sticky at the card's top */
+  .inspect .step {
+    border-radius: var(--radius);
+    background: var(--surface-1);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line);
+    transition: box-shadow var(--dur-2) var(--ease);
+  }
+  .inspect .step[open] {
+    background: var(--surface-2);
+    box-shadow: var(--shadow-2);
+    z-index: 2;
+  }
+  .inspect .step > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: 3px;
+    border-radius: var(--radius);
+    user-select: none;
+  }
+  .inspect .step > summary::-webkit-details-marker {
     display: none;
   }
-  .inspect .tgroup {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: 24px;
-    padding-left: var(--space-4);
-    color: var(--ink-2);
-    font-size: var(--text-caption);
-    box-shadow: 0 var(--hairline) 0 var(--line);
-  }
-  .inspect .tgroup svg {
-    width: 12px;
-    height: 12px;
-    color: var(--ink-3);
-  }
-  .inspect .tbody {
-    padding: var(--space-2) var(--space-3) var(--space-4) calc(var(--space-3) + 14px);
-    background: var(--alpha-1);
-  }
-  .inspect .bhead {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    height: 28px;
-  }
-  .inspect .bhead.answer {
-    margin-top: var(--space-3);
-    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
-  }
-  .inspect .cp {
-    padding: 2px var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
-    color: var(--ink-2);
-    font: inherit;
-  }
-  .inspect .cp:hover {
-    color: var(--ink);
+  .inspect .step:not([open]) > summary:hover {
     background: var(--ghost-hover);
   }
-  .inspect .region {
-    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+  .inspect .step[open] > summary {
+    position: sticky;
+    top: calc(-1 * var(--fade));
+    z-index: 3;
+    background: var(--surface-2);
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 var(--hairline) 0 var(--line);
   }
-  .inspect .region > summary {
-    display: grid;
-    grid-template-columns: 14px 4.5rem minmax(0, 1fr) auto;
-    gap: var(--space-2);
+  .inspect .step.flat > summary {
+    cursor: default;
+  }
+  .inspect .step.flat .chev {
+    visibility: hidden;
+  }
+  .inspect .stage {
+    display: inline-flex;
     align-items: center;
-    height: 30px;
+    gap: 6px;
+    font-size: var(--text-body);
+    font-weight: 600;
+    white-space: nowrap;
   }
-  .inspect .rn {
-    font-weight: 500;
+  .inspect .chev {
+    width: 11px;
+    height: 11px;
+    color: var(--ink-3);
+    transition: transform var(--dur-2) var(--ease);
   }
-  .inspect .rs {
+  .inspect details[open] > summary .chev {
+    transform: rotate(90deg);
+  }
+  .inspect .hits {
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--ink);
+    color: var(--surface-1);
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+  }
+  .inspect .digest {
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-2);
+    overflow: hidden;
+  }
+  .inspect .dtext,
+  .inspect .dprose {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inspect .dprose {
+    color: var(--ink-3);
+  }
+  .inspect .metrics {
+    grid-column: 2;
+    font-size: var(--text-caption);
     color: var(--ink-3);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .inspect .rt {
-    font-family: var(--font-mono);
+  .inspect .metrics .ms {
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+
+  /* the body: the call's numbers, then the well */
+  .inspect .body {
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .inspect .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    font-size: var(--text-caption);
     color: var(--ink-3);
+  }
+  .inspect .bar b {
+    color: var(--ink-2);
+    font-weight: 600;
+  }
+  .inspect .cp {
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--alpha-1);
+    color: var(--ink-2);
+    font-size: var(--text-caption);
+  }
+  .inspect .cp:hover {
+    background: var(--alpha-2);
+    color: var(--ink);
+  }
+  .inspect .well {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius);
+    background: var(--surface-0);
+    box-shadow:
+      inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+      inset 0 0 0 var(--hairline) var(--line);
+    overflow: hidden;
+  }
+  .inspect .rtabs {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    background: var(--alpha-1);
+    box-shadow: 0 var(--hairline) 0 var(--line);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .inspect .rtabs button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    color: var(--ink-2);
+    font-size: var(--text-caption);
     white-space: nowrap;
   }
-  .inspect .msg {
-    display: grid;
-    grid-template-columns: 4.5rem minmax(0, 1fr);
-    gap: var(--space-2);
-    padding: var(--space-1) 0 var(--space-2) calc(14px + var(--space-2));
+  .inspect .rtabs button:hover {
+    background: var(--ghost-hover);
+    color: var(--ink);
   }
-  .inspect .msg + .msg {
-    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+  .inspect .rtabs button[aria-selected="true"] {
+    background: var(--surface-2);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: var(--shadow-1);
+  }
+  .inspect .rtabs button[aria-selected="true"] .chars {
+    font-weight: 400;
+  }
+  .inspect .bp {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ink-3);
+  }
+  .inspect .rtabs button[aria-selected="true"] .bp {
+    background: var(--ink);
+  }
+  /* the one scroller inside a step, bounded by the viewport, the fade at its ends */
+  .inspect .wscroll {
+    box-sizing: border-box;
+    max-height: 50dvh;
+    overflow-y: auto;
+    padding: var(--fade) 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .inspect .msg {
+    padding-left: 9px;
+    border-left: 2px solid var(--alpha-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .inspect .msg[data-role="user"] {
+    border-left-color: var(--ink);
+  }
+  .inspect .msg[data-role="assistant"] {
+    border-left-color: var(--ok);
   }
   .inspect .role {
-    padding-top: 2px;
-    color: var(--ink-3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: var(--text-caption);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .inspect .bptag {
+    padding: 0 5px;
+    border-radius: 3px;
+    background: var(--alpha-2);
+    color: var(--ink-2);
+    font-size: 10px;
   }
   .inspect .txt {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    line-height: 1.55;
+    line-height: 1.6;
   }
-  .inspect .kv {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    gap: var(--space-1) var(--space-4);
-    margin: var(--space-1) 0 0;
-    font-family: var(--font-mono);
+  .inspect mark {
+    padding: 0 2px;
+    border-radius: 2px;
+    background: light-dark(#fde047, #a16207);
+    color: var(--ink);
   }
-  .inspect .kv dt {
-    color: var(--ink-2);
+  .inspect .answer {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--alpha-1);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
-  .inspect .kv dd {
+  .inspect .answer .role {
+    justify-content: space-between;
+  }
+  .inspect .answer .prose {
     margin: 0;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .inspect .prose {
-    max-width: 62ch;
-    margin-top: var(--space-1);
     font-size: var(--text-body);
     line-height: var(--leading-prose);
     white-space: pre-wrap;
   }
-
-  /* the state: fields as a three-column table, then small-caps groups */
-  .inspect .fields > div {
+  .inspect .kv {
+    margin: 0;
     display: grid;
-    grid-template-columns: max-content max-content minmax(0, 1fr);
-    gap: 0 var(--space-4);
-    padding: var(--space-1) 0;
-    box-shadow: 0 var(--hairline) 0 var(--line);
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px var(--space-3);
+    align-items: baseline;
   }
-  .inspect .fields .k,
-  .inspect .fields .d,
-  .inspect .lore .k,
-  .inspect .untold .k,
-  .inspect .roll {
-    font-family: var(--font-mono);
-  }
-  .inspect .fields .lb {
-    color: var(--ink-2);
-  }
-  .inspect .fields .d {
-    text-align: right;
-    white-space: nowrap;
-  }
-  .inspect .fields .d b {
-    font-weight: 600;
-  }
-  .inspect .fields .unch {
-    color: var(--ink-3);
-  }
-  .inspect .fields .unch b {
-    font-weight: inherit;
-  }
-  .inspect .mx,
-  .inspect .ar {
-    color: var(--ink-3);
-  }
-  .inspect .ar {
-    padding: 0 var(--space-1);
-  }
-  .inspect .sub {
-    margin: var(--space-4) 0 var(--space-1);
+  .inspect .kv dt {
     color: var(--ink-3);
     font-size: var(--text-caption);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
   }
-  .inspect .line {
+  .inspect .kv dd {
+    margin: 0;
+    min-width: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* the node card */
+  .inspect .inwell {
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: var(--surface-0);
+    box-shadow:
+      inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+      inset 0 0 0 var(--hairline) var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .inspect .line,
+  .inspect .val {
+    margin: 0;
+    font-size: var(--text-body);
+    line-height: 1.55;
+  }
+  .inspect .pills {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-1) var(--space-2);
-    padding: var(--space-1) 0;
+    gap: 6px;
   }
-  .inspect .lore,
-  .inspect .untold,
-  .inspect .must,
-  .inspect .vio,
-  .inspect .item {
-    padding: var(--space-1) 0;
-    box-shadow: 0 var(--hairline) 0 var(--line);
-  }
-  .inspect .lore > summary,
-  .inspect .untold {
-    display: grid;
-    grid-template-columns: 14px max-content minmax(0, 1fr);
-    gap: var(--space-2);
-    align-items: center;
-    min-height: 24px;
-  }
-  .inspect .untold {
-    grid-template-columns: max-content minmax(0, 1fr);
-  }
-  .inspect .lore .k,
-  .inspect .untold .k {
-    color: var(--ink-2);
-  }
-  .inspect .lore .k i {
-    margin-left: var(--space-1);
-    font-style: normal;
-    color: var(--ink-3);
-  }
-  .inspect .lore .lb {
-    max-width: 60ch;
-    padding: 0 0 var(--space-2) calc(14px + var(--space-2));
-    color: var(--ink-2);
-    line-height: 1.6;
-  }
-  .inspect .must {
+  .inspect .hook {
     display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    background: var(--alpha-1);
+    line-height: 1.5;
   }
-  .inspect .vio {
-    color: var(--danger);
+  .inspect .hook + .hook {
+    margin-top: -6px;
   }
-  .inspect .item .idx {
-    margin-right: var(--space-2);
-    font-family: var(--font-mono);
+  .inspect .hook.armed {
+    background: var(--surface-2);
+    box-shadow:
+      var(--shadow-1),
+      inset 0 0 0 1px var(--ink);
+  }
+  .inspect .hb {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .inspect .hid {
     font-size: var(--text-caption);
     color: var(--ink-3);
   }
-
-  /* a phone: stage, bar and status; the numbers fold into one line under the bar */
-  @media (max-width: 47.99rem) {
-    .inspect .thead {
-      display: none;
-    }
-    .inspect .trow > summary {
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-auto-flow: dense; /* the status back up beside the stage, past the full-width bar */
-      row-gap: var(--space-1);
-      padding: var(--space-2) 0;
-    }
-    .inspect .trow > summary .axis,
-    .inspect .trow > summary .tok {
-      grid-column: 1 / -1;
-    }
-    .inspect .trow > summary .num {
-      display: none;
-    }
-    .inspect .tok {
-      display: block;
-      font-family: var(--font-mono);
-      font-size: var(--text-caption);
-      color: var(--ink-3);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .inspect .msg {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 2px;
-    }
-    .inspect .rs {
-      display: none;
-    }
+  .inspect .hook .icon {
+    width: 26px;
+    height: 26px;
+    color: var(--ink-3);
+    border-radius: var(--radius-sm);
   }
-  /* desktop: two panes, trace wider, each scrolling on its own */
+  .inspect .hook .icon:hover {
+    background: var(--ghost-hover);
+    color: var(--ink);
+  }
+  .inspect .hook .icon[aria-pressed="true"] {
+    color: var(--ink);
+  }
+  .inspect .hook .icon svg {
+    width: 15px;
+    height: 15px;
+  }
+  .inspect .record {
+    font-size: var(--text-footnote);
+    gap: var(--space-3);
+  }
+  .inspect .prod {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .inspect .prod + .prod {
+    margin-top: 2px;
+  }
+  .inspect .pid {
+    font-size: var(--text-caption);
+    color: var(--ink-3);
+  }
+  .inspect .items {
+    margin: 0;
+    padding-left: 1.15rem;
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .inspect .prod .kv {
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    background: var(--alpha-1);
+  }
+  .inspect .rows {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .inspect .rows th {
+    text-align: left;
+    font-size: var(--text-caption);
+    font-weight: 500;
+    color: var(--ink-3);
+    padding: 2px 8px 4px 0;
+    border-bottom: var(--hairline) solid var(--line);
+  }
+  .inspect .rows td {
+    padding: 4px 8px 2px 0;
+  }
+
+  /* desktop: the canvas, two cards, the title and the sums in the bar, no switch */
   @media (min-width: 64rem) {
     .inspect {
-      overflow: hidden;
+      background: var(--surface-0);
     }
-    .inspect .top,
-    .inspect .totals,
-    .inspect .pane {
-      padding-inline: var(--space-5);
+    .inspect .top {
+      padding-inline: var(--space-4) var(--space-5);
     }
-    .inspect .tabs {
+    .inspect .top h1,
+    .inspect .sums {
+      display: inline-flex;
+    }
+    .inspect .seg {
       display: none;
     }
     .inspect .cols {
-      flex: 1;
-      min-height: 0;
-      display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+      grid-template-columns: minmax(0, 7fr) minmax(21rem, 5fr);
+      gap: var(--space-4);
+      padding: 0 var(--space-5) var(--space-5);
     }
     .inspect .pane {
-      min-height: 0;
-      overflow-y: auto;
+      padding-inline: var(--space-5);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
     }
-    .inspect[data-tab] .pane.state,
-    .inspect[data-tab] .pane.trace {
-      display: block;
+    .inspect[data-pane] .pane.node,
+    .inspect[data-pane] .pane.pipeline {
+      display: flex;
     }
-    .inspect .pane.state {
-      box-shadow: calc(-1 * var(--hairline)) 0 0 var(--line);
+    .inspect .step > summary {
+      grid-template-columns: auto minmax(0, 1fr) auto;
     }
-    /* the column header sticks at the pane's top edge: the pane's own padding moves up into the heading row */
-    .inspect .pane.trace {
-      padding-top: 0;
+    .inspect .metrics {
+      grid-column: auto;
     }
-    .inspect .pane.trace .sechead {
-      padding-top: var(--space-4);
-    }
-    .inspect .thead {
-      position: sticky;
-      top: 0;
-      z-index: 1;
+    .inspect .knot::before {
       background: var(--surface-1);
     }
   }

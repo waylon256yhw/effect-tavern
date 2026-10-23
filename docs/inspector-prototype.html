@@ -1,0 +1,1644 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inspector · 竹林 (Turn 14 · Depth & Exact Mapping)</title>
+  <style>
+    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ─────────
+       Explicit light & dark variables so the prototype toggle works in any browser regardless of OS setting. */
+    :root,
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --surface-0: #f6f6f3;          /* Level -1 / 0: canvas & recessed prompt wells */
+      --surface-1: #fcfcfb;          /* Level +1: main cards sitting on canvas */
+      --surface-2: #ffffff;          /* Level +2: raised active step / draft tray */
+      --surface-3: #ffffff;          /* Level +3: floating popovers / answer card */
+
+      --ink: #151515;
+      --ink-2: #525252;
+      --ink-3: #8a8a8a;
+
+      --alpha-1: rgb(20 20 20 / 0.045);
+      --alpha-2: rgb(20 20 20 / 0.09);
+      --alpha-3: rgb(20 20 20 / 0.18);
+      --alpha-4: rgb(20 20 20 / 0.32);
+
+      --danger: #dc2626;
+      --danger-soft: rgb(220 38 38 / 0.1);
+      --ok: #1f7a3f;
+      --ok-soft: rgb(31 122 63 / 0.12);
+
+      --shadow-1: 0 1px 2px rgb(0 0 0 / 0.05), 0 2px 8px rgb(0 0 0 / 0.06);
+      --shadow-2: 0 3px 8px rgb(0 0 0 / 0.06), 0 10px 24px -4px rgb(0 0 0 / 0.09), 0 0 0 1px rgb(20 20 20 / 0.08);
+      --shadow-well: inset 0 1px 3px rgb(0 0 0 / 0.06), inset 0 0 0 1px rgb(20 20 20 / 0.08);
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --surface-0: #0b0b0b;          /* Level -1 / 0: canvas & recessed prompt wells */
+      --surface-1: #141413;          /* Level +1: main cards */
+      --surface-2: #1c1c1b;          /* Level +2: raised active step */
+      --surface-3: #232322;          /* Level +3: floating / answer card */
+
+      --ink: #f5f5f5;
+      --ink-2: #a3a3a3;
+      --ink-3: #6f6f6f;
+
+      --alpha-1: rgb(255 255 255 / 0.045);
+      --alpha-2: rgb(255 255 255 / 0.09);
+      --alpha-3: rgb(255 255 255 / 0.18);
+      --alpha-4: rgb(255 255 255 / 0.3);
+
+      --danger: #f87171;
+      --danger-soft: rgb(248 113 113 / 0.15);
+      --ok: #4ade80;
+      --ok-soft: rgb(74 222 128 / 0.15);
+
+      --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.45), inset 0 0 0 1px rgb(255 255 255 / 0.06);
+      --shadow-2: 0 6px 16px rgb(0 0 0 / 0.55), 0 14px 32px -4px rgb(0 0 0 / 0.6), inset 0 0 0 1px rgb(255 255 255 / 0.12);
+      --shadow-well: inset 0 2px 5px rgb(0 0 0 / 0.55), inset 0 0 0 1px rgb(255 255 255 / 0.07);
+    }
+
+    :root {
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --ghost-hover: var(--alpha-1);
+      --ring: var(--alpha-4);
+      --hairline: 1px;
+
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-card: 12px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control: 32px;
+      --control-sm: 24px;
+      --icon: 18px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      /* Strictly 4 type sizes on the page */
+      --text-caption: 0.6875rem;  /* 11px */
+      --text-footnote: 0.75rem;   /* 12px */
+      --text-body: 0.875rem;      /* 14px */
+      --text-heading: 0.9375rem;  /* 15px */
+      --leading-body: 1.5;
+      --leading-prose: 1.68;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --topbar: 48px;
+
+      --dur-2: 120ms;
+      --dur-3: 200ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (resolution >= 2x) {
+      :root { --hairline: 0.5px; }
+    }
+
+    /* ───────── 2. Reset & Prototype Bar ───────── */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
+    button { cursor: pointer; border-radius: var(--radius); }
+    button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    p, h1, h2, h3, dl, dd, ul, table { margin: 0; }
+
+    .rig-bar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-3);
+      padding: 6px var(--space-4);
+      background: #18181b;
+      color: #f4f4f5;
+      font-size: var(--text-footnote);
+    }
+    .rig-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgb(255 255 255 / 0.12);
+      padding: 2px;
+      border-radius: 6px;
+    }
+    .rig-group span { padding: 0 6px; opacity: 0.65; }
+    .rig-group button {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: var(--text-footnote);
+      color: inherit;
+      opacity: 0.75;
+    }
+    .rig-group button[aria-pressed="true"] {
+      background: #f4f4f5;
+      color: #18181b;
+      font-weight: 600;
+      opacity: 1;
+    }
+
+    .stage-frame {
+      margin: 0 auto;
+      transition: width var(--dur-3) var(--ease);
+    }
+    .stage-frame[data-vp="desktop"] {
+      width: 1280px;
+      max-width: 100%;
+      height: calc(100dvh - 34px);
+    }
+    .stage-frame[data-vp="mobile"] {
+      width: 390px;
+      height: 844px;
+      margin: var(--space-4) auto;
+      border-radius: 28px;
+      box-shadow: var(--shadow-2), 0 0 0 6px var(--alpha-2);
+      overflow: hidden;
+      background: var(--surface-1);
+    }
+
+    /* ───────── 3. Shell & Topbar ───────── */
+    .inspect {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-0);
+    }
+    .stage-frame[data-vp="mobile"] .inspect { background: var(--surface-1); }
+
+    .topbar {
+      flex: none;
+      height: var(--topbar);
+      padding: 0 var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .icon-btn {
+      width: var(--control);
+      height: var(--control);
+      display: grid;
+      place-items: center;
+      color: var(--ink-2);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .icon-btn:hover:not(:disabled) { background: var(--ghost-hover); color: var(--ink); }
+    .icon-btn:disabled { opacity: 0.3; cursor: default; }
+    .icon-btn svg { width: var(--icon); height: var(--icon); }
+
+    .topbar h1 {
+      font-size: var(--text-heading);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .turn-stepper {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+    }
+    .turn-stepper .icon-btn { width: var(--control-sm); height: var(--control-sm); }
+    .turn-stepper .icon-btn svg { width: 14px; height: 14px; }
+    .turn-label {
+      padding: 0 var(--space-2);
+      color: var(--ink-2);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .turn-label b { color: var(--ink); font-weight: 600; }
+    .sibling-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: var(--ink-3);
+      font-family: var(--font-mono);
+    }
+    .sibling-tag svg { width: 12px; height: 12px; }
+    .topbar-spacer { flex: 1; }
+
+    .turn-summary {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      background: var(--alpha-1);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+    }
+    .turn-summary .sep { color: var(--ink-3); }
+    .turn-summary .cache-hit { color: var(--ok); }
+
+    .mobile-seg {
+      display: none;
+      padding: 2px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+    }
+    .mobile-seg button {
+      height: var(--control-sm);
+      padding: 0 10px;
+      border-radius: 6px;
+      color: var(--ink-2);
+    }
+    .mobile-seg button[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+
+    /* ───────── 4. Workspace & Cards (Level +1 on Level 0 Canvas) ───────── */
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 7fr) minmax(21rem, 5fr);
+      gap: var(--space-4);
+      padding: 0 var(--space-5) var(--space-5);
+    }
+    .card-pane {
+      min-height: 0;
+      overflow-y: auto;
+      background: var(--surface-1);
+      border-radius: var(--radius-dialog);
+      box-shadow: var(--shadow-1);
+      padding: var(--space-4) var(--space-5) var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .card-pane:hover { scrollbar-color: var(--alpha-2) transparent; }
+
+    .sec-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      min-height: 24px;
+    }
+    .sec-title {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .sec-meta {
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      color: var(--ink-3);
+    }
+
+    .search-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+    }
+    .search-box:focus-within {
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink);
+    }
+    .search-box svg { width: 13px; height: 13px; color: var(--ink-3); flex: none; }
+    .search-box input { width: 9.5rem; outline: none; font-size: var(--text-footnote); }
+    .search-box input::placeholder { color: var(--ink-3); }
+
+    /* ───────── 5. SPATIAL DEPTH PIPELINE: Spine + Draft Trays + Raised Active Step ─────────
+       Addresses the user's feedback:
+       1. A vertical timeline spine anchors the macro stages on the left.
+       2. Multi-draft attempts (Draft 1 vs Draft 2) sit inside grouped trays so macro hierarchy never flattens.
+       3. Opening a step elevates it to Level +2 (--surface-2 + --shadow-2) with a sticky summary bar.
+       4. Prompt regions sit inside a Level -1 recessed well (--surface-0 + --shadow-well) with horizontal tabs
+          and a bounded max-height (14rem), so long prompts NEVER push the rest of the pipeline off screen! */
+    .pipeline {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-left: 18px;
+    }
+    /* The vertical trace spine */
+    .pipeline::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 14px;
+      bottom: 14px;
+      width: 1.5px;
+      background: var(--alpha-2);
+      border-radius: 1px;
+    }
+
+    /* Macro Draft Tray: groups narrate + check pairs so Draft 1 (discarded) vs Draft 2 (final) have clear spatial depth */
+    .draft-tray {
+      position: relative;
+      border-radius: var(--radius-card);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--alpha-1);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+    }
+    .draft-tray.discarded {
+      background: transparent;
+      box-shadow: inset 0 0 0 var(--hairline) var(--alpha-2);
+    }
+    .draft-tray-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .draft-tray.discarded .draft-tray-head {
+      color: var(--ink-3);
+    }
+    /* Spine node dot for top-level steps and draft trays */
+    .spine-node {
+      position: relative;
+    }
+    .spine-node::before {
+      content: "";
+      position: absolute;
+      left: -16px;
+      top: 15px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--surface-1);
+      box-shadow: 0 0 0 2px var(--ink-3);
+      z-index: 1;
+    }
+    .spine-node.ok::before { box-shadow: 0 0 0 2px var(--ok); }
+    .spine-node.bad::before { box-shadow: 0 0 0 2px var(--danger); background: var(--danger); }
+
+    /* Step Card: flush when closed (Level +1), raised card when open (Level +2) */
+    details.step {
+      border-radius: var(--radius);
+      background: var(--surface-1);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      transition: transform var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+    }
+    .draft-tray details.step {
+      background: var(--surface-1);
+    }
+    .draft-tray.discarded details.step:not([open]) {
+      background: var(--alpha-1);
+      box-shadow: none;
+      opacity: 0.82;
+    }
+    .draft-tray.discarded details.step:not([open]):hover {
+      opacity: 1;
+    }
+    /* Level +2 Elevation when expanded! */
+    details.step[open] {
+      background: var(--surface-2);
+      box-shadow: var(--shadow-2);
+      z-index: 2;
+    }
+
+    details.step > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 8px 12px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-3);
+      user-select: none;
+      border-radius: var(--radius);
+    }
+    details.step[open] > summary {
+      position: sticky;
+      top: -16px;
+      z-index: 3;
+      background: var(--surface-2);
+      border-radius: var(--radius) var(--radius) 0 0;
+      box-shadow: 0 var(--hairline) 0 var(--line);
+    }
+    details.step > summary::-webkit-details-marker { display: none; }
+    details.step:not([open]) > summary:hover { background: var(--ghost-hover); }
+
+    .inspect[data-inspect="off"] details.step[data-private="true"] > summary { cursor: default; }
+    .inspect[data-inspect="off"] details.step[data-private="true"] .chev { visibility: hidden; }
+
+    .step-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .chev {
+      width: 11px;
+      height: 11px;
+      color: var(--ink-3);
+      transition: transform var(--dur-2) var(--ease);
+    }
+    details[open] > summary .chev { transform: rotate(90deg); }
+
+    .step-digest {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      overflow: hidden;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      white-space: nowrap;
+      flex: none;
+    }
+    .pill.ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+    .pill.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+
+    .digest-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--ink-2);
+    }
+    .digest-prose {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--ink-3);
+      font-style: normal;
+    }
+
+    .step-metrics {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+    .step-metrics .ms { color: var(--ink-2); font-weight: 500; }
+    .hit-badge {
+      background: var(--ink);
+      color: var(--surface-1);
+      padding: 0 5px;
+      border-radius: var(--radius-pill);
+      font-size: var(--text-caption);
+      font-family: var(--font-mono);
+    }
+
+    /* ───────── 6. Step Body: Recessed Prompt Well (Level -1) + Raised Answer (Level +3) ───────── */
+    .step-body {
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--ink);
+    }
+
+    /* Call-level token & cache bar: compares Head+Summary+History chars directly against call's cacheRead! */
+    .call-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .call-bar b { color: var(--ink-2); font-weight: 600; }
+    .copy-btn {
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-family: var(--font-sans);
+      font-size: var(--text-caption);
+    }
+    .copy-btn:hover { background: var(--alpha-2); color: var(--ink); }
+
+    /* Recessed Well (Level -1): horizontal region tabs + bounded scrollable viewport so it NEVER pushes the page apart */
+    .prompt-well {
+      border-radius: var(--radius);
+      background: var(--surface-0);
+      box-shadow: var(--shadow-well);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .region-tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 6px;
+      background: var(--alpha-1);
+      box-shadow: 0 var(--hairline) 0 var(--line);
+      overflow-x: auto;
+    }
+    .region-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .region-tab:hover { background: var(--ghost-hover); color: var(--ink); }
+    .region-tab[aria-selected="true"] {
+      background: var(--surface-2);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .region-tab .chars {
+      font-family: var(--font-mono);
+      color: var(--ink-3);
+      font-weight: 400;
+    }
+    /* Breakpoint dot: honest indicator that this region ends on a cache breakpoint */
+    .bp-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--ink-3);
+      display: inline-block;
+    }
+    .region-tab[aria-selected="true"] .bp-dot { background: var(--ink); }
+
+    /* Bounded scroll area inside the recessed well: max 14rem high! */
+    .well-scroll {
+      max-height: 14rem;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--alpha-3) transparent;
+    }
+    .msg {
+      padding-left: 9px;
+      border-left: 2px solid var(--alpha-3);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .msg[data-role="user"] { border-left-color: var(--ink); }
+    .msg[data-role="assistant"] { border-left-color: var(--ok); }
+    .msg-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .bp-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 5px;
+      border-radius: 3px;
+      background: var(--alpha-2);
+      color: var(--ink-2);
+      font-size: 10px;
+    }
+    .msg-txt {
+      font-size: var(--text-footnote);
+      line-height: 1.6;
+      color: var(--ink);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    mark {
+      background: #fde047;
+      color: #151515;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+
+    /* Output Answer Box: raised surface with bounded scroll if prose is long */
+    .answer-card {
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .answer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .answer-prose {
+      max-height: 11rem;
+      overflow-y: auto;
+      font-size: var(--text-body);
+      line-height: var(--leading-prose);
+      color: var(--ink);
+      white-space: pre-wrap;
+      scrollbar-width: thin;
+      scrollbar-color: var(--alpha-3) transparent;
+    }
+    .kv-grid {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 4px var(--space-3);
+      font-size: var(--text-footnote);
+      font-family: var(--font-mono);
+    }
+    .kv-grid dt { color: var(--ink-3); }
+    .kv-grid dd { color: var(--ink); white-space: pre-wrap; }
+
+    /* ───────── 7. Right Card: Node Context, Untold Hooks, State & Generic Product Shape Renderer ───────── */
+    .node-section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .node-section + .node-section {
+      padding-top: var(--space-3);
+      box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--line);
+    }
+
+    .input-well {
+      background: var(--surface-0);
+      box-shadow: var(--shadow-well);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .input-line {
+      font-size: var(--text-body);
+      line-height: 1.55;
+      color: var(--ink);
+    }
+    .input-sub {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Untold Hooks (readable) */
+    .hook-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .hook-item {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+      line-height: 1.5;
+      transition: box-shadow var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+    }
+    .hook-item[data-pinned="true"] {
+      background: var(--surface-2);
+      box-shadow: var(--shadow-1), inset 0 0 0 1px var(--ink);
+    }
+    .hook-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .hook-id {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .hook-text { color: var(--ink); }
+    .pin-btn {
+      flex: none;
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      color: var(--ink-3);
+      border-radius: var(--radius-sm);
+    }
+    .pin-btn:hover { background: var(--ghost-hover); color: var(--ink); }
+    .pin-btn[aria-pressed="true"] { color: var(--ink); }
+    .pin-btn svg { width: 15px; height: 15px; }
+
+    /* State Rows: follows src/record.ts `reading()` exactly (meter only when both min & max exist; otherwise value row) */
+    .state-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .reading-meter {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .reading-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-footnote);
+    }
+    .reading-label { font-weight: 600; }
+    .reading-path {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .reading-num {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      color: var(--ink-2);
+    }
+    .reading-num b { color: var(--ink); font-weight: 600; }
+    .meter-track {
+      height: 5px;
+      border-radius: 3px;
+      background: var(--alpha-2);
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+      background: var(--ink);
+      border-radius: 3px;
+    }
+
+    /* Generic Product Shape Renderer (list / record / table / text) */
+    .prod-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .prod-block + .prod-block { margin-top: 4px; }
+    .prod-id {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .shape-list {
+      padding-left: 1.15rem;
+      font-size: var(--text-footnote);
+      line-height: 1.55;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .shape-record {
+      background: var(--alpha-1);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 6px var(--space-3);
+      font-size: var(--text-footnote);
+      align-items: baseline;
+    }
+    .shape-record > dt {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .shape-record > dd { min-width: 0; }
+    .shape-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--text-footnote);
+    }
+    .shape-table th {
+      text-align: left;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      font-weight: 500;
+      color: var(--ink-3);
+      padding: 2px 8px 4px 0;
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .shape-table td {
+      padding: 4px 8px 2px 0;
+      color: var(--ink);
+    }
+
+    .inspect[data-inspect="off"] .dev-only { display: none !important; }
+
+    /* ───────── 8. Responsive / Phone 390px Collapse ───────── */
+    @media (max-width: 63.99rem) {
+      .workspace { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 0; }
+      .card-pane { border-radius: 0; box-shadow: none; padding: var(--space-3) var(--space-4) var(--space-5); }
+      .turn-summary { display: none; }
+      .mobile-seg { display: inline-flex; }
+      .inspect[data-pane="pipeline"] .pane-node { display: none; }
+      .inspect[data-pane="node"] .pane-pipeline { display: none; }
+      details.step > summary { grid-template-columns: auto minmax(0, 1fr); row-gap: 3px; }
+      .step-metrics { grid-column: 2; }
+    }
+    .stage-frame[data-vp="mobile"] .workspace { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 0; }
+    .stage-frame[data-vp="mobile"] .card-pane { border-radius: 0; box-shadow: none; padding: var(--space-3) var(--space-4) var(--space-5); }
+    .stage-frame[data-vp="mobile"] .turn-summary { display: none; }
+    .stage-frame[data-vp="mobile"] .mobile-seg { display: inline-flex; }
+    .stage-frame[data-vp="mobile"] .inspect[data-pane="pipeline"] .pane-node { display: none; }
+    .stage-frame[data-vp="mobile"] .inspect[data-pane="node"] .pane-pipeline { display: none; }
+    .stage-frame[data-vp="mobile"] details.step > summary { grid-template-columns: auto minmax(0, 1fr); row-gap: 3px; }
+    .stage-frame[data-vp="mobile"] .step-metrics { grid-column: 2; }
+  </style>
+</head>
+<body>
+
+  <!-- Prototype Switcher Bar -->
+  <div class="rig-bar" role="region" aria-label="Prototype Controls">
+    <div class="rig-group">
+      <span>Viewport</span>
+      <button type="button" aria-pressed="true" onclick="setVp('desktop', this)">Desktop 1280</button>
+      <button type="button" aria-pressed="false" onclick="setVp('mobile', this)">Phone 390</button>
+    </div>
+    <div class="rig-group">
+      <span>Server</span>
+      <button type="button" aria-pressed="true" onclick="setInspect('on', this)">inspect: true (Dev)</button>
+      <button type="button" aria-pressed="false" onclick="setInspect('off', this)">inspect: false (Player)</button>
+    </div>
+    <div class="rig-group">
+      <span>Theme</span>
+      <button type="button" aria-pressed="true" onclick="setTheme('light', this)">Light</button>
+      <button type="button" aria-pressed="false" onclick="setTheme('dark', this)">Dark</button>
+    </div>
+  </div>
+
+  <div class="stage-frame" id="frame" data-vp="desktop">
+    <div class="inspect" id="inspector" data-inspect="on" data-pane="pipeline">
+
+      <!-- Topbar -->
+      <header class="topbar">
+        <button type="button" class="icon-btn" aria-label="Back to story" title="Escape">
+          <svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>
+        </button>
+        <h1>竹林</h1>
+
+        <div class="turn-stepper" role="group" aria-label="Turn navigation">
+          <button type="button" class="icon-btn" aria-label="Previous turn [">
+            <svg viewBox="0 0 256 256" fill="currentColor"><path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z"/></svg>
+          </button>
+          <span class="turn-label">
+            <b>Turn 14</b>
+            <span class="sibling-tag" title="Swipe sibling 2 of 2">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></svg>
+              2/2
+            </span>
+          </span>
+          <button type="button" class="icon-btn" aria-label="Next turn ]" disabled>
+            <svg viewBox="0 0 256 256" fill="currentColor"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>
+          </button>
+        </div>
+
+        <span class="topbar-spacer"></span>
+
+        <!-- Accurate 7 calls total -->
+        <div class="turn-summary" aria-label="Turn totals">
+          <span>7 calls</span>
+          <span class="sep">·</span>
+          <span>7.5s</span>
+          <span class="sep">·</span>
+          <span>15.2k in <span class="cache-hit">(81% cached)</span></span>
+          <span class="sep">·</span>
+          <span>952 out</span>
+        </div>
+
+        <div class="mobile-seg" role="tablist" aria-label="Inspector view">
+          <button type="button" role="tab" aria-selected="true" onclick="setMobilePane('pipeline', this)">Pipeline</button>
+          <button type="button" role="tab" aria-selected="false" onclick="setMobilePane('node', this)">Node · 3</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+
+        <!-- ───────── LEFT CARD: Spatial-Depth Pipeline ───────── -->
+        <section class="card-pane pane-pipeline" aria-label="Turn pipeline">
+          <div class="sec-head">
+            <span class="sec-title">Pipeline</span>
+            <span class="sec-meta">lookup skipped</span>
+            <label class="search-box dev-only">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>
+              <input type="search" id="prompt-search" placeholder="Search prompts…" autocomplete="off" oninput="filterPrompts(this.value)" />
+            </label>
+          </div>
+
+          <div class="pipeline" id="pipeline-list"></div>
+        </section>
+
+        <!-- ───────── RIGHT CARD: Node Context, Untold Hooks, State & Generic Shape Products ───────── -->
+        <aside class="card-pane pane-node" aria-label="Node state and untold hooks">
+
+          <!-- 1. Input (Recessed Well) -->
+          <div class="node-section">
+            <div class="sec-head">
+              <span class="sec-title">Input</span>
+              <span class="sec-meta">act + note</span>
+            </div>
+            <div class="input-well">
+              <p class="input-line">我趁他旧力已尽、新力未生之际，欺身而上，短刀直取他左肩旧伤！</p>
+              <div class="input-sub">
+                <span class="pill">note: 节奏加快，但先别分出死活</span>
+                <span class="pill ok">pin: scar#1 (told)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Untold Hooks (readable) -->
+          <div class="node-section">
+            <div class="sec-head">
+              <span class="sec-title">Untold Hooks</span>
+              <span class="sec-meta">3 readable · pin for next turn</span>
+            </div>
+            <div class="hook-list" id="hook-list"></div>
+          </div>
+
+          <!-- 3. State Diff (Exact mapping #6: hp & bond are bounded meters; foe has no max so it is a value row!) -->
+          <div class="node-section">
+            <div class="sec-head">
+              <span class="sec-title">State</span>
+              <span class="sec-meta">vs Turn 13 · strike:hit, warmth:close</span>
+            </div>
+            <div class="state-rows">
+              <!-- hp: int with min 0, max 100 → meter -->
+              <div class="reading-meter">
+                <div class="reading-row">
+                  <span class="reading-label">体力</span>
+                  <span class="reading-path">hp</span>
+                  <span class="reading-num">40 → <b>35</b> / 100</span>
+                </div>
+                <div class="meter-track"><div class="meter-fill" style="width: 35%"></div></div>
+              </div>
+              <!-- foe: int with min 0, NO max → value row (no meter bar!) -->
+              <div class="reading-row">
+                <span class="reading-label">敌手</span>
+                <span class="reading-path">foe</span>
+                <span class="reading-num">30 → <b>20</b></span>
+              </div>
+              <!-- bond: int with min -30, max 100 → meter -->
+              <div class="reading-meter">
+                <div class="reading-row">
+                  <span class="reading-label">交情</span>
+                  <span class="reading-path">bond</span>
+                  <span class="reading-num">4 → <b>12</b> / 100</span>
+                </div>
+                <div class="meter-track"><div class="meter-fill" style="width: 32.3%"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Products: Generic Shape Renderer (Exact mapping #5: list, record, nested table) -->
+          <div class="node-section">
+            <div class="sec-head">
+              <span class="sec-title">Products</span>
+              <span class="sec-meta">by shape</span>
+            </div>
+            <div id="products-list"></div>
+          </div>
+
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ───────── Embedded Wuxia Data: Strictly derived from runtime/client data shapes ─────────
+    const BRIEF = { must: ["li#2", "scar#1"], may: ["oath#1"], tone: "急促、冷峻，刀光贴身即收" };
+    const CHECKS = [{ action: "strike", chance: 0.6, roll: 0.34, hit: true }];
+    const BEAT_EVENTS = ["strike:hit"];
+
+    const CALLS = [
+      {
+        id: "c1",
+        phase: "decide",
+        status: "ok",
+        ms: 380,
+        usage: { input: 1420, output: 28, cacheRead: 1180, cacheWrite: 0 },
+        regions: [
+          {
+            name: "Head",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Write in Chinese.\nFrame: wuxia" }]
+          },
+          {
+            name: "History",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Ledger:\nTurn 1..12 → talk, strike:miss; fired li#1; 竹林小径遭遇蒙面剑客\nTurn 13 → strike:hit; 黑衣人招式略滞，旧力已尽" }]
+          },
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "system", text: "Which card action does the player's input take first? \"end\" if it takes none of the listed actions.\nState: {\"hp\":40,\"foe\":30,\"bond\":4}\nActions: strike: attack B | talk: talk\nSo far: -" },
+              { role: "user", text: "我趁他旧力已尽、新力未生之际，欺身而上，短刀直取他左肩旧伤！" }
+            ]
+          }
+        ],
+        out: { next: "strike", again: false }
+      },
+      {
+        id: "c2",
+        phase: "direct",
+        status: "ok",
+        privateInPlay: true,
+        ms: 510,
+        usage: { input: 1560, output: 46, cacheRead: 1180, cacheWrite: 0 },
+        regions: [
+          {
+            name: "Head",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Write in Chinese.\nFrame: wuxia\nRule: B does not die" }]
+          },
+          {
+            name: "History",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Ledger:\nTurn 1..13 → strike:hit; fired li#1; 竹林小径交手十三合" }]
+          },
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "system", text: "Open: li#2=B is Li; crane tattoo on left shoulder | scar#1=Old sword scar under left collarbone\nEvents: strike:hit" },
+              { role: "system", text: "Player note: 节奏加快，但先别分出死活" },
+              { role: "user", text: "我趁他旧力已尽、新力未生之际，欺身而上，短刀直取他左肩旧伤！" }
+            ]
+          }
+        ],
+        out: BRIEF
+      },
+      {
+        id: "c3",
+        phase: "narrate",
+        draft: 1,
+        status: "ok",
+        privateInPlay: true,
+        ms: 2140,
+        usage: { input: 4620, output: 312, cacheRead: 4100, cacheWrite: 380 },
+        regions: [
+          {
+            name: "Head",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Write in Chinese.\nFrame: wuxia\nA: swordsman\nA keeps the player at arm's length." }]
+          },
+          {
+            name: "Summary",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Summary: 日头偏西，你在青崖山竹林小径遇蒙面剑客拦路。试探数合后发现对方剑路熟悉，左肩微沉似有暗伤。" }]
+          },
+          {
+            name: "History",
+            breakpoint: true,
+            msgs: [
+              { role: "user", text: "我横刀格开他剑尖，逼视他蒙面巾后的眼睛。" },
+              { role: "assistant", text: "竹叶被剑气卷起又落下。铁刃相交的一瞬，你听见他呼吸乱了一拍，原本密不透风的守势在左肩处漏出一线空当。" }
+            ]
+          },
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "user", text: "我趁他旧力已尽、新力未生之际，欺身而上，短刀直取他左肩旧伤！" },
+              { role: "system", text: "Outcome: strike:hit\nCurrent: scene=place: 竹林深处 | present: 沈青(tense), 黑衣人(tense)\nMUST reveal: B is Li; crane tattoo on the left shoulder.\nMUST reveal: 左肩锁骨下有一道三寸长的旧剑疤\nTone: 急促、冷峻，刀光贴身即收\nPlayer note: 节奏加快，但先别分出死活" }
+            ]
+          }
+        ],
+        out: "你靴尖在湿滑的竹根上一碾，整个人已贴进他长剑回撤的死角。短刀不走偏锋，迎着落叶直削他左肩。\n\n只听「嗤」的一声裂帛轻响，黑色夜行衣自肩头斜斜绽开，血珠溅上青竹。那截裸露出的肩头皮肤上，赫然印着一只展翅欲飞的青色仙鹤刺青。\n\n你的手腕猛地僵在半空，虎口被反震得发麻。天下间只有一个人会在左肩刺这只断羽仙鹤——三年前在落雁渡口沉江失踪的李玉。"
+      },
+      {
+        id: "c4",
+        phase: "check",
+        draft: 1,
+        status: "failed",
+        privateInPlay: true,
+        ms: 640,
+        usage: { input: 480, output: 32, cacheRead: 0, cacheWrite: 0 },
+        regions: [
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "system", text: "Rule: B does not die\nOpen: li#2, scar#1\nMust: li#2, scar#1" },
+              { role: "user", text: "你靴尖在湿滑的竹根上一碾，整个人已贴进他长剑回撤的死角。短刀不走偏锋，迎着落叶直削他左肩……天下间只有一个人会在左肩刺这只断羽仙鹤——三年前在落雁渡口沉江失踪的李玉。" }
+            ]
+          }
+        ],
+        out: { fired: ["li#2"], violated: [] }
+      },
+      {
+        id: "c5",
+        phase: "narrate",
+        draft: 2,
+        status: "ok",
+        openByDefault: true,
+        privateInPlay: true,
+        ms: 2380,
+        usage: { input: 4680, output: 365, cacheRead: 4480, cacheWrite: 0 },
+        regions: [
+          {
+            name: "Head",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Write in Chinese.\nFrame: wuxia\nA: swordsman\nA keeps the player at arm's length." }]
+          },
+          {
+            name: "Summary",
+            breakpoint: true,
+            msgs: [{ role: "system", text: "Summary: 日头偏西，你在青崖山竹林小径遇蒙面剑客拦路。试探数合后发现对方剑路熟悉，左肩微沉似有暗伤。" }]
+          },
+          {
+            name: "History",
+            breakpoint: true,
+            msgs: [
+              { role: "user", text: "我横刀格开他剑尖，逼视他蒙面巾后的眼睛。" },
+              { role: "assistant", text: "竹叶被剑气卷起又落下。铁刃相交的一瞬，你听见他呼吸乱了一拍，原本密不透风的守势在左肩处漏出一线空当。" }
+            ]
+          },
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "user", text: "我趁他旧力已尽、新力未生之际，欺身而上，短刀直取他左肩旧伤！" },
+              { role: "system", text: "Outcome: strike:hit\nCurrent: scene=place: 竹林深处 | present: 沈青(tense), 黑衣人(tense)\nMUST reveal: B is Li; crane tattoo on the left shoulder.\nMUST reveal: 左肩锁骨下有一道三寸长的旧剑疤\nTone: 急促、冷峻，刀光贴身即收\nPlayer note: 节奏加快，但先别分出死活" },
+              { role: "system", text: "Previous draft broke: missed MUST scar#1" }
+            ]
+          }
+        ],
+        out: "你靴尖在湿滑的竹根上一碾，趁他旧剑未收，欺身切入内门，短刀贴着竹影直削他左肩。\n\n「嗤」的一声裂帛轻响，夜行衣自肩头斜绽开来。新渗出的血珠底下，一只青色仙鹤刺青赫然入目；而横贯仙鹤翅根、紧贴锁骨下方的，正是那道三寸长的陈年剑疤——三年前在落雁渡口，替你生生受下追兵一剑才留下的旧创。\n\n他仓促回剑格挡，铁柄撞上你的刀背，震得你虎口生疼。刀锋在距他咽喉半寸处硬生生顿住。面巾滑落半截，那双冷寂的眼睛里映出你骤然收缩的瞳孔——是李玉。"
+      },
+      {
+        id: "c6",
+        phase: "check",
+        draft: 2,
+        status: "ok",
+        privateInPlay: true,
+        ms: 590,
+        usage: { input: 530, output: 24, cacheRead: 0, cacheWrite: 0 },
+        regions: [
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "system", text: "Rule: B does not die\nOpen: li#2, scar#1\nMust: li#2, scar#1" },
+              { role: "user", text: "你靴尖在湿滑的竹根上一碾，趁他旧剑未收，欺身切入内门……面巾滑落半截，那双冷寂的眼睛里映出你骤然收缩的瞳孔——是李玉。" }
+            ]
+          }
+        ],
+        out: { fired: ["li#2", "scar#1"], violated: [] }
+      },
+      {
+        id: "c7",
+        phase: "record",
+        status: "ok",
+        ms: 820,
+        usage: { input: 1890, output: 145, cacheRead: 1420, cacheWrite: 0 },
+        regions: [
+          {
+            name: "Input",
+            breakpoint: false,
+            msgs: [
+              { role: "system", text: "Known: 青崖山竹林小径遇蒙面剑客拦路; 对方剑路熟悉且左肩有暗伤\nCurrent: scene=place: 竹林深处 | present: 沈青(tense), 黑衣人(tense)\nnotes: Write only the new facts this scene established...\noptions: Four things the player could do next...\nscene: Where the scene stands now...\nQuestions: warmth: how A treated the player this turn [cold | flat | warm | close]" },
+              { role: "user", text: "我趁他旧力已尽、新力未生之际，欺身而上，短刀直取他左肩旧伤！\n你靴尖在湿滑的竹根上一碾……那双冷寂的眼睛里映出你骤然收缩的瞳孔——是李玉。" }
+            ]
+          }
+        ],
+        out: {
+          answers: { warmth: "close" },
+          notes: [
+            "短刀挑破黑衣人左肩衣襟，露出青色仙鹤刺青与三寸旧剑疤",
+            "认出黑衣人正是失踪三年的故友李玉，刀锋在咽喉半寸处硬生生顿住"
+          ],
+          scene: {
+            place: "竹林深处 · 断碑旁",
+            present: [
+              { name: "沈青", mood: "tense" },
+              { name: "李玉", mood: "tense" }
+            ]
+          }
+        }
+      }
+    ];
+
+    // Products with their declared shapes from src/product.ts
+    const PRODUCTS = [
+      {
+        id: "notes",
+        shape: { kind: "list" },
+        value: [
+          "短刀挑破黑衣人左肩衣襟，露出青色仙鹤刺青与三寸旧剑疤",
+          "认出黑衣人正是失踪三年的故友李玉，刀锋在咽喉半寸处硬生生顿住"
+        ]
+      },
+      {
+        id: "scene",
+        shape: {
+          kind: "record",
+          keys: [
+            { key: "place", type: "text" },
+            {
+              key: "present",
+              shape: {
+                kind: "table",
+                columns: [
+                  { key: "name", type: "text" },
+                  { key: "mood", type: "enum" }
+                ]
+              }
+            }
+          ]
+        },
+        value: {
+          place: "竹林深处 · 断碑旁",
+          present: [
+            { name: "沈青", mood: "tense" },
+            { name: "李玉", mood: "tense" }
+          ]
+        }
+      },
+      {
+        id: "options",
+        shape: { kind: "list" },
+        value: [
+          "收刀后撤半步，沉声唤出「李玉」的名字",
+          "刀锋顺势抵住他咽喉，逼问当年假死之由",
+          "装作未曾认出，按住震麻的虎口试探他下一招"
+        ]
+      }
+    ];
+
+    const UNTOLD_HOOKS = [
+      { id: "li#3", hook: "当两人兵刃相交、认出彼此身份后，提及当年若有朝一日拔剑相向必分生死的毒誓", pinned: false },
+      { id: "ferry#1", hook: "提及二十里外的野渡口，或追问竹林地上那道新鲜拖痕的去向", pinned: true },
+      { id: "sect#1", hook: "追问他肩头旧伤背后的青崖山掌门之争与假死隐情", pinned: false }
+    ];
+
+    // Active region tab per step id (defaults to "Input" so opening a step focuses on what this turn sent)
+    const activeRegion = {};
+
+    const escapeHtml = (s) =>
+      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const highlight = (text, q) => {
+      if (!q) return escapeHtml(text);
+      const parts = String(text).split(new RegExp(`(${escapeRe(q)})`, "gi"));
+      return parts.map((p, i) => (i % 2 === 1 ? `<mark>${escapeHtml(p)}</mark>` : escapeHtml(p))).join("");
+    };
+
+    const countHits = (msgs, q) => {
+      if (!q) return 0;
+      const re = new RegExp(escapeRe(q), "gi");
+      return msgs.reduce((n, m) => n + (m.text.match(re) || []).length, 0);
+    };
+
+    // Exact data mapping #1–#4: derive every step's header digest strictly from Call.out + Node.checks/events/brief!
+    function digestOf(c, inspectOn) {
+      if (c.phase === "decide") {
+        // #4: combined from Node.checks + beat events
+        const chk = CHECKS[0];
+        return `<span class="pill ${chk.hit ? "ok" : "bad"}">${chk.action} · ${chk.hit ? "Hit" : "Miss"}</span>
+                <span class="digest-text">roll ${chk.roll.toFixed(2)} vs ${Math.round(chk.chance * 100)}% · ${BEAT_EVENTS.join(", ")}</span>`;
+      }
+      if (c.phase === "direct") {
+        // must ids are public (same namespace as readable hooks); may & tone only in Dev
+        const must = `<span class="pill">must: ${c.out.must.join(", ")}</span>`;
+        const devPart = inspectOn
+          ? `<span class="digest-text">may: ${c.out.may.join(", ") || "—"} · tone: ${escapeHtml(c.out.tone)}</span>`
+          : "";
+        return must + devPart;
+      }
+      if (c.phase === "narrate") {
+        // #1: first line of the prose (truncated by CSS), never a hand-written summary!
+        const firstLine = String(c.out).split("\n")[0];
+        return `<span class="digest-prose">${escapeHtml(firstLine)}</span>`;
+      }
+      if (c.phase === "check") {
+        // #3: in Dev, missed = brief.must - out.fired; in Player (no brief), fallback to status
+        if (!inspectOn) {
+          return c.status === "failed"
+            ? `<span class="pill bad">failed → second draft</span>`
+            : `<span class="pill ok">ok</span>`;
+        }
+        const missed = BRIEF.must.filter((id) => !c.out.fired.includes(id));
+        const violated = c.out.violated || [];
+        if (missed.length || violated.length) {
+          const bads = [...missed.map((m) => `missed: ${m}`), ...violated.map((v) => `rule: ${v}`)].join(" · ");
+          return `<span class="pill bad">${escapeHtml(bads)}</span>
+                  <span class="digest-text">fired: ${c.out.fired.join(", ") || "none"}</span>`;
+        }
+        return `<span class="pill ok">met: ${c.out.fired.join(", ")}</span>`;
+      }
+      if (c.phase === "record") {
+        const ans = Object.entries(c.out.answers || {}).map(([k, v]) => `${k}=${v}`).join(", ");
+        return `<span class="pill">${escapeHtml(ans)}</span>
+                <span class="digest-text">notes (${c.out.notes.length}) · scene</span>`;
+      }
+      return "";
+    }
+
+    const fmtTok = (u) => {
+      const parts = [];
+      if (u.cacheRead) parts.push(`${(u.cacheRead / 1000).toFixed(1)}k r`);
+      if (u.cacheWrite) parts.push(`+${u.cacheWrite} w`);
+      parts.push(`${u.input} in → ${u.output} out`);
+      return parts.join(" · ");
+    };
+
+    function renderStep(c, q, inspectOn, inTray = false) {
+      const allMsgs = c.regions.flatMap((r) => r.msgs);
+      const hits = inspectOn ? countHits(allMsgs, q) : 0;
+      const isOpen = (c.openByDefault && !q) || hits > 0;
+      const dotClass = c.status === "failed" ? "bad" : "ok";
+
+      // Default active region tab is "Input" (or "All" when searching)
+      const selectedTab = q ? "All" : (activeRegion[c.id] || c.regions.at(-1).name);
+      const visibleRegions = selectedTab === "All" ? c.regions : c.regions.filter((r) => r.name === selectedTab);
+
+      // #2: compare cached prefix chars (regions ending on a breakpoint) against call's cacheRead/cacheWrite tokens
+      const prefixChars = c.regions.filter((r) => r.breakpoint).reduce((sum, r) => sum + r.msgs.reduce((n, m) => n + m.text.length, 0), 0);
+
+      const tabsHtml = [
+        ...c.regions.map((r) => {
+          const chars = r.msgs.reduce((n, m) => n + m.text.length, 0);
+          const rHits = countHits(r.msgs, q);
+          return `<button type="button" class="region-tab" role="tab" aria-selected="${selectedTab === r.name}" onclick="selectRegion('${c.id}', '${r.name}', event)">
+            ${r.breakpoint ? `<i class="bp-dot" title="Ends on cache breakpoint"></i>` : ""}
+            <span>${r.name}</span>
+            <span class="chars">${chars}c</span>
+            ${rHits > 0 ? `<span class="hit-badge">${rHits}</span>` : ""}
+          </button>`;
+        }),
+        c.regions.length > 1
+          ? `<button type="button" class="region-tab" role="tab" aria-selected="${selectedTab === "All"}" onclick="selectRegion('${c.id}', 'All', event)">All</button>`
+          : ""
+      ].join("");
+
+      const msgsHtml = visibleRegions
+        .flatMap((r) =>
+          r.msgs.map((m, idx) => {
+            const isBp = r.breakpoint && idx === r.msgs.length - 1;
+            return `<div class="msg" data-role="${m.role}">
+              <div class="msg-head">
+                <span>${r.name} · ${m.role}</span>
+                ${isBp ? `<span class="bp-tag"><i class="bp-dot"></i>breakpoint</span>` : ""}
+              </div>
+              <div class="msg-txt">${highlight(m.text, q)}</div>
+            </div>`;
+          })
+        )
+        .join("");
+
+      const answerHtml =
+        typeof c.out === "string"
+          ? `<div class="answer-prose">${highlight(c.out, q)}</div>`
+          : `<dl class="kv-grid">${Object.entries(c.out)
+              .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(typeof v === "string" ? v : JSON.stringify(v))}</dd>`)
+              .join("")}</dl>`;
+
+      return `
+        <details class="step ${inTray ? "" : `spine-node ${dotClass}`}" id="step-${c.id}" data-private="${Boolean(c.privateInPlay)}" ${isOpen && (!c.privateInPlay || inspectOn) ? "open" : ""}>
+          <summary>
+            <span class="step-title">
+              <svg class="chev" viewBox="0 0 256 256" fill="currentColor"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>
+              <span>${c.phase}</span>
+              ${hits > 0 ? `<span class="hit-badge">${hits}</span>` : ""}
+            </span>
+            <span class="step-digest">${digestOf(c, inspectOn)}</span>
+            <span class="step-metrics">
+              <span class="ms">${(c.ms / 1000).toFixed(2)}s</span>
+              <span>· ${fmtTok(c.usage)}</span>
+            </span>
+          </summary>
+          <div class="step-body ${c.privateInPlay ? "dev-only" : ""}">
+            <div class="call-bar">
+              <span>
+                in <b>${c.usage.input.toLocaleString()}</b> · out <b>${c.usage.output.toLocaleString()}</b>
+                · cache read <b>${c.usage.cacheRead.toLocaleString()}</b>${c.usage.cacheWrite ? ` · cache write <b>${c.usage.cacheWrite.toLocaleString()}</b>` : ""}
+                ${prefixChars ? ` <span>(breakpoint prefix: ${prefixChars} chars)</span>` : ""}
+              </span>
+              <button type="button" class="copy-btn dev-only" onclick="copyCall('${c.id}', this)">Copy JSON</button>
+            </div>
+            <div class="prompt-well dev-only">
+              <div class="region-tabs" role="tablist">${tabsHtml}</div>
+              <div class="well-scroll">${msgsHtml}</div>
+            </div>
+            <div class="answer-card">
+              <div class="answer-head">
+                <span>Answer</span>
+                <span>${c.usage.output} out</span>
+              </div>
+              ${answerHtml}
+            </div>
+          </div>
+        </details>`;
+    }
+
+    function renderPipeline(q = "") {
+      const container = document.getElementById("pipeline-list");
+      const inspectOn = document.getElementById("inspector").dataset.inspect === "on";
+
+      // Group narrate+check pairs by draft number into spatial Draft Trays so macro hierarchy is unmistakable
+      const preCalls = CALLS.filter((c) => !c.draft && c.phase !== "record");
+      const draft1 = CALLS.filter((c) => c.draft === 1);
+      const draft2 = CALLS.filter((c) => c.draft === 2);
+      const postCalls = CALLS.filter((c) => c.phase === "record");
+
+      container.innerHTML = [
+        ...preCalls.map((c) => renderStep(c, q, inspectOn, false)),
+        `<div class="draft-tray discarded spine-node bad">
+          <div class="draft-tray-head">
+            <span>Draft 1 · Discarded</span>
+            <span>2.78s · check failed</span>
+          </div>
+          ${draft1.map((c) => renderStep(c, q, inspectOn, true)).join("")}
+        </div>`,
+        `<div class="draft-tray spine-node ok">
+          <div class="draft-tray-head">
+            <span>Draft 2 · Final</span>
+            <span>2.97s · check passed</span>
+          </div>
+          ${draft2.map((c) => renderStep(c, q, inspectOn, true)).join("")}
+        </div>`,
+        ...postCalls.map((c) => renderStep(c, q, inspectOn, false))
+      ].join("");
+    }
+
+    function selectRegion(callId, regionName, ev) {
+      ev.stopPropagation();
+      activeRegion[callId] = regionName;
+      const stepEl = document.getElementById(`step-${callId}`);
+      const wasOpen = stepEl?.hasAttribute("open");
+      renderPipeline(document.getElementById("prompt-search").value.trim());
+      if (wasOpen) document.getElementById(`step-${callId}`)?.setAttribute("open", "");
+    }
+
+    // Exact data mapping #5: Generic Product Shape Renderer (list / record / table / text)
+    function renderShape(shape, val) {
+      if (shape.kind === "text") {
+        return `<p class="input-line">${escapeHtml(val)}</p>`;
+      }
+      if (shape.kind === "list") {
+        return `<ul class="shape-list">${(val || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+      }
+      if (shape.kind === "table") {
+        const cols = shape.columns || [];
+        return `<table class="shape-table">
+          <thead><tr>${cols.map((c) => `<th>${escapeHtml(c.key)}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${(val || [])
+              .map((row) => `<tr>${cols.map((c) => `<td>${escapeHtml(row[c.key])}</td>`).join("")}</tr>`)
+              .join("")}
+          </tbody>
+        </table>`;
+      }
+      if (shape.kind === "record") {
+        return `<dl class="shape-record">
+          ${(shape.keys || [])
+            .map((k) => {
+              const subVal = val?.[k.key];
+              const rendered = k.shape ? renderShape(k.shape, subVal) : escapeHtml(subVal);
+              return `<dt>${escapeHtml(k.key)}</dt><dd>${rendered}</dd>`;
+            })
+            .join("")}
+        </dl>`;
+      }
+      return "";
+    }
+
+    function renderProducts() {
+      const container = document.getElementById("products-list");
+      container.innerHTML = PRODUCTS.map(
+        (p) => `
+        <div class="prod-block">
+          <span class="prod-id">${escapeHtml(p.id)}</span>
+          ${renderShape(p.shape, p.value)}
+        </div>`
+      ).join("");
+    }
+
+    function renderHooks() {
+      const list = document.getElementById("hook-list");
+      list.innerHTML = UNTOLD_HOOKS.map(
+        (h, idx) => `
+        <div class="hook-item" data-pinned="${h.pinned}">
+          <div class="hook-body">
+            <span class="hook-id">${escapeHtml(h.id)}${h.pinned ? " · Armed for next send" : ""}</span>
+            <span class="hook-text">${escapeHtml(h.hook)}</span>
+          </div>
+          <button type="button" class="pin-btn" aria-label="Pin ${escapeHtml(h.id)}" aria-pressed="${h.pinned}" onclick="togglePin(${idx})">
+            ${
+              h.pinned
+                ? `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M235.33,104l-53.66,53.66c4.8,12.71,6.44,35.64-13.19,58.65a8,8,0,0,1-11.77.38L105.05,165,45.66,224.34a8,8,0,0,1-11.32-11.32L93.73,153.66,42.07,102a8,8,0,0,1,.38-11.77c23-19.63,45.94-18,58.65-13.19L154.76,23.4a8,8,0,0,1,11.31,0l69.26,69.29A8,8,0,0,1,235.33,104Z"/></svg>`
+                : `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M235.32,81.37,174.63,20.69a16,16,0,0,0-22.63,0L98.37,74.49c-10.66-3.34-35-7.37-60.4,13.14a16,16,0,0,0-1.29,23.78L85,159.71,42.34,202.34a8,8,0,0,0,11.32,11.32L96.29,171l48.29,48.29A16,16,0,0,0,167,220a15.86,15.86,0,0,0,11.39-4.76c20.43-25.43,16.45-49.72,13.11-60.38l43.82-43.8a16,16,0,0,0,0-22.69ZM166,204,48,86c16.82-11.39,35.47-8.77,44.41-5.15a16,16,0,0,0,17.27-3.42L163.31,24,232,92.69l-53.42,53.63a16,16,0,0,0-3.42,17.27C178.79,172.52,181.41,191.17,166,204Z"/></svg>`
+            }
+          </button>
+        </div>`
+      ).join("");
+    }
+
+    function togglePin(idx) {
+      UNTOLD_HOOKS.forEach((h, i) => {
+        h.pinned = i === idx ? !h.pinned : false;
+      });
+      renderHooks();
+    }
+
+    function filterPrompts(q) {
+      renderPipeline(q.trim());
+    }
+
+    function copyCall(id, btn) {
+      const c = CALLS.find((x) => x.id === id);
+      if (!c) return;
+      navigator.clipboard?.writeText(JSON.stringify(c, null, 2));
+      const old = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => (btn.textContent = old), 1200);
+    }
+
+    function setVp(vp, btn) {
+      document.getElementById("frame").dataset.vp = vp;
+      btn.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    }
+
+    function setInspect(mode, btn) {
+      document.getElementById("inspector").dataset.inspect = mode;
+      btn.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+      renderPipeline(document.getElementById("prompt-search").value.trim());
+    }
+
+    function setTheme(theme, btn) {
+      document.documentElement.dataset.theme = theme;
+      btn.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    }
+
+    function setMobilePane(pane, btn) {
+      document.getElementById("inspector").dataset.pane = pane;
+      btn.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
+    }
+
+    renderPipeline();
+    renderProducts();
+    renderHooks();
+  </script>
+</body>
+</html>

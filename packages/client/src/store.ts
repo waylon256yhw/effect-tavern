@@ -4,6 +4,7 @@
 // keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
 import * as Atom from "effect/reactivity/Atom"
@@ -29,6 +30,7 @@ export interface CardView {
   heading?: string // what titles a turn (Card.heading); absent, turns have no titles and there is no scene list
   input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
   rules: Rules
+  products: readonly { id: string; shape: Shape }[] // record products by declared shape: how the inspector draws them
   snippets: readonly Snippet[]
   format: readonly Format[]
 }

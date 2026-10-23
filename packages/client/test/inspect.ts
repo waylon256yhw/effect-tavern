@@ -1,59 +1,56 @@
-// The trace projection: calls laid on the six stages with the skeleton filled in, the second-draft loop and a stop
-// read off the order, a request split into regions at its cache breakpoints, totals summed over every node.
+// The pipeline projection: only the calls that ran, the second-draft loop and a stop read off the order, the drafts
+// folded into trays, a request split into regions at its cache breakpoints, one turn's totals.
 import assert from "node:assert/strict"
-import { regions, rows, totals, type Call } from "../src/inspect.ts"
+import { groups, isTray, missing, regions, rows, totals, type Call } from "../src/inspect.ts"
 
 const usage = { input: 100, output: 10, cacheRead: 50, cacheWrite: 0 }
 const call = (phase: Call["phase"], ms = 1): Call => ({ kind: "call", phase, msgs: [], out: {}, usage, ms })
 const shape = (rs: ReturnType<typeof rows>) =>
   rs.map((r) => [r.phase, r.status, r.draft].filter((x) => x !== undefined))
 
-// a chat card's turn: narrate and record only; the four other stages are dashed in pipeline order
-assert.deepEqual(shape(rows([call("narrate"), call("record")], { end: "end" })), [
-  ["lookup", "skipped"],
-  ["decide", "skipped"],
-  ["direct", "skipped"],
+// a chat card's turn: narrate and record only, two rows; the four other stages are named, not drawn
+const chat = [call("narrate"), call("record")]
+assert.deepEqual(shape(rows(chat, { end: "end" })), [
   ["narrate", "ok"],
-  ["check", "skipped"],
   ["record", "ok"],
 ])
-// the correction rewrite: check fails into a second narrate, both drafts numbered
-assert.deepEqual(
-  shape(
-    rows(
-      [
-        call("lookup"),
-        call("decide"),
-        call("direct"),
-        call("narrate"),
-        call("check"),
-        call("narrate"),
-        call("check"),
-        call("record"),
-      ],
-      { end: "end" },
-    ),
-  ),
+assert.deepEqual(missing(chat), ["lookup", "decide", "direct", "check"])
+// the correction rewrite: check fails into a second narrate, both drafts numbered, each draft one tray
+const rewrite = rows(
   [
-    ["lookup", "ok"],
-    ["decide", "ok"],
-    ["direct", "ok"],
-    ["narrate", "ok", 1],
-    ["check", "failed", 1],
-    ["narrate", "ok", 2],
-    ["check", "ok", 2],
-    ["record", "ok"],
+    call("lookup"),
+    call("decide"),
+    call("direct"),
+    call("narrate"),
+    call("check"),
+    call("narrate"),
+    call("check"),
+    call("record"),
   ],
+  { end: "end" },
 )
-// a stop mid-prose: the narrate is where the player halted, check never ran, record did
-assert.deepEqual(shape(rows([call("lookup"), call("narrate"), call("record")], { end: "stopped" })), [
+assert.deepEqual(shape(rewrite), [
   ["lookup", "ok"],
-  ["decide", "skipped"],
-  ["direct", "skipped"],
-  ["narrate", "stopped"],
-  ["check", "skipped"],
+  ["decide", "ok"],
+  ["direct", "ok"],
+  ["narrate", "ok", 1],
+  ["check", "failed", 1],
+  ["narrate", "ok", 2],
+  ["check", "ok", 2],
   ["record", "ok"],
 ])
+assert.deepEqual(
+  groups(rewrite).map((g) => (isTray(g) ? [g.draft, g.rows.map((r) => r.phase), g.failed] : g.phase)),
+  ["lookup", "decide", "direct", [1, ["narrate", "check"], true], [2, ["narrate", "check"], false], "record"],
+)
+// a stop mid-prose: the narrate is where the player halted, check never ran, record did; one draft, no tray
+const stopped = rows([call("lookup"), call("narrate"), call("record")], { end: "stopped" })
+assert.deepEqual(shape(stopped), [
+  ["lookup", "ok"],
+  ["narrate", "stopped"],
+  ["record", "ok"],
+])
+assert.ok(groups(stopped).every((g) => !isTray(g)))
 
 const bp = { anthropic: { cacheControl: { type: "ephemeral" } } }
 const sys = (content: string, mark = false) =>
@@ -69,12 +66,12 @@ assert.deepEqual(
     sys("l", true),
     usr("go"),
     sys("Tone: x"),
-  ]).map((r) => [r.name, r.msgs.length, r.chars]),
+  ]).map((r) => [r.name, r.msgs.length, r.chars, r.breakpoint]),
   [
-    ["Head", 2, 12],
-    ["Summary", 1, 7],
-    ["History", 2, 3],
-    ["Input", 2, 9],
+    ["Head", 2, 12, true],
+    ["Summary", 1, 7, true],
+    ["History", 2, 3, true],
+    ["Input", 2, 9, false],
   ],
 )
 // a decide request: head, then the ledger and the input unmarked
@@ -93,12 +90,12 @@ assert.equal(
   3,
 )
 
-assert.deepEqual(totals([[call("narrate", 5), call("record", 2)], [call("narrate", 3)]]), {
-  requests: 3,
-  input: 300,
-  output: 30,
-  cacheRead: 150,
+assert.deepEqual(totals([call("narrate", 5), call("record", 2)]), {
+  calls: 2,
+  input: 200,
+  output: 20,
+  cacheRead: 100,
   cacheWrite: 0,
-  ms: 10,
+  ms: 7,
 })
 console.log("ok")
