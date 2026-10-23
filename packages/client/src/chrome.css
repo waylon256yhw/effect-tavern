@@ -339,6 +339,9 @@
   padding: var(--space-1);
   border: 0;
   border-radius: var(--radius-card);
+  /* one grid for the rows: the name column as wide as the widest name, the hints aligned after it */
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
   background: var(--surface-3);
   color: inherit;
   box-shadow:
@@ -369,10 +372,11 @@
     translate: 0 8px;
   }
 }
-/* a row: the name in a fixed column (four CJK characters), the hint aligned after it, the fill glyph at the end */
+/* a row: the name, the hint aligned after it, the fill glyph at the end; the columns are the menu's */
 .snippets .item {
   display: grid;
-  grid-template-columns: 4.5em minmax(0, 1fr) auto;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   gap: var(--space-2);
   width: 100%;
@@ -405,12 +409,51 @@
   display: none;
 }
 .snippets hr {
+  grid-column: 1 / -1;
   margin: var(--space-1) var(--space-2);
   border: 0;
   border-top: var(--hairline) solid var(--line);
 }
-.snippets .item:is(:hover, :focus-visible) {
+.snippets .item:not(:disabled):is(:hover, :focus-visible) {
   background: var(--ghost-hover);
+}
+
+.snippets .item:disabled {
+  color: var(--ink-3);
+}
+/* the confirm: a small centred dialog on the scrim, the sheet's surface and radius; the deed sits last, in red */
+.confirm {
+  width: min(22rem, calc(100% - 2 * var(--space-4)));
+  margin: auto;
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-dialog);
+  background: var(--surface-3);
+  color: inherit;
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  outline: none;
+}
+.confirm::backdrop {
+  background: var(--scrim);
+}
+.confirm p {
+  margin: 0 0 var(--space-4);
+}
+.confirm .row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.confirm .chip {
+  height: var(--control);
+  padding: 0 var(--space-4);
+  font-size: var(--text-body);
+}
+.chip.danger {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */

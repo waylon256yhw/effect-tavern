@@ -4,6 +4,7 @@
 //                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
 //                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
 //   GET  /nodes   every node's projection, for a client that just opened.
+//   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the snapshot.
 //   GET  /calls   the `call` events of recent turns by node id: the inspector's trace. They evaporate with the SSE
 //                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
 //                 outputs-only, and a restart starts the trace over.
@@ -37,7 +38,7 @@ const reason = (c: Cause.Cause<unknown>) => {
 export type Call = Extract<Event, { kind: "call" }>
 const KEEP = 200 // ponytail: nodes whose calls stay in memory; a ring over the journal if a long story needs more
 
-export const handle = (session: Session, { inspect = false } = {}) => {
+export const handle = (s: Session, { inspect = false } = {}) => {
   const calls = new Map<number, Call[]>() // insertion order = age; an amend (demand, pin) appends to its node
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
   return async (req: IncomingMessage, res: ServerResponse) => {
@@ -45,19 +46,26 @@ export const handle = (session: Session, { inspect = false } = {}) => {
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
     }
+    const snapshot = () => s.nodes().map((t) => s.node(t.id))
     if (req.method === "GET" && req.url === "/card")
       return json(200, {
-        ...session.meta,
-        rules: session.rules,
-        products: session.products,
-        snippets: session.snippets,
-        format: session.format,
+        ...s.meta,
+        greetings: s.greetings.length,
+        rules: s.rules,
+        products: s.products,
+        snippets: s.snippets,
+        format: s.format,
       })
-    if (req.method === "GET" && req.url === "/nodes")
-      return json(
-        200,
-        session.nodes().map((t) => session.node(t.id)),
-      )
+    if (req.method === "GET" && req.url === "/nodes") return json(200, snapshot())
+    const dropping = req.method === "DELETE" && /^\/nodes\/(\d+)$/.exec(req.url ?? "")
+    if (dropping) {
+      try {
+        for (const id of s.drop(Number(dropping[1]))) calls.delete(id)
+      } catch (e) {
+        return json(404, { error: e instanceof Error ? e.message : String(e) })
+      }
+      return json(200, snapshot())
+    }
     if (req.method === "GET" && req.url === "/calls") return json(200, Object.fromEntries(calls))
     if (req.method !== "POST" || req.url !== "/") return json(404, { error: "not found" })
     let action
@@ -75,7 +83,7 @@ export const handle = (session: Session, { inspect = false } = {}) => {
     const made: Call[] = [] // this action's calls, filed under its node once the node exists
     const stop = Effect.runSync(Deferred.make<void>())
     const fiber = Effect.runFork(
-      Stream.runForEach(perform(session, action, Deferred.await(stop)), (e) =>
+      Stream.runForEach(perform(s, action, Deferred.await(stop)), (e) =>
         Effect.sync(() => {
           // Each draft starts over: a stop before its first character withdraws the turn, even on the correction rewrite.
           if (e.kind === "stage" && e.phase === "narrate") narrating = false

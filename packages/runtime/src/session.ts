@@ -687,6 +687,10 @@ export const makeSession = ({
         }),
       ),
     node: (id: number): Node => project(journal.get(id)),
+    /** The card's openings, for the greet action: a new thread is a new root, so the client asks for one by index. */
+    greetings: card.greetings,
+    /** A node and its descendants gone for good: deleting a thread is dropping its root. The ids dropped come back. */
+    drop: (id: number): number[] => journal.drop(id),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
     /** The record products by id and shape, for a client that draws a node's products by their declared shape. */
@@ -765,6 +769,7 @@ export const Action = Schema.Union([
       pin: Schema.optionalKey(Schema.String),
     }),
   }),
+  Schema.Struct({ kind: Schema.Literal("greet"), greeting: Schema.optionalKey(Id) }), // a new root from the card's opening
   Schema.Struct({ kind: Schema.Literal("swipe"), node: Id }),
   Schema.Struct({ kind: Schema.Literal("reword"), node: Id, note: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ kind: Schema.Literal("edit"), node: Id, text: Schema.String }),
@@ -780,6 +785,11 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
     switch (a.kind) {
       case "act":
         return s.act(a.parent, a.input, stop)
+      case "greet": {
+        const g = s.greetings[a.greeting ?? 0]
+        if (!g) throw new Error(`no greeting ${a.greeting ?? 0}`)
+        return Stream.succeed<Event>({ kind: "node", node: s.greet(g) })
+      }
       case "swipe":
         return s.swipe(a.node, stop)
       case "reword":

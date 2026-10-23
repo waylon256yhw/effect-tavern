@@ -5,7 +5,7 @@ import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
-import { Change, Close, Clue, Die, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
+import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { heading, record, status, type Element } from "./record.ts"
 import { card, latest, nodes, pin, registry } from "./store.ts"
 
@@ -194,9 +194,15 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   )
 }
 
-/** The sibling actions on a node: Swipe, and Reword with a word for the narrator ("plainer"), which rides as that
- *  sibling's note. The Record sheet's footer on the phone, the right card's on the desktop. */
-export const Rewrite = (props: { busy: boolean; onSwipe: () => void; onReword: (note?: string) => void }) => {
+/** The sibling actions on a node: Swipe, Reword with a word for the narrator ("plainer"), which rides as that
+ *  sibling's note, and Edit, which turns the prose into a textarea in place (App.tsx `Editor`). The Record sheet's
+ *  footer on the phone, the right card's on the desktop. */
+export const Rewrite = (props: {
+  busy: boolean
+  onSwipe: () => void
+  onReword: (note?: string) => void
+  onEdit: () => void
+}) => {
   let direction!: HTMLInputElement
   const reword = () => {
     const note = direction.value.trim()
@@ -218,6 +224,9 @@ export const Rewrite = (props: { busy: boolean; onSwipe: () => void; onReword: (
       <button class="icon" aria-label="Reword" disabled={props.busy} onClick={reword}>
         <Reword />
       </button>
+      <button class="icon" aria-label="Edit" disabled={props.busy} onClick={() => props.onEdit()}>
+        <Edit />
+      </button>
     </footer>
   )
 }
@@ -228,6 +237,7 @@ export const RecordSheet = (props: {
   busy: boolean
   onSwipe: () => void
   onReword: (note?: string) => void
+  onEdit: () => void
 }) => {
   const all = read(nodes)
   const view = read(card)
@@ -255,6 +265,7 @@ export const RecordSheet = (props: {
             busy={props.busy}
             onSwipe={() => (dlg.close(), props.onSwipe())}
             onReword={(note) => (dlg.close(), props.onReword(note))}
+            onEdit={() => (dlg.close(), props.onEdit())}
           />
         }
       >

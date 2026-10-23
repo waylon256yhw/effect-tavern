@@ -1,12 +1,13 @@
 // The composer: the one raised object under the column. The box, the format keys, the snippets menu (+, or / on an
-// empty box), the ⋯ Session menu (the Inspector), the channel chip, Send / Stop.
+// empty box), the ⋯ Session menu (the Inspector, Start over, Delete story), the channel chip, Send / Stop.
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Close, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { openInspector } from "./inspector.tsx"
-import { aside, card, compose, pin, registry } from "./store.ts"
+import { active, aside, card, compose, error, nodes, path, pin, registry, started } from "./store.ts"
+import { dropNodes, send } from "./wire.ts"
 
 export const Composer = (props: {
   busy: boolean
@@ -29,6 +30,27 @@ export const Composer = (props: {
   // This one send is a note (participant mode only). It is one state, not a tag per snippet: any number of note snippets
   // may go into the box, the chip says only where the send goes; it clears after the send.
   const toNarratorOn = read(aside)
+  // A thread is a root's subtree, so starting over is a new root: the card's opening when it has one, else the
+  // player's next line (the reading line empties until it lands). The old thread stays as the first turn's version.
+  // Deleting a thread drops its root; an empty journal on a card with an opening greets again. Neither acts on a
+  // thread with no player turn yet: there is nothing to leave behind or take.
+  const begun = read(started)
+  const open = () => (view()?.greetings ?? 0) > 0
+  const clean = () => {
+    registry.set(pin, null)
+    registry.set(error, null)
+  }
+  const startOver = () => {
+    clean()
+    registry.update(active, (m) => new Map(m).set(null, null))
+    if (open()) send({ kind: "greet" })
+  }
+  let confirmDrop!: HTMLDialogElement
+  const deleteStory = async () => {
+    clean()
+    await dropNodes(registry.get(path)[0]!.turn.id) // the item is disabled while the line is empty
+    if (registry.get(nodes).size === 0 && open()) send({ kind: "greet" })
+  }
   const isNote = () => !acting() || toNarratorOn()
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
   const prompt = () => (isNote() ? "To the narrator, not in the story…" : "Your line…")
@@ -189,20 +211,49 @@ export const Composer = (props: {
               e.newState === "open" && e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
             }
           >
-            <button
-              type="button"
-              role="menuitem"
-              class="item"
-              tabindex="-1"
-              onClick={(e) => {
-                e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()
-                openInspector()
-              }}
+            <For
+              each={[
+                { name: "Inspector", hint: "What the engine did this turn", go: openInspector },
+                { name: "Start over", hint: "A new story; this one stays as a version", go: startOver, off: true },
+                {
+                  name: "Delete story",
+                  hint: "Every turn of this story, for good",
+                  go: () => confirmDrop.showModal(),
+                  off: true,
+                },
+              ]}
+              keyed={(i) => i.name}
             >
-              <span class="name">Inspector</span>
-              <span class="hint">What the engine did this turn</span>
-            </button>
+              {(i) => (
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="item"
+                  tabindex="-1"
+                  disabled={i().off && (props.busy || !begun())}
+                  onClick={(e) => {
+                    e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()
+                    i().go()
+                  }}
+                >
+                  <span class="name">{i().name}</span>
+                  <span class="hint">{i().hint}</span>
+                </button>
+              )}
+            </For>
           </div>
+          {/* the one destructive action asks once, in the app's own dialog: Cancel on the left, the deed in red */}
+          <dialog class="confirm" ref={(el) => (confirmDrop = el)} closedby="any">
+            <p>Delete this story? Every turn in it is gone for good.</p>
+            <div class="row">
+              <button type="button" class="chip state" onClick={() => confirmDrop.close()}>
+                Cancel
+              </button>
+              <button type="button" class="chip danger" onClick={() => (confirmDrop.close(), void deleteStory())}>
+                Delete
+              </button>
+            </div>
+          </dialog>
           <Show when={acting() && toNarratorOn()}>
             <button
               type="button"

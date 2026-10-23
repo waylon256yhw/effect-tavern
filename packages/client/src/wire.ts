@@ -1,4 +1,5 @@
-// The seam to packages/server: `GET /card` and `GET /nodes` are the snapshot, `POST /` is one action whose events come back as SSE.
+// The seam to packages/server: `GET /card` and `GET /nodes` are the snapshot, `POST /` is one action whose events come back as SSE,
+// `DELETE /nodes/<id>` drops a node and everything under it (the reply is the snapshot).
 // Closing the response is the stop (before the first delta it withdraws the turn, after it the prose halts).
 import type { Action, Node } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
@@ -9,6 +10,8 @@ const base = "/api"
 export const fetchNodes = async (): Promise<void> => load((await (await fetch(`${base}/nodes`)).json()) as Node[])
 export const fetchCard = async (): Promise<void> =>
   registry.set(card, (await (await fetch(`${base}/card`)).json()) as CardView)
+export const dropNodes = async (id: number): Promise<void> =>
+  load((await (await fetch(`${base}/nodes/${id}`, { method: "DELETE" })).json()) as Node[])
 export const fetchCalls = async (): Promise<void> => {
   const by = (await (await fetch(`${base}/calls`)).json()) as Record<string, Call[]>
   registry.set(calls, new Map(Object.entries(by).map(([id, list]) => [Number(id), list])))

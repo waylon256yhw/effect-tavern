@@ -13,6 +13,7 @@ import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "s
 import { read } from "./bridge.ts"
 import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
+import { imeController } from "./ime.ts"
 import {
   Contents,
   DieFill,
@@ -38,6 +39,7 @@ import {
   compose,
   draft,
   type Draft,
+  editing,
   error,
   inspecting,
   latest,
@@ -77,6 +79,34 @@ const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
         </p>
       )}
     </For>
+  )
+}
+
+/** The prose in place as a textarea (Edit): ⌘↵ sends it as an `edit` sibling (check and record run over the player's
+ *  text, nothing is narrated), Escape cancels, and so does sending it unchanged or empty. Bare Enter is a paragraph. */
+const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
+  let box!: HTMLTextAreaElement
+  const submit = () => {
+    const t = box.value.trim()
+    props.onDone(t && t !== props.text ? t : undefined)
+    return true
+  }
+  // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
+  const ime = imeController(submit)
+  onSettled(() => {
+    box.focus()
+    box.setSelectionRange(box.value.length, box.value.length)
+  })
+  return (
+    <textarea
+      class="editor"
+      aria-label="Edit the prose"
+      ref={(el) => (box = el)}
+      value={props.text}
+      onCompositionStart={ime.compositionStart}
+      onCompositionEnd={ime.compositionEnd}
+      onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
+    />
   )
 }
 
@@ -301,8 +331,10 @@ const Section = (props: {
   busy: boolean
   onSwipe: () => void
   onReword: (note?: string) => void
+  onEdit: (text?: string) => void // without text: open the editor; with it: send the edit; `undefined` from the editor: cancel
 }) => {
   const all = read(nodes)
+  const edited = read(editing)
   const siblings = createMemo(() => childrenOf(all(), props.node.turn.parent))
   // how many nodes follow a version: what the player leaves behind by switching away from it
   const below = (id: Id) => {
@@ -327,7 +359,9 @@ const Section = (props: {
   return (
     <section id={`node-${props.node.turn.id}`}>
       <Said input={props.node.turn.input} />
-      <Paragraphs text={prose(props.node)} />
+      <Show when={edited() === props.node.turn.id} fallback={<Paragraphs text={prose(props.node)} />}>
+        <Editor text={prose(props.node)} onDone={(t) => props.onEdit(t)} />
+      </Show>
       <footer class="actions">
         <RecordSheet
           node={props.node}
@@ -335,6 +369,7 @@ const Section = (props: {
           busy={props.busy}
           onSwipe={props.onSwipe}
           onReword={props.onReword}
+          onEdit={() => props.onEdit()}
         />
         <Show when={siblings().length > 1}>
           <span class="siblings">
@@ -408,9 +443,14 @@ const Reader = () => {
   let stop: (() => void) | null = null
   onSettled(() => void Promise.all([fetchCard(), fetchNodes()]))
 
-  const start = (parent: Id | null, input: { text: string; note?: string }, action: Parameters<typeof send>[0]) => {
+  const start = (
+    parent: Id | null,
+    input: { text: string; note?: string },
+    action: Parameters<typeof send>[0],
+    text = "", // an edit's draft is the player's text, shown while check and record run over it
+  ) => {
     registry.set(error, null)
-    registry.set(draft, { parent, input, text: "" })
+    registry.set(draft, { parent, input, text })
     stop = send(action)
   }
   const onSend = (text: string, note: boolean) => {
@@ -423,6 +463,12 @@ const Reader = () => {
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
   const onReword = (n: Node, note?: string) =>
     start(n.turn.parent, n.turn.input, { kind: "reword", node: n.turn.id, ...(note !== undefined && { note }) })
+  // Edit: the first call opens the editor on the node, the editor's call closes it, with the text to send or none.
+  const onEdit = (n: Node, text?: string) => {
+    const open = registry.get(editing) !== n.turn.id
+    registry.set(editing, open ? n.turn.id : null)
+    if (!open && text !== undefined) start(n.turn.parent, n.turn.input, { kind: "edit", node: n.turn.id, text }, text)
+  }
   const onStop = async () => {
     if (!stop) return
     stop()
@@ -457,6 +503,7 @@ const Reader = () => {
                   busy={busy()}
                   onSwipe={() => onSwipe(n())}
                   onReword={(note) => onReword(n(), note)}
+                  onEdit={(text) => onEdit(n(), text)}
                 />
               )}
             </For>
@@ -471,7 +518,7 @@ const Reader = () => {
         />
         <Latest />
       </div>
-      <Glance busy={busy()} onSwipe={onSwipe} onReword={onReword} />
+      <Glance busy={busy()} onSwipe={onSwipe} onReword={onReword} onEdit={onEdit} />
     </>
   )
 }
@@ -501,7 +548,12 @@ const Side = () => {
 
 /** Desktop's right card: the Status table and the latest turn's Record with its sibling actions, inline. Rendered by
  *  the Reader (the actions are its), as a sibling of the panel in the canvas grid; the latest section's pill hides. */
-const Glance = (props: { busy: boolean; onSwipe: (n: Node) => void; onReword: (n: Node, note?: string) => void }) => {
+const Glance = (props: {
+  busy: boolean
+  onSwipe: (n: Node) => void
+  onReword: (n: Node, note?: string) => void
+  onEdit: (n: Node) => void
+}) => {
   const last = read(latest)
   return (
     <aside class="side">
@@ -518,6 +570,7 @@ const Glance = (props: { busy: boolean; onSwipe: (n: Node) => void; onReword: (n
               busy={props.busy}
               onSwipe={() => props.onSwipe(l().node)}
               onReword={(note) => props.onReword(l().node, note)}
+              onEdit={() => props.onEdit(l().node)}
             />
           </section>
         )}

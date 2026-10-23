@@ -21,7 +21,7 @@ export type Wire = Event | { kind: "error"; message: string }
 
 export const registry = AtomRegistry.make()
 export const nodes = Atom.make<ReadonlyMap<Id, Node>>(new Map())
-export const active = Atom.make<ReadonlyMap<Id | null, Id>>(new Map())
+export const active = Atom.make<ReadonlyMap<Id | null, Id | null>>(new Map()) // a null child: none chosen, a new thread begins here
 export const draft = Atom.make<Draft | null>(null)
 /** What the client draws the card by (GET /card): read once at open, before anything subscribes, hence keepAlive. */
 export interface CardView {
@@ -29,6 +29,7 @@ export interface CardView {
   title: string
   heading?: string // what titles a turn (Card.heading); absent, turns have no titles and there is no scene list
   input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
+  greetings: number // how many openings the card has: a new thread starts with one (greet) or with the player's line (none)
   rules: Rules
   products: readonly { id: string; shape: Shape }[] // record products by declared shape: how the inspector draws them
   snippets: readonly Snippet[]
@@ -39,6 +40,7 @@ export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an unt
 export const compose = Atom.make("") // the composer's text; an Options row writes here and never sends
 export const aside = Atom.make(false) // this one send goes to the narrator (participant mode's deviation); clears after the send
 export const stage = Atom.make<Phase | null>(null)
+export const editing = Atom.make<Id | null>(null) // the node whose prose is a textarea in place (Edit), until sent or cancelled
 export const error = Atom.make<string | null>(null)
 /** The Inspect page: the node under inspection, or null while reading; the calls by node (GET /calls), read on open. */
 export const inspecting = Atom.make<Id | null>(null)
@@ -56,8 +58,9 @@ export const path = Atom.make((get) => {
   let parent: Id | null = null
   for (;;) {
     const kids = childrenOf(all, parent)
-    if (kids.length === 0) return out
-    const next: Node = all.get(chosen.get(parent)!) ?? kids.at(-1)!
+    const pick = chosen.get(parent)
+    if (kids.length === 0 || pick === null) return out
+    const next: Node = all.get(pick!) ?? kids.at(-1)!
     out.push(next)
     parent = next.turn.id
   }
@@ -70,6 +73,9 @@ export const latest = Atom.make((get) => {
   const node = line.at(-1)
   return node ? { node, prev: line.at(-2) } : null
 })
+
+/** Whether the reading line holds a player's turn: what Start over leaves behind and Delete story takes. */
+export const started = Atom.make((get) => get(path).some((n) => n.turn.input.text || n.turn.input.note))
 
 export const prose = (n: Node): string =>
   n.turn.reply

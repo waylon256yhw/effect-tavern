@@ -1,6 +1,6 @@
 // The adapter on a scripted session over a real socket: an action goes in as JSON, its events come back as SSE in the
 // session's order, a bad body is a 400, a bad action is an `error` event, and `inspect` decides whether `call` events
-// carry the request.
+// carry the request. `greet` opens a new root, DELETE /nodes/<id> drops a subtree, both answer with the snapshot.
 import { fake, fakeText } from "@effect-tavern/provider"
 import { makeSession, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, player } from "@effect-tavern/runtime/test/cards/wuxia.ts"
@@ -25,7 +25,7 @@ const model = {
   ),
   prefill: false,
 }
-const session = makeSession({ card: chat, player, model })
+const session = makeSession({ card: { ...chat, greetings: [{ text: "G" }] }, player, model })
 
 const wired = (v: unknown) => JSON.parse(JSON.stringify(v)) as unknown // what JSON keeps: no `undefined` keys
 const sse = (text: string) =>
@@ -89,11 +89,33 @@ const run = async (inspect: boolean) => {
     assert.equal(bad.status, 400)
     assert.equal((await post("{")).status, 400)
 
-    const err = sse(await (await post({ kind: "setField", node: 0, effects: [{ path: "x", set: 1 }] })).text())
+    const err = sse(
+      await (await post({ kind: "setField", node: node.turn.id, effects: [{ path: "x", set: 1 }] })).text(),
+    )
     assert.deepEqual([err.length, err[0]!.event, /x/.test(err[0]!.data.message!)], [1, "error", true])
     // A parent that does not exist is a defect on the stream, not a new root (it once became its own parent and spun).
     const orphan = sse(await (await post({ kind: "act", parent: 99, input: { text: "hi" } })).text())
     assert.deepEqual([orphan.length, orphan[0]!.event, /99/.test(orphan[0]!.data.message!)], [1, "error", true])
+
+    // a new thread is a greeting root; dropping a root takes its subtree, the trace with it, and ids never come back
+    const greeted = sse(await (await post({ kind: "greet" })).text())
+    const g = (greeted.at(-1)!.data as Extract<Event, { kind: "node" }>).node.turn
+    assert.deepEqual([g.parent, g.input.text, (g.reply[0] as { text: string }).text], [null, "", "G"])
+    const noSuch = sse(await (await post({ kind: "greet", greeting: 3 })).text())
+    assert.deepEqual([noSuch.length, noSuch[0]!.event], [1, "error"])
+    const tree = session.nodes().map((t) => t.id)
+    const hadTrace = Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length
+    const left = (await (await fetch(`${base}/nodes/${node.turn.id}`, { method: "DELETE" })).json()) as {
+      turn: { id: number }
+    }[]
+    assert.deepEqual(
+      left.map((n) => n.turn.id),
+      tree.filter((id) => id !== node.turn.id && id !== node.turn.id + 1),
+    ) // "hi" and its pick "B"
+    assert.ok(Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length < hadTrace)
+    assert.equal((await fetch(`${base}/nodes/${node.turn.id}`, { method: "DELETE" })).status, 404)
+    const again = sse(await (await post({ kind: "act", parent: null, input: { text: "hi" } })).text())
+    assert.equal((again.at(-1)!.data as Extract<Event, { kind: "node" }>).node.turn.id, Math.max(...tree) + 1)
   } finally {
     server.close()
   }
