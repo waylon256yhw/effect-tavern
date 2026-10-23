@@ -411,12 +411,15 @@ button.said:is(:hover, :focus-visible) svg {
   color: var(--ink-2);
   text-align: left;
 }
-.error svg {
+.error > svg {
   flex: none;
   width: var(--icon-sm);
   height: var(--icon-sm);
   margin-top: 2px;
   color: var(--danger);
+}
+.error .icon {
+  margin: -6px -8px -6px auto; /* the control's box hangs over the padding: the row stays one line of text tall */
 }
 
 button {

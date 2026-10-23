@@ -2,7 +2,7 @@
   "name": "effect-tavern",
   "private": true,
   "scripts": {
-    "dev": "cd packages/client && vp dev",
+    "dev": "cd packages/client && bun --bun vp dev",
     "verify": "pnpm -r verify"
   },
   "devDependencies": {

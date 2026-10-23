@@ -262,6 +262,21 @@ const program = Effect.gen(function* () {
   const v5 = str(lastNarr())
   assert.ok(v5.includes("A trusts the player.") && !v5.includes("arm's length"))
   assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 3), prompts("narrate").at(-3)!.slice(0, 3)) // prefix intact
+  // A stop that fires while check runs (the client closed after the whole first draft): the rewrite halts before its
+  // first character, the first draft stands as the stopped reply with its verdict, and no second check runs.
+  i = calls().length
+  narrations.push("kill")
+  const late = yield* Deferred.make<void>()
+  const t5s = yield* go(
+    S.act(t3.id, { text: "finish him" }, Deferred.await(late)).pipe(
+      Stream.tap((e) => (e.kind === "stage" && e.phase === "check" ? Deferred.succeed(late, undefined) : Effect.void)),
+    ),
+  )
+  assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "record"])
+  assert.deepEqual([t5s.end, t5s.violated, prose(t5s).endsWith("KILL")], ["stopped", ["B does not die"], true])
+  // nothing to run from: an act of nothing, an edit of nothing
+  for (const ex of [yield* Effect.exit(go(S.act(t3.id, { text: "" }))), yield* Effect.exit(go(S.edit(t3.id, {})))])
+    assert.ok(ex._tag === "Failure" && /empty input|nothing to edit/.test(String(Cause.squash(ex.cause))))
   i = calls().length
   const t6 = yield* go(S.act(t5.id, { text: "rest" }))
   assert.ok(!str(lastNarr()).includes("Previous draft broke"))

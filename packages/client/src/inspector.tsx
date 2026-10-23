@@ -568,7 +568,7 @@ export const Inspect = (props: { id: Id }) => {
                 <span class="lbl">State</span>
                 <span class="meta">
                   <Show when={parent()} fallback="after this node">
-                    {(p) => `vs ${turnOf(line(), p().turn.id)}`}
+                    {(p) => <>vs {turnOf(line(), p().turn.id)}</>}
                   </Show>
                   <Show when={x().events.length}> · {x().events.join(", ")}</Show>
                 </span>

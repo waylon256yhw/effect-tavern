@@ -457,6 +457,10 @@ export const makeSession = ({
     stop?: Stop,
   ) =>
     Effect.gen(function* () {
+      // no line and no note: nothing to run the narrator from (an act of nothing, or a sibling of an opening; an edit
+      // of the prose alone starts at check and needs none)
+      if (from !== "check" && !input.text && !input.note)
+        throw new Error(base ? `node ${base.id}: nothing to rerun` : "empty input")
       const path = chain(parent)
       const s0 = stateAt(path)
       const g0 = gated(path)
@@ -635,10 +639,15 @@ export const makeSession = ({
         const missed = brief.must.filter((id) => !c.fired.includes(id))
         // the player's own prose (an edit) is never rewritten: its verdict is recorded and stands
         if (from !== "check" && (c.violated.length || missed.length)) {
-          reply = yield* narrate(
+          const again = yield* narrate(
             `${wording("narrate.correction")} ${[...c.violated.map((r) => `rule "${r}"`), ...missed.map((m) => `missed MUST ${m}`)].join("; ")}`,
           )
-          c = yield* check(proseOf(reply))
+          // A stop that fired while check ran halts the rewrite before its first character: the first draft stands,
+          // stopped, with its verdict (the halted rewrite once became an empty stopped node).
+          if (!cut || proseOf(again)) {
+            reply = again
+            c = yield* check(proseOf(reply))
+          }
         }
         fired = open.filter((d) => c.fired.includes(d.id))
         violated = [...c.violated]
@@ -677,8 +686,6 @@ export const makeSession = ({
     })
   const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>, stop?: Stop) => {
     const base = { ...turnOf(nodeId), ...patch }
-    // an opening has no input to rerun the narrator from; only its prose can be edited
-    if (from !== "check" && !base.input.text && !base.input.note) throw new Error(`node ${nodeId}: nothing to rerun`)
     return emitting((emit) => turn(emit, base.parent, base.input, from, base, stop))
   }
 
@@ -750,10 +757,12 @@ export const makeSession = ({
      *  and record run over it, so what enters the record is only what the edit fired and answered (README §5 direction
      *  3). Revising the line while keeping the prose is for a change of wording, not of what happened: the beats stay. */
     edit: (nodeId: number, patch: { text?: string; input?: Input }): Events =>
-      sibling(nodeId, "check", {
-        ...(patch.text !== undefined && { reply: [{ type: "text", text: patch.text }] }),
-        ...(patch.input && { input: patch.input }),
-      }),
+      patch.text === undefined && !patch.input
+        ? Stream.die(new Error(`node ${nodeId}: nothing to edit`))
+        : sibling(nodeId, "check", {
+            ...(patch.text !== undefined && { reply: [{ type: "text", text: patch.text }] }),
+            ...(patch.input && { input: patch.input }),
+          }),
     /** The player sets fields on a node (a status bar's +/-): effects appended to the node's `adjust`, validated against
      *  the card's bounds and enums now, replayed in the fold after everything the turn itself did. Every descendant sees
      *  it. A value outside the field throws and leaves the node as it was. */

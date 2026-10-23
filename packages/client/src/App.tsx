@@ -37,10 +37,13 @@ import { Timeline } from "./timeline.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record, scenes } from "./record.ts"
 import {
+  apply,
   arrived,
   aside,
   card,
+  clear,
   compose,
+  dismiss,
   type Draft,
   draft,
   editing,
@@ -54,6 +57,7 @@ import {
   prose,
   registry,
   revising,
+  settle,
   stage,
   timeline,
   withdraw,
@@ -244,6 +248,9 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) =
           <p class="error" role="alert">
             <Warning aria-hidden="true" />
             {e()}
+            <button type="button" class="icon" aria-label="Dismiss" onClick={dismiss}>
+              <Close />
+            </button>
           </p>
         )}
       </Show>
@@ -468,8 +475,7 @@ const Reader = () => {
   // the draft hangs under its parent: a sibling of a past turn cuts the line there while it is written
   const shown = createMemo(() => {
     const dr = d()
-    const i = dr ? line().findIndex((n) => n.id === dr.parent) : -1
-    return i >= 0 ? line().slice(0, i + 1) : line()
+    return dr ? line().slice(0, line().findIndex((n) => n.id === dr.parent) + 1) : line() // a root's draft: nothing above
   })
   let stop: (() => void) | null = null
   onSettled(() => void Promise.all([fetchCard(), fetchNodes()]))
@@ -481,7 +487,7 @@ const Reader = () => {
     text = "", // an edit's draft is the player's text, shown while check and record run over it
   ) => {
     registry.set(error, null)
-    registry.set(draft, { parent, input, text })
+    registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
     stop = send(action)
   }
   const onSend = (text: string, note: boolean) => {
@@ -523,7 +529,11 @@ const Reader = () => {
   }
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
   const onReword = (n: Node, note?: string) =>
-    start(n.turn.parent, n.turn.input, { kind: "reword", node: n.turn.id, ...(note !== undefined && { note }) })
+    start(
+      n.turn.parent,
+      { ...n.turn.input, note: [n.turn.input.note, note].filter(Boolean).join("\n") || undefined }, // joined as the session joins it
+      { kind: "reword", node: n.turn.id, ...(note !== undefined && { note }) },
+    )
   // Edit: the first call opens the editor on the node, the editor's call closes it, with the text to send or none.
   const onEdit = (n: Node, text?: string) => {
     const open = registry.get(editing) !== n.turn.id
@@ -538,16 +548,17 @@ const Reader = () => {
     const was = registry.get(log).nodes.size
     if (!arrived()) {
       withdraw()
-      return registry.set(draft, null)
+      return clear() // the revision, if any, stays: its line is back in the box under it
     }
     registry.set(stage, "record") // what the server is doing with the cut prose; the Record slot waits for it
     for (let i = 0; i < 100 && registry.get(log).nodes.size === was; i++) {
       await new Promise((r) => setTimeout(r, 300))
       await fetchNodes()
     }
-    if (registry.get(log).nodes.size === was) withdraw() // record failed on the server: the line comes back
-    registry.set(draft, null)
-    registry.set(stage, null)
+    // record failed on the server (the closed response never carried its error): the ghost says so, the line comes back
+    if (registry.get(log).nodes.size === was)
+      return apply({ kind: "error", message: "The stopped turn was not recorded" })
+    settle()
   }
 
   return (
@@ -561,7 +572,7 @@ const Reader = () => {
                 <Section
                   node={n()}
                   n={i() + 1}
-                  last={!d() && i() === shown().length - 1}
+                  last={!busy() && i() === shown().length - 1}
                   busy={busy()}
                   onSwipe={() => onSwipe(n())}
                   onReword={(note) => onReword(n(), note)}

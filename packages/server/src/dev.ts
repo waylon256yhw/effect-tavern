@@ -83,6 +83,8 @@ const answer = (o: FakeCall) => {
 }
 
 const live = (): SessionModel => {
+  // the proxy rides on Bun's fetch (provider connection.ts): on Node a live request goes direct and fails behind one
+  if (!("Bun" in globalThis)) throw new Error("live model needs Bun: bun --bun vp run dev, or MODEL=fake")
   const conn = localAnthropic()
   if (!conn)
     throw new Error("no connection: put an Anthropic key where provider's localAnthropic() reads it, or MODEL=fake")

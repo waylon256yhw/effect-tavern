@@ -17,6 +17,7 @@ export interface Draft {
   input: { text: string; note?: string }
   text: string
   prev?: string // the discarded first draft, shown greyed under the rewrite
+  fresh?: boolean // the line is nowhere else (an act, a revised line): a failed turn puts it back in the composer
 }
 export type Wire = Event | { kind: "error"; message: string }
 
@@ -106,7 +107,7 @@ const play = {
   credit: 0, // sub-grapheme playout budget carried between frames
   at: 0, // last frame
   frame: undefined as number | undefined,
-  ended: false,
+  ended: true, // nothing more to play: the loop stops when the queue is empty
 }
 const resetPlay = () => {
   if (play.frame !== undefined) cancelAnimationFrame(play.frame)
@@ -121,7 +122,7 @@ const resetPlay = () => {
     credit: 0,
     at: 0,
     frame: undefined,
-    ended: false,
+    ended: true,
   })
 }
 /** Whether any prose has arrived for the current draft, shown or still queued: what a stop before it withdraws. */
@@ -150,11 +151,12 @@ const enqueue = (chunk: string) => {
 }
 const tick = () => {
   play.frame = undefined
+  drain()
   const q = play.queue
   if (q.length === 0) {
     if (!play.ended) {
       if (play.last === 0) play.last = performance.now() // idling before the first token: that gap is the startup stall
-      play.frame = requestAnimationFrame(tick)
+      play.frame ??= requestAnimationFrame(tick)
     }
     return
   }
@@ -184,16 +186,29 @@ const tick = () => {
     const out = q.splice(0, count).join("")
     registry.update(draft, (d) => (d ? { ...d, text: d.text + out } : d))
   }
-  play.frame = requestAnimationFrame(tick)
+  play.frame ??= requestAnimationFrame(tick)
 }
 
+// An event that arrives while graphemes are still queued waits behind them, so the stage, the rewrite, the node and an
+// error never overtake the prose on screen (a fast model ends narrate with a cushion still to play). Deltas flow while
+// nothing waits; behind a waiting event they wait too, in order.
+let held: Wire[] = []
+const made: Call[] = [] // this action's calls, filed under its node when it lands (as the server files them)
 export const apply = (e: Wire): void => {
+  if (held.length || (play.queue.length && e.kind !== "delta")) held.push(e)
+  else applyNow(e)
+}
+const drain = () => {
+  while (held.length && (play.queue.length === 0 || held[0]!.kind === "delta")) applyNow(held.shift()!)
+}
+const applyNow = (e: Wire): void => {
   switch (e.kind) {
     case "stage":
       registry.set(stage, e.phase)
       // Each draft starts over: a narrate after check is the rewrite, the first one greys under it.
       if (e.phase === "narrate") {
         resetPlay()
+        play.ended = false
         registry.update(draft, (d) => (d ? { ...d, text: "", prev: d.text || d.prev } : d))
       }
       if (e.phase === "check" || e.phase === "record") play.ended = true // the prose is complete: the queue plays out
@@ -201,14 +216,18 @@ export const apply = (e: Wire): void => {
     case "delta":
       if (e.part.type === "text-delta") enqueue(e.part.text)
       return
-    case "change":
-      registry.update(log, (l) => L.apply(l, e))
-      resetPlay()
-      registry.set(draft, null)
-      registry.set(stage, null)
-      registry.set(revising, null) // a revision ends when its node lands; a failed one stays revisable
+    case "call":
+      made.push(e)
       return
+    case "change": {
+      registry.update(log, (l) => L.apply(l, e))
+      const id = e.node?.id
+      if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made]))
+      settle()
+      return
+    }
     case "error":
+      made.length = 0
       resetPlay()
       registry.set(error, e.message)
       registry.set(stage, null)
@@ -217,10 +236,30 @@ export const apply = (e: Wire): void => {
   }
 }
 
+/** The draft is over, landed or withdrawn: nothing plays, nothing waits. */
+export const clear = (): void => {
+  held = []
+  made.length = 0
+  resetPlay()
+  registry.set(draft, null)
+  registry.set(stage, null)
+}
+/** A node landed: the draft, the revision it came from and the error it displaced are over. */
+export const settle = (): void => {
+  clear()
+  registry.set(revising, null)
+  registry.set(error, null)
+}
+/** The ghost of a failed turn put away. */
+export const dismiss = (): void => {
+  registry.set(draft, null)
+  registry.set(error, null)
+}
+
 /** The turn did not become a node: its line goes back into the box (unless the reader has typed since). */
 export const withdraw = (): void => {
   const d = registry.get(draft)
-  if (!d || registry.get(compose)) return
+  if (!d?.fresh || registry.get(compose)) return
   const r = registry.get(revising) // a revision puts back the field it was revising
   registry.set(compose, (r ? d.input[r.field] : d.input.text || d.input.note) ?? "")
   registry.set(aside, r ? r.field === "note" : !!d.input.note)
