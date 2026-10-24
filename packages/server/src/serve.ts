@@ -6,6 +6,12 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
+//   GET  /stories this card's stories, newest first, and which one is open. POST /stories {persona?} opens a new one,
+//                 PUT /stories/<id> opens that one (404 when there is none), DELETE /stories/<id> removes it (the open
+//                 one gone, the newest remaining opens, or a new one). Each answers the listing; the client re-reads
+//                 /nodes, and the trace starts over.
+//   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one, DELETE /personas/<id> removes it.
+//                 Both answer the list.
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the `call` events of recent turns by node id: the inspector's trace. They evaporate with the SSE
 //                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
@@ -18,9 +24,10 @@
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
 import { decodePlayer } from "@effect-tavern/runtime/src/fragment.ts"
-import { decodeAction, perform, type Event, type Session } from "@effect-tavern/runtime/src/session.ts"
-import { Cause, Deferred, Effect, Fiber, Stream } from "effect"
+import { decodeAction, perform, type Event } from "@effect-tavern/runtime/src/session.ts"
+import { Cause, Deferred, Effect, Fiber, Schema, Stream } from "effect"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import type { Library } from "./library.ts"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
   new Promise<string>((resolve, reject) => {
@@ -43,14 +50,53 @@ const reason = (c: Cause.Cause<unknown>) => {
 
 export type Call = Extract<Event, { kind: "call" }>
 const KEEP = 200 // ponytail: nodes whose calls stay in memory; a ring over the journal if a long story needs more
+// The two bodies besides Action and Player, decoded here like them.
+const NewStory = Schema.decodeUnknownSync(Schema.Struct({ persona: Schema.optionalKey(Schema.String) }))
+const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 
-export const handle = (s: Session, { inspect = false } = {}) => {
+export const handle = (lib: Library, { inspect = false } = {}) => {
   const calls = new Map<number, Call[]>() // insertion order = age; an amend (demand, pin) appends to its node
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
   return async (req: IncomingMessage, res: ServerResponse) => {
+    const s = lib.session // the open story's
     const json = (status: number, v: unknown) => {
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
+    }
+    const bad = (e: unknown, status = 400) => json(status, { error: e instanceof Error ? e.message : String(e) })
+    const stories = () => json(200, { current: lib.story, stories: lib.stories.list() })
+    if (req.method === "GET" && req.url === "/stories") return stories()
+    if (req.method === "POST" && req.url === "/stories") {
+      try {
+        lib.stories.create(NewStory(JSON.parse((await body(req)) || "{}")).persona)
+      } catch (e) {
+        return bad(e)
+      }
+      calls.clear()
+      return stories()
+    }
+    const storyAt = /^\/stories\/(\d+)$/.exec(req.url ?? "")
+    if (storyAt && (req.method === "PUT" || req.method === "DELETE")) {
+      try {
+        if (req.method === "PUT") lib.stories.open(Number(storyAt[1]))
+        else lib.stories.del(Number(storyAt[1]))
+      } catch (e) {
+        return bad(e, 404)
+      }
+      calls.clear()
+      return stories()
+    }
+    if (req.method === "GET" && req.url === "/personas") return json(200, lib.personas.list())
+    const personaAt = /^\/personas\/([^/]+)$/.exec(req.url ?? "")
+    if (personaAt && (req.method === "PUT" || req.method === "DELETE")) {
+      const id = decodeURIComponent(personaAt[1]!)
+      try {
+        if (req.method === "PUT") lib.personas.put({ id, ...PersonaBody(JSON.parse(await body(req))) })
+        else lib.personas.del(id)
+      } catch (e) {
+        return bad(e)
+      }
+      return json(200, lib.personas.list())
     }
     if (req.method === "GET" && req.url === "/card")
       return json(200, {
@@ -128,4 +174,4 @@ export const handle = (s: Session, { inspect = false } = {}) => {
     })
   }
 }
-export const serve = (session: Session, opts?: { inspect?: boolean }) => createServer(handle(session, opts))
+export const serve = (lib: Library, opts?: { inspect?: boolean }) => createServer(handle(lib, opts))

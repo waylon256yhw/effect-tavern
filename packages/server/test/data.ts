@@ -11,7 +11,7 @@ interface N extends L.Noded {
 const data = open(":memory:")
 
 // Store: the authority commits, a fresh holder over the same rows equals it, and the next id is the stored one.
-const story = data.stories.create("wuxia")
+const story = data.stories.create("wuxia", "friend")
 const store = data.store<N>(story)
 const h = L.hold<N>(store)
 h.commit(L.add(h.log, { parent: null, text: "r" }))
@@ -26,8 +26,11 @@ assert.throws(() => data.store<N>(99).read(), /no story 99/)
 // Stories list newest first per card; deleting one cascades to its nodes.
 const second = data.stories.create("wuxia")
 assert.deepEqual(
-  data.stories.list("wuxia").map((s) => s.id),
-  [second, story],
+  data.stories.list("wuxia").map((s) => [s.id, s.persona]),
+  [
+    [second, null],
+    [story, "friend"],
+  ],
 )
 assert.equal(data.stories.list("other").length, 0)
 data.stories.del(story)
@@ -37,7 +40,21 @@ assert.deepEqual(
 )
 assert.throws(() => data.store<N>(story).read(), /no story/)
 
-// The player row: JSON in, the same out.
+// Personas by name; the player row: JSON in, the same out.
+data.personas.put({ id: "friend", name: "旧友", text: "你是替故人送还遗物的旧友。" })
+data.personas.put({ id: "monk", name: "行脚僧", text: "你是路过的行脚僧。" })
+assert.deepEqual(
+  data.personas.list().map((p) => [p.id, p.text]),
+  [
+    ["friend", "你是替故人送还遗物的旧友。"],
+    ["monk", "你是路过的行脚僧。"],
+  ],
+) // byte order: 旧 (U+65E7) before 行 (U+884C)
+data.personas.del("monk")
+assert.deepEqual(
+  data.personas.list().map((p) => p.id),
+  ["friend"],
+)
 assert.equal(data.player.read(), undefined)
 data.player.write({ writing: { pov: "second" }, global: [], forCard: {} })
 assert.deepEqual(data.player.read(), { writing: { pov: "second" }, global: [], forCard: {} })

@@ -15,13 +15,20 @@ const schema = `
 create table if not exists player (id integer primary key check (id = 1), json text not null);
 create table if not exists persona (id text primary key, name text not null, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null);
-create table if not exists story (id integer primary key, card text not null, persona text, title text,
+create table if not exists story (id integer primary key autoincrement, card text not null, persona text, title text,
   head integer, next integer not null default 0, updated integer not null);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
 `
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
+
+/** A named frame fragment the player picks per story: who they are in the fiction. */
+export interface Persona {
+  id: string
+  name: string
+  text: string
+}
 
 export const open = (file: string) => {
   const db = new DatabaseSync(file)
@@ -45,11 +52,34 @@ export const open = (file: string) => {
       read: (): unknown => parse<unknown>(q("select json from player where id = 1").get() as Row | undefined),
       write: (p: unknown) => void q("insert or replace into player (id, json) values (1, ?)").run(JSON.stringify(p)),
     },
+    personas: {
+      list: (): Persona[] =>
+        (q("select id, name, json from persona order by name").all() as Row[]).map((r) => ({
+          id: r["id"] as string,
+          name: r["name"] as string,
+          text: parse<string>(r)!,
+        })),
+      put: (p: Persona) =>
+        void q("insert or replace into persona (id, name, json) values (?, ?, ?)").run(
+          p.id,
+          p.name,
+          JSON.stringify(p.text),
+        ),
+      del: (id: string) => void q("delete from persona where id = ?").run(id),
+    },
+    /** One card's stories, newest first: a story is a log tree played as one persona (by id; none = the card's default). */
     stories: {
       list: (card: string) =>
-        q("select id from story where card = ? order by updated desc, id desc").all(card) as { id: Id }[],
-      create: (card: string): Id =>
-        Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
+        q("select id, persona, updated from story where card = ? order by updated desc, id desc").all(card) as {
+          id: Id
+          persona: string | null
+          updated: number
+        }[],
+      create: (card: string, persona?: string): Id =>
+        Number(
+          q("insert into story (card, persona, updated) values (?, ?, ?)").run(card, persona ?? null, Date.now())
+            .lastInsertRowid,
+        ),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
     },
     /** log.ts's Store over one story: read the tree whole, write each Change as rows in one transaction. */
@@ -78,3 +108,4 @@ export const open = (file: string) => {
     close: () => db.close(),
   }
 }
+export type Data = ReturnType<typeof open>

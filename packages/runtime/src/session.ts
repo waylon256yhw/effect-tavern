@@ -224,14 +224,27 @@ export const makeSession = ({
   model: M,
   store,
   players,
+  persona,
 }: {
   card: Card
   player: Player // the harness default; a stored player wins over it
   model: SessionModel
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
+  persona?: string // this story's persona: the player's per-card `persona` slot, over the card's default (fragment.ts)
 }) => {
   let player = players?.read() ?? given
+  /** The player layer as the frame reads it: the story's persona, when there is one, joins the per-card layer last. */
+  const layered = (): Player =>
+    persona === undefined
+      ? player
+      : {
+          ...player,
+          forCard: {
+            ...player.forCard,
+            [card.id]: [...(player.forCard[card.id] ?? []), { id: "persona", text: persona }],
+          },
+        }
   const rpg = makeCard(card.rules)
   // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
   const gate = (id: string, offer: Cond) => ({
@@ -367,7 +380,7 @@ export const makeSession = ({
   // ───────── The document each stage reads (src/request.ts) ─────────
   /** A stage's document: the frame at this state, the input and what a thought in it is, then the stage's own ask. */
   const ask = (state: State, input: Input, a: Ask) =>
-    request({ frame: headOf(frame(player, card), { state }), input, thought: wording("input.thought") }, a, {
+    request({ frame: headOf(frame(layered(), card), { state }), input, thought: wording("input.thought") }, a, {
       reasoningBack: M.reasoningBack,
       ttl: M.ttl,
     })

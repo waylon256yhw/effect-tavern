@@ -5,20 +5,18 @@
 // the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
 // picked on the server would stay as an orphan root beside the player's).
 import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
-import { makeSession, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
-import { decodePlayer } from "@effect-tavern/runtime/src/fragment.ts"
+import type { SessionModel } from "@effect-tavern/runtime/src/session.ts"
 import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
+import { library } from "./library.ts"
 import { handle } from "./serve.ts"
 
 const name = process.env["CARD"] ?? "wuxia"
 const dir = process.env["DATA"] ?? fileURLToPath(new URL("../../../.dev/", import.meta.url))
 mkdirSync(dir, { recursive: true })
 const data = open(`${dir}/tavern.db`)
-const story = data.stories.list(name)[0]?.id ?? data.stories.create(name)
-const store = data.store<Turn>(story)
 
 let n = 0
 /** By phase: lookup reads nothing, decide ends, direct opens what the gate offered, check is clean, record answers each
@@ -105,14 +103,9 @@ const live = (): SessionModel => {
 }
 const model: SessionModel = process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false } : live()
 const card = await loadCard(name)
-// The stored player layer wins over the shared default; what the library holds is decoded like a PUT would be.
-const players = {
-  read: () => (data.player.read() === undefined ? undefined : decodePlayer(data.player.read())),
-  write: data.player.write,
-}
-const session = makeSession({ card, player, model, store, players })
-if (session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
+const lib = library({ data, card, player, model })
+if (lib.session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
   const greeting = card.greetings[Number(process.env["GREETING"])]
-  if (greeting) session.greet(greeting)
+  if (greeting) lib.session.greet(greeting)
 }
-export const handler = handle(session, { inspect: true })
+export const handler = handle(lib, { inspect: true })
