@@ -288,6 +288,7 @@ export const makeSession = ({
       events: [...o.events, ...b.events, ...r.events, ...a.events],
       checks: b.checks,
       post: [...o.events, ...r.events, ...a.events],
+      pre: b.s, // after opening and beats, before readouts and adjustments: what the turn's record saw
     }
   }
   const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, rpg.initial)
@@ -317,12 +318,12 @@ export const makeSession = ({
     const seen = deliveredOn(path)
     const seenKeys = new Set(seen.map(key))
     const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
-    const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)!, lore: true })) : []
+    const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
     const recall = products
       .filter((p) => p.recall !== undefined)
       .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
       .filter((e) => !seenKeys.has(`${e.id}#1`))
-      .map((e) => ({ id: e.id, hook: e.hook, lore: false }))
+      .map((e) => ({ id: e.id, hook: e.hook }))
     return [...lore, ...recall]
   }
   const project = (t: Turn): Node => {
@@ -390,7 +391,7 @@ export const makeSession = ({
     qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
   ) =>
     Effect.gen(function* () {
-      if (!asked.length && !qs) return { products: {} as Record<string, unknown>, answers: undefined } // nothing to ask
+      if (!asked.length && !qs) return { products: {}, answers: undefined } // nothing to ask
       const fed = known(path)
       const msgs = ask(state, scene.input, {
         stage: "record",
@@ -792,10 +793,7 @@ export const makeSession = ({
       if (!p) throw new Error(`${productId}: not a product of this card`)
       return emitting((emit) =>
         Effect.gen(function* () {
-          // the state the turn's own record saw: opening and beats settled, readouts and adjustments not yet
-          const s0 = stateAt(chain(t.parent))
-          const s1 = rpg.fold(t.opening ? rpg.apply(s0, t.opening).s : s0, t.beats).s
-          const rec = yield* record(emit, [p], chain(t.parent), s1, t)
+          const rec = yield* record(emit, [p], chain(t.parent), settleTurn(stateAt(chain(t.parent)), t).pre, t)
           const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...rec.products } })
           yield* emit({ kind: "change", ...change(held.commit(amended)) })
         }),
