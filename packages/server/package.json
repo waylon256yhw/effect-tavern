@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "tsc && bun test/serve.ts",
+    "verify": "tsc && bun test/data.ts && bun test/serve.ts",
     "start": "bun src/main.ts"
   },
   "dependencies": {

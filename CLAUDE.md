@@ -76,7 +76,7 @@ Tooling:
 
 `bun --bun vp run dev` at the root (`bun --bun vp dev` in packages/client; `--bun` makes the `node` Vite+ launches resolve to Bun) is the whole stack: the session (packages/server/src/dev.ts) runs
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
-effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the journal lives in
-`.dev/<card>.json` (gitignored; delete it to start the story over). The user starts and stops `vp dev` in their own
+effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the library lives in
+`.dev/tavern.db` (gitignored; `DATA=<dir>` moves it; delete it to start every story over). The user starts and stops `vp dev` in their own
 terminal; an agent uses it and never starts, restarts or kills it. `bun src/main.ts` in packages/server serves the same
 session on its own port.

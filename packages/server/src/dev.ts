@@ -1,24 +1,30 @@
 // The developer's session: one card (CARD, default wuxia) on the local Anthropic connection, or on a scripted model
-// (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The journal lives in
-// .dev/<card>.json at the repo root, so Vite re-evaluating this module after a runtime/server edit, or a restart, keeps
-// the story; an empty journal opens on the greeting GREETING names, and on none otherwise: the player picks one on the
-// card page (a greet is a root, and one picked on the server would stay as an orphan root beside the player's).
+// (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The library (data.ts)
+// is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a runtime/server
+// edit, or a restart, keeps the story; the session plays the card's newest story, or opens one. An empty story opens on
+// the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
+// picked on the server would stay as an orphan root beside the player's).
 import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
-import type { Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
+import * as Log from "@effect-tavern/runtime/src/log.ts"
 import { makeSession, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
 import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { open } from "./data.ts"
 import { handle } from "./serve.ts"
 
 const name = process.env["CARD"] ?? "wuxia"
-const dir = fileURLToPath(new URL("../../../.dev/", import.meta.url))
-const file = `${dir}${name}.json`
+const dir = process.env["DATA"] ?? fileURLToPath(new URL("../../../.dev/", import.meta.url))
 mkdirSync(dir, { recursive: true })
-const store: Store<Turn> = {
-  // ponytail: the whole snapshot, synchronously, on every commit; a dev journal is a few hundred nodes at most
-  read: () => (existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Snapshot<Turn>) : undefined),
-  write: (s) => writeFileSync(file, JSON.stringify(s)),
+const data = open(`${dir}/tavern.db`)
+const story = data.stories.list(name)[0]?.id ?? data.stories.create(name)
+const store = data.store<Turn>(story)
+// A journal written before the library (.dev/<card>.json) becomes the story once, then stays beside it as .imported.
+const old = `${dir}/${name}.json`
+if (existsSync(old) && !store.read()?.nodes.length) {
+  const log = Log.of<Turn>(JSON.parse(readFileSync(old, "utf8")) as Log.Snapshot<Turn>)
+  for (const node of [...log.nodes.values()].sort((a, b) => a.id - b.id)) store.write({ node, head: log.head }, log)
+  renameSync(old, `${old}.imported`)
 }
 
 let n = 0

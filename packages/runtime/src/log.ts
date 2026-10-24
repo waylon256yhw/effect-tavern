@@ -27,9 +27,12 @@ export interface Change<T> {
   readonly dropped?: readonly Id[]
   readonly head: Id | null
 }
-export interface Store<T> {
+/** Persistence at the log's seam: `read` the whole once, then `write` each Change as it is committed (an append for a
+ *  row store; a snapshot store writes `log` whole and ignores the change). `log` is the log after the change: a row
+ *  store keeps its `head` and `next` beside the nodes, so an id never comes back after a drop. */
+export interface Store<T extends Noded> {
   read: () => Snapshot<T> | undefined
-  write: (s: Snapshot<T>) => void
+  write: (c: Change<T>, log: Log<T>) => void
 }
 type Written<T extends Noded> = [Log<T>, Change<T>]
 
@@ -102,7 +105,7 @@ export const drop = <T extends Noded>(log: Log<T>, id: Id): Written<T> => {
   return write(log, { dropped, head })
 }
 
-/** The authority's holder: one value, persisted whole after every commit; no store = memory. */
+/** The authority's holder: one value, each commit written to the store as its Change; no store = memory. */
 export const hold = <T extends Noded>(store?: Store<T>) => {
   let log = of(store?.read())
   return {
@@ -111,7 +114,7 @@ export const hold = <T extends Noded>(store?: Store<T>) => {
     },
     commit: ([next, c]: Written<T>): Change<T> => {
       log = next
-      store?.write(snapshot(log))
+      store?.write(c, log)
       return c
     },
   }

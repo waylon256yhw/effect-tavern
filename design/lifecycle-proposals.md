@@ -83,6 +83,7 @@ lookup → (decide → settle)* → gate → direct → narrate → check → re
 ### 4.1 为什么分阶段架构天然适合多模型混搭？
 
 在 `src/request.ts` 中，六个阶段的上下文视图本来就是分离的：
+
 - **唯一的长上下文创作调用是 `narrate`**：只有它读取完整的 `card.fiction` 与 `history` 转录稿，也只有它依赖长前缀的 Prompt Cache。
 - **其余五个阶段（`lookup`、`decide`、`direct`、`check`、`record`）全是短上下文的结构化判别与提取**：它们只读 `frame` 加事实账本或单轮正文，运行在 `temperature: 0, effort: "off"` 下。
 
@@ -100,6 +101,7 @@ export interface StageModels {
 ```
 
 典型配置组合：
+
 - **`narrate`（Writer）**：绑定文笔上限最高的主力创作模型（如 Claude Opus / Sonnet、Gemini Pro 或专项写作微调模型），开启 `1h` 缓存 TTL。
 - **`lookup` / `decide` / `check`**：绑定极速、低成本且原生 JSON Schema 稳定的轻量模型（如 Haiku、Gemini Flash-Lite），将前置判别与事后验收的延迟压到百毫秒级。
 - **`direct` / `record`**：按需绑定高性价比的中等模型（如 Flash / Haiku），专门负责导演调度与多字段表格提取。

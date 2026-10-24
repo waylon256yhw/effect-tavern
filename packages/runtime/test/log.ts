@@ -58,16 +58,24 @@ commit(L.drop(auth.log, 2))
 const replica = kept.reduce(L.apply, L.of<N>())
 assert.deepEqual(L.snapshot(replica), L.snapshot(auth.log))
 
-// the store: reloaded from what it wrote is the same log, and a dropped tail's id does not come back
+// the store: reloaded from what it wrote is the same log, and a dropped tail's id does not come back. Two adapters of
+// the one seam: a snapshot store writes the log whole, a row store keeps the changes (and head and next beside them).
 let disk: L.Snapshot<N> | undefined
-const store: L.Store<N> = { read: () => disk, write: (s) => void (disk = s) }
-const h = L.hold<N>(store)
-h.commit(L.add(h.log, { parent: null, text: "r" }))
-h.commit(L.add(h.log, { parent: 0, text: "c" }))
-h.commit(L.drop(h.log, 1))
-const back = L.hold<N>(store)
-assert.deepEqual(L.snapshot(back.log), L.snapshot(h.log))
-assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
+const store: L.Store<N> = { read: () => disk, write: (_, log) => void (disk = L.snapshot(log)) }
+const rows: { changes: L.Change<N>[]; head: L.Id | null; next: L.Id } = { changes: [], head: null, next: 0 }
+const rowStore: L.Store<N> = {
+  read: () => ({ ...L.snapshot(rows.changes.reduce(L.apply, L.of<N>())), head: rows.head, next: rows.next }),
+  write: (c, log) => void (rows.changes.push(c), (rows.head = log.head), (rows.next = log.next)),
+}
+for (const s of [store, rowStore]) {
+  const h = L.hold<N>(s)
+  h.commit(L.add(h.log, { parent: null, text: "r" }))
+  h.commit(L.add(h.log, { parent: 0, text: "c" }))
+  h.commit(L.drop(h.log, 1))
+  const back = L.hold<N>(s)
+  assert.deepEqual(L.snapshot(back.log), L.snapshot(h.log))
+  assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
+}
 // a snapshot from before ids were kept: next is one past the greatest present
 assert.equal(L.of<N>({ nodes: [{ id: 0, parent: null, text: "r" }], head: 0 }).next, 1)
 
