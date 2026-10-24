@@ -126,7 +126,8 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
         onBeforeInput={(e) => e.inputType.startsWith("format") && e.preventDefault()}
         onPaste={(e) => {
           e.preventDefault()
-          document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "")
+          const text = (e.clipboardData?.getData("text/plain") ?? "").replace(/\r?\n{2,}/g, "\n")
+          document.execCommand("insertText", false, text)
         }}
         onCompositionStart={ime.compositionStart}
         onCompositionEnd={ime.compositionEnd}
@@ -157,7 +158,8 @@ const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller()
 /** How much of the latest turn's content is below the viewport. The last section is at least a screen tall so a
  *  turn can land at its top; that filler is not something to jump to, so the way-back button reads the content's end. */
 const hidden = () => {
-  const last = document.querySelector("main > section:last-of-type")?.lastElementChild
+  let last = document.querySelector("main > section:last-of-type")?.lastElementChild
+  if (last && !last.getClientRects().length) last = last.previousElementSibling // .actions is display: none while editing
   return last ? last.getBoundingClientRect().bottom - scroller().getBoundingClientRect().bottom : gap()
 }
 const anchor = () => {
