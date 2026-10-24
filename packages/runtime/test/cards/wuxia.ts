@@ -38,17 +38,25 @@ export const full: Card = {
     {
       id: "pei-cool",
       label: "裴青舟（戒备）",
-      text: "眼下裴青舟对你满怀戒备，疑心你是顺着江南旧案摸上山来的仇家或公门耳目，因此始终与你隔着三步开外的距离，言语冷淡简短，话里话外都在逼你亮明来历、早些下山。",
+      text: "眼下裴青舟尚未确认你的底细，疑心你是顺着江南旧案摸上山来的仇家或公门耳目，因此起初与你保持着三步开外的距离，言语冷峻克制，暗中留意你的来路；当你道出关外旧事、亮出李鹤的随身信物，或显出对故人真切的记挂时，他紧绷的防线便会有所触动与松缓，肯听你把话往下说。",
       when: { path: "bond", op: "lt", value: 8 },
     },
     {
       id: "pei-warm",
       label: "裴青舟（松动）",
-      text: "眼下裴青舟已看出你确是真心记挂李鹤的故人，紧绷的戒心松动了许多，不仅不再拿话试探驱赶，神色间也透出几分压抑已久的倦意与亲近，愿意与你平心静气地提起往事。",
+      text: "眼下裴青舟已信了你是真心记挂李鹤的关外故人，先前那股随时准备拔剑的戒备已然敛去，神色间透出几分压抑已久的疲态与悲凉，不再拿话试探驱赶，愿意与你正面谈起李鹤与江南那场变故。",
       when: { path: "bond", op: "gte", value: 8 },
     },
   ]),
-  greetings: [],
+  greetings: [
+    {
+      text: "暮春的雨刚歇，苦竹岭上雾气未散，竹叶间积着的水珠顺着破败的亭檐一滴一滴砸在青石阶上。\n\n你踏着湿滑的石板走近竹林深处的这座荒亭时，亭里只有一个人。那人很瘦，穿一件洗得发白的青布旧衫，正背对着山道立在亭柱旁，望着亭外竹影下那座新垒的孤坟出神。坟头的黄土还带着雨水浸过的深色，旁边没有立碑。\n\n听见你的脚步声在阶前停住，那人没有回头，只有右手无声地垂落下来，停在了腰间那柄乌木鞘长剑的剑柄上方。\n\n「苦竹岭早就没茶了。」裴青舟的声音像竹林里的冷雾一样平淡，「山路湿滑，过路的客人若只是避雨，歇过脚便请下山吧。」",
+    },
+    {
+      text: "雨丝斜斜地掠过竹林荒亭，在石桌上积起一层薄薄的水光。你没有拐弯抹角，进亭之后便解下腰间那柄跟了你三年的牛皮鞘旧短剑，平平地推到了石桌中央。\n\n立在亭柱旁的青衫剑客原本只拿冷淡的余光打量你，待看清剑柄末端那道熟悉的刻痕时，他按在腰间乌木剑鞘上的手指蓦地一紧，呼吸也跟着滞了一瞬。\n\n亭外竹叶沙沙作响，过了好半晌，裴青舟才缓缓收回按剑的手，抬起那双布满血丝的眼看向你，声音比刚才哑了几分：\n\n「这把剑，他从不离身……你是从何处得来的？他临走前，到底跟你说过什么？」",
+      do: [{ path: "bond", set: 4 }],
+    },
+  ],
   rules: {
     fields: [
       { path: "hp", label: "体力", group: "Body", type: "int", min: 0, max: 100, initial: 40 },
@@ -60,12 +68,12 @@ export const full: Card = {
         id: "warmth",
         text: "这一幕里裴青舟对待你的态度",
         options: [
-          { id: "cold", text: "冷硬敌视，出言驱赶或动怒拔剑", do: [{ path: "bond", add: -5 }] },
-          { id: "flat", text: "审视戒备，不动声色地保持距离", do: [] },
-          { id: "warm", text: "态度缓和，愿意放下戒心与你交谈", do: [{ path: "bond", add: 4 }] },
+          { id: "cold", text: "敌意加深，出言驱赶、拔剑相向或厉声喝止", do: [{ path: "bond", add: -5 }] },
+          { id: "flat", text: "冷淡审视，只做试探盘问而未见触动", do: [] },
+          { id: "warm", text: "有所触动，戒心稍缓并肯听你细说或接话", do: [{ path: "bond", add: 4 }] },
           {
             id: "close",
-            text: "推心置腹，向你吐露实情或流露悲恸",
+            text: "防线大开，为你所言所行深深震动、流露悲恸或吐露实情",
             do: [{ path: "bond", add: 8 }, { event: "warmth:close" }],
           },
         ],
@@ -79,7 +87,6 @@ export const full: Card = {
         hit: [{ path: "foe", add: -10 }, { event: "strike:hit" }],
         miss: [{ path: "hp", add: -10 }, { event: "strike:miss" }],
       },
-      { id: "talk", text: "与裴青舟交谈、追问或出示信物", do: [{ event: "talk" }] },
     ],
     over: {
       any: [
@@ -119,7 +126,7 @@ export const full: Card = {
     { id: "options", on: true },
     {
       id: "scene",
-      text: "Where the scene stands now: the place, and who is present with their mood.",
+      text: "Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.",
       shape: {
         kind: "record",
         keys: [
@@ -140,7 +147,7 @@ export const full: Card = {
     },
     {
       id: "people",
-      text: "People named this scene who are not in Known, one row each.",
+      text: "New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.",
       shape: {
         kind: "table",
         columns: [

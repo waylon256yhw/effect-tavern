@@ -139,8 +139,15 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...thoughtOf(c),
         ...(a.correction ? [sys(a.correction)] : []),
       ]
-    case "check":
-      return [...frame, ...rules(a.rules), sys(`${openLine(a.open)}\nMust: ${a.must.join(",")}`), usr(a.prose)]
+    case "check": // nothing open (a guard-only turn): no empty Open / Must labels, the rules alone are the question
+      return [
+        ...frame,
+        ...rules(a.rules),
+        ...(a.open.length
+          ? [sys([openLine(a.open), ...(a.must.length ? [`Must: ${a.must.join(",")}`] : [])].join("\n"))]
+          : []),
+        usr(a.prose),
+      ]
     case "record":
       return [
         ...frame,

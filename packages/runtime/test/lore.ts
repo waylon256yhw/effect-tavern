@@ -83,6 +83,7 @@ const f = add(root, ch1, [], [{ id: "li", layer: 2 }])
 assert.deepEqual(read(ch1, D(path(f)), "li")!.map(text), [
   "Li is A's friend who vanished ten years ago. A crane tattoo marks his left shoulder.",
 ])
+assert.deepEqual(L.readable(ch1, D(path(f))), ["li"], "the layer the window jumped over is still readable")
 const g = add(t1, ch1)
 assert.equal(current(byId.get("li")!, ch1, D(path(g))), 1)
 assert.ok(offers(ch1, D(path(g)), "We talk by the fire").length === 0, "no window without the trigger")

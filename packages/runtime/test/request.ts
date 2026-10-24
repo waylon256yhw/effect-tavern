@@ -134,6 +134,13 @@ assert.deepEqual(line.check.slice(3).map(text), [
   "Open: li=B is Li. | echo=E2, with a comma\nMust: li",
   "PROSE#2",
 ])
+// a guard-only turn (nothing open): the rules alone, no empty Open / Must labels
+assert.deepEqual(
+  request(c({ text: "我拔剑。" }), { ...(asks.check as Extract<Ask, { stage: "check" }>), open: [], must: [] })
+    .slice(3)
+    .map(text),
+  ["Rule: B does not die", "PROSE#2"],
+)
 // record: facts and questions above, the scene as one user message with the player's line marked as theirs
 assert.deepEqual(line.record.slice(3).map(text), [
   "Known: N1\nCurrent: scene=place: P\nnotes: Notes are the record\noptions: Four things",

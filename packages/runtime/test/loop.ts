@@ -509,6 +509,9 @@ const program = Effect.gen(function* () {
   const r1 = yield* go(V.act(v4.id, { text: "names li" }))
   const r2 = yield* go(V.act(r1.id, { text: "names li" }))
   assert.deepEqual([r1.products.people, untold(r2.id)], [[{ name: "Li", note: `N#${n - 1}` }], [`people@${r2.id}#0`]])
+  // Reading the newest row tells the key: the superseded row does not come back as unread.
+  const r3 = yield* go(V.act(r2.id, { text: "about Li" }))
+  assert.deepEqual([r3.read, untold(r3.id)], [[{ id: `people@${r2.id}#0`, layer: 1 }], []])
   console.log(str(lastNarr()))
 })
 

@@ -159,7 +159,7 @@ const defaultProducts = (input: "act" | "note"): readonly Product[] =>
   decodeProducts([
     {
       id: "notes",
-      text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence in the third person, naming people as the frame names them, never the prose's 你 or 我. Never repeat Known, never comment on the writing.",
+      text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence in the third person. Name characters by their names in the frame, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never comment on the writing.",
       shape: { kind: "list" },
       feed: true,
     },
@@ -168,7 +168,7 @@ const defaultProducts = (input: "act" | "note"): readonly Product[] =>
       text:
         input === "note"
           ? "Four directions the player could give the narrator for what happens next, each one line, distinct in kind."
-          : "Four lines the player might send next, each one line as they would type it themselves: in the first person (我……) or the words they would say. Never 你, never a narrator's description of them. Distinct in kind.",
+          : "Four inputs the player might send next, each one short line as the player would type it: a direct line in quotes, a brief first-person action (我……), or both together. When the player speaks, write the exact words in quotes—never summarize speech indirectly (never 我说…… / 我问他……), and never use 你. Distinct in kind.",
       shape: { kind: "list", max: 4 },
       on: false,
     },
@@ -325,13 +325,14 @@ export const makeSession = ({
     const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
     const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
     // Rows with one key are one entry, the newest row (a person re-rowed with what a later scene added); the live
-    // session had 老朋友 twice in the index.
-    const recall = products
+    // session had 老朋友 twice in the index. Folded before the seen filter: filtered first, reading the newest row
+    // brought the superseded one back as unread (the third live session re-read 李鹤's old row two turns later).
+    const rows = products
       .filter((p) => p.recall !== undefined)
       .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
-      .filter((e) => !seenKeys.has(`${e.id}#1`))
-      .map((e) => ({ id: e.id, hook: e.hook }))
-    return [...lore, ...new Map(recall.map((e) => [`${e.id.split("@")[0]}=${e.hook}`, e])).values()]
+    const newest = [...new Map(rows.map((e) => [`${e.id.split("@")[0]}=${e.hook}`, e])).values()]
+    const recall = newest.filter((e) => !seenKeys.has(`${e.id}#1`)).map((e) => ({ id: e.id, hook: e.hook }))
+    return [...lore, ...recall]
   }
   const project = (t: Turn): Node => {
     const path = chain(t.id)

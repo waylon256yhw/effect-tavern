@@ -24,6 +24,13 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
   const current = (e: Entry<S, C>, s: S, ds: readonly Disclosure[]) =>
     Math.min(e.layers.length, Math.max(e.unlock?.(s) ?? 0, deepest(ds, e.id)))
   const visible = (s: S, ds: readonly Disclosure[]) => entries.filter((e) => current(e, s, ds) >= 1)
+  /** Layers up to current this path hasn't seen, shallowest first. */
+  const unread = (e: Entry<S, C>, s: S, ds: readonly Disclosure[]): Disclosure[] => {
+    const seen = new Set(ds.map(key))
+    return Array.from({ length: current(e, s, ds) }, (_, i) => ({ id: e.id, layer: i + 1 })).filter(
+      (d) => !seen.has(key(d)),
+    )
+  }
   return {
     entries,
     deepest,
@@ -31,18 +38,17 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
     /** Hooks of visible entries. */
     index: (s: S, ds: readonly Disclosure[]) =>
       visible(s, ds).map((e) => ({ id: e.id, hook: e.layers[0].split(/(?<=[.。!?！？])\s*/)[0] })),
-    /** Visible entries with a layer this path hasn't seen: the enum the lookup stage picks from. Empty → no call. */
+    /** Visible entries with a layer up to current this path hasn't seen: the enum the lookup stage picks from. Empty →
+     *  no call. By unseen layers, not depth: a window fires current+1 over an unlocked layer nobody read, and that
+     *  layer stays readable under it (by depth alone it was lost for good once a deeper one fired). */
     readable: (s: S, ds: readonly Disclosure[]) =>
       visible(s, ds)
-        .filter((e) => current(e, s, ds) > deepest(ds, e.id))
+        .filter((e) => unread(e, s, ds).length > 0)
         .map((e) => e.id),
     /** Layers up to current that this path hasn't seen yet; undefined when the entry isn't readable at all. */
     read: (s: S, ds: readonly Disclosure[], id: string): Disclosure[] | undefined => {
       const e = byId.get(id)
-      const upTo = e ? current(e, s, ds) : 0
-      if (upTo === 0) return undefined
-      const seen = new Set(ds.map(key))
-      return Array.from({ length: upTo }, (_, i) => ({ id, layer: i + 1 })).filter((d) => !seen.has(key(d)))
+      return e && current(e, s, ds) > 0 ? unread(e, s, ds) : undefined
     },
     /** Next layer of each visible entry whose window is open; never deeper than one step. Feeds the brief as `may`. */
     offers: (s: S, ds: readonly Disclosure[], ctx: C) =>

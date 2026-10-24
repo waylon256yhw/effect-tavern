@@ -20,24 +20,24 @@ const script = async (): Promise<Script> => {
         card,
         turns: [
           {
-            parent: null,
+            parent: 0,
             input: { text: "我在亭外收起油纸伞，拱手道：「在下从关外远道而来，特来寻访裴青舟裴兄。」" },
           },
           {
-            parent: null,
+            parent: 0,
             input: {
               text: "我把李鹤留下的短剑放在石桌上：「我是李鹤在关外的旧友，听说他半年前死在了江南，特来问个清楚。」",
             },
           },
           {
-            parent: 1,
+            parent: 2,
             input: {
               text: "「既然裴兄不肯吐实，那便请赐教吧！」我拔剑向裴青舟左肩虚刺一剑。",
               note: "写得简练紧凑一些。",
             },
           },
-          { parent: 2, input: { text: "我收剑后退半步，盯着裴青舟左肩被剑锋挑开的衣领。" } },
-          { parent: 3, input: { text: "我一剑快似一剑地向裴青舟攻去，非要逼他使出全力不可。" } }, // the §10 case
+          { parent: 3, input: { text: "我收剑后退半步，盯着裴青舟左肩被剑锋挑开的衣领。" } },
+          { parent: 4, input: { text: "我一剑快似一剑地向裴青舟攻去，非要逼他使出全力不可。" } }, // the §10 case
         ],
       }
     default: {
