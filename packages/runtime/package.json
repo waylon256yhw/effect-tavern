@@ -7,7 +7,7 @@
     "./*": "./*"
   },
   "scripts": {
-    "verify": "tsc && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/assemble.ts && bun test/loop.ts && bun test/card.ts && bun test/product.ts && bun test/tokens.ts"
+    "verify": "tsc && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/assemble.ts && bun test/request.ts && bun test/loop.ts && bun test/card.ts && bun test/product.ts && bun test/tokens.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",

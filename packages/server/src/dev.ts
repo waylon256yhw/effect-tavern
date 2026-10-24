@@ -31,8 +31,8 @@ const answer = (o: FakeCall) => {
   const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
   const open =
     text
-      .match(/Open: ([\w,=]*)/)?.[1]
-      .split(/[,|]/)
+      .match(/^Open: (.*)$/m)?.[1]
+      .split("|")
       .map((x) => x.split("=")[0]!.trim())
       .filter(Boolean) ?? []
   const demo = /重写|一稿|二稿/.test(text)

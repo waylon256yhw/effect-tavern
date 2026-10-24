@@ -17,10 +17,11 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
   const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
   const last = o.prompt.at(-1)!
   const want = fakeText(last)
+  // `Open: id=text | id=text`: ids off the line (the texts carry spaces and commas)
   const open =
     text
-      .match(/Open: ([\w,=]*)/)?.[1]
-      .split(/[,|]/)
+      .match(/^Open: (.*)$/m)?.[1]
+      .split("|")
       .map((x) => x.split("=")[0].trim())
       .filter(Boolean) ?? []
   let out: string
@@ -79,7 +80,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
         ],
         options: ["O1", "O2", "O3", "O4", "O5"], // five: the cap cuts to four
         scene: { place: `P#${n}`, present: [{ name: "B", mood: "calm" }] },
-        people: /^ask about li/i.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
+        people: /^Player's line: ask about li/im.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
         inner: `INNER#${n}`,
       }
       const products = Object.fromEntries(asked.map((id) => [id, canned[id]]))
@@ -184,7 +185,7 @@ const program = Effect.gen(function* () {
   const t2 = yield* go(S.act(t1.id, { text: "strike B", note: "NOTE#2" }))
   assert.deepEqual([t2.answers, S.node(t2.id).state.bond], [{ warmth: "warm" }, 4])
   assert.deepEqual(since(i), ["lookup", "decide", "decide", "decide", "direct", "narrate", "check", "record"])
-  assert.equal(str(prompts("lookup").at(-1)!).split("\n")[0], `Index: people@${t1.id}#0=Li`)
+  assert.equal(str(prompts("lookup").at(-1)!).match(/^Index: (.*)$/m)![1], `people@${t1.id}#0=Li`)
   assert.deepEqual(t2.read, [])
   assert.ok(/^Current: scene=place: P#2; present: name=B, mood=calm$/m.test(str(lastNarr())))
   assert.ok(
@@ -439,6 +440,10 @@ const program = Effect.gen(function* () {
   const t11 = yield* go(C.pick(c0.id, 1))
   assert.deepEqual([t11.parent, t11.input], [c0.id, { text: "O2" }])
   assert.throws(() => C.pick(c0.id, 9), /no option/)
+  // On a note card the pick is a direction, never a line in the story.
+  const n0 = yield* go(N.act(null, { text: "", note: "开场" }))
+  const n1 = yield* go(N.pick(n0.id, 1))
+  assert.deepEqual(n1.input, { text: "", note: "O2" })
 
   // ───────── Derived lore counters in the window (§8 item 4), and a card's own ask ─────────
   // A recurring entry: offered when it has not reached the narrator for two turns and has been shown fewer than twice.

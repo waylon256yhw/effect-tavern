@@ -30,7 +30,6 @@
 // Errors: a model failure is a `ModelError` on the stream; an action that names what does not exist (a node, an
 // option, a product, a value outside a field) is a defect, the caller's bug.
 import {
-  breakpoint,
   object,
   streamed,
   type CacheTtl,
@@ -45,15 +44,7 @@ import { Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
 import { Effect_, makeCard, type Answers, type Beat, type Card, type Check, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
-import {
-  decodeFragments as frags,
-  frame,
-  head as headOf,
-  type Format,
-  type Msg,
-  type Player,
-  type Snippet,
-} from "./fragment.ts"
+import { decodeFragments as frags, frame, head as headOf, type Format, type Player, type Snippet } from "./fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
 import {
   deliveredIn,
@@ -66,6 +57,7 @@ import {
 } from "./journal.ts"
 import * as Log from "./log.ts"
 import { key, makeLore, type Disclosure } from "./lore.ts"
+import { request, type Ask, type Told } from "./request.ts"
 import {
   cap,
   decodeProducts,
@@ -155,27 +147,33 @@ export const format: readonly Format[] = [
 ]
 // The default products (src/product.ts): what record asks for on every card unless the card patches or the player
 // toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
-// overridden like any ask by the fragment id `product.<id>`.
-export const defaults: readonly Product[] = decodeProducts([
-  {
-    id: "notes",
-    text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence. Never repeat Known, never comment on the writing.",
-    shape: { kind: "list" },
-    feed: true,
-  },
-  {
-    id: "options",
-    text: "Four things the player could do next, each one line in the third person, distinct in kind.",
-    shape: { kind: "list", max: 4 },
-    on: false,
-  },
-  {
-    id: "inner",
-    text: "What the character thought this scene but did not say, one short paragraph.",
-    shape: { kind: "text" },
-    on: false,
-  },
-])
+// overridden like any ask by the fragment id `product.<id>`. The options question follows the card's input channel,
+// because a picked option is sent as the player's next input: on an act card it is their own line (the first Haiku run
+// wrote "玩家……" in the third person and the pick put that sentence in the player's mouth), on a note card a direction.
+const defaultProducts = (input: "act" | "note"): readonly Product[] =>
+  decodeProducts([
+    {
+      id: "notes",
+      text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence in the third person, naming people as the frame names them, never the prose's 你 or 我. Never repeat Known, never comment on the writing.",
+      shape: { kind: "list" },
+      feed: true,
+    },
+    {
+      id: "options",
+      text:
+        input === "note"
+          ? "Four directions the player could give the narrator for what happens next, each one line, distinct in kind."
+          : "Four things the player could do next, each one line written as the player would type it: their own act or words, in the person and voice of their input, never a description of them. Distinct in kind.",
+      shape: { kind: "list", max: 4 },
+      on: false,
+    },
+    {
+      id: "inner",
+      text: "What the character thought this scene but did not say, one short paragraph.",
+      shape: { kind: "text" },
+      on: false,
+    },
+  ])
 
 const Lookup = (ids: readonly string[]) => Schema.Struct({ read: Schema.Array(Schema.Literals(ids)) })
 const BriefOf = (open: readonly string[]) =>
@@ -195,15 +193,6 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       : Schema.Struct(violated)
 }
 const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when a real tokenizer is in the loop
-
-const sys = (content: string): Message => ({ role: "system", content })
-const usr = (content: string): Message => ({ role: "user", content })
-/** This turn's user message. In-fiction text when there is any; otherwise the note itself (directed prose: the
- *  player writes to the narrator, not as anyone in the story). Past note-only turns leave no user message in the
- *  transcript, so direction never becomes history. */
-const said = (i: Input) => usr(i.text || i.note || "")
-/** The note as a system line, only when it accompanies in-fiction text; alone, it is already the user message. */
-const noteOf = (i: Input) => (i.text && i.note ? [sys(`Player note: ${i.note}`)] : [])
 
 /** Runs an action's stream and gives back the node it ended with. */
 export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn, E> =>
@@ -265,11 +254,7 @@ export const makeSession = ({
 
   const wording = (id: string) =>
     [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
-  const products = resolve(defaults, card.products, player.products)
-  /** A thought in the input is a perception scope inside the fiction (nobody there perceives it), not a channel: it stays
-   *  in history, and every stage that reads the input hears what it is, so decide takes no action from it and narrate
-   *  lets no one react to it. */
-  const thoughtOf = (i: Input) => (/⦅/.test(i.text) ? [sys(wording("input.thought"))] : [])
+  const products = resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
   const question = (pr: Product) =>
     [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
@@ -361,26 +346,15 @@ export const makeSession = ({
     ...(c.node && { node: project(c.node) }),
   })
 
-  // ───────── Views (src/fragment + src/history), as provider messages ─────────
-  /** Past assistant turns go back as parts (reasoning with its signature) when the connection takes them; else as text. */
-  const toP = (m: Msg): Message =>
-    (m.parts && M.reasoningBack ? { role: m.role, content: m.parts } : { role: m.role, content: m.text }) as Message
-  /** Head, with a cache breakpoint on its last message: player zone → frame → fiction is byte-stable across turns. */
-  const head = (stage: "narrate" | "direct", state: State) => {
-    const h = headOf(stage === "narrate" ? [...frame(player, card), ...card.fiction] : frame(player, card), {
-      state,
-    }).map(toP)
-    return h.length ? [...h.slice(0, -1), breakpoint(h.at(-1)!, M.ttl)] : h
-  }
-  const history = (path: readonly Turn[], stage: "narrate" | "direct") => {
-    if (stage === "direct") return ledger(path, (t) => settledOf(path, t).events).map(toP)
-    const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
-    const h = narratorHistory(path, textOf, sum).map(toP)
-    if (!h.length) return h
-    // The fold is byte-stable until the boundary moves; the last message is the end of what next turn resends verbatim.
-    const marked = sum ? [breakpoint(h[0]!), ...h.slice(1)] : h
-    return [...marked.slice(0, -1), breakpoint(marked.at(-1)!)]
-  }
+  // ───────── The document each stage reads (src/request.ts) ─────────
+  /** A stage's document: the frame at this state, the input and what a thought in it is, then the stage's own ask. */
+  const ask = (state: State, input: Input, a: Ask) =>
+    request({ frame: headOf(frame(player, card), { state }), input, thought: wording("input.thought") }, a, {
+      reasoningBack: M.reasoningBack,
+      ttl: M.ttl,
+    })
+  const ledgerOf = (path: readonly Turn[]) => ledger(path, (t) => settledOf(path, t).events)
+  const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: textOf(d) }))
 
   // ───────── Calls, each announced before and reported after ─────────
   const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(
@@ -411,18 +385,20 @@ export const makeSession = ({
     emit: Emit,
     asked: readonly Product[],
     path: readonly Turn[],
-    scene: string,
+    state: State,
+    scene: Pick<Turn, "input" | "reply">,
     qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
   ) =>
     Effect.gen(function* () {
       const fed = known(path)
-      const msgs = [
-        sys(
-          [fed.known, ...(fed.current ? [fed.current] : []), ...asked.map((p) => `${p.id}: ${question(p)}`)].join("\n"),
-        ),
-        ...(qs ? [sys(`Questions: ${qs.lines.join("\n")}`)] : []),
-        usr(scene),
-      ]
+      const msgs = ask(state, scene.input, {
+        stage: "record",
+        known: fed.known,
+        current: fed.current,
+        asks: asked.map((p) => `${p.id}: ${question(p)}`),
+        questions: qs?.lines,
+        prose: proseOf(scene.reply),
+      })
       // Built per call from data, so its static type is unknown: the shapes already decode what the model returns.
       const schema = Schema.Struct({
         ...Object.fromEntries(asked.map((p) => [p.id, shapeSchema(p.shape)])),
@@ -481,10 +457,15 @@ export const makeSession = ({
               g0,
               seen,
               idx.length
-                ? (yield* obj(emit, "lookup", Lookup(idx), [
-                    sys(`Index: ${untold.map((e) => (e.lore ? e.id : `${e.id}=${e.hook}`)).join(", ")}`),
-                    said(input),
-                  ])).read
+                ? (yield* obj(
+                    emit,
+                    "lookup",
+                    Lookup(idx),
+                    ask(s0, input, {
+                      stage: "lookup",
+                      index: untold.map((e) => (e.lore ? e.id : `${e.id}=${e.hook}`)),
+                    }),
+                  )).read
                 : [],
             )
       // decide → settle, looping; the k-th decide sees the first k events
@@ -506,15 +487,19 @@ export const makeSession = ({
           // outcomes so far (§10.2) and continues by default. Verified on Haiku: one question for both roles answers
           // the input again every time, whichever way it is worded.
           const q = wording(beats.length ? "decide.again" : "decide.first")
-          const d = yield* obj(emit, "decide", rpg.decideSchema(s), [
-            ...head("direct", s),
-            ...history(path, "direct"),
-            sys(
-              `${q}\nState: ${JSON.stringify(s)}\nActions: ${rpg.menu(s).join(" | ")}\nSo far: ${events.join(",") || "-"}`,
-            ),
-            ...thoughtOf(input),
-            said(input),
-          ])
+          const d = yield* obj(
+            emit,
+            "decide",
+            rpg.decideSchema(s),
+            ask(s, input, {
+              stage: "decide",
+              ledger: ledgerOf(path),
+              question: q,
+              state: JSON.stringify(s),
+              menu: rpg.menu(s),
+              soFar: events,
+            }),
+          )
           if (d.next === "end") {
             end = "end"
             break
@@ -549,14 +534,18 @@ export const makeSession = ({
         from !== "lookup"
           ? base!.brief
           : card.director && offered.length
-            ? yield* obj(emit, "direct", BriefOf(openIds), [
-                ...head("direct", s1),
-                ...card.guard.map((r) => sys(`Rule: ${r}`)),
-                ...history(path, "direct"),
-                sys(`Open: ${open.map((d) => `${d.id}=${textOf(d)}`).join(" | ")}\nEvents: ${gateEvents.join(",")}`),
-                ...noteOf(input),
-                said(input),
-              ])
+            ? yield* obj(
+                emit,
+                "direct",
+                BriefOf(openIds),
+                ask(s1, input, {
+                  stage: "direct",
+                  ledger: ledgerOf(path),
+                  rules: card.guard,
+                  open: told(open),
+                  events: gateEvents,
+                }),
+              )
             : { must: [], may: openIds }
       const brief: Brief = {
         ...briefed,
@@ -565,16 +554,7 @@ export const makeSession = ({
       }
       // narrate, streamed, with truncation recovery and at most one correction rewrite
       const fed = known(path)
-      const tail = [
-        ...disclosures.map((d) => sys(textOf(d))),
-        ...(events.length ? [sys(`Outcome: ${events.join(", ")}`)] : []),
-        ...(fed.current ? [sys(fed.current)] : []), // feed products other than notes: where the scene stands, as data
-        ...open.filter((d) => brief.must.includes(d.id)).map((d) => sys(`MUST reveal: ${textOf(d)}`)),
-        ...open.filter((d) => brief.may.includes(d.id)).map((d) => sys(`MAY reveal: ${textOf(d)}`)),
-        ...(brief.tone ? [sys(`Tone: ${brief.tone}`)] : []),
-        ...noteOf(input),
-        ...thoughtOf(input),
-      ]
+      const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
       // A stopped stream ends after the current pull without the `finish` part: the text so far is the reply, usage unknown.
@@ -607,15 +587,19 @@ export const makeSession = ({
         })
       const narrate = (correction?: string) =>
         Effect.gen(function* () {
-          // This turn's directives follow the player's input: Anthropic accepts a mid-conversation system message only
-          // directly after a user message (verified live), and it is the one placement all three formats take.
-          const msgs = [
-            ...head("narrate", s1),
-            ...history(path, "narrate"),
-            said(input),
-            ...tail,
-            ...(correction ? [sys(correction)] : []),
-          ]
+          const msgs = ask(s1, input, {
+            stage: "narrate",
+            fiction: headOf(card.fiction, { state: s1 }),
+            history: narratorHistory(path, textOf, sum),
+            summarized: sum !== undefined,
+            told: disclosures.map(textOf),
+            outcome: events,
+            current: fed.current, // feed products other than notes: where the scene stands, as data
+            must: told(open.filter((d) => brief.must.includes(d.id))),
+            may: told(open.filter((d) => brief.may.includes(d.id))),
+            tone: brief.tone,
+            correction,
+          })
           const r = yield* write(msgs)
           if (r.finishReason !== "length" || !M.prefill) return r.parts
           const r2 = yield* write([...msgs, { role: "assistant", content: r.text }]) // resume with the partial as prefix
@@ -626,11 +610,12 @@ export const makeSession = ({
       let violated: string[] = []
       if (!cut && (card.guard.length > 0 || open.length > 0)) {
         const check = (text: string) =>
-          obj(emit, "check", Check(openIds, card.guard), [
-            ...card.guard.map((r) => sys(`Rule: ${r}`)),
-            sys(`Open: ${openIds.join(",")}\nMust: ${brief.must.join(",")}`),
-            usr(text),
-          ]).pipe(
+          obj(
+            emit,
+            "check",
+            Check(openIds, card.guard),
+            ask(s1, input, { stage: "check", rules: card.guard, open: told(open), must: brief.must, prose: text }),
+          ).pipe(
             Effect.map((c) => {
               const r = c as { fired?: readonly string[]; violated?: readonly string[] }
               return { fired: r.fired ?? [], violated: r.violated ?? [] }
@@ -663,7 +648,8 @@ export const makeSession = ({
         emit,
         asked,
         path,
-        `${input.text}\n${proseOf(reply)}`,
+        s1,
+        { input, reply },
         qs ? { schema: qs, lines: rpg.questions(s1) } : undefined,
       )
       const answers = (rec.answers ?? {}) as Answers
@@ -787,11 +773,13 @@ export const makeSession = ({
       settleTurn(stateAt(chain(t.parent)), { ...t, adjust })
       return change(held.commit(Log.amend(held.log, nodeId, { adjust })))
     },
-    /** The player picks one of a node's `options`: it is their next act, a child turn like any typed input. */
+    /** The player picks one of a node's `options`: their next input, a child turn like any typed one, on the card's
+     *  default channel (a direction on a note card; the player's own line on an act card). */
     pick: (nodeId: number, i: number, stop?: Stop): Events => {
       const text = (turnOf(nodeId).products.options as readonly string[] | undefined)?.[i]
       if (text === undefined) throw new Error(`no option ${i} on node ${nodeId}`)
-      return emitting((emit) => turn(emit, nodeId, { text }, "lookup", undefined, stop))
+      const input: Input = card.input === "note" ? { text: "", note: text } : { text }
+      return emitting((emit) => turn(emit, nodeId, input, "lookup", undefined, stop))
     },
     /** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
      *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner
@@ -802,7 +790,7 @@ export const makeSession = ({
       if (!p) throw new Error(`${productId}: not a product of this card`)
       return emitting((emit) =>
         Effect.gen(function* () {
-          const rec = yield* record(emit, [p], chain(t.parent), `${t.input.text}\n${proseOf(t.reply)}`)
+          const rec = yield* record(emit, [p], chain(t.parent), stateAt(chain(t.id)), t)
           const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...rec.products } })
           yield* emit({ kind: "change", ...change(held.commit(amended)) })
         }),
