@@ -1,7 +1,7 @@
 // The three calls the harness makes, as Effects. Interrupting the fiber aborts the HTTP request.
 // Structured stages: `object`. Narrate: `text` (one shot) or `stream`. Nothing here loops or picks tools.
 import {
-  generateObject,
+  Output,
   generateText,
   streamText,
   type LanguageModel,
@@ -124,17 +124,16 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
   o: CallOptions = {},
 ) =>
   Effect.tryPromise((abortSignal) =>
-    generateObject({
+    generateText({
       model: m.model,
-      schema: standard(schema),
-      schemaName: o.name,
+      output: Output.object({ schema: standard(schema), name: o.name }),
       messages: wire(m.format, messages),
       abortSignal,
       ...settings(m.format, o),
     }),
   ).pipe(
     Effect.mapError(fail),
-    Effect.map((r) => ({ value: r.object as S["Type"], usage: usage(r.usage), finishReason: r.finishReason })),
+    Effect.map((r) => ({ value: r.output as S["Type"], usage: usage(r.usage), finishReason: r.finishReason })),
   )
 
 export const text = (m: Model, messages: readonly Message[], o: CallOptions = {}) =>

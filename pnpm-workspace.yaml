@@ -17,3 +17,7 @@ permissions:
     skills: true
   solid-js:
     skills: true
+# ponytail: temporary, lets the ai-sdk pins pass ~/.npmrc's min-release-age=7; drop once the pins are a week old.
+minimumReleaseAgeExclude:
+  - "@ai-sdk/*"
+  - ai

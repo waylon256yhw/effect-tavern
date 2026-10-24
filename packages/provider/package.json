@@ -10,10 +10,10 @@
     "verify": "tsc && bun test/url.ts && bun test/anthropic.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.36",
-    "@ai-sdk/google": "4.0.39",
-    "@ai-sdk/openai-compatible": "3.0.27",
-    "ai": "7.0.62",
+    "@ai-sdk/anthropic": "4.0.87",
+    "@ai-sdk/google": "4.0.104",
+    "@ai-sdk/openai-compatible": "3.0.77",
+    "ai": "7.0.152",
     "effect": "4.0.5"
   },
   "devDependencies": {
