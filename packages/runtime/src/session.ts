@@ -390,6 +390,7 @@ export const makeSession = ({
     qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
   ) =>
     Effect.gen(function* () {
+      if (!asked.length && !qs) return { products: {} as Record<string, unknown>, answers: undefined } // nothing to ask
       const fed = known(path)
       const msgs = ask(state, scene.input, {
         stage: "record",
@@ -463,7 +464,7 @@ export const makeSession = ({
                     Lookup(idx),
                     ask(s0, input, {
                       stage: "lookup",
-                      index: untold.map((e) => (e.lore ? e.id : `${e.id}=${e.hook}`)),
+                      index: untold.map((e) => `${e.id}=${e.hook}`),
                     }),
                   )).read
                 : [],
@@ -630,9 +631,10 @@ export const makeSession = ({
           )
           // A stop that fired while check ran halts the rewrite before its first character: the first draft stands,
           // stopped, with its verdict (the halted rewrite once became an empty stopped node).
+          // A rewrite the player cut is not judged either (the first draft's verdict stands only when it stands).
           if (!cut || proseOf(again)) {
             reply = again
-            c = yield* check(proseOf(reply))
+            c = cut ? { fired: [], violated: [] } : yield* check(proseOf(reply))
           }
         }
         fired = open.filter((d) => c.fired.includes(d.id))
@@ -790,7 +792,10 @@ export const makeSession = ({
       if (!p) throw new Error(`${productId}: not a product of this card`)
       return emitting((emit) =>
         Effect.gen(function* () {
-          const rec = yield* record(emit, [p], chain(t.parent), stateAt(chain(t.id)), t)
+          // the state the turn's own record saw: opening and beats settled, readouts and adjustments not yet
+          const s0 = stateAt(chain(t.parent))
+          const s1 = rpg.fold(t.opening ? rpg.apply(s0, t.opening).s : s0, t.beats).s
+          const rec = yield* record(emit, [p], chain(t.parent), s1, t)
           const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...rec.products } })
           yield* emit({ kind: "change", ...change(held.commit(amended)) })
         }),

@@ -130,7 +130,7 @@ export const makeCard = (r: Rules) => {
         const f = fields.get(e.path)
         const v = num(out, e.path) + (typeof e.add === "number" ? e.add : num(out, e.add.path))
         out[e.path] = Math.min(f?.max ?? Infinity, Math.max(f?.min ?? -Infinity, v)) // bounds clamp (§4.2)
-      } else events.push(e.event.replace(/\{(\w+)\}/g, (_, p) => String(out[p])))
+      } else events.push(e.event.replace(/\{([^}]+)\}/g, (_, p) => String(out[p])))
     }
     return { s: validate(out) as State, events }
   }

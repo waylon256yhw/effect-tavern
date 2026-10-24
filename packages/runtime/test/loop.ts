@@ -29,13 +29,14 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
   let delay: number | undefined
   switch (phase) {
     case "lookup":
-      // Index entries are `id` (lore) or `id=hook` (a recall product's item); the script reads "about <hook>".
+      // Index entries are `id=hook` (a lore entry's first sentence, a recall row's key); the script reads "about <id>" or
+      // "about <hook>".
       out = JSON.stringify({
         read: text
           .match(/Index: (.*)/)![1]
           .split(", ")
           .map((e) => e.split("="))
-          .filter(([id, hook]) => want.toLowerCase().includes(`about ${(hook ?? id)!.toLowerCase()}`))
+          .filter(([id, hook]) => [id, hook].some((k) => want.toLowerCase().includes(`about ${k!.toLowerCase()}`)))
           .map(([id]) => id),
       })
       break
@@ -119,6 +120,12 @@ assert.deepEqual(
   ["继续", "推进剧情", "时间流逝", "详细描写"],
 ) // author mode: no thought mark, no channel switch
 const C = makeSession({ card: chat, player, model }) // its stripped copy: no actions, no lore, no guard
+// every product off and no readouts: a turn is narrate alone, record has nothing to ask and makes no call
+const Q = makeSession({
+  card: chat,
+  player: { ...player, products: { notes: false, options: false, scene: false, people: false } },
+  model,
+})
 const events: Event[] = []
 const made = () => events.filter((e) => e.kind === "call")
 const calls = () => made().map((e) => e.phase)
@@ -165,6 +172,8 @@ const program = Effect.gen(function* () {
 
   let i = calls().length
   const t1 = yield* go(S.act(null, { text: "ask about li" }))
+  // the lookup's index names every entry by its hook, a lore entry's first sentence included
+  assert.ok(/^Index: li=Li: A's lost friend; crane tattoo on the left shoulder\.$/m.test(str(prompts("lookup")[0]!)))
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t1.read, [{ id: "li", layer: 1 }])
   assert.deepEqual(S.node(t1.id).delivered, [{ id: "li", layer: 1, text: full.lore[0]!.layers[0] }])
@@ -444,6 +453,9 @@ const program = Effect.gen(function* () {
   const n0 = yield* go(N.act(null, { text: "", note: "开场" }))
   const n1 = yield* go(N.pick(n0.id, 1))
   assert.deepEqual(n1.input, { text: "", note: "O2" })
+  i = calls().length
+  const q0 = yield* go(Q.act(null, { text: "hello" }))
+  assert.deepEqual([since(i), q0.products], [["narrate"], {}])
 
   // ───────── Derived lore counters in the window (§8 item 4), and a card's own ask ─────────
   // A recurring entry: offered when it has not reached the narrator for two turns and has been shown fewer than twice.

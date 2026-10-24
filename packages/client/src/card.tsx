@@ -129,7 +129,16 @@ export const CardPage = () => {
                       {at() + 1} / {openings().length}
                       <Up />
                     </button>
-                    <div id="openings" class="versions" popover role="menu">
+                    <div
+                      id="openings"
+                      class="versions"
+                      popover
+                      role="menu"
+                      onFocusOut={(e) =>
+                        !e.currentTarget.contains(e.relatedTarget as HTMLElement | null) &&
+                        e.currentTarget.hidePopover()
+                      }
+                    >
                       <For each={openings()} keyed={false}>
                         {(g, i) => (
                           <button

@@ -63,6 +63,11 @@ assert.ok(offers(ch1, D(path(root)), "sword throne").every((o) => o.id !== "sect
 
 // 2. Pull then push on one entry: read layer 1, then the duel offers layer 2, the narrator reveals it.
 assert.deepEqual(index(ch1, D(path(root)))[0].hook, "Li is A's friend who vanished ten years ago.")
+// the hook is the first sentence in either script: a Chinese full stop ends one without a space after it
+assert.equal(
+  makeLore([{ id: "x", layers: ["甲在竹林。乙在镇上。"], unlock: () => 1 }]).index({}, [])[0]!.hook,
+  "甲在竹林。",
+)
 const r1 = read(ch1, D(path(root)), "li")!
 assert.deepEqual(r1, [{ id: "li", layer: 1 }])
 const t1 = add(root, ch1, r1) // lookup result appended to the log once

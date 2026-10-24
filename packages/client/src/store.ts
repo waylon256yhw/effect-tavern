@@ -134,8 +134,9 @@ const resetPlay = () => {
     ended: true,
   })
 }
-/** Whether any prose has arrived for the current draft, shown or still queued: what a stop before it withdraws. */
-export const arrived = (): boolean => play.total > 0
+/** Whether any prose has arrived this turn, shown, still queued, or a first draft a rewrite displaced: what a stop
+ *  before it withdraws, and what the server keeps as a stopped node after it. */
+export const arrived = (): boolean => play.total > 0 || !!registry.get(draft)?.prev
 const enqueue = (chunk: string) => {
   const chars = Array.from(segmenter.segment(chunk), (x) => x.segment)
   if (chars.length === 0) return

@@ -30,7 +30,7 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
     current,
     /** Hooks of visible entries. */
     index: (s: S, ds: readonly Disclosure[]) =>
-      visible(s, ds).map((e) => ({ id: e.id, hook: e.layers[0].split(/(?<=\.)\s/)[0] })),
+      visible(s, ds).map((e) => ({ id: e.id, hook: e.layers[0].split(/(?<=[.。!?！？])\s*/)[0] })),
     /** Visible entries with a layer this path hasn't seen: the enum the lookup stage picks from. Empty → no call. */
     readable: (s: S, ds: readonly Disclosure[]) =>
       visible(s, ds)
