@@ -36,7 +36,7 @@ export interface Told {
   text: string
 }
 export type Ask =
-  | { stage: "lookup"; index: readonly string[] } // entries as `id` (lore) or `id=hook` (a recall row)
+  | { stage: "lookup"; question: string; index: readonly string[] } // entries as `id=hook`
   | {
       stage: "decide"
       ledger: readonly Msg[]
@@ -102,7 +102,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
   const frame = zone(c.frame, w)
   switch (a.stage) {
     case "lookup":
-      return [...frame, sys(`Index: ${a.index.join(", ")}`), ...thoughtOf(c), said(c.input)]
+      return [...frame, sys(`${a.question}\nIndex: ${a.index.join(", ")}`), ...thoughtOf(c), said(c.input)]
     case "decide":
       return [
         ...frame,

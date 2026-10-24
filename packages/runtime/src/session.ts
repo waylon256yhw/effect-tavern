@@ -108,9 +108,14 @@ export type SessionModel = Model & {
 // ───────── The session's own words ─────────
 // Every instruction the loop says to the model, as fragments with ids, in the open. Data lines (State:, Actions:,
 // Open:, Known:, Questions:) are format and stay in code; these are the prose around them. Resolved per id: the
-// player's `asks`, then the card's, then these defaults. Lookup, direct and check carry no prose: the schema is the
-// question.
+// player's `asks`, then the card's, then these defaults. Direct and check carry no prose: the schema is the question.
+// Lookup carries one line, since an index and an array read as "fill it": the first Haiku session picked one entry a
+// turn until the index was empty, the innkeeper on a line that spoke to the swordsman.
 export const asks = frags([
+  {
+    id: "lookup",
+    text: "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.",
+  },
   {
     id: "decide.first",
     text: `Which card action does the player's input take first? "end" if it takes none of the listed actions. Set "again" to true only if the input's own words ask for more than one beat ("until he falls", "twice", "then …").`,
@@ -163,7 +168,7 @@ const defaultProducts = (input: "act" | "note"): readonly Product[] =>
       text:
         input === "note"
           ? "Four directions the player could give the narrator for what happens next, each one line, distinct in kind."
-          : "Four things the player could do next, each one line written as the player would type it: their own act or words, in the person and voice of their input, never a description of them. Distinct in kind.",
+          : "Four lines the player might send next, each one line as they would type it themselves: in the first person (我……) or the words they would say. Never 你, never a narrator's description of them. Distinct in kind.",
       shape: { kind: "list", max: 4 },
       on: false,
     },
@@ -319,12 +324,14 @@ export const makeSession = ({
     const seenKeys = new Set(seen.map(key))
     const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
     const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
+    // Rows with one key are one entry, the newest row (a person re-rowed with what a later scene added); the live
+    // session had 老朋友 twice in the index.
     const recall = products
       .filter((p) => p.recall !== undefined)
       .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
       .filter((e) => !seenKeys.has(`${e.id}#1`))
       .map((e) => ({ id: e.id, hook: e.hook }))
-    return [...lore, ...recall]
+    return [...lore, ...new Map(recall.map((e) => [`${e.id.split("@")[0]}=${e.hook}`, e])).values()]
   }
   const project = (t: Turn): Node => {
     const path = chain(t.id)
@@ -465,6 +472,7 @@ export const makeSession = ({
                     Lookup(idx),
                     ask(s0, input, {
                       stage: "lookup",
+                      question: wording("lookup"),
                       index: untold.map((e) => `${e.id}=${e.hook}`),
                     }),
                   )).read

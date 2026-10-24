@@ -81,7 +81,8 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
         ],
         options: ["O1", "O2", "O3", "O4", "O5"], // five: the cap cuts to four
         scene: { place: `P#${n}`, present: [{ name: "B", mood: "calm" }] },
-        people: /^Player's line: ask about li/im.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
+        // "names li" rows Li too, on a line the lookup script does not read from
+        people: /^Player's line: (ask about|names) li/im.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
         inner: `INNER#${n}`,
       }
       const products = Object.fromEntries(asked.map((id) => [id, canned[id]]))
@@ -502,6 +503,10 @@ const program = Effect.gen(function* () {
   assert.deepEqual([V.node(v2.id).state.bond, untold(v2.id)], [3, ["li"]]) // the instant no longer holds; the lock stays open
   const v4 = yield* go(V.act(v2.id, { text: "about li" }))
   assert.deepEqual([v4.read, untold(v4.id)], [[{ id: "li", layer: 2 }], []])
+  // Two undelivered rows with one key are one index entry, the newest row.
+  const r1 = yield* go(V.act(v4.id, { text: "names li" }))
+  const r2 = yield* go(V.act(r1.id, { text: "names li" }))
+  assert.deepEqual([r1.products.people, untold(r2.id)], [[{ name: "Li", note: `N#${n - 1}` }], [`people@${r2.id}#0`]])
   console.log(str(lastNarr()))
 })
 

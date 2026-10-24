@@ -40,7 +40,7 @@ const marks = (ms: Message[]) =>
     .filter((i) => i >= 0)
 
 const asks: Record<Ask["stage"], Ask> = {
-  lookup: { stage: "lookup", index: ["li", "people@3#0=Li"] },
+  lookup: { stage: "lookup", question: "Which entries?", index: ["li=Li: A's friend.", "people@3#0=Li"] },
   decide: {
     stage: "decide",
     ledger: [{ role: "system", text: "Ledger:\nhello → -" }],
@@ -113,7 +113,10 @@ for (const s of stages.filter((s) => s !== "narrate")) {
   const ms = line[s]
   assert.ok(ms.slice(0, -1).every((m) => m.role === "system") && ms.at(-1)!.role === "user", s)
 }
-assert.deepEqual(line.lookup.slice(3).map(text), ["Index: li, people@3#0=Li", "我拔剑。"])
+assert.deepEqual(line.lookup.slice(3).map(text), [
+  "Which entries?\nIndex: li=Li: A's friend., people@3#0=Li",
+  "我拔剑。",
+])
 assert.deepEqual(line.decide.slice(3).map(text), [
   "Ledger:\nhello → -",
   'Which action?\nState: {"hp":40}\nActions: strike: attack B | talk: talk\nSo far: -',

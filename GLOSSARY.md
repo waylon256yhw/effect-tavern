@@ -70,7 +70,7 @@ _不用_："导演"来指作者视角（director 是 harness 的阶段）、"小
 
 **玩家层（Player）**：玩家自己的框架 fragment、`asks` 覆盖、产物开关、`snippets`。排在卡的框架之前。**enhancer** 是它的装配形式：一组带名字的玩家层 fragment 加几个产物开关，生态里叫 text LoRA。_不用_："预设"（作为提示词对象不存在，只剩 provider 配置）。
 
-**asks**：harness 在固定点向模型提的问法，带 id 的默认 fragment（decide.first、decide.again、narrate.correction、record.notes、input.thought 等），按 id 由玩家层、再由卡覆盖。数据行是格式，留在代码里。
+**asks**：harness 在固定点向模型提的问法，带 id 的默认 fragment（lookup、decide.first、decide.again、narrate.correction、record.notes、input.thought 等），按 id 由玩家层、再由卡覆盖。数据行是格式，留在代码里。
 
 **snippets（快捷片段）**：`{ name, text, after?, hint?, note? }`，有游戏意义的快捷输入（心声的记号、场外通道、给叙事者的指示），玩家层数据，harness 带默认几条。客户端按 `+` 或空框按 `/` 拉出，分"故事里 / 给叙事者"两组，插进光标处，从不代发。_不用_：把格式键混进来。
 
