@@ -233,7 +233,7 @@ const applyNow = (e: Wire): void => {
       registry.update(log, (l) => L.apply(l, e))
       const id = e.node?.id
       if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made]))
-      settle()
+      if (id !== undefined || !registry.get(draft)) settle() // a checkout while a turn streams moves head, not the draft
       return
     }
     case "error":

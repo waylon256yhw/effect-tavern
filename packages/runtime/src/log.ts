@@ -66,11 +66,14 @@ export const path = <T extends Noded>(log: Log<T>): T[] => chain(log, log.head)
 /** A parent's children in id order: the versions of a turn; `null` gives the roots, the threads. */
 export const children = <T extends Noded>(log: Log<T>, parent: Id | null): T[] =>
   [...log.nodes.values()].filter((n) => n.parent === parent).sort((a, b) => a.id - b.id)
-/** The subtree, the node itself first. */
-const under = <T extends Noded>(log: Log<T>, id: Id): T[] => (
-  get(log, id),
-  [...log.nodes.values()].filter((n) => chain(log, n.id).some((a) => a.id === id)).sort((a, b) => a.id - b.id)
-)
+/** The subtree, the node itself first. One pass in id order: a child's id is greater than its parent's, so a node's
+ *  parent is already known to be inside (or not) when the node is reached. */
+const under = <T extends Noded>(log: Log<T>, id: Id): T[] => {
+  const inside = new Set([get(log, id).id]) // `add` returns the set: a node under an inside parent is marked and kept
+  return [...log.nodes.values()]
+    .sort((a, b) => a.id - b.id)
+    .filter((n) => inside.has(n.id) || (n.parent !== null && inside.has(n.parent) && inside.add(n.id)))
+}
 /** How many nodes follow a node: what a checkout away from it leaves behind. */
 export const below = <T extends Noded>(log: Log<T>, id: Id): number => under(log, id).length - 1
 /** The newest leaf in a node's subtree (the node itself when childless): the greatest id there. */

@@ -31,6 +31,9 @@ assert.deepEqual(
 
 registry.set(draft, { parent: 1, input: { text: "x" }, text: "" })
 apply({ kind: "stage", phase: "narrate" })
+apply({ kind: "change", head: 2 }) // a checkout while the turn streams: head moves, the draft stays
+assert.deepEqual([registry.get(log).head, registry.get(draft)?.parent], [2, 1])
+apply({ kind: "change", head: 1 })
 apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "he" } })
 apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "llo" } })
 assert.equal(registry.get(draft)!.text, "") // nothing until the frame

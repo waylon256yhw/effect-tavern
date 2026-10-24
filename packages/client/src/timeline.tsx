@@ -74,7 +74,7 @@ export const Timeline = () => {
   const node = (id: Id) => all().nodes.get(id)
   const sel = () => (selected() === null ? undefined : node(selected()!))
   // where checkout(selected) lands: the newest leaf under it
-  const target = () => (sel() ? L.leaf(all(), sel()!.id) : null)
+  const target = createMemo(() => (sel() ? L.leaf(all(), sel()!.id) : null)) // read by every station: once per change
   const scene = (n: Node) => {
     const h = heading(view()?.heading, n)
     const p = n.parent === null ? undefined : node(n.parent)

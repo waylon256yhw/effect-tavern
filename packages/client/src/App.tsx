@@ -73,9 +73,10 @@ const waiting: Record<string, string> = {
   record: "Recording",
 }
 
+const paragraphs = (text: string) => text.split(/\n{2,}/).filter((p) => p.trim())
 const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
   const ps = createMemo(() => {
-    const ps = props.text.split(/\n{2,}/).filter((p) => p.trim())
+    const ps = paragraphs(props.text)
     return ps.length || !("tail" in props) ? ps : [""]
   })
   const last = createMemo(() => ps().length - 1)
@@ -91,29 +92,33 @@ const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
   )
 }
 
-/** The prose in place as a textarea (Edit): ⌘↵ sends it as an `edit` sibling (check and record run over the player's
- *  text, nothing is narrated), Escape cancels, and so does sending it unchanged or empty. Bare Enter is a paragraph.
- *  Two keys under it do the same for a touch screen, which has neither. */
+/** The prose in place, editable (Edit): the same paragraphs made contenteditable, so not a glyph moves when the editor
+ *  opens (a textarea re-flowed the whole turn: its own padding, and a blank line where the paragraph gap was). ⌘↵
+ *  sends it as an `edit` sibling (check and record run over the player's text, nothing is narrated), Escape cancels,
+ *  and so does sending it unchanged or empty. Bare Enter is a line break, two make a paragraph. Two keys under it do
+ *  the same for a touch screen, which has neither. The paragraphs are plain DOM the editor fills once: the player's
+ *  typing mutates them, and nothing reactive must own what it did not write. */
 const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
-  let box!: HTMLTextAreaElement
+  let box!: HTMLDivElement
   const submit = () => {
-    const t = box.value.trim()
+    const t = box.innerText.trim()
     props.onDone(t && t !== props.text ? t : undefined)
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
   const ime = imeController(submit)
   onSettled(() => {
+    for (const p of paragraphs(props.text)) box.append(Object.assign(document.createElement("p"), { textContent: p }))
     box.focus()
-    box.setSelectionRange(box.value.length, box.value.length)
+    getSelection()?.collapse(box, box.childNodes.length)
   })
   return (
     <>
-      <textarea
+      <div
         class="editor"
+        contenteditable="plaintext-only"
         aria-label="Edit the prose"
         ref={(el) => (box = el)}
-        value={props.text}
         onCompositionStart={ime.compositionStart}
         onCompositionEnd={ime.compositionEnd}
         onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
@@ -260,22 +265,22 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) =
 
 /** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
 const Said = (props: { input: { text: string; note?: string }; onEdit?: (field: "text" | "note") => void }) => {
-  // on a landed node the bubble is the way to revise the line: it goes back into the composer (Cherry Studio's edit)
+  // on a landed node the bubble is the way to revise the line: it goes back into the composer (Cherry Studio's edit).
+  // The draft's bubble is the same button, disabled: one box, so the line does not re-wrap when the node lands.
   const Bubble = (p: { field: "text" | "note"; text: string }) => (
-    <Show when={props.onEdit} fallback={<p class={{ said: true, note: p.field === "note" }}>{p.text}</p>}>
-      <button
-        type="button"
-        class={{ said: true, note: p.field === "note" }}
-        aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
-        onClick={() => {
-          props.onEdit!(p.field)
-          document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()
-        }}
-      >
-        <span>{p.text}</span>
-        <Edit aria-hidden="true" />
-      </button>
-    </Show>
+    <button
+      type="button"
+      class={{ said: true, note: p.field === "note" }}
+      aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
+      disabled={!props.onEdit}
+      onClick={() => {
+        props.onEdit!(p.field)
+        document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()
+      }}
+    >
+      <span>{p.text}</span>
+      <Edit aria-hidden="true" />
+    </button>
   )
   return (
     <>
@@ -403,7 +408,12 @@ const Section = (props: {
         />
         <Show when={siblings().length > 1}>
           <span class="siblings">
-            <button class="icon" aria-label="Previous version" disabled={at() === 0} onClick={() => go(at() - 1)}>
+            <button
+              class="icon"
+              aria-label="Previous version"
+              disabled={props.busy || at() === 0}
+              onClick={() => go(at() - 1)}
+            >
               <Prev />
             </button>
             {/* the counter opens the list: which action made each version, its opening, how many nodes follow it */}
@@ -448,7 +458,7 @@ const Section = (props: {
             <button
               class="icon"
               aria-label="Next version"
-              disabled={at() === siblings().length - 1}
+              disabled={props.busy || at() === siblings().length - 1}
               onClick={() => go(at() + 1)}
             >
               <Next />
