@@ -93,32 +93,41 @@ const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
 }
 
 /** The prose in place, editable (Edit): the same paragraphs made contenteditable, so not a glyph moves when the editor
- *  opens (a textarea re-flowed the whole turn: its own padding, and a blank line where the paragraph gap was). ⌘↵
- *  sends it as an `edit` sibling (check and record run over the player's text, nothing is narrated), Escape cancels,
- *  and so does sending it unchanged or empty. Bare Enter is a line break, two make a paragraph. Two keys under it do
- *  the same for a touch screen, which has neither. The paragraphs are plain DOM the editor fills once: the player's
- *  typing mutates them, and nothing reactive must own what it did not write. */
+ *  opens (a textarea re-flowed the whole turn: its own padding, and a blank line where the paragraph gap was). The
+ *  host is a rich one, so Enter is a paragraph as the browser makes it (a <p>, with the reader's gap) and ⇧↵ a line
+ *  break, both what innerText reads back and `paragraphs` splits; formatting and pasted markup are refused, text is
+ *  text. ⌘↵ sends it as an `edit` sibling (check and record run over the player's text, nothing is narrated), Escape
+ *  cancels, and so does sending it unchanged or empty. Two keys under it do the same for a touch screen, which has
+ *  neither. The paragraphs are plain DOM the editor fills once: the player's typing mutates them, and nothing reactive
+ *  must own what it did not write. */
 const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
   let box!: HTMLDivElement
   const submit = () => {
-    const t = box.innerText.trim()
-    props.onDone(t && t !== props.text ? t : undefined)
+    const t = paragraphs(box.innerText).join("\n\n")
+    props.onDone(t && t !== paragraphs(props.text).join("\n\n") ? t : undefined)
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
   const ime = imeController(submit)
   onSettled(() => {
     for (const p of paragraphs(props.text)) box.append(Object.assign(document.createElement("p"), { textContent: p }))
+    document.execCommand("defaultParagraphSeparator", false, "p")
     box.focus()
-    getSelection()?.collapse(box, box.childNodes.length)
+    const end = box.lastChild?.lastChild ?? box // the caret inside the last paragraph's text, after its last character
+    getSelection()?.collapse(end, end.textContent?.length ?? 0)
   })
   return (
     <>
       <div
         class="editor"
-        contenteditable="plaintext-only"
+        contenteditable="true"
         aria-label="Edit the prose"
         ref={(el) => (box = el)}
+        onBeforeInput={(e) => e.inputType.startsWith("format") && e.preventDefault()}
+        onPaste={(e) => {
+          e.preventDefault()
+          document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "")
+        }}
         onCompositionStart={ime.compositionStart}
         onCompositionEnd={ime.compositionEnd}
         onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
@@ -145,6 +154,12 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
 const follow = { on: true, ours: null as number | null, touched: -Infinity }
 const scroller = () => document.querySelector(".scroll")!
 const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
+/** How much of the latest turn's content is below the viewport. The last section is at least a screen tall so a
+ *  turn can land at its top; that filler is not something to jump to, so the way-back button reads the content's end. */
+const hidden = () => {
+  const last = document.querySelector("main > section:last-of-type")?.lastElementChild
+  return last ? last.getBoundingClientRect().bottom - scroller().getBoundingClientRect().bottom : gap()
+}
 const anchor = () => {
   follow.on = true
   document.querySelector("main > section:last-of-type")?.scrollIntoView({ block: "start", behavior: "instant" })
@@ -159,7 +174,7 @@ const Latest = () => {
   onSettled(() => {
     const onScroll = () => {
       const g = gap()
-      setAway(g > 120)
+      setAway(hidden() > 120)
       const t = follow.ours
       follow.ours = null
       if (t === null || Math.abs(scroller().scrollTop - t) > 2) follow.on = g <= 40
@@ -171,7 +186,7 @@ const Latest = () => {
     // the scroller shrinking (the composer growing under it) is the same event from the other side
     const ro = new ResizeObserver(() => {
       if (follow.on && performance.now() - follow.touched >= 150) stick()
-      setAway(!follow.on && gap() > 120)
+      setAway(!follow.on && hidden() > 120)
     })
     ro.observe(document.querySelector("main")!)
     ro.observe(scroller())
@@ -264,13 +279,17 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) =
 }
 
 /** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
-const Said = (props: { input: { text: string; note?: string }; onEdit?: (field: "text" | "note") => void }) => {
+const Said = (props: {
+  input: { text: string; note?: string }
+  onEdit?: (field: "text" | "note") => void
+  revising?: "text" | "note" // the field of this line that is in the composer now: that bubble is marked
+}) => {
   // on a landed node the bubble is the way to revise the line: it goes back into the composer (Cherry Studio's edit).
   // The draft's bubble is the same button, disabled: one box, so the line does not re-wrap when the node lands.
   const Bubble = (p: { field: "text" | "note"; text: string }) => (
     <button
       type="button"
-      class={{ said: true, note: p.field === "note" }}
+      class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}
       aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
       disabled={!props.onEdit}
       onClick={() => {
@@ -383,6 +402,7 @@ const Section = (props: {
 }) => {
   const all = read(log)
   const edited = read(editing)
+  const revised = read(revising)
   const siblings = createMemo(() => L.children(all(), props.node.parent))
   // versions that differ in the player's line are told apart by it; otherwise by the prose
   const varied = createMemo(() => new Set(siblings().map((v) => `${v.turn.input.text}\n${v.turn.input.note}`)).size > 1)
@@ -393,7 +413,11 @@ const Section = (props: {
   const options = () => props.node.turn.products.options as readonly string[] | undefined
   return (
     <section id={`node-${props.node.turn.id}`}>
-      <Said input={props.node.turn.input} onEdit={(f) => props.onRevise(f)} />
+      <Said
+        input={props.node.turn.input}
+        onEdit={(f) => props.onRevise(f)}
+        revising={revised()?.node === props.node.id ? revised()!.field : undefined}
+      />
       <Show when={edited() === props.node.turn.id} fallback={<Paragraphs text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={(t) => props.onEdit(t)} />
       </Show>

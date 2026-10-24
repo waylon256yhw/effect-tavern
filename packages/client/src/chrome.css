@@ -261,7 +261,8 @@
 .scene:hover {
   background: var(--alpha-1);
 }
-.icon[aria-pressed="true"] {
+.icon[aria-pressed="true"],
+.icon[aria-expanded="true"] {
   color: var(--ink);
 }
 .notes ul {

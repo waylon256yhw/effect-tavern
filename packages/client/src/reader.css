@@ -180,20 +180,20 @@ p {
   white-space: pre-wrap; /* a single newline is a line break, as the editor (a plaintext-only host) shows it */
 }
 /* the prose in place, editable (Edit): the paragraphs stay where they were (the same column, the same gap); the
-   field is drawn around them as a shadow spread, so it costs no layout */
+   field grows outward by its own padding, margin cancelling it, so the text keeps its width and its place */
 .editor {
   display: flex;
   flex-direction: column;
   gap: var(--gap-item);
   min-height: var(--line-prose);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 0 0 var(--space-2) var(--alpha-1);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
   outline: none;
 }
 .editor:focus {
-  box-shadow:
-    0 0 0 var(--space-2) var(--alpha-1),
-    0 0 0 calc(var(--space-2) + var(--hairline)) var(--line-strong);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 /* the editor's keys: a touch screen has no Escape or ⌘↵. They stand in for the turn's action row, the same height,
    so opening the editor adds nothing under the prose (the column follows the end: added height scrolls the prose) */
@@ -272,6 +272,10 @@ button.said {
 }
 button.said span {
   flex: 1;
+}
+/* the line that is in the composer now (Revise): the bubble says so where it stands */
+button.said.revising {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 /* the draft's bubble: the same box, not yet a control */
 button.said:disabled {

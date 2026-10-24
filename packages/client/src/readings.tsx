@@ -234,6 +234,7 @@ export const Rewrite = (props: {
               reword()
             } else if (e.key === "Escape") setAsking(false)
           }}
+          onBlur={() => !direction?.value.trim() && setAsking(false)}
         />
       </Show>
       <Show when={props.rerun}>
@@ -252,6 +253,7 @@ export const Rewrite = (props: {
           data-hint="Reword: new prose, same turn"
           aria-expanded={asking() ? "true" : "false"}
           disabled={props.busy}
+          onPointerDown={(e) => e.preventDefault()}
           onClick={() => (asking() ? reword() : setAsking(true))}
         >
           <Reword />
