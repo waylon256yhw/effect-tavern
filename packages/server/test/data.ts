@@ -1,5 +1,6 @@
 // The library (src/data.ts) in memory: a story's store is log.ts's Store, written change by change and read back as
-// the same log, with head and next kept so a dropped id never returns; deleting a story takes its nodes with it.
+// the same log, with head and next kept so a dropped id never returns; deleting a story takes its nodes with it; the
+// player row round-trips its JSON.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
 import { open } from "../src/data.ts"
@@ -36,5 +37,9 @@ assert.deepEqual(
 )
 assert.throws(() => data.store<N>(story).read(), /no story/)
 
+// The player row: JSON in, the same out.
+assert.equal(data.player.read(), undefined)
+data.player.write({ writing: { pov: "second" }, global: [], forCard: {} })
+assert.deepEqual(data.player.read(), { writing: { pov: "second" }, global: [], forCard: {} })
 data.close()
 console.log("ok")

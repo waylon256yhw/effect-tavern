@@ -220,15 +220,18 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
 
 export const makeSession = ({
   card,
-  player,
+  player: given,
   model: M,
   store,
+  players,
 }: {
   card: Card
-  player: Player
+  player: Player // the harness default; a stored player wins over it
   model: SessionModel
   store?: Log.Store<Turn> // the log's persistence; none = in memory
+  players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
 }) => {
+  let player = players?.read() ?? given
   const rpg = makeCard(card.rules)
   // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
   const gate = (id: string, offer: Cond) => ({
@@ -259,7 +262,8 @@ export const makeSession = ({
 
   const wording = (id: string) =>
     [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
-  const products = resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
+  const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
+  let products = resolveProducts()
   const question = (pr: Product) =>
     [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
@@ -755,10 +759,25 @@ export const makeSession = ({
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
     // In author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
     // mark have nothing to do there.
-    snippets: [...(player.snippets ?? []), ...snippets].filter(
-      (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
-    ),
-    format: [...(player.format ?? []), ...format],
+    get snippets() {
+      return [...(player.snippets ?? []), ...snippets].filter(
+        (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
+      )
+    },
+    get format() {
+      return [...(player.format ?? []), ...format]
+    },
+    /** The player layer in force: the stored one, else the harness default given at start. */
+    get player() {
+      return player
+    },
+    /** The player layer replaced whole (the client edits it as one document): the frame, the asks, the product toggles
+     *  and the quick inputs follow from the next request on; nothing recorded changes. Written to the store if there is one. */
+    setPlayer: (p: Player) => {
+      player = p
+      products = resolveProducts()
+      players?.write(p)
+    },
     /** The player's turn: a child of `parent` (null for a root), every stage the card declares. */
     act: (parent: number | null, input: Input, stop?: Stop): Events =>
       emitting((emit) => turn(emit, parent, input, "lookup", undefined, stop)),

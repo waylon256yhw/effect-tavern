@@ -35,15 +35,21 @@ export interface Insert {
 }
 /** A quick input with a meaning in play: a perception scope (心声), the note channel, a direction to the narrator. The
  *  ecosystem's quick replies as player-layer data; the harness ships defaults (session `snippets`). */
-export interface Snippet extends Insert {
-  name: string
-  hint?: string // one line under the name in the menu: what it does
-  note?: boolean // on pick the send goes to the narrator (the note channel)
-}
+export const Snippet = Schema.Struct({
+  name: Schema.String,
+  text: Schema.String,
+  after: Schema.optionalKey(Schema.String),
+  hint: Schema.optionalKey(Schema.String), // one line under the name in the menu: what it does
+  note: Schema.optionalKey(Schema.Boolean), // on pick the send goes to the narrator (the note channel)
+})
+export type Snippet = typeof Snippet.Type
 /** A format key: a typing convenience with no meaning in play (brackets a phone keyboard lacks). Labelled by its glyph. */
-export interface Format extends Insert {
-  label: string
-}
+export const Format = Schema.Struct({
+  label: Schema.String,
+  text: Schema.String,
+  after: Schema.optionalKey(Schema.String),
+})
+export type Format = typeof Format.Type
 // The writing switches: a bounded front over slots the player layer and a card already fill as free text. Each value
 // compiles to one sentence the harness owns (fixed once, every player and dev script gets it); a free-text fragment on
 // the same slot, from the player or the card, overrides the compiled one by the usual slot rules. Three faces, like Cond
@@ -88,16 +94,22 @@ export const writing = (w: Writing = {}): Fragment[] => {
   ]
 }
 
-export interface Player {
-  writing?: Writing // compiled into the global layer first: a global fragment on the same slot overrides it
-  global: readonly Fragment[]
-  forCard: Record<string, readonly Fragment[]>
-  defaults?: { global?: Mode; forCard?: Mode } // harness-level setting, also the player's
-  asks?: readonly Fragment[] // the harness's own wording, overridden by id (see session `asks`)
-  products?: Readonly<Record<string, boolean>> // record products on/off by id: the player's toggle wins over card and defaults
-  snippets?: readonly Snippet[] // the player's quick inputs, before the harness defaults
-  format?: readonly Format[] // the player's format keys, before the harness defaults
-}
+// The player layer as data: what the library stores and `PUT /player` decodes at the trust boundary.
+const ModeSchema = Schema.Literals(["override", "yield", "both"])
+export const Player = Schema.Struct({
+  writing: Schema.optionalKey(Writing), // compiled into the global layer first: a global fragment on the same slot overrides it
+  global: Schema.Array(Fragment),
+  forCard: Schema.Record(Schema.String, Schema.Array(Fragment)),
+  defaults: Schema.optionalKey(
+    Schema.Struct({ global: Schema.optionalKey(ModeSchema), forCard: Schema.optionalKey(ModeSchema) }),
+  ), // harness-level setting, also the player's
+  asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id (see session `asks`)
+  products: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)), // record products on/off by id: the player's toggle wins over card and defaults
+  snippets: Schema.optionalKey(Schema.Array(Snippet)), // the player's quick inputs, before the harness defaults
+  format: Schema.optionalKey(Schema.Array(Format)), // the player's format keys, before the harness defaults
+})
+export type Player = typeof Player.Type
+export const decodePlayer = Schema.decodeUnknownSync(Player)
 export interface FrameSource {
   id: string
   frame: readonly Fragment[]

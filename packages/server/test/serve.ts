@@ -61,6 +61,18 @@ const run = async (inspect: boolean) => {
       ],
     )
 
+    // the player layer: read whole, replaced whole; the card's quick inputs follow it at once, a bad body is a 400
+    assert.deepEqual(await (await fetch(`${base}/player`)).json(), wired(player))
+    const mine = { ...player, writing: { pov: "third" as const }, snippets: [{ name: "Q", text: "q" }] }
+    const put = (v: unknown) => fetch(`${base}/player`, { method: "PUT", body: JSON.stringify(v) })
+    assert.deepEqual(await (await put(mine)).json(), wired(mine))
+    assert.equal(
+      ((await (await fetch(`${base}/card`)).json()) as { snippets: { name: string }[] }).snippets[0]!.name,
+      "Q",
+    )
+    assert.equal((await put({ global: "no" })).status, 400)
+    assert.equal((await put(player)).status, 200)
+
     const r = await post({ kind: "act", parent: null, input: { text: "hi" } })
     assert.equal(r.headers.get("content-type"), "text/event-stream")
     const evs = sse(await r.text())

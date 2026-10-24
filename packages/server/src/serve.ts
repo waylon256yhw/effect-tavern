@@ -4,6 +4,8 @@
 //                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
 //                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
+//   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
+//                 written to the library, in force from the next request; a bad body is a 400).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the `call` events of recent turns by node id: the inspector's trace. They evaporate with the SSE
 //                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
@@ -15,6 +17,7 @@
 //                 Fragment bodies, guard lines and lore never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
+import { decodePlayer } from "@effect-tavern/runtime/src/fragment.ts"
 import { decodeAction, perform, type Event, type Session } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Deferred, Effect, Fiber, Stream } from "effect"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
@@ -60,6 +63,15 @@ export const handle = (s: Session, { inspect = false } = {}) => {
         format: s.format,
       })
     if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
+    if (req.method === "GET" && req.url === "/player") return json(200, s.player)
+    if (req.method === "PUT" && req.url === "/player") {
+      try {
+        s.setPlayer(decodePlayer(JSON.parse(await body(req))))
+      } catch (e) {
+        return json(400, { error: e instanceof Error ? e.message : String(e) })
+      }
+      return json(200, s.player)
+    }
     const dropping = req.method === "DELETE" && /^\/nodes\/(\d+)$/.exec(req.url ?? "")
     if (dropping) {
       let c

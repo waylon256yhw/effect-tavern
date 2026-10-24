@@ -6,6 +6,7 @@
 // picked on the server would stay as an orphan root beside the player's).
 import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
 import { makeSession, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
+import { decodePlayer } from "@effect-tavern/runtime/src/fragment.ts"
 import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -104,7 +105,12 @@ const live = (): SessionModel => {
 }
 const model: SessionModel = process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false } : live()
 const card = await loadCard(name)
-const session = makeSession({ card, player, model, store })
+// The stored player layer wins over the shared default; what the library holds is decoded like a PUT would be.
+const players = {
+  read: () => (data.player.read() === undefined ? undefined : decodePlayer(data.player.read())),
+  write: data.player.write,
+}
+const session = makeSession({ card, player, model, store, players })
 if (session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
   const greeting = card.greetings[Number(process.env["GREETING"])]
   if (greeting) session.greet(greeting)

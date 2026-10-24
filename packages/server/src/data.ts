@@ -40,6 +40,11 @@ export const open = (file: string) => {
     }
   }
   return {
+    /** The player layer, one row: the session's `players` store. What it holds is decoded by the caller. */
+    player: {
+      read: (): unknown => parse<unknown>(q("select json from player where id = 1").get() as Row | undefined),
+      write: (p: unknown) => void q("insert or replace into player (id, json) values (1, ?)").run(JSON.stringify(p)),
+    },
     stories: {
       list: (card: string) =>
         q("select id from story where card = ? order by updated desc, id desc").all(card) as { id: Id }[],
