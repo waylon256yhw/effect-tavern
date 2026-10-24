@@ -5,10 +5,9 @@
 // the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
 // picked on the server would stay as an orphan root beside the player's).
 import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
-import * as Log from "@effect-tavern/runtime/src/log.ts"
 import { makeSession, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
 import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
-import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs"
+import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
 import { handle } from "./serve.ts"
@@ -19,13 +18,6 @@ mkdirSync(dir, { recursive: true })
 const data = open(`${dir}/tavern.db`)
 const story = data.stories.list(name)[0]?.id ?? data.stories.create(name)
 const store = data.store<Turn>(story)
-// A journal written before the library (.dev/<card>.json) becomes the story once, then stays beside it as .imported.
-const old = `${dir}/${name}.json`
-if (existsSync(old) && !store.read()?.nodes.length) {
-  const log = Log.of<Turn>(JSON.parse(readFileSync(old, "utf8")) as Log.Snapshot<Turn>)
-  for (const node of [...log.nodes.values()].sort((a, b) => a.id - b.id)) store.write({ node, head: log.head }, log)
-  renameSync(old, `${old}.imported`)
-}
 
 let n = 0
 /** By phase: lookup reads nothing, decide ends, direct opens what the gate offered, check is clean, record answers each

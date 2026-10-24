@@ -6,6 +6,7 @@
 // a card played as a persona, with the log's head and next beside it so an id never comes back after a drop. `node`: a
 // Turn per row, appended by the store's write. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
+// Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // Ceilings: full-text search over nodes; sync between two installs (the Android copy is a copy of this file).
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
 import { DatabaseSync } from "node:sqlite"
@@ -22,11 +23,6 @@ create table if not exists node (story integer not null references story (id) on
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
 
-export interface Persona {
-  id: string
-  name: string
-  text: string
-}
 export const open = (file: string) => {
   const db = new DatabaseSync(file)
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on;")
@@ -44,63 +40,11 @@ export const open = (file: string) => {
     }
   }
   return {
-    player: {
-      get: <P>(): P | undefined => parse<P>(q("select json from player where id = 1").get() as Row | undefined),
-      set: (p: unknown) => void q("insert or replace into player (id, json) values (1, ?)").run(JSON.stringify(p)),
-    },
-    personas: {
-      list: (): Persona[] =>
-        (q("select id, name, json from persona order by name").all() as Row[]).map((r) => ({
-          id: r["id"] as string,
-          name: r["name"] as string,
-          text: parse<string>(r)!,
-        })),
-      put: (p: Persona) =>
-        void q("insert or replace into persona (id, name, json) values (?, ?, ?)").run(
-          p.id,
-          p.name,
-          JSON.stringify(p.text),
-        ),
-      del: (id: string) => void q("delete from persona where id = ?").run(id),
-    },
-    cards: {
-      list: () =>
-        q("select id, title, updated from card order by updated desc").all() as {
-          id: string
-          title: string
-          updated: number
-        }[],
-      get: <C>(id: string): C | undefined =>
-        parse<C>(q("select json from card where id = ?").get(id) as Row | undefined),
-      put: (c: { id: string; title: string }) =>
-        void q("insert or replace into card (id, title, json, updated) values (?, ?, ?, ?)").run(
-          c.id,
-          c.title,
-          JSON.stringify(c),
-          Date.now(),
-        ),
-      del: (id: string) => void q("delete from card where id = ?").run(id),
-    },
     stories: {
-      list: (card?: string) =>
-        q(
-          `select id, card, persona, title, updated from story ${card ? "where card = ?" : ""} order by updated desc`,
-        ).all(...(card ? [card] : [])) as {
-          id: Id
-          card: string
-          persona: string | null
-          title: string | null
-          updated: number
-        }[],
-      create: (card: string, persona?: string, title?: string): Id =>
-        Number(
-          q("insert into story (card, persona, title, updated) values (?, ?, ?, ?)").run(
-            card,
-            persona ?? null,
-            title ?? null,
-            Date.now(),
-          ).lastInsertRowid,
-        ),
+      list: (card: string) =>
+        q("select id from story where card = ? order by updated desc, id desc").all(card) as { id: Id }[],
+      create: (card: string): Id =>
+        Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
     },
     /** log.ts's Store over one story: read the tree whole, write each Change as rows in one transaction. */
@@ -129,4 +73,3 @@ export const open = (file: string) => {
     close: () => db.close(),
   }
 }
-export type Data = ReturnType<typeof open>
