@@ -324,14 +324,19 @@ export const makeSession = ({
     const seenKeys = new Set(seen.map(key))
     const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
     const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
-    // Rows with one key are one entry, the newest row (a person re-rowed with what a later scene added); the live
-    // session had 老朋友 twice in the index. Folded before the seen filter: filtered first, reading the newest row
-    // brought the superseded one back as unread (the third live session re-read 李鹤's old row two turns later).
-    const rows = products
+    // The product's fold decides which rows exist (a keyed table is the newest row per key: a person re-rowed with what
+    // a later scene added is one entry); the seen filter runs after it, so reading the newest row never brings a
+    // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did).
+    const recall = products
       .filter((p) => p.recall !== undefined)
-      .flatMap((p) => path.flatMap((t) => recallEntries(p, t.products[p.id], t.id)))
-    const newest = [...new Map(rows.map((e) => [`${e.id.split("@")[0]}=${e.hook}`, e])).values()]
-    const recall = newest.filter((e) => !seenKeys.has(`${e.id}#1`)).map((e) => ({ id: e.id, hook: e.hook }))
+      .flatMap((p) =>
+        recallEntries(
+          p,
+          path.map((t) => ({ id: t.id, v: t.products[p.id] })),
+        ),
+      )
+      .filter((e) => !seenKeys.has(`${e.id}#1`))
+      .map((e) => ({ id: e.id, hook: e.hook }))
     return [...lore, ...recall]
   }
   const project = (t: Turn): Node => {

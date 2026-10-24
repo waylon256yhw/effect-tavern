@@ -44,7 +44,52 @@ export interface Snippet extends Insert {
 export interface Format extends Insert {
   label: string
 }
+// The writing switches: a bounded front over slots the player layer and a card already fill as free text. Each value
+// compiles to one sentence the harness owns (fixed once, every player and dev script gets it); a free-text fragment on
+// the same slot, from the player or the card, overrides the compiled one by the usual slot rules. Three faces, like Cond
+// and Product: compiles to head text, draws as toggles, decodes from a sentence of the player's. `pov`, `echo` and
+// `agency` are one slot (`pov`): a card that writes the player's place in the story itself (盐道: no player in the
+// fiction) takes the whole group with it. `verbosity` is its own slot. Only switches with live evidence are here.
+export const Writing = Schema.Struct({
+  pov: Schema.optionalKey(Schema.Literals(["second", "third", "none"])), // the player in the prose: 你, by name, absent
+  echo: Schema.optionalKey(Schema.Boolean), // restate the player's line before the reaction (转述), or start from the reaction
+  agency: Schema.optionalKey(Schema.Literals(["strict", "free"])), // only what the player gave, or the narrator may continue them (co-writing)
+  verbosity: Schema.optionalKey(Schema.Literals(["concise", "medium", "detailed"])),
+})
+export type Writing = typeof Writing.Type
+const POV = {
+  second: "用第二人称「你」写玩家。",
+  third: "用玩家角色的名字、以第三人称写玩家。",
+  none: "故事里没有玩家角色；输入是给叙述者的指示，不是任何人物的话，不要把它写进故事。",
+}
+const ECHO = {
+  true: "开头可先用一句转述玩家本轮的言行，再写对方的反应。",
+  false: "不要转述或扩写玩家本轮已输入的话，直接从对方或周遭的反应写起。",
+}
+const AGENCY = {
+  strict: "只承接玩家已给出的言行，不要替玩家扩写未说出口的话、未声明的动作或下一步决定。",
+  free: "可以替玩家续写言行与决定，像合写一部小说那样推进。",
+}
+const VERBOSITY = {
+  concise: "每轮篇幅简短，一两段，点到即止。",
+  medium: "每轮三四段，写到对方的反应落定为止。",
+  detailed: "每轮篇幅从容，把动作、神态与周遭风物写足。",
+}
+/** The switches as slot fragments: `pov` (pov, echo, agency; the last two drop when there is no player in the fiction) and `verbosity`. */
+export const writing = (w: Writing = {}): Fragment[] => {
+  const pov = [
+    w.pov && POV[w.pov],
+    w.pov !== "none" && w.echo !== undefined && ECHO[`${w.echo}`],
+    w.pov !== "none" && w.agency && AGENCY[w.agency],
+  ].filter((x): x is string => typeof x === "string")
+  return [
+    ...(pov.length ? [{ id: "pov", text: pov.join("") }] : []),
+    ...(w.verbosity ? [{ id: "verbosity", text: VERBOSITY[w.verbosity] }] : []),
+  ]
+}
+
 export interface Player {
+  writing?: Writing // compiled into the global layer first: a global fragment on the same slot overrides it
   global: readonly Fragment[]
   forCard: Record<string, readonly Fragment[]>
   defaults?: { global?: Mode; forCard?: Mode } // harness-level setting, also the player's
@@ -62,7 +107,8 @@ export interface FrameSource {
 export const frame = (player: Player, card: FrameSource): Fragment[] => {
   // Within the player's own layer, per-card replaces global on the same slot; the player wrote both.
   const mine = new Map<string, { f: Fragment; mode: Mode }>()
-  for (const f of player.global) mine.set(f.id, { f, mode: f.mode ?? player.defaults?.global ?? "yield" })
+  for (const f of [...writing(player.writing), ...player.global])
+    mine.set(f.id, { f, mode: f.mode ?? player.defaults?.global ?? "yield" })
   for (const f of player.forCard[card.id] ?? [])
     mine.set(f.id, { f, mode: f.mode ?? player.defaults?.forCard ?? "override" })
   const theirs = new Map(card.frame.map((f) => [f.id, f]))

@@ -1,5 +1,6 @@
-// Tests for src/product.ts: shapes decode to answer schemas, caps and filters are code, lists accumulate while other
-// shapes take the latest, recall items get stable ids, and resolve merges defaults ← card patch ← player toggle.
+// Tests for src/product.ts: shapes decode to answer schemas, caps and filters are code, the fold is declared
+// (append / latest / rows merged by a key column) and feed and recall read the same one, recall items get stable ids,
+// and resolve merges defaults ← card patch ← player toggle.
 import assert from "node:assert/strict"
 import { Schema } from "effect"
 import {
@@ -35,6 +36,7 @@ const inventory: Product = {
   feed: true,
   recall: "item",
 }
+const keyed: Product = { ...inventory, id: "kbag", fold: { key: "item" } } // rows merged by item, newest wins
 const scene: Product = {
   id: "scene",
   text: "the scene",
@@ -71,19 +73,30 @@ assert.deepEqual(cap(scene.shape, { place: "inn", present: ["A", "B"] }), { plac
 assert.equal(render(scene.shape, { place: "inn", present: ["A"] }), "place: inn; present: A")
 assert.equal(cap({ kind: "text", max: 3 }, "abcdef"), "abc")
 
-// Fold along a path: lists accumulate, a table or record is the latest node that has one; absent stays absent.
+// Fold along a path, as declared: a list appends, a table or record defaults to the latest node that has one, a keyed
+// table merges rows by the key (newest row per key, in order of first appearance); absent stays absent.
 const path = [{ notes: ["a"], bag: bag.slice(0, 1) }, { notes: ["b"] }, { notes: ["c"], bag }]
 assert.deepEqual(fold([...defaults, inventory], path), { notes: ["a", "b", "c"], bag })
 assert.deepEqual(fold([scene], path), {})
+const kpath = [{ kbag: [bag[0]!, bag[1]!] }, {}, { kbag: [{ item: "coin", n: 3, kind: "misc" }, bag[2]!] }]
+assert.deepEqual(fold([keyed], kpath), { kbag: [bag[0], { item: "coin", n: 3, kind: "misc" }, bag[2]] })
+assert.deepEqual(fold([keyed], [{ kbag: [bag[0]!] }, { kbag: [] }]), { kbag: [bag[0]] }) // a turn with no new rows keeps the table
 
-// Recall entries: filtered rows only, id = product@node#index with the stored index, hook = the named column.
-assert.deepEqual(recallEntries(inventory, bag, 7), [
+// Recall entries read the same fold: id = product@node#index with the node and stored index the row lives at,
+// filtered rows only, hook = the named column. On a keyed table the superseded row is not an entry.
+const nodes = (vs: Record<string, unknown>[], ids: number[], id: string) =>
+  vs.map((v, i) => ({ id: ids[i]!, v: v[id] }))
+assert.deepEqual(recallEntries(inventory, nodes(path, [5, 6, 7], "bag")), [
   { id: "bag@7#0", hook: "sword", text: "item=sword, n=1, kind=weapon" },
   { id: "bag@7#2", hook: "rope", text: "item=rope, n=2, kind=misc" },
 ])
+assert.deepEqual(
+  recallEntries(keyed, nodes(kpath, [1, 2, 3], "kbag")).map((e) => e.id),
+  ["kbag@1#0", "kbag@3#0", "kbag@3#1"], // coin was filtered at node 1 (n=0) and is readable from node 3 (n=3)
+)
 assert.deepEqual(entryRef("bag@7#2"), { product: "bag", node: 7, index: 2 })
 assert.equal(entryRef("li"), undefined)
-assert.deepEqual(recallEntries(scene, { place: "inn", present: [] }, 1), []) // no recall declared
+assert.deepEqual(recallEntries(scene, [{ id: 1, v: { place: "inn", present: [] } }]), []) // no recall declared
 
 // Resolve: defaults ← card patch by id ← player toggle; a new product needs text and shape; recall must fit the shape.
 const r = resolve(defaults, [{ id: "options", on: true }, inventory], { notes: false })
@@ -99,5 +112,6 @@ assert.equal(r[1]!.shape.kind === "list" && r[1]!.shape.max, 4) // the patch kep
 assert.throws(() => resolve(defaults, [{ id: "ghost" }]), /needs text and shape/)
 assert.throws(() => resolve(defaults, [{ ...inventory, recall: "weight" }]), /names a column/)
 assert.throws(() => resolve(defaults, [{ ...scene, recall: true }]), /only lists and tables/)
+assert.throws(() => resolve(defaults, [{ ...inventory, fold: { key: "weight" } }]), /fold key names a table column/)
 
 console.log("ok")

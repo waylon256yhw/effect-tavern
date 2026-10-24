@@ -2,7 +2,16 @@
 // Head = player layer → card frame → fiction (the card's character, cast or world); audience per stage comes from the layer, not from a per-fragment field.
 // Dropped from Fragment: keys, trigger, depth, scan, before/after anchors, order. Kept: when, enabled/options.
 import assert from "node:assert/strict"
-import { decodeFragments as frags, frame, head, type Fragment, type Msg, type Player } from "../src/fragment.ts"
+import {
+  decodeFragments as frags,
+  frame,
+  head,
+  writing,
+  type Fragment,
+  type Msg,
+  type Player,
+  type Writing,
+} from "../src/fragment.ts"
 import { ledger, narratorHistory } from "../src/history.ts"
 import type { Turn } from "../src/journal.ts"
 
@@ -137,6 +146,32 @@ assert.ok(
     undefined as never,
   ),
 )
+
+// Writing switches: pov, echo and agency compile into one `pov` slot (so a card that fills `pov` itself, 盐道, takes the
+// whole group), verbosity into its own; a global free-text fragment on the same slot wins; "none" drops echo and agency.
+const w: Writing = { pov: "second", echo: false, agency: "strict", verbosity: "concise" }
+assert.deepEqual(
+  writing(w).map((f) => f.id),
+  ["pov", "verbosity"],
+)
+assert.ok(
+  /「你」/.test(writing(w)[0]!.text!) && /不要转述/.test(writing(w)[0]!.text!) && /只承接/.test(writing(w)[0]!.text!),
+)
+assert.deepEqual(
+  writing({ pov: "none", echo: true, agency: "free" }).map((f) => f.text!.includes("转述")),
+  [false],
+)
+assert.deepEqual(writing({}), [])
+const switched: Player = { writing: w, global: frags([{ id: "language", text: "Write in Chinese." }]), forCard: {} }
+v = assemble(switched, other, [], "narrate", "go", { state: s0 })
+assert.deepEqual(texts(v).slice(0, 2), [writing(w)[0]!.text!, writing(w)[1]!.text!]) // compiled slots lead the player zone
+const povCard: Card = { ...other, frame: frags([{ id: "pov", text: "全知第三人称。" }]) }
+v = assemble(switched, povCard, [], "narrate", "go", { state: s0 })
+assert.ok(texts(v).includes("全知第三人称。") && !texts(v).some((t) => /只承接/.test(t))) // the card's pov takes echo and agency with it
+v = assemble({ ...switched, global: frags([{ id: "pov", text: "My own pov." }]) }, other, [], "narrate", "go", {
+  state: s0,
+})
+assert.ok(texts(v).includes("My own pov.") && !texts(v).some((t) => /「你」/.test(t))) // free text on the slot wins
 
 console.log(texts(b).join("\n"))
 console.log("ok")

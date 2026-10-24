@@ -6,6 +6,7 @@ import { decodeFragments as frags, type Player } from "../../src/fragment.ts"
 export const player: Player = {
   global: frags([{ id: "language", text: "使用自然、舒展的现代中文写作。" }]),
   forCard: {},
+  products: { options: true }, // the test player's toggle: the card declares nothing about options
 }
 
 export const full: Card = {
@@ -119,11 +120,10 @@ export const full: Card = {
   ],
   guard: ["裴青舟不会在交手中丧命"],
   director: true,
-  // Record products (src/product.ts), one of each flavour: a default switched on (options, capped list), a feed record
-  // with a nested table (scene: read back to the model as `Current:`), and a recall table (people: rows the lookup
-  // stage can deliver later, like lore).
+  // Record products (src/product.ts), one of each flavour the card adds: a feed record with a nested table (scene: read
+  // back to the model as `Current:`), and a keyed recall table (people: rows merged by name along the path, which the
+  // lookup stage can deliver later, like lore). `options` is the player's toggle (the dev and test players turn it on).
   products: [
-    { id: "options", on: true },
     {
       id: "scene",
       text: "Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.",
@@ -156,6 +156,7 @@ export const full: Card = {
         ],
         max: 8,
       },
+      fold: { key: "name" },
       recall: "name",
     },
   ],

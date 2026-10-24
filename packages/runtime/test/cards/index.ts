@@ -3,18 +3,16 @@ import type { Card } from "../../src/card.ts"
 import type { Player } from "../../src/fragment.ts"
 import { full, player as wuxiaPlayer } from "./wuxia.ts"
 
-// The player layer: language, and the point-of-view slot every player sets once. Without the second, Haiku wrote the
-// player's answer to the confession for them (docs/provider-reading.md §10). A card with no player in the fiction
-// (yandao) fills the same slot itself; the player's global `pov` yields to it (fragment.ts defaults).
+// The player layer: language, and the writing switches every player sets once (fragment.ts `Writing`): the player is 你,
+// the narrator restates their line before the reaction and writes nothing they did not give. Without the last, Haiku
+// wrote the player's answer to the confession for them (docs/provider-reading.md §10). A card with no player in the
+// fiction (yandao) fills the `pov` slot itself and the compiled one yields to it (fragment.ts defaults). `options` is
+// this player's toggle: the dev and live sessions run with it, a card declares nothing about it.
 export const player: Player = {
-  global: [
-    ...wuxiaPlayer.global,
-    {
-      id: "pov",
-      text: "用第二人称「你」写玩家：对玩家的本轮输入只做转述而不要抢话——顺着「你」的言行写出对方的反应即可，不要替玩家开口表态、接话或做下一步决定。",
-    },
-  ],
+  writing: { pov: "second", echo: true, agency: "strict" },
+  global: wuxiaPlayer.global,
   forCard: {},
+  products: { options: true },
 }
 
 const cards: Record<string, () => Promise<Card>> = {
