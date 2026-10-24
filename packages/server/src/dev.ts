@@ -60,11 +60,16 @@ const answer = (o: FakeCall) => {
       )
       // ponytail: canned rows for the harness defaults and wuxia's products; another card's product decodes to nothing
       const canned: Record<string, unknown> = {
-        notes: [`第${n}段立下的事实`],
-        options: ["上前一步", "按剑不动", "开口搭话", "转身离开"],
-        scene: { place: `竹林深处 ${n}`, present: [{ name: "李", mood: "calm" }] },
+        notes: [`第${n}幕：你与裴青舟在苦竹岭茶亭中隔桌相对，试探彼此来意。`],
+        options: [
+          "我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的。」",
+          "「既然裴兄不愿提他，那我便向阁下讨教几招。」我按住剑柄往前踏出一步。",
+          "我看着亭外未干的泥土，轻声问：「这竹亭外的孤坟，埋的真是李鹤吗？」",
+          "我拱了拱手：「今日冒昧打扰，改日再来拜会。」",
+        ],
+        scene: { place: `苦竹岭茶亭 ${n}`, present: [{ name: "裴青舟", mood: "calm" }] },
         people: [],
-        inner: `第${n}段的心思`,
+        inner: `裴青舟垂眼看着石桌上的雨水，心里暗自思量你究竟是从何处得知李鹤的名字。`,
       }
       const asked = [...text.matchAll(/^(\w+): (?!.*\[)/gm)]
         .map(([, id]) => id!)
@@ -77,7 +82,7 @@ const answer = (o: FakeCall) => {
     }
     default:
       return {
-        text: `第${++n}段。${text.includes("Previous draft broke") ? "二稿。" : demo ? "一稿。" : ""}${"竹叶在风里翻了一遍又一遍，"}${"你听见远处有人踏着落叶走来。".repeat(demo ? 8 : 3)}`,
+        text: `第${++n}段。${text.includes("Previous draft broke") ? "二稿。" : demo ? "一稿。" : ""}${"雨后的苦竹林里雾气未散，竹叶上的水珠顺着亭檐一滴滴落在青石板上。"}${"裴青舟按着乌木剑鞘站在三步开外，目光静静地落在你腰间的旧短剑上。".repeat(demo ? 6 : 2)}`,
         delay: demo ? 120 : 20,
       }
   }

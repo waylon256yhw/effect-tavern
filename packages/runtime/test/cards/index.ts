@@ -9,7 +9,10 @@ import { full, player as wuxiaPlayer } from "./wuxia.ts"
 export const player: Player = {
   global: [
     ...wuxiaPlayer.global,
-    { id: "pov", text: "用第二人称写玩家。玩家只做输入里做的事、只说输入里说的话；不替玩家说话，不替玩家做决定。" },
+    {
+      id: "pov",
+      text: "以第二人称「你」展开玩家视角，但叙事须严格停留在玩家的本轮输入之内——玩家只做输入里写明的事、只说输入里写明的话，绝不要替玩家开口作答，也不要替玩家拿主意或往下跨步。",
+    },
   ],
   forCard: {},
 }

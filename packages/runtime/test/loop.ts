@@ -51,7 +51,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
     case "check": {
       out = JSON.stringify({
         fired: /tattoo/.test(want) ? open : [],
-        violated: /KILL/.test(want) ? ["B does not die"] : [],
+        violated: /KILL/.test(want) ? [full.guard[0]!] : [],
       })
       break
     }
@@ -172,18 +172,19 @@ const program = Effect.gen(function* () {
   )
 
   let i = calls().length
+  const hook = full.lore[0]!.layers[0]!.split(/(?<=\.)\s|(?<=。)/)[0]!
   const t1 = yield* go(S.act(null, { text: "ask about li" }))
   // the lookup's index names every entry by its hook, a lore entry's first sentence included
-  assert.ok(/^Index: li=Li: A's lost friend; crane tattoo on the left shoulder\.$/m.test(str(prompts("lookup")[0]!)))
+  assert.ok(str(prompts("lookup")[0]!).includes(`Index: li=${hook}`))
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t1.read, [{ id: "li", layer: 1 }])
   assert.deepEqual(S.node(t1.id).delivered, [{ id: "li", layer: 1, text: full.lore[0]!.layers[0] }])
-  assert.ok(str(lastNarr()).includes(full.lore[0]!.layers[0]!) && !str(lastNarr()).includes("B is Li"))
+  assert.ok(str(lastNarr()).includes(full.lore[0]!.layers[0]!) && !str(lastNarr()).includes(full.lore[0]!.layers[1]!))
   // Readout: asked at record, answered by enum, no number anywhere the prose stages can see.
   assert.deepEqual(t1.answers, { warmth: "flat" })
   const rec1 = str(prompts("record").at(-1)!)
-  assert.ok(/Questions: warmth: how A treated/.test(rec1) && !/bond|State:/.test(rec1))
-  assert.ok(str(lastNarr()).includes("arm's length") && !/bond/.test(str(lastNarr())))
+  assert.ok(/Questions: warmth: 这一幕里裴青舟对待你的态度/.test(rec1) && !/bond|State:/.test(rec1))
+  assert.ok(str(lastNarr()).includes(full.fiction[1]!.text!) && !/bond/.test(str(lastNarr())))
   assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
   assert.deepEqual(t1.products.notes, ["NOTE#2"]) // the echoed Known item is dropped; only the new fact is kept
 
@@ -205,7 +206,7 @@ const program = Effect.gen(function* () {
   assert.ok(S.node(t2.id).events.includes("strike:hit"))
   assert.deepEqual([t2.brief.may, t2.fired], [["li"], [{ id: "li", layer: 2 }]])
   assert.ok(
-    /MAY reveal: B is Li/.test(str(lastNarr())) &&
+    str(lastNarr()).includes(`MAY reveal: ${full.lore[0]!.layers[1]!}`) &&
       str(lastNarr()).includes("NOTE#2") &&
       str(lastNarr()).includes(`Tone: TONE#`),
   )
@@ -228,15 +229,17 @@ const program = Effect.gen(function* () {
   assert.deepEqual(t3.read, [{ id: `people@${t1.id}#0`, layer: 1 }])
   assert.deepEqual(S.node(t3.id).delivered[0]!.text, "name=Li, note=N#2")
   assert.ok(v3.includes("name=Li, note=N#2"))
-  assert.ok(v3.includes("B is Li") && v3.includes(full.lore[0]!.layers[0]!) && v3.includes(prose(t2)))
+  assert.ok(v3.includes(full.lore[0]!.layers[1]!) && v3.includes(full.lore[0]!.layers[0]!) && v3.includes(prose(t2)))
   assert.ok(!v3.includes("NOTE#2") && !v3.includes(t2.brief.tone!))
-  assert.ok(v3.includes("arm's length")) // bond was 4 when this head was built; the answer lands after the prose
+  assert.ok(v3.includes(full.fiction[1]!.text!)) // bond was 4 when this head was built; the answer lands after the prose
   assert.equal(S.node(t3.id).state.bond, 8)
-  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 3), prompts("narrate").at(-2)!.slice(0, 3))
-  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 3).map(msgText), [
-    "Write in Chinese.",
-    "Frame: wuxia",
-    "A: swordsman",
+  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5), prompts("narrate").at(-2)!.slice(0, 5))
+  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5).map(msgText), [
+    player.global[0]!.text!,
+    full.frame[0]!.text!,
+    full.frame[1]!.text!,
+    full.frame[2]!.text!,
+    full.fiction[0]!.text!,
   ]) // player zone → frame → fiction
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
@@ -248,7 +251,7 @@ const program = Effect.gen(function* () {
   const at = (i: number) => msgText(prompts("narrate").at(-1)![i]!)
   assert.deepEqual(
     [marks.at(-1), marks.filter(Boolean).length, at(marks.indexOf(true)), at(marks.lastIndexOf(true))],
-    [false, 2, "A keeps the player at arm's length.", prose(t2)],
+    [false, 2, full.fiction[1]!.text!, prose(t2)],
   )
 
   // Truncation: one node, prose concatenated, two narrate calls, second prompt ends with the partial as assistant.
@@ -261,18 +264,18 @@ const program = Effect.gen(function* () {
   assert.equal(resumed.role, "assistant")
   assert.deepEqual([C.log.nodes.size, S.log.nodes.size], [2, 3])
 
-  // Guardrail: a draft that kills B is re-asked once with the broken rule in the tail; the correction never enters history.
+  // Guardrail: a draft that kills Pei is re-asked once with the broken rule in the tail; the correction never enters history.
   i = calls().length
   narrations.push("kill", "plain")
   warmths.push("close")
   const t5 = yield* go(S.act(t3.id, { text: "finish him" }))
   assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "check", "record"])
-  assert.ok(str(prompts("narrate").at(-1)!).includes('Previous draft broke: rule "B does not die"'))
+  assert.ok(str(prompts("narrate").at(-1)!).includes(`Previous draft broke: rule "${full.guard[0]!}"`))
   assert.deepEqual(t5.violated, [])
   // The band switched: bond reached 8 at t3's record, so t5's head reads the warm fragment and not the cool one.
   const v5 = str(lastNarr())
-  assert.ok(v5.includes("A trusts the player.") && !v5.includes("arm's length"))
-  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 3), prompts("narrate").at(-3)!.slice(0, 3)) // prefix intact
+  assert.ok(v5.includes(full.fiction[2]!.text!) && !v5.includes(full.fiction[1]!.text!))
+  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5), prompts("narrate").at(-3)!.slice(0, 5)) // prefix intact
   // A stop that fires while check runs (the client closed after the whole first draft): the rewrite halts before its
   // first character, the first draft stands as the stopped reply with its verdict, and no second check runs.
   i = calls().length
@@ -284,7 +287,7 @@ const program = Effect.gen(function* () {
     ),
   )
   assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "record"])
-  assert.deepEqual([t5s.end, t5s.violated, prose(t5s).endsWith("KILL")], ["stopped", ["B does not die"], true])
+  assert.deepEqual([t5s.end, t5s.violated, prose(t5s).endsWith("KILL")], ["stopped", [full.guard[0]!], true])
   // nothing to run from: an act of nothing, an edit of nothing
   for (const ex of [yield* Effect.exit(go(S.act(t3.id, { text: "" }))), yield* Effect.exit(go(S.edit(t3.id, {})))])
     assert.ok(ex._tag === "Failure" && /empty input|nothing to edit/.test(String(Cause.squash(ex.cause))))
@@ -308,7 +311,7 @@ const program = Effect.gen(function* () {
       v6.includes(prose(t3)) &&
       v6.includes(prose(t5)),
   )
-  assert.ok(v6.includes("B is Li") && v6.includes(full.lore[0]!.layers[0]!)) // lore delivered inside the folded range survives in the fold
+  assert.ok(v6.includes(full.lore[0]!.layers[1]!) && v6.includes(full.lore[0]!.layers[0]!)) // lore delivered inside the folded range survives in the fold
   const summary = (v: string) => v.match(/Summary:[^]*?(?=\n(?:user|assistant):|$)/)?.[0]
   // Boundary moves in blocks: one more turn keeps the same summary; lore dedupe still sees the folded deliveries.
   i = calls().length
@@ -347,7 +350,7 @@ const program = Effect.gen(function* () {
   const t9 = yield* go(S.act(g.turn.id, { text: "wait" }))
   assert.deepEqual(since(i), ["lookup", "decide", "direct", "narrate", "check", "record"])
   assert.deepEqual([t9.beats, t9.brief.may], [[], ["li"]])
-  assert.ok(str(lastNarr()).includes("A trusts the player.") && str(lastNarr()).includes("G"))
+  assert.ok(str(lastNarr()).includes(full.fiction[2]!.text!) && str(lastNarr()).includes("G"))
   i = calls().length
   for (const t of S.log.nodes.values()) S.node(t.id) // replay: every projection from recorded outputs, no call
   assert.equal(calls().length, i)
@@ -387,7 +390,7 @@ const program = Effect.gen(function* () {
   // edit whose prose breaks a rule: the verdict is recorded and the player's words stand, never rewritten
   i = calls().length
   const v = yield* go(S.edit(t2.id, { text: "EDITED: KILL" }))
-  assert.deepEqual([since(i), v.violated, prose(v)], [["check", "record"], ["B does not die"], "EDITED: KILL"])
+  assert.deepEqual([since(i), v.violated, prose(v)], [["check", "record"], [full.guard[0]!], "EDITED: KILL"])
 
   // setField: an effect kept on t3 and folded last; every descendant's state moves with it (t6 was 16: t5's +8 on 20), no call made.
   // A value outside the field is refused and the node is untouched.
@@ -401,7 +404,6 @@ const program = Effect.gen(function* () {
   // the next act: no lookup (the pinned entry is kept out of it, nothing else is readable), the narrator gets it as MUST,
   // check confirms it fired, so it is delivered through `fired`. The greeting set bond to 8, which unlocks li's second
   // layer, so the entry is still untold one layer deeper: a pin takes one layer at a time.
-  const hook = full.lore[0]!.layers[0]!.split(/(?<=\.)\s/)[0]!
   assert.deepEqual(S.node(t9.id).readable, [{ id: "li", hook }])
   narrations.push("fire")
   const t10 = yield* go(S.act(t9.id, { text: "wait", pin: "li" }))

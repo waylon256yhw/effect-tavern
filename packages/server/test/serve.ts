@@ -54,9 +54,9 @@ const run = async (inspect: boolean) => {
         { entries: 0, layers: 0 },
         false,
         [
-          { id: "a", label: "A" },
-          { id: "a-cool", label: "A（疏远）", when: { path: "bond", op: "lt", value: 8 } },
-          { id: "a-warm", label: "A（信任）", when: { path: "bond", op: "gte", value: 8 } },
+          { id: "pei", label: "裴青舟" },
+          { id: "pei-cool", label: "裴青舟（戒备）", when: { path: "bond", op: "lt", value: 8 } },
+          { id: "pei-warm", label: "裴青舟（松动）", when: { path: "bond", op: "gte", value: 8 } },
         ],
       ],
     )
