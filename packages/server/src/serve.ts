@@ -14,6 +14,8 @@
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
 //                 where it is picked), DELETE /personas/<id> removes it and its picks (the client re-reads /player).
 //                 Both answer the list. Which persona is in force on a card is the player's (`Player.persona`).
+//   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
+//                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
 //                 stop closes it before record's call), so the adapter files them in the library under the node they
@@ -25,9 +27,9 @@
 //                 Fragment bodies, guard lines and lore never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
-import { decodePlayer } from "@effect-tavern/runtime/src/fragment.ts"
+import { decodePlayer, Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import { decodeAction, perform, type Event } from "@effect-tavern/runtime/src/session.ts"
-import { Cause, Deferred, Effect, Fiber, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { extname, join, resolve, sep } from "node:path"
@@ -55,6 +57,7 @@ const reason = (c: Cause.Cause<unknown>) => {
 export type Call = Extract<Event, { kind: "call" }>
 // The body besides Action and Player, decoded here like them.
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
+const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
@@ -92,6 +95,18 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         return bad(e)
       }
       return json(200, lib.personas.list())
+    }
+    if (req.method === "GET" && req.url === "/hats") return json(200, lib.hats.list())
+    const hatAt = /^\/hats\/([^/]+)$/.exec(req.url ?? "")
+    if (hatAt && (req.method === "PUT" || req.method === "DELETE")) {
+      const id = decodeURIComponent(hatAt[1]!)
+      try {
+        if (req.method === "PUT") lib.hats.put({ id, ...HatBody(JSON.parse(await body(req))) })
+        else lib.hats.del(id)
+      } catch (e) {
+        return bad(e)
+      }
+      return json(200, lib.hats.list())
     }
     if (req.method === "GET" && req.url === "/card")
       return json(200, {

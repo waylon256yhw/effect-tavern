@@ -68,6 +68,12 @@ assert.deepEqual(
   data.personas.list().map((p) => p.id),
   ["friend"],
 )
+// Hats: the row's id and name, the rest in the json column, the same hat back.
+const hat = { id: "h", name: "续写", narrate: { head: [{ role: "user" as const, text: "U" }] }, review: { head: [] } }
+data.hats.put(hat)
+assert.deepEqual(data.hats.list(), [hat])
+data.hats.del("h")
+assert.deepEqual(data.hats.list(), [])
 assert.equal(data.player.read(), undefined)
 data.player.write({ writing: { pov: "second" }, global: [], forCard: {}, persona: { wuxia: "friend" } })
 assert.deepEqual(data.player.read(), {

@@ -545,6 +545,16 @@ const program = Effect.gen(function* () {
   assert.deepEqual([light, phases.filter((p) => p === "lookup").length], [1, 1])
   assert.ok(phases.includes("narrate") && phases.includes("record")) // unnamed: the default answered them
   console.log(str(lastNarr()))
+  // ───────── The connection's hat, resolved per request by id; a tail-placed player fragment ─────────
+  const H = makeSession({
+    card: full,
+    player: { ...player, global: [...player.global, { id: "taste", text: "TASTE-TAIL", at: "tail" }] },
+    model: { ...model, hat: "h" },
+    hat: (id) => (id === "h" ? { id, name: "h", narrate: { tail: [{ role: "user", text: "HAT-TAIL" }] } } : undefined),
+  })
+  yield* go(H.act(null, { text: "about li" }))
+  assert.deepEqual(lastNarr().slice(-2).map(msgText), ["TASTE-TAIL", "HAT-TAIL"])
+  assert.ok(!str(prompts("record").at(-1)!).includes("TAIL"))
 
   // ───────── Polish: code finds lexicon hits in the final prose, one call rewrites those sentences only ─────────
   // The chat card has no guard and nothing open, so the turn goes narrate → polish → record. The script rewrites the

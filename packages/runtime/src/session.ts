@@ -45,7 +45,15 @@ import { Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
 import { Effect_, makeCard, type Answers, type Beat, type Card, type Check, type Greeting, type State } from "./card.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
-import { decodeFragments as frags, frame, head as headOf, type Format, type Player, type Snippet } from "./fragment.ts"
+import {
+  decodeFragments as frags,
+  frame,
+  head as headOf,
+  type Format,
+  type Hat,
+  type Player,
+  type Snippet,
+} from "./fragment.ts"
 import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
 import {
   deliveredIn,
@@ -106,6 +114,7 @@ export type SessionModel = Model & {
   effort?: Effort
   maxOutputTokens?: number
   ttl?: CacheTtl // the head's cache lifetime; the connection's setting
+  hat?: string // the connection's hat, a library id (`Connection.hat`), read per request through makeSession's `hat`
 }
 /** Stages bound to connections: one SessionModel for every stage, or a default plus the stages named apart. lookup and
  *  check can take a light model; record answers readouts (state judgement), not pure extraction: never route it down by default. */
@@ -235,6 +244,7 @@ export const makeSession = ({
   store,
   players,
   persona,
+  hat,
 }: {
   card: Card
   player: Player // the harness default; a stored player wins over it
@@ -242,6 +252,7 @@ export const makeSession = ({
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
   persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
+  hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
 }) => {
   const modelFor = (p: Phase): SessionModel => ("default" in models ? (models[p] ?? models.default) : models)
   let player = players?.read() ?? given
@@ -406,11 +417,27 @@ export const makeSession = ({
 
   // ───────── The document each stage reads (src/request.ts) ─────────
   /** A stage's document: the frame at this state, the input and what a thought in it is, then the stage's own ask. */
-  const ask = (state: State, input: Input, a: Ask) =>
-    request({ frame: headOf(frame(layered(), card), { state }), input, thought: wording("input.thought") }, a, {
-      reasoningBack: modelFor(a.stage).reasoningBack,
-      ttl: modelFor(a.stage).ttl,
-    })
+  const ask = (state: State, input: Input, a: Ask) => {
+    const M = modelFor(a.stage)
+    const layers = frame(layered(), card)
+    const worn = M.hat === undefined ? undefined : hat?.(M.hat)
+    return request(
+      {
+        frame: headOf(
+          layers.filter((f) => f.at !== "tail"),
+          { state },
+        ),
+        tail: headOf(
+          layers.filter((f) => f.at === "tail"),
+          { state },
+        ),
+        input,
+        thought: wording("input.thought"),
+      },
+      a,
+      { reasoningBack: M.reasoningBack, ttl: M.ttl, ...(worn && { hat: worn }) },
+    )
+  }
   const ledgerOf = (path: readonly Turn[]) => ledger(path, (t) => settledOf(path, t).events)
   const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: textOf(d) }))
 

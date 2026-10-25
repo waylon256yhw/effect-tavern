@@ -27,4 +27,15 @@ for (const f of ["anthropic", "gemini"] as const) {
 }
 // a list of system messages only stays system on gemini
 assert.deepEqual(roles(wire("gemini", [sys("a"), sys("b")])), ["system", "system"])
+
+// prefill: a connection that takes none rejects a request ending in an assistant message (a hat tail's), and only that
+const ending = (role: "user" | "assistant"): Message[] => [
+  ...seq,
+  { role: "assistant", content: "A" },
+  { role, content: "end" },
+]
+assert.throws(() => wire("anthropic", ending("assistant"), false), /prefill/)
+assert.equal(wire("anthropic", ending("user"), false).length, 7) // an assistant inside, a user at the end: accepted
+assert.equal(wire("anthropic", ending("assistant"), true).length, 7) // a continuation where the connection takes one
+assert.equal(wire("anthropic", ending("assistant")).length, 7) // a bare Model (no capability said): unchanged
 console.log("wire ok")

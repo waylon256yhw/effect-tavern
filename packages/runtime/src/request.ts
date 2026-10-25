@@ -13,22 +13,29 @@
 // the thought ask wherever the line is (decide takes no action from a thought, record no fact), the note only where the
 // README sends it, narrator and director. Cache breakpoints: the head's last message (the connection's TTL), the
 // summary, and the last history message; everything before this turn's input is a cached read next turn.
+// The connection's hat (fragment.ts `Hat`), by what a stage reads: narrate's head joins the head, its system messages
+// after frame + fiction and its handshake (user/assistant) after every head system message, the breakpoint on the last
+// head message (ai-sdk promotes only the leading system run to top-level system: a handshake first would demote the
+// frame); narrate's tail ends the request, after this turn's directives and the player's tail fragments. check, polish
+// and record wear review.head after the frame; lookup, decide and direct wear nothing. No hat: today's document, byte for byte.
 // Data lines are format and live here: Index, State / Actions / So far, Rule, Open, Events, Must, Outcome, Current,
 // MUST / MAY reveal, Tone, Player note, Known, Questions, Player's line.
 import { breakpoint, type CacheTtl, type Message } from "@effect-tavern/provider"
-import type { Msg } from "./fragment.ts"
+import type { Hat, Msg } from "./fragment.ts"
 import type { Input } from "./journal.ts"
 
 /** The connection's say: whether past reasoning parts go back, and the head's cache lifetime. */
 export interface Wire {
   reasoningBack?: boolean
   ttl?: CacheTtl
+  hat?: Hat
 }
 /** What every stage shares: the evaluated frame, this turn's input, and the ask that explains a thought in it. */
 export interface Common {
   frame: readonly Msg[]
   input: Input
   thought: string
+  tail?: readonly Msg[] // the player's tail-placed fragments; only narrate reads them
 }
 /** An entry with its text: what Open lines and reveal directives carry. */
 export interface Told {
@@ -101,6 +108,8 @@ const scene = (i: Input, prose: string) => usr(i.text ? `Player's line: ${i.text
 
 export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
   const frame = zone(c.frame, w)
+  const reviewed = zone([...c.frame, ...(w.hat?.review?.head ?? [])], w)
+  const hatHead = w.hat?.narrate?.head ?? []
   switch (a.stage) {
     case "lookup":
       return [...frame, sys(`${a.question}\nIndex: ${a.index.join(", ")}`), ...thoughtOf(c), said(c.input)]
@@ -124,7 +133,15 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
       ]
     case "narrate":
       return [
-        ...zone([...c.frame, ...a.fiction], w),
+        ...zone(
+          [
+            ...c.frame,
+            ...a.fiction,
+            ...hatHead.filter((m) => m.role === "system"),
+            ...hatHead.filter((m) => m.role !== "system"),
+          ],
+          w,
+        ),
         // the fold is byte-stable until the boundary moves; the last message is the end of what next turn resends verbatim
         ...a.history.map((m, i, all) =>
           i === all.length - 1 || (i === 0 && a.summarized) ? breakpoint(toP(w)(m)) : toP(w)(m),
@@ -139,10 +156,11 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...noteOf(c.input),
         ...thoughtOf(c),
         ...(a.correction ? [sys(a.correction)] : []),
+        ...[...(c.tail ?? []), ...(w.hat?.narrate?.tail ?? [])].map(toP(w)),
       ]
     case "check": // nothing open (a guard-only turn): no empty Open / Must labels, the rules alone are the question
       return [
-        ...frame,
+        ...reviewed,
         ...rules(a.rules),
         ...(a.open.length
           ? [sys([openLine(a.open), ...(a.must.length ? [`Must: ${a.must.join(",")}`] : [])].join("\n"))]
@@ -150,10 +168,10 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         usr(a.prose),
       ]
     case "polish": // check's shape, the rules swapped for the rewrite and its per-target hints
-      return [...frame, sys([a.question, ...a.hints].join("\n")), usr(a.prose)]
+      return [...reviewed, sys([a.question, ...a.hints].join("\n")), usr(a.prose)]
     case "record":
       return [
-        ...frame,
+        ...reviewed,
         sys([a.known, ...(a.current ? [a.current] : []), ...a.asks].join("\n")),
         ...(a.questions ? [sys(`Questions: ${a.questions.join("\n")}`)] : []),
         ...thoughtOf(c),
