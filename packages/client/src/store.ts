@@ -61,15 +61,23 @@ export const stories = Atom.make<{ current: Id; stories: readonly StoryRow[] } |
 export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
 export const player = Atom.make<Player | null>(null).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
-export const compose = Atom.make("") // the composer's text; an Options row writes here and never sends
-export const aside = Atom.make(false) // this one send goes to the narrator (participant mode's deviation); clears after the send
+export const compose = Atom.make("") // the composer's main box: the line (participant mode) or the direction (author mode); an Options row writes here and never sends
+export const noted = Atom.make("") // the note box under the line: a word to the narrator that goes with this send (participant mode only)
+export const aside = Atom.make(false) // the note box is open (participant mode's deviation); clears after the send
+/** Participant mode: the main box is the character's line and a note may go with it. Author mode: every input is a
+ *  direction, the main box is the note and there is no line. One mapping at the edges (send, revise, withdraw). */
+export const acting = (): boolean => registry.get(card)?.input === "act"
+export const boxesOf = (i: { text: string; note?: string }): { text: string; note: string } =>
+  acting() ? { text: i.text, note: i.note ?? "" } : { text: i.note ?? "", note: "" }
+export const inputOf = (text: string, note: string): { text: string; note?: string } =>
+  acting() ? { text, ...(note && { note }) } : { text: "", note: text }
 export const stage = Atom.make<Phase | null>(null)
 export const editing = Atom.make<Id | null>(null) // the node whose prose is a textarea in place (Edit), until sent or cancelled
 /** The player's own line back in the composer (Revise): which node and field, and the draft it displaced, restored on cancel. */
 export const revising = Atom.make<{
   node: Id
   field: "text" | "note"
-  previous: { text: string; aside: boolean }
+  previous: { text: string; note: string; aside: boolean }
 } | null>(null)
 export const error = Atom.make<string | null>(null)
 /** A turn in flight: a draft that is not the ghost of a failed one. What holds the composer, the story and a new root. */
@@ -282,11 +290,12 @@ export const dismiss = (): void => {
   registry.set(error, null)
 }
 
-/** The turn did not become a node: its line goes back into the box (unless the reader has typed since). */
+/** The turn did not become a node: its line and note go back into their boxes (unless the reader has typed since). */
 export const withdraw = (): void => {
   const d = registry.get(draft)
-  if (!d?.fresh || registry.get(compose)) return
-  const r = registry.get(revising) // a revision puts back the field it was revising
-  registry.set(compose, (r ? d.input[r.field] : d.input.text || d.input.note) ?? "")
-  registry.set(aside, r ? r.field === "note" : !!d.input.note)
+  if (!d?.fresh || registry.get(compose) || registry.get(noted)) return
+  const b = boxesOf(d.input)
+  registry.set(compose, b.text)
+  registry.set(noted, b.note)
+  registry.set(aside, !!b.note)
 }

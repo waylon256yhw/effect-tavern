@@ -526,6 +526,13 @@ button:focus-visible {
     transparent
   );
 }
+/* the note box: a line at rest under the line's box, parted by a hairline, in the note bubble's ink */
+.composer textarea.note {
+  min-height: calc(1.5 * var(--text-body) + 2 * var(--space-2));
+  font-size: var(--text-body);
+  color: var(--ink-2);
+  box-shadow: inset 0 var(--hairline) 0 var(--line);
+}
 .composer .row {
   display: flex;
   align-items: center;

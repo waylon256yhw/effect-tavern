@@ -40,7 +40,9 @@ import { Session, Side } from "./side.tsx"
 import {
   apply,
   arrived,
+  acting,
   aside,
+  boxesOf,
   card,
   clear,
   compose,
@@ -54,6 +56,8 @@ import {
   path,
   pin,
   prose,
+  inputOf,
+  noted,
   registry,
   stories,
   revising,
@@ -528,41 +532,49 @@ const Reader = () => {
     registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
     stop = send(action)
   }
-  const onSend = (text: string, note: boolean) => {
+  const onSend = (text: string, note: string) => {
     if (registry.get(revising)) {
       // the line revised and sent again: a new turn beside the old one, under the same parent
-      const { n, input } = revised(text)
+      const { n, input } = revised(text, note)
       return start(n.parent, input, { kind: "act", parent: n.parent, input })
     }
     const pinned = registry.get(pin)
-    const input = { ...(note ? { text: "", note: text } : { text }), ...(pinned ? { pin: pinned } : {}) }
+    const input = { ...inputOf(text, note), ...(pinned ? { pin: pinned } : {}) }
     registry.set(pin, null)
     start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
   }
-  // Revise: the bubble puts the line in the composer (the draft there is stashed, back on cancel); Send makes a new
-  // turn, Keep makes a sibling with the prose kept and the record redone over the revised line.
+  // Revise: the bubble puts the turn's input in the composer, line and note in their boxes (what was there is stashed,
+  // back on cancel); Send makes a new turn, Keep makes a sibling with the prose kept and the record redone over it.
   const onRevise = (n: Node, field: "text" | "note") => {
     const r = registry.get(revising)
-    const previous = r?.previous ?? { text: registry.get(compose), aside: registry.get(aside) }
+    const previous = r?.previous ?? {
+      text: registry.get(compose),
+      note: registry.get(noted),
+      aside: registry.get(aside),
+    }
     registry.set(revising, { node: n.id, field, previous })
-    registry.set(compose, n.turn.input[field] ?? "")
-    registry.set(aside, field === "note")
+    const b = boxesOf(n.turn.input)
+    registry.set(compose, b.text)
+    registry.set(noted, b.note)
+    registry.set(aside, acting() && (!!b.note || field === "note"))
   }
-  /** The revised line as the node's input, and the node. Revising ends when the node lands (store.ts), so a failed
-   *  send puts the line back under the same revision. */
-  const revised = (text: string) => {
+  /** The revised input (the pin kept, a cleared note gone) and the node. Revising ends when the node lands (store.ts),
+   *  so a failed send puts the input back under the same revision. */
+  const revised = (text: string, note: string) => {
     const r = registry.get(revising)!
     const n = L.get(registry.get(log), r.node)
-    return { n, input: { ...n.turn.input, [r.field]: text } }
+    const { note: _, ...kept } = n.turn.input
+    return { n, input: { ...kept, ...inputOf(text, note) } }
   }
-  const onKeep = (text: string) => {
-    const { n, input } = revised(text)
+  const onKeep = (text: string, note: string) => {
+    const { n, input } = revised(text, note)
     start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
   }
   const onCancel = () => {
     const r = registry.get(revising)!
     registry.set(revising, null)
     registry.set(compose, r.previous.text)
+    registry.set(noted, r.previous.note)
     registry.set(aside, r.previous.aside)
   }
   const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })

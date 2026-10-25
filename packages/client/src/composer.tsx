@@ -1,66 +1,73 @@
 // The composer: the one raised object under the column. The box, the format keys, the snippets menu (+, or / on an
-// empty box), the channel chip, Send / Stop. The session's own actions live beside the reading (side.tsx).
+// empty box), the note box a note snippet opens under the line (a word to the narrator that goes with the line, or
+// alone), Send / Stop. The session's own actions live beside the reading (side.tsx).
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { roam } from "./side.tsx"
-import { aside, card, compose, path, pin, registry, revising, turnOf } from "./store.ts"
+import { aside, card, compose, noted, path, pin, registry, revising, turnOf } from "./store.ts"
 
 export const Composer = (props: {
   busy: boolean
   stoppable: boolean // the prose can still be halted: before and during narrate, not while the turn settles
-  onSend: (text: string, note: boolean) => void
-  onKeep: (text: string) => void // revising: the line sent as a sibling that keeps the prose
+  onSend: (text: string, note: string) => void // the main box and the note box (empty when closed or in author mode)
+  onKeep: (text: string, note: string) => void // revising: the input sent as a sibling that keeps the prose
   onCancel: () => void // revising: the line put back, the displaced draft restored
   onStop: () => void
 }) => {
   const text = read(compose)
+  const noteText = read(noted)
   const pinned = read(pin)
   const view = read(card)
   // The card's default channel is the mode for the whole session (GET /card `input`): in participant mode the box is the
-  // character's line and a note to the narrator or a thought is this turn's deviation; in author mode every input is
-  // direction and neither exists.
+  // character's line, a thought is this turn's deviation inside it, and a note to the narrator is a second box under it
+  // that goes with the line or alone; in author mode every input is direction and neither exists.
   const acting = () => view()?.input === "act"
   const quick = () => view()?.snippets ?? []
   // The snippets menu groups by meaning: a note snippet is a word to the narrator, the rest stay in the story.
   const inStory = () => quick().filter((s) => !s.note)
   const toNarrator = () => quick().filter((s) => s.note)
   const keys = () => view()?.format ?? []
-  // This one send is a note (participant mode only). It is one state, not a tag per snippet: any number of note snippets
-  // may go into the box, the chip says only where the send goes; it clears after the send.
+  // The note box is open (participant mode only). It is one state, not a tag per snippet: any number of note snippets
+  // may go into that box; it clears after the send.
   const toNarratorOn = read(aside)
   // Revising a landed line: the chip names the turn (a tap scrolls to it) and cancels; Keep sits beside Send.
   const revise = read(revising)
   const line = read(path)
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
-  const isNote = () => !acting() || toNarratorOn()
+  const TO_NARRATOR = "To the narrator, not in the story…"
   // An empty line on a card with openings: the story starts from one of them (the card page), not from a typed root.
   const waiting = () => line().length === 0 && (view()?.greetings.length ?? 0) > 0
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
-  const prompt = () =>
-    waiting() ? "Pick an opening on the card page…" : isNote() ? "To the narrator, not in the story…" : "Your line…"
+  const prompt = () => (waiting() ? "Pick an opening on the card page…" : acting() ? "Your line…" : TO_NARRATOR)
   let box: HTMLTextAreaElement | undefined
+  let noteBox: HTMLTextAreaElement | undefined
   let menu: HTMLDivElement | undefined
-  const put = (value: string, caret: number) => {
-    registry.set(compose, value)
+  /** What a send carries: the main box, and the note box when it is there. */
+  const filled = () => !!(text().trim() || (acting() && noteText().trim()))
+  const put = (value: string, caret: number, note = false) => {
+    registry.set(note ? noted : compose, value)
     requestAnimationFrame(() => {
-      box?.focus()
-      box?.setSelectionRange(caret, caret)
+      const el = note ? noteBox : box
+      el?.focus()
+      el?.setSelectionRange(caret, caret)
     })
   }
   // An Insert (a format key or a snippet) goes in at the caret and never sends: `text` before the caret, `after`
-  // behind it, the selection between them. A note snippet also switches this send's channel; an empty one does only that.
+  // behind it, the selection between them. A note snippet opens the note box and goes in there; an empty one only opens it.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
     menu?.hidePopover()
-    if (s.note && !revise()) registry.set(aside, true) // a revision's channel is the field being revised
-    const v = text()
-    const a = box?.selectionStart ?? v.length
-    const b = box?.selectionEnd ?? a
+    const note = !!s.note && acting()
+    if (note) registry.set(aside, true)
+    const el = note ? noteBox : box
+    const v = note ? noteText() : text()
+    const a = el?.selectionStart ?? v.length
+    const b = el?.selectionEnd ?? a
     const inner = v.slice(a, b)
-    put(v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b), a + s.text.length + inner.length)
+    put(v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b), a + s.text.length + inner.length, note)
   }
   const Items = (p: { of: readonly Snippet[] }) => (
     <For each={p.of} keyed={(s) => s.name}>
@@ -77,16 +84,20 @@ export const Composer = (props: {
     </For>
   )
   const submit = (keep = false) => {
+    if (!filled() || props.busy || waiting()) return false
     const t = text().trim()
-    if (!t || props.busy || waiting()) return false
-    if (keep) props.onKeep(t)
-    else props.onSend(t, isNote())
+    const n = acting() ? noteText().trim() : ""
+    if (keep) props.onKeep(t, n)
+    else props.onSend(t, n)
     registry.set(compose, "")
+    registry.set(noted, "")
     registry.set(aside, false)
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
   const ime = imeController(submit)
+  // oxlint-disable-next-line solid/reactivity -- the note box's own composition state, the same submit
+  const noteIme = imeController(submit)
   const keep = (e: Event) => e.preventDefault() // a tap on a control must not take focus (and the phone's keyboard) from the box
   return (
     <form
@@ -140,6 +151,27 @@ export const Composer = (props: {
             else ime.keyDown(e)
           }}
         />
+        {/* the note box: under the line, one line at rest; Escape on an empty one closes it (the chip's × for touch) */}
+        <Show when={acting() && toNarratorOn()}>
+          <textarea
+            ref={(el) => (noteBox = el)}
+            class="note"
+            value={noteText()}
+            placeholder={TO_NARRATOR}
+            enterkeyhint="enter"
+            aria-label="Note to the narrator"
+            onInput={(e) => registry.set(noted, e.currentTarget.value)}
+            onCompositionStart={noteIme.compositionStart}
+            onCompositionEnd={noteIme.compositionEnd}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && revise()) props.onCancel()
+              else if (e.key === "Escape" && !noteText()) {
+                registry.set(aside, false)
+                box?.focus()
+              } else noteIme.keyDown(e)
+            }}
+          />
+        </Show>
         <div class="row">
           <Show when={quick().length > 0}>
             <button
@@ -183,13 +215,13 @@ export const Composer = (props: {
               </span>
             )}
           </Show>
-          <Show when={acting() && toNarratorOn() && !revise()}>
+          <Show when={acting() && toNarratorOn()}>
             <button
               type="button"
               class="chip state"
-              aria-label="Back to your line"
+              aria-label="Close the note"
               onPointerDown={keep}
-              onClick={() => registry.set(aside, false)}
+              onClick={() => (registry.set(aside, false), registry.set(noted, ""))}
             >
               To the narrator
               <Close />
@@ -207,7 +239,7 @@ export const Composer = (props: {
               class="icon"
               aria-label="Keep the prose"
               data-hint="Keep the prose, redo the record"
-              disabled={!text().trim() || props.busy}
+              disabled={!filled() || props.busy}
               onPointerDown={keep}
               onClick={() => submit(true)}
             >
@@ -222,7 +254,7 @@ export const Composer = (props: {
                 class="send"
                 aria-label="Send"
                 data-hint="Send ⌘↵"
-                disabled={!text().trim() || props.busy || waiting()}
+                disabled={!filled() || props.busy || waiting()}
                 onPointerDown={keep}
               >
                 <Send />
