@@ -21,3 +21,5 @@ permissions:
 minimumReleaseAgeExclude:
   - "@ai-sdk/*"
   - ai
+  - "@lobehub/icons-static-svg"
+  - "@copilotkit/aimock"

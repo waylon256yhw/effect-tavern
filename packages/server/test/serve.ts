@@ -1,6 +1,7 @@
 // The adapter on a scripted session over a real socket: an action goes in as JSON, its events come back as SSE in the
 // session's order, a bad body is a 400, a bad action is an `error` event, and `inspect` decides whether `call` events
 // carry the request. `greet` opens a new root, `checkout` moves head, DELETE /nodes/<id> drops a subtree and answers with the Change.
+import { LLMock } from "@copilotkit/aimock"
 import { fake, fakeText } from "@effect-tavern/provider"
 import type { Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, player } from "@effect-tavern/runtime/test/cards/wuxia.ts"
@@ -319,6 +320,43 @@ await run(false)
   } finally {
     server.close()
     upstream.close()
+  }
+}
+
+// The listing and the test against aimock's native Anthropic surface (anthropic-version enforced): the model route
+// answers the catalog, the test answers the Trace of the fetch it made, the listing's without a model, a one-token
+// /v1/messages with one.
+{
+  const mock = new LLMock({ port: 0, policy: { requiredHeaders: "enforce", modelCatalog: "native" } })
+  mock.on({ model: "claude-haiku-5-5" }, { content: "ok" })
+  await mock.start()
+  const data = open(":memory:")
+  data.secrets.put({ id: "k", name: "K", type: "api_key", value: "test-key" })
+  data.providers.put({
+    id: "a",
+    name: "A",
+    enabled: false, // a probe does not need it switched on
+    defaultFormat: "anthropic",
+    endpoints: { anthropic: { url: mock.url } },
+    secret: "k",
+    models: [],
+  })
+  const server = serve(library({ data, card: chat, player, model })).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  const post = async (v: unknown) =>
+    (await fetch(`${base}/providers/a/test`, { method: "POST", body: JSON.stringify(v) })).json() as Promise<any>
+  try {
+    assert.deepEqual(await (await fetch(`${base}/providers/a/models`)).json(), ["claude-haiku-5-5"])
+    const listed = await post({})
+    assert.deepEqual(
+      [listed.url, listed.method, listed.status, typeof listed.ms],
+      [`${mock.url}/v1/models`, "GET", 200, "number"],
+    )
+    const asked = await post({ model: "claude-haiku-5-5" })
+    assert.deepEqual([asked.url, asked.method, asked.status], [`${mock.url}/v1/messages`, "POST", 200])
+  } finally {
+    server.close()
+    await mock.stop()
   }
 }
 
