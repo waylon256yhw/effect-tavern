@@ -115,7 +115,8 @@ const live = (): SessionModel => {
     hat: process.env["HAT"] ?? conn.hat, // HAT=<id> puts a library hat on the dev connection
   }
 }
-const model: SessionModel = process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false } : live()
+const model: SessionModel =
+  process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false, hat: process.env["HAT"] } : live() // HAT works on the scripted model too
 const card = await loadCard(name)
 const lib = library({ data, card, player, model })
 if (lib.session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
