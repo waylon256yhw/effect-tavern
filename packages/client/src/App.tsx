@@ -154,7 +154,7 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
  *  past 120px. The one deviation is the anchor: a new turn lands at its own top, where the last section's min-height
  *  puts the column's end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a
  *  smooth one fires many events no one could attribute. The scroller is the column (.scroll), never the page. */
-const follow = { on: true, ours: null as number | null, touched: -Infinity }
+const follow = { on: true, ours: null as number | null, touched: -Infinity, landing: false }
 const scroller = () => document.querySelector(".scroll")!
 const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
 /** How much of the latest turn's content is below the viewport. The last section is at least a screen tall so a
@@ -176,15 +176,26 @@ const stick = () => {
 const Latest = () => {
   const [away, setAway] = createSignal(false)
   const lib = read(stories)
-  // another story opened: the reader lands at its live edge whatever the hand was doing (the row was just clicked),
-  // so following is on when its nodes arrive and the growth sticks
+  const all = read(log)
+  // another story opened: the reader lands at its live edge whatever the hand was doing (the row was just clicked):
+  // following is on when its nodes arrive, and that arrival sticks by itself (two stories of one opening are the same
+  // height, so the growth the observer would see may never come)
   createEffect(
     () => lib()?.current,
     (cur, prev) => {
       if (prev !== undefined && cur !== prev) {
         follow.on = true
         follow.touched = -Infinity
+        follow.landing = true
       }
+    },
+  )
+  createEffect(
+    () => all(),
+    () => {
+      if (!follow.landing) return
+      follow.landing = false
+      stick()
     },
   )
   onSettled(() => {
