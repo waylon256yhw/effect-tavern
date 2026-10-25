@@ -3,8 +3,9 @@
 // projections out. The in-process callers (test/loop.ts, test/live.ts) and the wire adapter cross the same seam.
 //
 // One turn, wiring §9/§10 (beats), §13 (brief, guardrail), §14 (layered lore), §17 (record, views), §18 (head).
-// Order: lookup → decide/settle loop → gate → direct → narrate → check → record. The gate runs AFTER settlement because
-// a window can depend on what this turn produced (the sword cut exposes the tattoo).
+// Order: lookup → decide/settle loop → gate → direct → narrate → check → polish → record. The gate runs AFTER settlement
+// because a window can depend on what this turn produced (the sword cut exposes the tattoo). Polish (src/polish.ts) is
+// a call only when code found lexicon hits in the final prose; it rewrites those sentences alone, so nothing is re-checked.
 // There is no tool anywhere: lookup is a structured pick over the literal enum of readable ids, actions are the decide
 // stage. The model never drives a loop, so there is no tool definition to gate or to cache (§15.4 items 1–2 dissolve).
 // Truncation: a narrate that finishes with "length" is re-asked once with the partial as a trailing assistant message
@@ -57,6 +58,7 @@ import {
 } from "./journal.ts"
 import * as Log from "./log.ts"
 import { key, makeLore, type Disclosure } from "./lore.ts"
+import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
 import {
   cap,
@@ -72,7 +74,7 @@ import {
 } from "./product.ts"
 
 export type Turn = TurnOf<Beat>
-export type Phase = "lookup" | "decide" | "direct" | "narrate" | "check" | "record"
+export type Phase = "lookup" | "decide" | "direct" | "narrate" | "check" | "polish" | "record"
 /** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `readable` is what the
  *  path could still be told (hooks, not bodies): the client's untold list, where a pin is picked from. */
 export interface Node {
@@ -125,6 +127,10 @@ export const asks = frags([
     text: `The input asked to keep going. Given the outcomes so far, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`,
   },
   { id: "narrate.correction", text: "Previous draft broke:" },
+  {
+    id: "polish",
+    text: "Each sentence marked <target> uses wording the reader has seen too often: the words in its hits, and what its hint below names. Rewrite each so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks.",
+  },
   {
     id: "input.thought",
     text: "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it.",
@@ -640,7 +646,7 @@ export const makeSession = ({
           const r2 = yield* write([...msgs, { role: "assistant", content: r.text }]) // resume with the partial as prefix
           return [...r.parts, ...r2.parts]
         })
-      let reply = from === "check" ? base!.reply : yield* narrate()
+      let reply: Turn["reply"] = from === "check" ? base!.reply : yield* narrate()
       let fired: Disclosure[] = []
       let violated: string[] = []
       if (!cut && (card.guard.length > 0 || open.length > 0)) {
@@ -673,6 +679,34 @@ export const makeSession = ({
         }
         fired = open.filter((d) => c.fired.includes(d.id))
         violated = [...c.violated]
+      }
+      // polish: code scans the final prose for the lexicon (the player's, then the card's); hit sentences go to one call
+      // keyed by target id, and only the answers that differ from their sentence are spliced into the prose. Never on a
+      // cut draft or the player's own prose (an edit), same as the correction. The other parts (reasoning) stand.
+      const text = proseOf(reply)
+      const targets =
+        cut || from === "check" || player.writing?.polish === false
+          ? []
+          : scan(text, [...(player.writing?.lexicon ?? []), ...(card.lexicon ?? [])])
+      if (targets.length) {
+        const out = yield* obj(
+          emit,
+          "polish",
+          Schema.Struct(Object.fromEntries(targets.map((t) => [t.id, Schema.String]))),
+          ask(s1, input, {
+            stage: "polish",
+            question: wording("polish"),
+            hints: targets.flatMap((t) => (t.hints.length ? [`${t.id}: ${t.hints.join("; ")}`] : [])),
+            prose: marked(text, targets),
+          }),
+          4096,
+        )
+        const polished = splice(text, targets, out)
+        let first = true // the prose is the text parts joined: it goes back as the first, the others drop
+        if (polished !== text)
+          reply = reply.flatMap((p): Turn["reply"][number][] =>
+            p.type !== "text" ? [p] : first ? ((first = false), [{ ...p, text: polished }]) : [],
+          )
       }
       // record: every product that is on and whose `when` holds, plus the readout questions when the card declares any.
       // One call, one schema: product id → its shape, `answers` → the readout enums. The model sees the prose, Known

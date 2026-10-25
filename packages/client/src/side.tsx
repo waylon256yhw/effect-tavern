@@ -64,6 +64,15 @@ const SWITCHES: { key: keyof Writing; label: string; values: [string | boolean, 
       ["detailed", "详尽"],
     ],
   },
+  {
+    // not head text: whether lexicon hits in the prose get the polish call after check (on unless off)
+    key: "polish",
+    label: "润色",
+    values: [
+      [true, "润色"],
+      [false, "不润色"],
+    ],
+  },
 ]
 /** The switches in force, by name; none set, the card's. */
 const chosen = (w: Writing | undefined): string[] => {

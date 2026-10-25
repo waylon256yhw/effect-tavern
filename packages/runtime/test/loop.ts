@@ -9,7 +9,7 @@ import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, player } from "./cards/wuxia.ts"
 
 // ───────── Scripted model ─────────
-const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long"> = []
+const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
 let n = 0
 function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean; delay?: number } {
@@ -105,7 +105,22 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
         out += " the road winds on through the bamboo".repeat(4)
         delay = 1
       }
+      if (how === "slop") {
+        out += `.${" The road winds on.".repeat(12)} His knuckles went white. Her knuckles stayed white.`
+        delay = 1
+      }
+      break
     }
+    case "polish":
+      // a target that "went" white is rewritten, any other is echoed back unchanged
+      out = JSON.stringify(
+        Object.fromEntries(
+          [...want.matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(([, id, s]) => [
+            id,
+            /went/.test(s!) ? "He clenched his fist." : s,
+          ]),
+        ),
+      )
   }
   return { text: out, cut: reason === "length", delay } // delay: a stop needs the stream to still be running
 }
@@ -518,6 +533,52 @@ const program = Effect.gen(function* () {
   const r3 = yield* go(V.act(r2.id, { text: "about Li" }))
   assert.deepEqual([r3.read, untold(r3.id)], [[{ id: `people@${r2.id}#0`, layer: 1 }], []])
   console.log(str(lastNarr()))
+
+  // ───────── Polish: code finds lexicon hits in the final prose, one call rewrites those sentences only ─────────
+  // The chat card has no guard and nothing open, so the turn goes narrate → polish → record. The script rewrites the
+  // sentence that "went" white and echoes the other: the first is spliced in, the echo stands, record reads the result.
+  const P = makeSession({
+    card: { ...chat, lexicon: [{ pattern: "knuckles*white", hint: "stock image" }] },
+    player,
+    model,
+  })
+  i = calls().length
+  narrations.push("slop")
+  const p1 = yield* go(P.act(null, { text: "hello" }))
+  assert.deepEqual(since(i), ["narrate", "polish", "record"])
+  const asked = str(prompts("polish").at(-1)!)
+  assert.ok(asked.includes('<target id="hit-1" hits="knuckles went white">His knuckles went white.</target>'), asked)
+  assert.ok(asked.includes("hit-2: stock image") && !/A: |PROSE#\d+\n/.test(asked.split("\n")[0]!))
+  assert.ok(prose(p1).endsWith(" He clenched his fist. Her knuckles stayed white."), prose(p1))
+  assert.ok(
+    str(prompts("record").at(-1)!).includes("He clenched his fist.") &&
+      !/went white/.test(str(prompts("record").at(-1)!)),
+  )
+  // The player's toggle off: no call, the prose stands.
+  P.setPlayer({ ...player, writing: { ...player.writing, polish: false } })
+  i = calls().length
+  narrations.push("slop")
+  const p2 = yield* go(P.act(p1.id, { text: "hello" }))
+  assert.deepEqual([since(i), /went white/.test(prose(p2))], [["narrate", "record"], true])
+  P.setPlayer(player)
+  // The player's own prose (an edit) is never rewritten, hits or not.
+  i = calls().length
+  const p3 = yield* go(P.edit(p1.id, { text: prose(p2) }))
+  assert.deepEqual([since(i), prose(p3)], [["record"], prose(p2)])
+  // A stopped stream is not polished: halted past the floor, the hits in the kept prose stand.
+  i = calls().length
+  narrations.push("slop")
+  const enough = yield* Deferred.make<void>()
+  let streamed = ""
+  const p4 = yield* go(
+    P.act(p1.id, { text: "hello" }, Deferred.await(enough)).pipe(
+      Stream.tap((e) => {
+        if (e.kind === "delta" && e.part.type === "text-delta") streamed += e.part.text
+        return /went white/.test(streamed) ? Deferred.succeed(enough, undefined) : Effect.void
+      }),
+    ),
+  )
+  assert.deepEqual([since(i), p4.end, /went white/.test(prose(p4))], [["narrate", "record"], "stopped", true])
 })
 
 await Effect.runPromise(program)

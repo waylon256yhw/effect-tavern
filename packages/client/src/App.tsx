@@ -77,6 +77,7 @@ const waiting: Record<string, string> = {
   direct: "Directing",
   narrate: "Writing",
   check: "Checking",
+  polish: "Polishing",
   record: "Recording",
 }
 
