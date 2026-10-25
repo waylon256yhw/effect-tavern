@@ -1,9 +1,9 @@
 // The session beside the reading: what holds for the whole story and is byte-stable in the request head: the card,
-// this card's stories (which one is open, its persona), the writing switches, the armed pin, and the two pages that
-// look at the story (Timeline, Inspector). The left card on desktop; on a phone, the sheet the title opens. Both can
-// be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a story is one root's tree
-// played as one persona, fixed when it is made (the library rebuilds the session on open); a persona is picked when
-// a story is started, and edited from the same menu.
+// this card's stories (which one is open), the persona the player is on this card, the writing switches, the armed
+// pin, and the two pages that look at the story (Timeline, Inspector). The left card on desktop; on a phone, the sheet
+// the title opens. Both can be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a
+// story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
+// `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch), made and edited from the same menu.
 import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
@@ -73,7 +73,7 @@ const chosen = (w: Writing | undefined): string[] => {
 
 /** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
 export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
-  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")]
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role^=menuitem]")]
   const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
   const d = { ArrowDown: 1, ArrowUp: -1, Home: -i, End: items.length - 1 - i }[e.key]
   if (d === undefined) return
@@ -94,13 +94,27 @@ export const Session = (props: { at: string }) => {
   const pinned = read(pin)
   const line = read(path)
   const busy = read(working) // the story stays put while a turn is in flight
-  const nameOf = (p: string | null) => (p === null ? undefined : people().find((x) => x.id === p)?.name)
-  // The persona form: a new one, or the one being edited (its text under the name); Delete only on an existing one.
+  // The persona in force on this card, and the pick: a change of the player's own layer, nothing of the story's.
+  const cardId = () => view()?.id ?? ""
+  const current = () => people().find((p) => p.id === me()?.persona?.[cardId()])
+  const pick = (id: string | undefined) => {
+    const p = me()
+    if (!p) return
+    const { [cardId()]: _, ...rest } = p.persona ?? {}
+    const next = id === undefined ? rest : { ...rest, [cardId()]: id }
+    void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
+  }
+  // The persona form: a new one (picked once saved), or the one being edited (its text under the name); Delete only on
+  // an existing one. The fields are set by hand: the same signal value twice (null, null) would leave typed text behind.
   let form!: HTMLDialogElement
   let confirm!: HTMLDialogElement
+  let nameField!: HTMLInputElement
+  let textField!: HTMLTextAreaElement
   const [editingPersona, setEditingPersona] = createSignal<Persona | null>(null)
   const edit = (p: Persona | null) => {
     setEditingPersona(p)
+    nameField.value = p?.name ?? ""
+    textField.value = p?.text ?? ""
     form.showModal()
   }
   const save = (e: SubmitEvent) => {
@@ -109,7 +123,9 @@ export const Session = (props: { at: string }) => {
     const name = (f.get("name") as string).trim()
     const text = (f.get("text") as string).trim()
     if (!name || !text) return
-    void putPersona({ id: editingPersona()?.id ?? crypto.randomUUID().slice(0, 8), name, text })
+    const was = editingPersona()
+    const id = was?.id ?? crypto.randomUUID().slice(0, 8)
+    void putPersona({ id, name, text }).then(() => was ?? pick(id))
     form.close()
   }
   const set = (key: keyof Writing, value: string | boolean | undefined) => {
@@ -130,9 +146,8 @@ export const Session = (props: { at: string }) => {
             class="icon"
             aria-label="New story"
             data-hint="New story"
-            aria-haspopup="menu"
-            popovertarget={id("newstory")}
             disabled={busy()}
+            onClick={(e) => (closeUp(e.currentTarget), void newStory())}
           >
             <Snippets />
           </button>
@@ -147,40 +162,6 @@ export const Session = (props: { at: string }) => {
             <Trash />
           </button>
         </h2>
-        {/* who to be in the new story: the card's own, or one of the player's personas (each editable), or a new one */}
-        <div id={id("newstory")} class="snippets" popover role="menu" onKeyDown={roam}>
-          <button
-            type="button"
-            role="menuitem"
-            class="item"
-            tabindex="-1"
-            onClick={(e) => (closeUp(e.currentTarget), void newStory())}
-          >
-            <span class="name">As the card has it</span>
-          </button>
-          <For each={people()} keyed={(p) => p.id}>
-            {(p) => (
-              <div class="item pair" role="none">
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="name"
-                  tabindex="-1"
-                  onClick={(e) => (closeUp(e.currentTarget), void newStory(p().id))}
-                >
-                  {p().name}
-                </button>
-                <button type="button" class="icon" aria-label="Edit persona" onClick={() => edit(p())}>
-                  <Edit />
-                </button>
-              </div>
-            )}
-          </For>
-          <hr />
-          <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => edit(null)}>
-            <span class="name">New persona</span>
-          </button>
-        </div>
         <ul>
           <For each={lib()?.stories ?? []} keyed={(s) => s.id}>
             {(s) => (
@@ -197,9 +178,7 @@ export const Session = (props: { at: string }) => {
                 >
                   <span class="first">{s().last || "Empty"}</span>
                   <span class="meta">
-                    {[nameOf(s().persona), s().turns ? `${s().turns} turns` : undefined, ago(s().updated)]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {[s().turns ? `${s().turns} turns` : undefined, ago(s().updated)].filter(Boolean).join(" · ")}
                   </span>
                 </button>
               </li>
@@ -221,15 +200,58 @@ export const Session = (props: { at: string }) => {
             </button>
           </div>
         </dialog>
+      </section>
+      {/* who the player is on this card: one chip, the persona in force (the card's own when none is picked); the
+          menu picks, edits or makes one. Head text like the switches: a change rewrites the cached prefix, no new story */}
+      <section class="persona" aria-label="Persona">
+        <h2>Persona</h2>
+        <button type="button" class="chosen" popovertarget={id("persona")} disabled={!me()}>
+          <span class="chip">{current()?.name ?? "跟随卡片"}</span>
+        </button>
+        <div id={id("persona")} class="snippets" popover role="menu" onKeyDown={roam}>
+          <For each={people()} keyed={(p) => p.id}>
+            {(p) => (
+              <div class="item pair" role="none">
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  class="name"
+                  tabindex="-1"
+                  aria-checked={p().id === current()?.id ? "true" : "false"}
+                  onClick={(e) => (e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover(), pick(p().id))}
+                >
+                  {p().name}
+                </button>
+                <button type="button" class="icon" aria-label="Edit persona" onClick={() => edit(p())}>
+                  <Edit />
+                </button>
+              </div>
+            )}
+          </For>
+          <hr />
+          <button
+            type="button"
+            role="menuitemradio"
+            class="item"
+            tabindex="-1"
+            aria-checked={current() ? "false" : "true"}
+            onClick={(e) => (e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover(), pick(undefined))}
+          >
+            <span class="name">As the card has it</span>
+          </button>
+          <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => edit(null)}>
+            <span class="name">New persona</span>
+          </button>
+        </div>
         <dialog class="confirm" ref={(el) => (form = el)} closedby="any">
           <form onSubmit={save}>
-            <input name="name" class="field" placeholder="Name" value={editingPersona()?.name ?? ""} required />
+            <input name="name" class="field" placeholder="Name" ref={(el) => (nameField = el)} required />
             <textarea
               name="text"
               class="field"
               placeholder="Who you are in the story…"
               rows="4"
-              value={editingPersona()?.text ?? ""}
+              ref={(el) => (textField = el)}
               required
             />
             <div class="row">

@@ -1,9 +1,9 @@
 // The install's library: one SQLite file through `node:sqlite` (built into Bun and Node, no dependency), used as a
 // document store: a row is an id and a JSON column, nothing is ever joined. Five tables mirror the types. `player`: one
-// row, the Player (reading preferences: writing, language, asks, product toggles, snippets). `persona`: named frame
-// fragments the player picks per story (who they are in the fiction; a card still gives a default in its frame).
-// `card`: a Card as the workshop will write it (the four templates stay TS modules until then). `story`: one log tree,
-// a card played as a persona, with the log's head and next beside it so an id never comes back after a drop. `node`: a
+// row, the Player (reading preferences: writing, language, asks, product toggles, snippets, and which persona it is on
+// each card). `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
+// default in its frame). `card`: a Card as the workshop will write it (the four templates stay TS modules until then).
+// `story`: one log tree of a card, with the log's head and next beside it so an id never comes back after a drop. `node`: a
 // Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
 // node lands or is amended, gone with the node. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
@@ -16,8 +16,7 @@ const schema = `
 create table if not exists player (id integer primary key check (id = 1), json text not null);
 create table if not exists persona (id text primary key, name text not null, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null);
-create table if not exists story (id integer primary key autoincrement, card text not null, persona text, title text,
-  head integer, next integer not null default 0, updated integer not null);
+create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
 create table if not exists call (seq integer primary key autoincrement, story integer not null, node integer not null,
@@ -26,7 +25,7 @@ create table if not exists call (seq integer primary key autoincrement, story in
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
 
-/** A named frame fragment the player picks per story: who they are in the fiction. */
+/** A named frame fragment of the player's: who they are in the fiction, picked per card on the player row. */
 export interface Persona {
   id: string
   name: string
@@ -70,28 +69,24 @@ export const open = (file: string) => {
         ),
       del: (id: string) => void q("delete from persona where id = ?").run(id),
     },
-    /** One card's stories, newest first: a story is a log tree played as one persona (by id; none = the card's default),
-     *  with its size and its head node (what a list names it by), parsed for the caller to read. */
+    /** One card's stories, newest first, each with its size and its head node (what a list names it by), parsed for
+     *  the caller to read. */
     stories: {
       list: (card: string) =>
         (
           q(
-            `select s.id, s.persona, s.updated, (select count(*) from node where story = s.id) as turns,
+            `select s.id, s.updated, (select count(*) from node where story = s.id) as turns,
                (select json from node where story = s.id and id = s.head) as json
              from story s where card = ? order by updated desc, id desc`,
           ).all(card) as Row[]
         ).map((r) => ({
           id: r["id"] as Id,
-          persona: r["persona"] as string | null,
           updated: r["updated"] as number,
           turns: r["turns"] as number,
           head: parse<unknown>(r) ?? null,
         })),
-      create: (card: string, persona?: string): Id =>
-        Number(
-          q("insert into story (card, persona, updated) values (?, ?, ?)").run(card, persona ?? null, Date.now())
-            .lastInsertRowid,
-        ),
+      create: (card: string): Id =>
+        Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
     },
     /** One story's trace: calls by node id, in the order they were made. */

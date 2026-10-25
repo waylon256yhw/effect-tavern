@@ -1,7 +1,10 @@
 // The library behind the wire: one card's stories and the player's personas, one story open. A story is a session over
-// its rows in data.ts, with the player layer the library stores (it wins over the harness default given) and the
-// story's persona, a named fragment from the persona table, as the player's per-card persona slot: the card's default
-// overridden by the slot rules, nothing else in the card touched. Opening another story is another session; the wire
+// its rows in data.ts, with the player layer the library stores (it wins over the harness default given). A persona is
+// the player's, a sibling of the card, not a step of a story: `Player.persona[card]` names the one in force, and the
+// library reads its text into the per-card persona slot on every request (the card's default overridden by the slot
+// rules, nothing else in the card touched), so an edit of the persona is in force from the next request and a change of
+// pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). Opening another story
+// is another session; the wire
 // adapter asks `session` on every request, so a switch is in force at once. Deleting the open story opens the newest
 // remaining one, or a new one when none is left: there is always a story open.
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
@@ -28,10 +31,12 @@ export const library = ({
     },
     write: data.player.write,
   }
+  const persona = (p: Player) => {
+    const id = p.persona?.[card.id]
+    return id === undefined ? undefined : data.personas.list().find((x) => x.id === id)?.text
+  }
   const open = (id: Id): Session => {
-    const story = data.stories.list(card.id).find((s) => s.id === id)
-    if (!story) throw new Error(`no story ${id}`)
-    const persona = story.persona === null ? undefined : data.personas.list().find((p) => p.id === story.persona)?.text
+    if (!data.stories.list(card.id).some((s) => s.id === id)) throw new Error(`no story ${id}`)
     return makeSession({ card, player, model, store: data.store<Turn>(id), players, persona })
   }
   let current = data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
@@ -60,13 +65,24 @@ export const library = ({
           return { ...s, last: said || (told ? told.text.trimStart().split("\n")[0]! : "") }
         }),
       open: to,
-      create: (persona?: string) => to(data.stories.create(card.id, persona)),
+      create: () => to(data.stories.create(card.id)),
       del: (id: Id) => {
         data.stories.del(id)
         if (id === current) to(data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id))
       },
     },
-    personas: data.personas,
+    personas: {
+      ...data.personas,
+      /** Gone from the table, and from every card it was picked on: the card's own persona is back in force there. */
+      del: (id: string) => {
+        data.personas.del(id)
+        const p = session.player
+        if (p.persona && Object.values(p.persona).includes(id)) {
+          const rest = Object.fromEntries(Object.entries(p.persona).filter(([, v]) => v !== id))
+          session.setPlayer({ ...p, persona: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key
+        }
+      },
+    },
   }
 }
 export type Library = ReturnType<typeof library>

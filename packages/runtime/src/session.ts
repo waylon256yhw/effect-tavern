@@ -231,20 +231,22 @@ export const makeSession = ({
   model: SessionModel
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
-  persona?: string // this story's persona: the player's per-card `persona` slot, over the card's default (fragment.ts)
+  persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
 }) => {
   let player = players?.read() ?? given
-  /** The player layer as the frame reads it: the story's persona, when there is one, joins the per-card layer last. */
-  const layered = (): Player =>
-    persona === undefined
+  /** The player layer as the frame reads it: the persona in force, when there is one, joins the per-card layer last. */
+  const layered = (): Player => {
+    const text = persona?.(player)
+    return text === undefined
       ? player
       : {
           ...player,
           forCard: {
             ...player.forCard,
-            [card.id]: [...(player.forCard[card.id] ?? []), { id: "persona", text: persona }],
+            [card.id]: [...(player.forCard[card.id] ?? []), { id: "persona", text }],
           },
         }
+  }
   const rpg = makeCard(card.rules)
   // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
   const gate = (id: string, offer: Cond) => ({

@@ -158,8 +158,10 @@ const run = async (inspect: boolean) => {
     const again = sse(await (await post({ kind: "act", parent: null, input: { text: "hi" } })).text())
     assert.equal((again.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id, u.id + 1) // one past every id ever handed out, the dropped tail's included
 
-    // The library on the wire: a persona by id; a new story opens with it (its text in the narrator's head, seen when
-    // inspecting) and empty; switching back finds the first story's nodes; a story that is not there is a 404.
+    // The library on the wire. A persona is the player's, picked per card on the player row: the pick puts its text in
+    // the narrator's head (seen when inspecting) from the next request on, an edit of the persona too, no new story;
+    // deleting it drops the pick. A new story opens empty; switching back finds the first story's nodes; a story that is
+    // not there is a 404.
     const first = lib.story
     const persona = (id: string, v?: unknown) =>
       fetch(`${base}/personas/${id}`, {
@@ -170,16 +172,23 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await (await persona("monk", { name: monk.name, text: monk.text })).json(), [monk])
     assert.equal((await persona("monk", { name: 1 })).status, 400)
     assert.deepEqual(await (await fetch(`${base}/personas`)).json(), [monk])
-    const opened = (await (
-      await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ persona: "monk" }) })
-    ).json()) as { current: number; stories: { id: number; persona: string | null }[] }
-    assert.deepEqual([opened.current !== first, opened.stories.map((x) => x.persona)], [true, ["monk", null]])
+    const me = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
+    await fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...me, persona: { [chat.id]: "monk" } }) })
+    const opened = (await (await fetch(`${base}/stories`, { method: "POST" })).json()) as {
+      current: number
+      stories: { id: number }[]
+    }
+    assert.deepEqual([opened.current !== first, opened.stories.length], [true, 2])
     assert.deepEqual(((await (await fetch(`${base}/nodes`)).json()) as { nodes: unknown[] }).nodes, [])
-    const fresh = sse(await (await post({ kind: "act", parent: null, input: { text: "who am i" } })).text())
-    const head = (fresh.find((e) => e.event === "call")!.data as Extract<Event, { kind: "call" }>).msgs
-    assert.equal(JSON.stringify(head).includes(monk.text), inspect)
+    const headOf = async (text: string) => {
+      const got = sse(await (await post({ kind: "act", parent: null, input: { text } })).text())
+      return JSON.stringify((got.find((e) => e.event === "call")!.data as Extract<Event, { kind: "call" }>).msgs)
+    }
+    assert.equal((await headOf("who am i")).includes(monk.text), inspect)
+    await persona("monk", { name: monk.name, text: "你是还俗的武僧。" })
+    assert.equal((await headOf("and now")).includes("你是还俗的武僧。"), inspect) // the edit is in force, same story
     const listed = (await (await fetch(`${base}/stories`)).json()) as { stories: { turns: number; last: string }[] }
-    assert.deepEqual([listed.stories[0]!.turns, listed.stories[0]!.last], [1, "who am i"]) // the row is named by the player's last line
+    assert.deepEqual([listed.stories[0]!.turns, listed.stories[0]!.last], [2, "and now"]) // the row is named by the player's last line
     assert.equal(
       ((await (await fetch(`${base}/stories/${first}`, { method: "PUT" })).json()) as { current: number }).current,
       first,
@@ -195,6 +204,8 @@ const run = async (inspect: boolean) => {
     }
     assert.deepEqual([left.current, left.stories.length], [first, 1])
     assert.deepEqual(await (await persona("monk")).json(), [])
+    assert.equal(((await (await fetch(`${base}/player`)).json()) as { persona?: object }).persona, undefined) // the pick went with it
+    assert.equal((await headOf("who now")).includes(monk.text), false)
   } finally {
     server.close()
   }

@@ -11,7 +11,7 @@ interface N extends L.Noded {
 const data = open(":memory:")
 
 // Store: the authority commits, a fresh holder over the same rows equals it, and the next id is the stored one.
-const story = data.stories.create("wuxia", "friend")
+const story = data.stories.create("wuxia")
 const store = data.store<N>(story)
 const h = L.hold<N>(store)
 h.commit(L.add(h.log, { parent: null, text: "r" }))
@@ -38,10 +38,10 @@ assert.deepEqual(Object.keys(trace.list()), ["0"])
 // Stories list newest first per card, each with its size and head node; deleting one cascades to its nodes.
 const second = data.stories.create("wuxia")
 assert.deepEqual(
-  data.stories.list("wuxia").map((s) => [s.id, s.persona, s.turns, s.head]),
+  data.stories.list("wuxia").map((s) => [s.id, s.turns, s.head]),
   [
-    [second, null, 0, null],
-    [story, "friend", 1, { id: 0, parent: null, text: "r" }], // node 2 dropped above: head fell back to the root
+    [second, 0, null],
+    [story, 1, { id: 0, parent: null, text: "r" }], // node 2 dropped above: head fell back to the root
   ],
 )
 assert.equal(data.stories.list("other").length, 0)
@@ -53,7 +53,7 @@ assert.deepEqual(
 assert.throws(() => data.store<N>(story).read(), /no story/)
 assert.deepEqual(trace.list(), {})
 
-// Personas by name; the player row: JSON in, the same out.
+// Personas by name; the player row: JSON in, the same out (which persona is on which card is the player's).
 data.personas.put({ id: "friend", name: "旧友", text: "你是替故人送还遗物的旧友。" })
 data.personas.put({ id: "monk", name: "行脚僧", text: "你是路过的行脚僧。" })
 assert.deepEqual(
@@ -69,7 +69,12 @@ assert.deepEqual(
   ["friend"],
 )
 assert.equal(data.player.read(), undefined)
-data.player.write({ writing: { pov: "second" }, global: [], forCard: {} })
-assert.deepEqual(data.player.read(), { writing: { pov: "second" }, global: [], forCard: {} })
+data.player.write({ writing: { pov: "second" }, global: [], forCard: {}, persona: { wuxia: "friend" } })
+assert.deepEqual(data.player.read(), {
+  writing: { pov: "second" },
+  global: [],
+  forCard: {},
+  persona: { wuxia: "friend" },
+})
 data.close()
 console.log("ok")

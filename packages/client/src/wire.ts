@@ -55,14 +55,15 @@ const onStory = async (res: Promise<Response>): Promise<void> => {
   registry.set(page, registry.get(log).nodes.size ? "reader" : "card")
 }
 export const openStory = (id: number): Promise<void> => onStory(fetch(`${base}/stories/${id}`, { method: "PUT" }))
-export const newStory = (persona?: string): Promise<void> =>
-  onStory(fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ persona }) }))
+export const newStory = (): Promise<void> => onStory(fetch(`${base}/stories`, { method: "POST" }))
 export const deleteStory = (id: number): Promise<void> => onStory(fetch(`${base}/stories/${id}`, { method: "DELETE" }))
 const at = (id: string) => `${base}/personas/${encodeURIComponent(id)}`
 export const putPersona = async ({ id, ...body }: Persona): Promise<void> =>
   registry.set(personas, await got(fetch(at(id), { method: "PUT", body: JSON.stringify(body) })))
-export const deletePersona = async (id: string): Promise<void> =>
+export const deletePersona = async (id: string): Promise<void> => {
   registry.set(personas, await got(fetch(at(id), { method: "DELETE" })))
+  await fetchPlayer() // the pick on any card it held is gone with it
+}
 export const putPlayer = async (p: Player): Promise<void> =>
   registry.set(player, await got(fetch(`${base}/player`, { method: "PUT", body: JSON.stringify(p) })))
 

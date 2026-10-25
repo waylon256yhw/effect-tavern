@@ -534,7 +534,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* a story row: the player's last line, and under it the persona, the size and the time; the open one sits on a tint */
+/* a story row: the player's last line, and under it the size and the time; the open one sits on a tint */
 .stories ul {
   margin: 0;
   padding: 0;
@@ -566,27 +566,16 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-/* the session's menus hang under their section's header row, exactly as wide as the content column: never past the
-   card's edge */
-.session .stories h2 {
-  anchor-name: --stories;
-}
-.session .writing h2 {
-  anchor-name: --writing;
-}
+/* the session's menus (persona, writing) hang under the chips that open them (the invoker is the implicit anchor),
+   exactly as wide as the content column (the chips button bleeds a gutter each side): never past the card's edge, never
+   over what they set */
 .session .snippets {
   position-anchor: auto;
   position-area: bottom;
   box-sizing: border-box;
-  width: anchor-size(width);
+  width: calc(anchor-size(width) - 2 * var(--space-2));
   min-width: 0;
   margin: var(--space-1) 0 0;
-}
-.session .stories .snippets {
-  position-anchor: --stories;
-}
-.session .writing .snippets {
-  position-anchor: --writing;
 }
 /* a persona row: the name is the pick, the pencil edits; both in the menu's columns */
 .snippets .pair {
@@ -605,6 +594,10 @@
 .snippets .pair:has(.name:focus-visible) {
   background: var(--ghost-hover);
 }
+.snippets [aria-checked="true"] .name,
+.snippets .name[aria-checked="true"] {
+  color: var(--primary);
+}
 /* the writing switches: one line of what is set; the menu is four rows of chips, the set one outlined */
 .writing fieldset {
   grid-column: 1 / -1;
@@ -615,8 +608,8 @@
   padding: var(--space-1) 2px; /* the menu is the content column's width: 192px holds three four-character chips only with the padding this thin */
   border: 0;
 }
-/* the setting in force: one chip per switch, stacked, the menu's anchor */
-.writing .chosen {
+/* the setting in force (persona, writing): one chip per thing set, stacked, the menu's anchor */
+.session .chosen {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -626,7 +619,7 @@
   padding: var(--space-1) var(--space-2);
   box-sizing: content-box;
 }
-.writing .chosen:hover:not(:disabled) {
+.session .chosen:hover:not(:disabled) {
   background: var(--ghost-hover);
 }
 .writing legend {

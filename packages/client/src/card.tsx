@@ -2,14 +2,14 @@
 // sheet: the name and the introduction, three derived rows (manifest.ts), the openings in a well that scrolls, and one
 // action. Landed on when the story is empty; opened from the session's card head any time, Escape or Back returns.
 // Browsing openings writes nothing: Begin greets the one shown, and it lands as the story's root; mid-story the same
-// pick starts a new story (this persona again) beside the old one. A card with no opening begins on an empty line,
+// pick starts a new story beside the old one. A card with no opening begins on an empty line,
 // the player's first words start it.
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
-import { card, error, log, page, pin, registry, stories, working } from "./store.ts"
+import { card, error, log, page, personas, pin, player, registry, working } from "./store.ts"
 import { newStory, send } from "./wire.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
@@ -38,6 +38,13 @@ export const CardPage = () => {
   const view = read(card)
   const all = read(log)
   const busy = read(working) // no new root under a turn in flight
+  const me = read(player)
+  const people = read(personas)
+  /** The persona the player is on this card: the player's pick by name, none when the card's own holds. */
+  const persona = () => {
+    const id = me()?.persona?.[view()?.id ?? ""]
+    return id === undefined ? undefined : people().find((p) => p.id === id)?.name
+  }
   const [at, setAt] = createSignal(0)
   const inStory = () => all().nodes.size > 0
   const openings = () => view()?.greetings ?? []
@@ -46,10 +53,7 @@ export const CardPage = () => {
   const begin = async () => {
     registry.set(pin, null) // the old story's pin and error do not carry into a new one
     registry.set(error, null)
-    if (inStory()) {
-      const lib = registry.get(stories)
-      await newStory(lib?.stories.find((s) => s.id === lib.current)?.persona ?? undefined)
-    }
+    if (inStory()) await newStory()
     if (openings().length) send({ kind: "greet", greeting: at() }) // none: an empty line
     back()
   }
@@ -94,6 +98,14 @@ export const CardPage = () => {
                     </div>
                   )}
                 </For>
+                <Show when={persona()}>
+                  {(name) => (
+                    <div class="row">
+                      <dt>Persona</dt>
+                      <dd>{name()}</dd>
+                    </div>
+                  )}
+                </Show>
                 <div class="row">
                   <dt>Prompt</dt>
                   <dd class="mono">~{compact.format(c().tokens.head)} tokens</dd>

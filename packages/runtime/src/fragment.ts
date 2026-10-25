@@ -100,6 +100,7 @@ export const Player = Schema.Struct({
   writing: Schema.optionalKey(Writing), // compiled into the global layer first: a global fragment on the same slot overrides it
   global: Schema.Array(Fragment),
   forCard: Schema.Record(Schema.String, Schema.Array(Fragment)),
+  persona: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)), // card id → the persona (a library id) the player is on that card; none = the card's own
   defaults: Schema.optionalKey(
     Schema.Struct({ global: Schema.optionalKey(ModeSchema), forCard: Schema.optionalKey(ModeSchema) }),
   ), // harness-level setting, also the player's

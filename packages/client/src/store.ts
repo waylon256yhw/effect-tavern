@@ -44,11 +44,10 @@ export interface CardView {
   format: readonly Format[]
 }
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
-/** The library (GET /stories, /personas, /player): this card's stories and which is open (a story is one root's tree,
- *  played as one persona), the player's personas, and the player layer the writing switches live in. Read at open. */
+/** The library (GET /stories, /personas, /player): this card's stories and which is open (a story is one root's tree),
+ *  the player's personas, and the player layer the writing switches and the persona pick live in. Read at open. */
 export interface StoryRow {
   id: Id
-  persona: string | null
   updated: number
   turns: number
   last: string // the player's last line (the head's), or the head's first words; "" when empty

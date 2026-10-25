@@ -6,13 +6,14 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories (id, persona, turns, the last line, updated), newest first, and which one is open.
-//                 POST /stories {persona?} opens a new one,
+//   GET  /stories this card's stories (id, turns, the last line, updated), newest first, and which one is open.
+//                 POST /stories opens a new one,
 //                 PUT /stories/<id> opens that one (404 when there is none), DELETE /stories/<id> removes it (the open
 //                 one gone, the newest remaining opens, or a new one). Each answers the listing; the client re-reads
 //                 /nodes, and the trace starts over.
-//   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one, DELETE /personas/<id> removes it.
-//                 Both answer the list.
+//   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
+//                 where it is picked), DELETE /personas/<id> removes it and its picks (the client re-reads /player).
+//                 Both answer the list. Which persona is in force on a card is the player's (`Player.persona`).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
 //                 stop closes it before record's call), so the adapter files them in the library under the node they
@@ -50,8 +51,7 @@ const reason = (c: Cause.Cause<unknown>) => {
 }
 
 export type Call = Extract<Event, { kind: "call" }>
-// The two bodies besides Action and Player, decoded here like them.
-const NewStory = Schema.decodeUnknownSync(Schema.Struct({ persona: Schema.optionalKey(Schema.String) }))
+// The body besides Action and Player, decoded here like them.
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
@@ -66,11 +66,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const stories = () => json(200, { current: lib.story, stories: lib.stories.list() })
     if (req.method === "GET" && req.url === "/stories") return stories()
     if (req.method === "POST" && req.url === "/stories") {
-      try {
-        lib.stories.create(NewStory(JSON.parse((await body(req)) || "{}")).persona)
-      } catch (e) {
-        return bad(e)
-      }
+      lib.stories.create()
       return stories()
     }
     const storyAt = /^\/stories\/(\d+)$/.exec(req.url ?? "")
