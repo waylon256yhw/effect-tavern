@@ -642,8 +642,9 @@ button:focus-visible {
   [data-hint]::after {
     content: attr(data-hint);
     position: absolute;
-    position-area: top;
-    margin-bottom: 6px;
+    bottom: calc(100% + 6px); /* over the button; position-area needs an anchor a pseudo-element has none of */
+    left: 50%;
+    translate: -50% 0;
     padding: 3px 8px;
     border-radius: var(--radius-sm);
     background: var(--ink);
@@ -654,6 +655,18 @@ button:focus-visible {
     pointer-events: none;
     opacity: 0;
     transition: opacity var(--dur-2) var(--ease);
+  }
+  .topbar [data-hint]::after {
+    top: calc(100% + 6px);
+    bottom: auto;
+  }
+  /* the bubble clips at its rounded edge: its actions' hints sit beside the button, inside the bubble */
+  .acts [data-hint]::after {
+    top: 50%;
+    right: calc(100% + 6px);
+    bottom: auto;
+    left: auto;
+    translate: 0 -50%;
   }
   [data-hint]:is(:hover, :focus-visible)::after {
     opacity: 1;

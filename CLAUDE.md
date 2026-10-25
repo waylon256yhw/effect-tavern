@@ -74,6 +74,8 @@ Tooling:
 
 ## Dev
 
+Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp test` built-in finds no vitest files and exits 1.
+
 `bun --bun vp run dev` at the root (`bun --bun vp dev` in packages/client; `--bun` makes the `node` Vite+ launches resolve to Bun) is the whole stack: the session (packages/server/src/dev.ts) runs
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
 effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the library lives in
