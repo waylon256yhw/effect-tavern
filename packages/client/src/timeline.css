@@ -321,23 +321,6 @@ button.cell:hover {
   color: var(--ink-2);
   font-weight: 600;
 }
-.timeline .quote {
-  margin: 0;
-  padding-left: 10px;
-  border-left: 2px solid var(--ink);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--text-body);
-  line-height: 1.5;
-  color: var(--ink);
-}
-.timeline .quote .aside {
-  font-family: var(--font-mono);
-  font-size: var(--text-caption);
-  font-style: italic;
-  color: var(--ink-3);
-}
 .timeline .prose {
   font-size: var(--text-prose);
   line-height: var(--leading-prose);
