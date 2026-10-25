@@ -815,6 +815,10 @@
   gap: var(--space-3);
   padding: var(--space-4);
 }
+/* the body scrolls: its groups keep their height instead of shrinking to fit (a flex child's default) */
+.drawer-body > * {
+  flex: none;
+}
 .drawer-foot,
 .modal-foot {
   flex: none;
@@ -940,9 +944,6 @@
 .modal .field {
   height: 38px;
   padding-block: 0;
-}
-.modal .field.mono {
-  font-size: var(--text-footnote);
 }
 .modal .endpoints {
   display: flex;
