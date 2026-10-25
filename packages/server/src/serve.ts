@@ -28,7 +28,9 @@
 import { decodePlayer } from "@effect-tavern/runtime/src/fragment.ts"
 import { decodeAction, perform, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Deferred, Effect, Fiber, Schema, Stream } from "effect"
+import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import { extname, join, resolve, sep } from "node:path"
 import type { Library } from "./library.ts"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
@@ -164,3 +166,42 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
   }
 }
 export const serve = (lib: Library, opts?: { inspect?: boolean }) => createServer(handle(lib, opts))
+
+const types: Record<string, string> = {
+  html: "text/html; charset=utf-8",
+  js: "text/javascript",
+  css: "text/css",
+  json: "application/json",
+  svg: "image/svg+xml",
+  png: "image/png",
+  ico: "image/x-icon",
+  woff2: "font/woff2",
+}
+/** The whole tavern on one port, what a phone runs: the session's handler under /api (the prefix stripped, as Vite's
+ *  mount does), and under everything else the client build (`vp build` → packages/client/dist): a path with an
+ *  extension is that file (hashed assets cached for good) or a 404, any other path is index.html, the client's own. */
+export const app = (api: (req: IncomingMessage, res: ServerResponse) => Promise<void>, dist: string) => {
+  const root = resolve(dist)
+  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const url = req.url ?? "/"
+    if (url === "/api" || url.startsWith("/api/")) {
+      req.url = url.slice(4) || "/"
+      return api(req, res)
+    }
+    const path = decodeURIComponent(new URL(url, "http://x").pathname)
+    const file = resolve(root, `.${path}`)
+    const page = !extname(path) || !file.startsWith(root + sep)
+    const asset = page ? join(root, "index.html") : file
+    try {
+      const body = await readFile(asset)
+      res.writeHead(200, {
+        "content-type": types[extname(asset).slice(1)] ?? "application/octet-stream",
+        "cache-control": page ? "no-cache" : "public, max-age=31536000, immutable",
+      })
+      res.end(body)
+    } catch {
+      res.writeHead(404, { "content-type": "text/plain" })
+      res.end(page ? "no client build: vp build in packages/client" : "not found")
+    }
+  }
+}

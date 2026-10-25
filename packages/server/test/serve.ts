@@ -5,10 +5,14 @@ import { fake, fakeText } from "@effect-tavern/provider"
 import type { Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, player } from "@effect-tavern/runtime/test/cards/wuxia.ts"
 import assert from "node:assert/strict"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { createServer } from "node:http"
 import type { AddressInfo } from "node:net"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { open } from "../src/data.ts"
 import { library } from "../src/library.ts"
-import { serve } from "../src/serve.ts"
+import { app, handle, serve } from "../src/serve.ts"
 
 const model = {
   ...fake((o) =>
@@ -212,6 +216,40 @@ const run = async (inspect: boolean) => {
 }
 await run(true)
 await run(false)
+
+// The app on one port: /api is the session with the prefix stripped; a path with an extension is a file of the build
+// (hashed assets cached for good) or a 404; any other path is the client's index.html.
+{
+  const dist = await mkdtemp(join(tmpdir(), "tavern-dist-"))
+  await mkdir(join(dist, "assets"))
+  await writeFile(join(dist, "index.html"), "<!doctype html><title>t</title>")
+  await writeFile(join(dist, "assets", "a.js"), "export {}")
+  const server = createServer(app(handle(lib), dist)).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  try {
+    const got = async (path: string) => {
+      const r = await fetch(base + path)
+      return [r.status, r.headers.get("content-type"), r.headers.get("cache-control"), await r.text()] as const
+    }
+    const index = [200, "text/html; charset=utf-8", "no-cache", "<!doctype html><title>t</title>"]
+    assert.deepEqual(await got("/"), index)
+    assert.deepEqual(await got("/stories"), index) // the client's route, not the session's
+    assert.deepEqual(await got("/assets/a.js"), [
+      200,
+      "text/javascript",
+      "public, max-age=31536000, immutable",
+      "export {}",
+    ])
+    assert.equal((await got("/assets/b.js"))[0], 404)
+    assert.deepEqual((await got("/..%2Fassets%2Fa.js")).slice(0, 2), [200, "text/html; charset=utf-8"]) // never above the build
+    assert.equal(((await (await fetch(`${base}/api/card`)).json()) as { id: string }).id, chat.id)
+    assert.ok(Array.isArray(((await (await fetch(`${base}/api/stories`)).json()) as { stories: unknown[] }).stories))
+    assert.equal((await fetch(`${base}/api`)).status, 404) // the session's "/" takes POST only
+  } finally {
+    server.close()
+    await rm(dist, { recursive: true })
+  }
+}
 
 // The library alone: deleting the open story opens the newest remaining one, or a new one when none is left.
 const solo = library({ data: open(":memory:"), card: chat, player, model })

@@ -14,7 +14,12 @@ import { library } from "./library.ts"
 import { handle } from "./serve.ts"
 
 const name = process.env["CARD"] ?? "wuxia"
-const dir = process.env["DATA"] ?? fileURLToPath(new URL("../../../.dev/", import.meta.url))
+// a compiled binary (bun build --compile) has no checkout around it: its library lives where it is run
+const dir =
+  process.env["DATA"] ??
+  (import.meta.url.includes("$bunfs")
+    ? `${process.cwd()}/.dev`
+    : fileURLToPath(new URL("../../../.dev/", import.meta.url)))
 mkdirSync(dir, { recursive: true })
 const data = open(`${dir}/tavern.db`)
 

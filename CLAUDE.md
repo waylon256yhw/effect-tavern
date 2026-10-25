@@ -78,5 +78,4 @@ Tooling:
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
 effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the library lives in
 `.dev/tavern.db` (gitignored; `DATA=<dir>` moves it; delete it to start every story over). The user starts and stops `vp dev` in their own
-terminal; an agent uses it and never starts, restarts or kills it. `bun src/main.ts` in packages/server serves the same
-session on its own port.
+terminal; an agent uses it and never starts, restarts or kills it. `bun src/main.ts` in packages/server serves the same session under `/api` on its own port, with the client build (`vp build` in packages/client → dist) under every other path: the one-port form a phone runs.
