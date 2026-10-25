@@ -354,6 +354,11 @@ const program = Effect.gen(function* () {
   i = calls().length
   for (const t of S.log.nodes.values()) S.node(t.id) // replay: every projection from recorded outputs, no call
   assert.equal(calls().length, i)
+  // An opening edited: the player's prose replaces the greeting's in a sibling root, the opening's effects kept, no
+  // call made (there is no line or note for check or record to read the prose against).
+  const ge = yield* go(S.edit(g.turn.id, { text: "G2" }))
+  assert.deepEqual([since(i), ge.parent, prose(ge), ge.opening, ge.sibling], [[], null, "G2", g.turn.opening, "edit"])
+  assert.equal(S.node(ge.id).state.bond, 8)
 
   // A player action on a node: demand a product that is off (inner) over t3's scene. One record call, no new node, the
   // answer kept on t3 beside the turn's own products; the player's toggle alone could have switched it on for every turn.

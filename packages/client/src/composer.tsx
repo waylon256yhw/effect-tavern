@@ -37,8 +37,11 @@ export const Composer = (props: {
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
   const isNote = () => !acting() || toNarratorOn()
+  // An empty line on a card with openings: the story starts from one of them (the card page), not from a typed root.
+  const waiting = () => line().length === 0 && (view()?.greetings.length ?? 0) > 0
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
-  const prompt = () => (isNote() ? "To the narrator, not in the story…" : "Your line…")
+  const prompt = () =>
+    waiting() ? "Pick an opening on the card page…" : isNote() ? "To the narrator, not in the story…" : "Your line…"
   let box: HTMLTextAreaElement | undefined
   let menu: HTMLDivElement | undefined
   const put = (value: string, caret: number) => {
@@ -75,7 +78,7 @@ export const Composer = (props: {
   )
   const submit = (keep = false) => {
     const t = text().trim()
-    if (!t || props.busy) return false
+    if (!t || props.busy || waiting()) return false
     if (keep) props.onKeep(t)
     else props.onSend(t, isNote())
     registry.set(compose, "")
@@ -219,7 +222,7 @@ export const Composer = (props: {
                 class="send"
                 aria-label="Send"
                 data-hint="Send ⌘↵"
-                disabled={!text().trim() || props.busy}
+                disabled={!text().trim() || props.busy || waiting()}
                 onPointerDown={keep}
               >
                 <Send />

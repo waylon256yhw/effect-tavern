@@ -94,6 +94,11 @@ export const Session = (props: { at: string }) => {
   const pinned = read(pin)
   const line = read(path)
   const busy = read(working) // the story stays put while a turn is in flight
+  /** A pinned entry by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
+  const hookOf = (id: string) =>
+    line()
+      .flatMap((n) => n.readable)
+      .find((e) => e.id === id)?.hook ?? id
   // The persona in force on this card, and the pick: a change of the player's own layer, nothing of the story's.
   const cardId = () => view()?.id ?? ""
   const current = () => people().find((p) => p.id === me()?.persona?.[cardId()])
@@ -311,7 +316,7 @@ export const Session = (props: { at: string }) => {
             <h2>Pinned</h2>
             <p>
               <Pin aria-hidden="true" />
-              <span>{p()}</span>
+              <span>{hookOf(p())}</span>
             </p>
           </section>
         )}

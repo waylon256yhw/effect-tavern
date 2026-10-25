@@ -27,7 +27,7 @@ const els = record(
       turn: { input: { text: "go", pin: "li" }, fired: [], products: { notes: ["a fact"] } },
     },
   ),
-  node({ hp: 40, foe: 30, mood: "low" }),
+  node({ hp: 40, foe: 30, mood: "low" }, { readable: [{ id: "li", hook: "a hook" }] }),
 )
 assert.deepEqual(els, [
   { kind: "meter", path: "hp", label: "体力", min: 0, max: 100, was: 40, now: 30 },
@@ -35,7 +35,7 @@ assert.deepEqual(els, [
   { kind: "steps", path: "mood", label: "mood", options: ["low", "mid", "high"], was: 0, now: 2 },
   { kind: "check", check: { action: "strike", chance: 0.6, roll: 0.7, hit: false } },
   { kind: "clue", id: "li", text: "a clue", pinnable: true },
-  { kind: "pin", id: "li", told: false }, // pinned, never fired: the row is where it can be pinned again
+  { kind: "pin", id: "li", hook: "a hook", told: false }, // pinned, never fired: the row is where it can be pinned again; named by the parent's hook
   { kind: "notes", items: ["a fact"] },
 ])
 assert.deepEqual(
@@ -47,7 +47,7 @@ assert.deepEqual(
     ),
     undefined,
   ),
-  [{ kind: "pin", id: "li", told: true }],
+  [{ kind: "pin", id: "li", hook: "li", told: true }], // no parent to name it: the id
 )
 // Status: the card's order inside a group, groups by first appearance, the ungrouped first and unnamed
 assert.deepEqual(

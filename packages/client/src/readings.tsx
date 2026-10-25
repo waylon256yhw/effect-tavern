@@ -130,7 +130,7 @@ export const Reading = (props: { el: Element }) => (
       {(el) => (
         <div class="clue">
           <Pin aria-hidden="true" />
-          <p>{el().id}</p>
+          <p>{el().hook}</p>
           <span class="badge" data-hit={el().told}>
             {el().told ? "Told" : "Untold"}
           </span>

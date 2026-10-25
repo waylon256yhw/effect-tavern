@@ -1,6 +1,7 @@
 // The card page: the card on the player's side (docs/card-page-brief.md, docs/card-page-prototype.html). One bounded
 // sheet: the name and the introduction, three derived rows (manifest.ts), the openings in a well that scrolls, and one
-// action. Landed on when the story is empty; opened from the session's card head any time, Escape or Back returns.
+// action. Landed on when the story is empty; opened from the session's card head any time, Escape or Back returns
+// (the empty reader is a valid place to be: its composer waits for an opening while the card has any).
 // Browsing openings writes nothing: Begin greets the one shown, and it lands as the story's root; mid-story the same
 // pick starts a new story beside the old one. A card with no opening begins on an empty line,
 // the player's first words start it.
@@ -59,7 +60,7 @@ export const CardPage = () => {
   }
   onSettled(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && inStory() && !document.querySelector(":popover-open")) back()
+      if (e.key === "Escape" && !document.querySelector(":popover-open")) back()
     }
     addEventListener("keydown", onKey)
     return () => removeEventListener("keydown", onKey)
@@ -72,11 +73,9 @@ export const CardPage = () => {
             <section class="about" aria-label="Card">
               <div class="head">
                 <div class="title">
-                  <Show when={inStory()}>
-                    <button type="button" class="icon" aria-label="Back to story" onClick={back}>
-                      <Back />
-                    </button>
-                  </Show>
+                  <button type="button" class="icon" aria-label="Back to story" onClick={back}>
+                    <Back />
+                  </button>
                   <h1>{c().title}</h1>
                 </div>
                 <Show when={c().summary}>

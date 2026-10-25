@@ -12,7 +12,7 @@ export type Element =
   | { kind: "value"; path: string; label: string; was: State[string]; now: State[string] } // any other change
   | { kind: "check"; check: Check }
   | { kind: "clue"; id: string; text: string; pinnable: boolean } // pinnable: a deeper layer is still untold
-  | { kind: "pin"; id: string; told: boolean } // the entry this act pinned; untold: check never saw it fire, it can be pinned again
+  | { kind: "pin"; id: string; hook: string; told: boolean } // the entry this act pinned, by its hook (the parent's readable list; told, it has left this node's); untold: check never saw it fire, it can be pinned again
   | { kind: "notes"; items: readonly string[] }
 
 export const reading = (f: Field, was: State[string], now: State[string]): Element => {
@@ -44,7 +44,13 @@ export const record = (rules: Rules, node: Node, prev: Node | undefined): Elemen
   const untold = new Set(node.readable.map((r) => r.id))
   for (const d of node.delivered) out.push({ kind: "clue", id: d.id, text: d.text, pinnable: untold.has(d.id) })
   const p = node.turn.input.pin
-  if (p !== undefined) out.push({ kind: "pin", id: p, told: node.turn.fired.some((d) => d.id === p) })
+  if (p !== undefined)
+    out.push({
+      kind: "pin",
+      id: p,
+      hook: prev?.readable.find((r) => r.id === p)?.hook ?? p,
+      told: node.turn.fired.some((d) => d.id === p),
+    })
   const notes = node.turn.products.notes as readonly string[] | undefined
   if (notes?.length) out.push({ kind: "notes", items: notes })
   return out

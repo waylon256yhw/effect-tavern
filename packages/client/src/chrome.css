@@ -541,6 +541,8 @@
   list-style: none;
   display: grid;
   gap: 2px;
+  max-height: 11rem; /* four rows; the list is unbounded, the card is not */
+  overflow-y: auto;
 }
 .story {
   display: grid;
@@ -684,8 +686,9 @@
   .topbar {
     display: none;
   }
-  /* the latest turn's Record and actions sit in the right card: its pill would open the same thing twice */
-  main > section:last-of-type .record-pill,
+  /* the latest turn's Record and actions sit in the right card: its pill would open the same thing twice (the draft's
+     pill is the only sign of check and record running: it stays) */
+  main > section:last-of-type:not(.draft) .record-pill,
   main > section:has(+ .draft) .record-pill {
     display: none;
   }

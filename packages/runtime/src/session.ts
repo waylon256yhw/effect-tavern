@@ -808,13 +808,25 @@ export const makeSession = ({
     /** The player rewrites the prose, or their own line under it, or both: a sibling carrying the new text, with check
      *  and record run over it, so what enters the record is only what the edit fired and answered (README §5 direction
      *  3). Revising the line while keeping the prose is for a change of wording, not of what happened: the beats stay. */
-    edit: (nodeId: number, patch: { text?: string; input?: Input }): Events =>
-      patch.text === undefined && !patch.input
-        ? Stream.die(new Error(`node ${nodeId}: nothing to edit`))
-        : sibling(nodeId, "check", {
-            ...(patch.text !== undefined && { reply: [{ type: "text", text: patch.text }] }),
-            ...(patch.input && { input: patch.input }),
+    edit: (nodeId: number, patch: { text?: string; input?: Input }): Events => {
+      if (patch.text === undefined && !patch.input) return Stream.die(new Error(`node ${nodeId}: nothing to edit`))
+      const { id: _, ...t } = turnOf(nodeId)
+      // an opening (no line, no note): there is nothing for check or record to read the prose against, so the sibling
+      // root is the greeting with the player's prose in its place, its effects kept, and no call is made
+      if (!patch.input && !t.input.text && !t.input.note)
+        return emitting((emit) =>
+          emit({
+            kind: "change",
+            ...change(
+              held.commit(Log.add(held.log, { ...t, reply: [{ type: "text", text: patch.text! }], sibling: "edit" })),
+            ),
           }),
+        )
+      return sibling(nodeId, "check", {
+        ...(patch.text !== undefined && { reply: [{ type: "text", text: patch.text }] }),
+        ...(patch.input && { input: patch.input }),
+      })
+    },
     /** The player sets fields on a node (a status bar's +/-): effects appended to the node's `adjust`, validated against
      *  the card's bounds and enums now, replayed in the fold after everything the turn itself did. Every descendant sees
      *  it. A value outside the field throws and leaves the node as it was. */

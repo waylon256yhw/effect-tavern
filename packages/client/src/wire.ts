@@ -34,6 +34,7 @@ export const fetchCard = async (): Promise<void> => registry.set(card, (await go
 export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(fetch(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
   registry.update(log, (l) => L.apply(l, c))
+  await fetchStories() // the head moved: the row's last line and size follow
 }
 export const fetchCalls = async (): Promise<void> => {
   const by = (await got(fetch(`${base}/calls`))) as Record<string, Call[]>
