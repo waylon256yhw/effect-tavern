@@ -92,6 +92,17 @@ export const library = ({
     if (!env) throw new Error("no model: pick a default model in settings")
     return typeof env === "function" ? env(phase) : "default" in env ? (env[phase] ?? env.default) : env
   }
+  /** The routing row without the pairs `keep` refuses; written only when something went. */
+  const prune = (keep: (pair: typeof Pair.Type) => boolean) => {
+    const r = routing()
+    const stages = Object.entries(r.stages ?? {}).filter(([, v]) => v && keep(v))
+    const lost = (r.default && !keep(r.default)) || stages.length !== Object.keys(r.stages ?? {}).length
+    if (!lost) return
+    data.routing.write({
+      ...(r.default && keep(r.default) && { default: r.default }),
+      ...(r.stages && { stages: Object.fromEntries(stages) }),
+    })
+  }
   /** A provider probed whether or not it is enabled (the player tests before switching it on), on a model entry of its
    *  own or a bare id, with the one fetch traced. */
   const probe = (id: string, m: ModelEntry) => {
@@ -165,17 +176,16 @@ export const library = ({
     },
     providers: {
       list: data.providers.list,
-      put: data.providers.put,
+      /** Written; a routing pair on a model it no longer lists is cleared (a disabled provider's pairs stay: it can be
+       *  switched back on). */
+      put: (p: Provider) => {
+        data.providers.put(p)
+        prune((pair) => pair.provider !== p.id || p.models.some((m) => m.id === pair.model))
+      },
       /** Gone, and from the routing: a stage that ran on it follows the default again, or the environment's model. */
       del: (id: string) => {
         data.providers.del(id)
-        const r = routing()
-        const keep = (pair: typeof Pair.Type | undefined) => (pair?.provider === id ? undefined : pair)
-        const stages = Object.fromEntries(Object.entries(r.stages ?? {}).filter(([, v]) => keep(v)))
-        data.routing.write({
-          ...(keep(r.default) && { default: r.default }),
-          ...(Object.keys(stages).length && { stages }),
-        })
+        prune((pair) => pair.provider !== id)
       },
       /** The provider's model list, over its default format's endpoint. */
       models: (id: string) => listModels(probe(id, { id: "" })),

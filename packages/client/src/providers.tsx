@@ -41,7 +41,7 @@ import {
   Sync,
   Trash,
 } from "./icons.tsx"
-import { hats, providers, secrets } from "./store.ts"
+import { hats, providers, registry, secrets } from "./store.ts"
 import { addSecret, deleteProvider, deleteSecret, listModels, putProvider, setSecret, testProvider } from "./wire.ts"
 
 const EFFORTS: [Effort, string][] = [
@@ -51,9 +51,9 @@ const EFFORTS: [Effort, string][] = [
   ["high", "高"],
   ["max", "最高"],
 ]
-const providerOf = (id: string) => untrack(read(providers)).find((p) => p.id === id)
-/** For handlers and snapshots (untracked); JSX reads `vault()` itself. */
-const secretOf = (p: Provider): SecretView | undefined => untrack(read(secrets)).find((s) => s.id === p.secret)
+const providerOf = (id: string) => registry.get(providers).find((p) => p.id === id)
+/** For handlers and snapshots (the registry, not a tracked read); JSX reads `vault()` itself. */
+const secretOf = (p: Provider): SecretView | undefined => registry.get(secrets).find((s) => s.id === p.secret)
 const addModels = (p: Provider, ids: readonly string[]) =>
   void putProvider({
     ...p,
@@ -65,6 +65,7 @@ const setUrl = (p: Provider, f: Format, url: string): Provider["endpoints"] => {
   const { [f]: old, ...rest } = p.endpoints
   return url.trim() ? { ...rest, [f]: { ...old, url: url.trim() } } : rest
 }
+const DRAWER_OUT = 250 // ms: past the drawer's --dur-3 slide, so its content leaves with it
 /** Opens a dialog component from its parent: the dialog hands its open function up through `opener`. */
 type Opener<A> = (open: (a: A) => void) => void
 
@@ -137,12 +138,29 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
   const [searching, setSearching] = createSignal(false)
   const [folded, setFolded] = createSignal(false)
   const [drawer, setDrawer] = createSignal<"endpoint" | "sync" | null>(null)
+  // what the drawer shows: set as it opens, kept while it slides out (DRAWER_OUT)
+  const [shown, setShown] = createSignal<"endpoint" | "sync" | null>(null)
+  const open = (d: "endpoint" | "sync") => (setShown(d), setDrawer(d))
+  const shut = () => {
+    setDrawer(null)
+    setTimeout(() => drawer() || setShown(null), DRAWER_OUT)
+  }
   let openModel: (m: ModelEntry) => void = () => {}
   let openAddModel: () => void = () => {}
 
   /** A typed key goes up once. Retyped on the provider's own secret (the one named after it), the value is replaced in
    *  place; on a secret the player named, or under a name given in the vault, it is a new secret. */
-  const storeKey = async (name: string) => {
+  // the key's write in flight: a drawer's first request and the probe wait for it, or they would go out keyless
+  let savingKey: Promise<void> | undefined
+  const keySaved = () => savingKey ?? Promise.resolve()
+  const storeKey = (name: string): Promise<void> => {
+    const run: Promise<void> = writeKey(name).finally(() => {
+      if (savingKey === run) savingKey = undefined
+    })
+    savingKey = run
+    return run
+  }
+  const writeKey = async (name: string) => {
     const x = p()
     const value = typed().trim()
     if (!x || !value) return
@@ -156,7 +174,8 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
   const runProbe = async () => {
     const x = p()
     if (!x) return
-    if (typed().trim()) await storeKey("")
+    if (typed().trim()) void storeKey("")
+    await keySaved()
     setProbe({ ok: true, text: "…" })
     setProbe(await testProvider(x.id, x.models[0]?.id))
   }
@@ -167,7 +186,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
   onSettled(() => {
     // the page's Escape leaves the drawer to this: it closes the drawer, not the page (settings.tsx checks the DOM)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(":popover-open, dialog[open]") && drawer()) setDrawer(null)
+      if (e.key === "Escape" && !document.querySelector(":popover-open, dialog[open]") && drawer()) shut()
     }
     addEventListener("keydown", onKey)
     return () => removeEventListener("keydown", onKey)
@@ -296,7 +315,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
             <div class="block">
               <div class="block-title">
                 <h3>API 地址</h3>
-                <button type="button" class="link" onClick={() => setDrawer("endpoint")}>
+                <button type="button" class="link" onClick={() => open("endpoint")}>
                   添加端点
                 </button>
                 <div class="right">
@@ -319,7 +338,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
                     }
                   />
                 </div>
-                <button type="button" class="icon boxed" aria-label="请求配置" onClick={() => setDrawer("endpoint")}>
+                <button type="button" class="icon boxed" aria-label="请求配置" onClick={() => open("endpoint")}>
                   <Gear />
                 </button>
               </div>
@@ -357,7 +376,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
                 </label>
                 <div class="right">
                   <div class="btn-join">
-                    <button type="button" class="btn sm" onClick={() => setDrawer("sync")}>
+                    <button type="button" class="btn sm" onClick={() => open("sync")}>
                       <Sync /> <span>同步模型</span>
                     </button>
                     <button type="button" class="btn sm" aria-label="手动添加模型" onClick={() => openAddModel()}>
@@ -374,7 +393,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
                     <div class="empty-card">
                       <span>{mq() ? "无匹配模型" : "尚未添加模型"}</span>
                       <Show when={!mq()}>
-                        <button type="button" class="btn sm" onClick={() => setDrawer("sync")}>
+                        <button type="button" class="btn sm" onClick={() => open("sync")}>
                           <Sync /> 同步模型列表
                         </button>
                       </Show>
@@ -418,16 +437,12 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
             </div>
           </div>
 
-          <Drawer
-            open={!!drawer()}
-            label={drawer() === "sync" ? "同步模型" : "请求配置"}
-            onClose={() => setDrawer(null)}
-          >
-            <Show when={drawer() === "endpoint"}>
-              <RequestDrawer id={props.id} onClose={() => setDrawer(null)} />
+          <Drawer open={!!drawer()} label={shown() === "sync" ? "同步模型" : "请求配置"} onClose={shut}>
+            <Show when={shown() === "endpoint"}>
+              <RequestDrawer id={props.id} ready={keySaved} onClose={shut} />
             </Show>
-            <Show when={drawer() === "sync"}>
-              <SyncDrawer id={props.id} onClose={() => setDrawer(null)} />
+            <Show when={shown() === "sync"}>
+              <SyncDrawer id={props.id} ready={keySaved} onClose={shut} />
             </Show>
           </Drawer>
           <ModelDialog id={props.id} opener={(f) => (openModel = f)} />
@@ -478,7 +493,7 @@ const applied = (p: Provider, r: Request): Provider => {
   }
 }
 
-const RequestDrawer = (props: { id: string; onClose: () => void }) => {
+const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose: () => void }) => {
   const start = untrack(() => providerOf(props.id))
   const [r, setR] = createSignal<Request | undefined>(start && requestOf(start))
   const edit = (f: (r: Request) => Request) => setR((x) => (x ? f(x) : x))
@@ -486,6 +501,7 @@ const RequestDrawer = (props: { id: string; onClose: () => void }) => {
     edit((x) => ({ ...x, endpoints: { ...x.endpoints, [f]: { ...x.endpoints[f], ...patch } } }))
   const sample = () => providerOf(props.id)?.models[0]?.id
   const save = async () => {
+    await props.ready()
     const p = providerOf(props.id)
     const d = r()
     if (!p || !d) return
@@ -680,17 +696,20 @@ const RequestDrawer = (props: { id: string; onClose: () => void }) => {
 }
 
 // ───────── The sync drawer: the service's own model list, toggled into the provider's ─────────
-const SyncDrawer = (props: { id: string; onClose: () => void }) => {
+const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: () => void }) => {
   const list = read(providers)
   const p = () => list().find((x) => x.id === props.id)
   const [remote, setRemote] = createSignal<{ ids?: string[]; error?: string } | null>(null)
   const [q, setQ] = createSignal("")
   const shown = () => (remote()?.ids ?? []).filter((id) => id.toLowerCase().includes(q().toLowerCase()))
   onSettled(() => {
-    listModels(props.id).then(
-      (ids) => setRemote({ ids }),
-      (e: unknown) => setRemote({ error: e instanceof Error ? e.message : String(e) }),
-    )
+    void props
+      .ready()
+      .then(() => listModels(props.id))
+      .then(
+        (ids) => setRemote({ ids }),
+        (e: unknown) => setRemote({ error: e instanceof Error ? e.message : String(e) }),
+      )
   })
   return (
     <Show when={p()}>
@@ -809,7 +828,9 @@ const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) => {
     const m = entry()
     const x = p()
     setEntry(null)
-    if (m && x) void putProvider({ ...x, models: x.models.map((y) => (y.id === m.id ? m : y)) })
+    const stored = x?.models.find((y) => y.id === m?.id)
+    if (m && x && JSON.stringify(m) !== JSON.stringify(stored))
+      void putProvider({ ...x, models: x.models.map((y) => (y.id === m.id ? m : y)) })
   }
   return (
     <Modal

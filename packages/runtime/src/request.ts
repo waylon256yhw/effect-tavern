@@ -106,10 +106,14 @@ const thoughtOf = (c: Common) => (/⦅/.test(c.input.text) ? [sys(c.thought)] : 
 /** The scene record reads: the player's line, marked as theirs, then the prose; an opening or a note-only turn is prose alone. */
 const scene = (i: Input, prose: string) => usr(i.text ? `Player's line: ${i.text}\n\n${prose}` : prose)
 
+/** A hat's messages that say something: the settings editor keeps empty rows to type into, and Anthropic and Gemini
+ *  refuse empty content, so every hat slot is read through this. */
+const spoken = <M extends { text: string }>(ms: readonly M[] = []): M[] => ms.filter((m) => m.text.trim())
+
 export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
   const frame = zone(c.frame, w)
-  const reviewed = zone([...c.frame, ...(w.hat?.review?.head ?? [])], w)
-  const hatHead = w.hat?.narrate?.head ?? []
+  const reviewed = zone([...c.frame, ...spoken(w.hat?.review?.head)], w)
+  const hatHead = spoken(w.hat?.narrate?.head)
   switch (a.stage) {
     case "lookup":
       return [...frame, sys(`${a.question}\nIndex: ${a.index.join(", ")}`), ...thoughtOf(c), said(c.input)]
@@ -156,7 +160,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...noteOf(c.input),
         ...thoughtOf(c),
         ...(a.correction ? [sys(a.correction)] : []),
-        ...[...(c.tail ?? []), ...(w.hat?.narrate?.tail ?? [])].map(toP(w)),
+        ...[...(c.tail ?? []), ...spoken(w.hat?.narrate?.tail)].map(toP(w)),
       ]
     case "check": // nothing open (a guard-only turn): no empty Open / Must labels, the rules alone are the question
       return [

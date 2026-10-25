@@ -157,6 +157,18 @@ const Routing = () => {
         })),
       ),
   )
+  /** A pair the menus cannot offer (its provider off, or it or its model gone) still shows what the row holds, marked;
+   *  the next turn on it fails naming the provider, so the trigger must not look unset. */
+  const stale = (pair: Pair | undefined) => {
+    if (!pair) return undefined
+    const p = list().find((x) => x.id === pair.provider)
+    const gone = !p || !p.models.some((m) => m.id === pair.model)
+    return {
+      value: key(pair),
+      label: `${p?.name ?? pair.provider} · ${pair.model}（${gone ? "已移除" : "已禁用"}）`,
+      glyph: pair.model,
+    }
+  }
   const setStage = (s: Phase, k: string) => {
     const { [s]: _, ...rest } = route().stages ?? {}
     void putRouting({ ...route(), stages: k ? { ...rest, [s]: pairOf(k) } : rest })
@@ -179,6 +191,7 @@ const Routing = () => {
               placeholder="未选择"
               value={route().default && key(route().default!)}
               options={pairs()}
+              stale={stale(route().default)}
               onPick={(k) => void putRouting({ ...route(), default: pairOf(k) })}
             />
           </div>
@@ -202,7 +215,9 @@ const Routing = () => {
                     <Menu
                       label={s()[1]}
                       value={route().stages?.[s()[0]] ? key(route().stages![s()[0]]!) : ""}
+                      placeholder="跟随主默认模型"
                       options={[{ value: "", label: "跟随主默认模型" }, ...pairs()]}
+                      stale={stale(route().stages?.[s()[0]])}
                       onPick={(k) => setStage(s()[0], k)}
                     />
                   </div>
@@ -260,7 +275,7 @@ const Templates = (props: Pane) => {
                 onClick={() => props.onPick(h().id)}
               >
                 <span class="p-name">{h().name}</span>
-                <span class="tag mono">{slotOf(h(), "head").length + slotOf(h(), "tail").length}</span>
+                <span class="tag mono">{SLOTS.reduce((n, [s]) => n + slotOf(h(), s).length, 0)}</span>
               </button>
             )}
           </For>

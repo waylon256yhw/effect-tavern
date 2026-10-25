@@ -312,6 +312,12 @@ await run(false)
     await call("PUT", "/providers/relay", { ...relay, enabled: false })
     const off = await act("off")
     assert.deepEqual([off.at(-1)!.event, /provider "Relay": disabled/.test(off.at(-1)!.data.message!)], ["error", true])
+    // a disabled provider keeps its pairs (it can be switched back on); a model dropped from its list takes its pairs
+    assert.deepEqual((await call("GET", "/routing")).body, { stages: { narrate: pair } })
+    const other = { provider: "relay", model: "n" }
+    await call("PUT", "/routing", { default: pair, stages: { narrate: pair, lookup: other } })
+    await call("PUT", "/providers/relay", { ...relay, enabled: false, models: [{ id: "n" }] })
+    assert.deepEqual((await call("GET", "/routing")).body, { stages: { lookup: other } })
     await call("PUT", "/routing", { default: pair })
     await call("DELETE", "/providers/relay")
     assert.deepEqual((await call("GET", "/routing")).body, {})

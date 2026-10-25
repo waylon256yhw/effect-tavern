@@ -87,8 +87,10 @@ const checked = async <T>(res: Promise<Response>): Promise<T> => {
   return v
 }
 export const fetchProviders = async (): Promise<void> => registry.set(providers, await got(fetch(`${base}/providers`)))
-export const putProvider = async ({ id, ...body }: Provider): Promise<void> =>
+export const putProvider = async ({ id, ...body }: Provider): Promise<void> => {
   registry.set(providers, await checked(fetch(`${base}/providers/${enc(id)}`, json("PUT", body))))
+  await fetchRouting() // a pair on a model it no longer lists went with it
+}
 export const deleteProvider = async (id: string): Promise<void> => {
   registry.set(providers, await got(fetch(`${base}/providers/${enc(id)}`, { method: "DELETE" })))
   await fetchRouting() // the pairs on it are gone with it

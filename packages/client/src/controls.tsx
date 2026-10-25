@@ -54,11 +54,12 @@ export const Menu = <T extends string>(props: {
   options: readonly Option<T>[]
   onPick: (v: T) => void
   placeholder?: string
+  stale?: Option<T> // what the trigger shows when the value is set but not among the options (a dangling pick)
   label?: string
   small?: boolean
 }) => {
   const id = `menu-${menus++}`
-  const current = () => props.options.find((o) => o.value === props.value)
+  const current = () => props.options.find((o) => o.value === props.value) ?? props.stale
   return (
     <>
       <button type="button" class={{ select: true, sm: !!props.small }} popovertarget={id} aria-label={props.label}>
