@@ -4,12 +4,12 @@
 import { fake, fakeText, type Message } from "@effect-tavern/provider"
 import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
-import { prose } from "../src/journal.ts"
+import { prose, splitAside } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, player } from "./cards/wuxia.ts"
 
 // ───────── Scripted model ─────────
-const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop"> = []
+const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
 let n = 0
 function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean; delay?: number } {
@@ -109,6 +109,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
         out += `.${" The road winds on.".repeat(12)} His knuckles went white. Her knuckles stayed white.`
         delay = 1
       }
+      if (how === "aside") out += ".\n\n<<aside>> 幕后\nBACKSTAGE KILL, a crane tattoo" // what check would flag, if it saw it
       break
     }
     case "polish":
@@ -590,6 +591,40 @@ const program = Effect.gen(function* () {
     ),
   )
   assert.deepEqual([since(i), p4.end, /went white/.test(prose(p4))], [["narrate", "record"], "stopped", true])
+
+  // ───────── Aside: what narrate writes after the `<<aside>>` line is one aside part, never prose ─────────
+  // The fake streams eight characters a delta, so the nine-character delimiter always arrives split across two.
+  const A = makeSession({ card: full, player, model })
+  narrations.push("aside")
+  const e0 = events.length
+  i = calls().length
+  const a1 = yield* go(A.act(null, { text: "hello" }))
+  const ran = since(i)
+  const deltas = events
+    .slice(e0)
+    .flatMap((e) => (e.kind === "delta" && e.part.type === "text-delta" ? [e.part.text] : []))
+  assert.ok(deltas.join("").includes("<<aside>>") && !deltas.some((d) => d.includes("<<aside>>")))
+  assert.deepEqual(a1.reply.slice(1), [
+    { type: "aside", id: "aside", label: "幕后", text: "BACKSTAGE KILL, a crane tattoo" },
+  ])
+  assert.deepEqual([a1.reply[0]!.type, /^PROSE#\d+\.$/.test(prose(a1))], ["text", true])
+  // check saw the prose only: no KILL, no rewrite, nothing fired; record read the prose only
+  assert.deepEqual(
+    [ran.filter((p) => p === "narrate").length, ran.includes("check"), a1.violated, a1.fired],
+    [1, true, [], []],
+  )
+  for (const phase of ["check", "record"]) assert.ok(!/BACKSTAGE|<<aside>>/.test(str(prompts(phase).at(-1)!)))
+  assert.equal(A.node(a1.id).turn, a1) // the snapshot carries the aside as stored
+  // the next turn's transcript carries a1's prose, not its aside
+  yield* go(A.act(a1.id, { text: "rest" }))
+  assert.ok(str(lastNarr()).includes(prose(a1)) && !/BACKSTAGE|<<aside>>/.test(str(lastNarr())))
+  // no delimiter: the very parts, untouched; a label is optional
+  const plain = [{ type: "text" as const, text: "a\n<<asides are prose>> b" }]
+  assert.equal(splitAside(plain), plain)
+  assert.deepEqual(splitAside([{ type: "text", text: "x\n<<aside>>\ny" }]), [
+    { type: "text", text: "x" },
+    { type: "aside", id: "aside", text: "y" },
+  ])
 })
 
 await Effect.runPromise(program)

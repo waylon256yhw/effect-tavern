@@ -17,10 +17,15 @@ export type Fragment = typeof Fragment.Type
 export type Mode = NonNullable<Fragment["mode"]>
 export const decodeFragments = Schema.decodeUnknownSync(Schema.Array(Fragment))
 
-/** What the model wrote, as parts: the prose, and reasoning carrying whatever the provider needs to take it back. */
+/** What the model wrote, as parts: the prose, reasoning carrying whatever the provider needs to take it back, and the
+ *  aside: whatever narrate wrote after a line starting `<<aside>>` (the rest of that line is its optional label), split
+ *  off by code (`splitAside`, src/journal.ts). The aside is for the player to read this turn and is not canon: it is not
+ *  a text part, so `prose(t)` and every stage reading prose never see it, and it never goes back to the model. The
+ *  harness never asks for one; that ask is player or card data. */
 export type Part =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string; providerOptions?: Record<string, Record<string, unknown>> }
+  | { type: "aside"; id: string; label?: string; text: string }
 export interface Msg {
   role: "system" | "user" | "assistant"
   text: string

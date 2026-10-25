@@ -41,6 +41,21 @@ export const textOf = (parts: readonly Part[]): string =>
     .map((p) => p.text)
     .join("")
 export const prose = <B>(t: Turn<B>): string => textOf(t.reply)
+/** The first `<<aside>>` line splits the prose (see Part): the text before it is the one text part, in the first text
+ *  part's place; everything after it is one aside part, last. No such line: the parts as given. */
+export const splitAside = (parts: readonly Part[]): readonly Part[] => {
+  const all = textOf(parts)
+  const m = /^[ \t]*<<aside>>(.*)$/m.exec(all)
+  if (!m) return parts
+  const label = m[1]!.trim()
+  let first = true
+  return [
+    ...parts.flatMap((p): Part[] =>
+      p.type !== "text" ? [p] : first ? ((first = false), [{ ...p, text: all.slice(0, m.index).trimEnd() }]) : [],
+    ),
+    { type: "aside", id: "aside", ...(label ? { label } : {}), text: all.slice(m.index + m[0].length).trim() }, // one per reply
+  ]
+}
 
 export const deliveredIn = <B>(t: Turn<B>): Disclosure[] => [...t.read, ...t.fired]
 export const deliveredOn = <B>(path: readonly Turn<B>[], extra: readonly Disclosure[] = []): Disclosure[] => [
