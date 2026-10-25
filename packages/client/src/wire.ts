@@ -56,7 +56,7 @@ const onStory = async (res: Promise<Response>): Promise<void> => {
 }
 export const openStory = (id: number): Promise<void> => onStory(fetch(`${base}/stories/${id}`, { method: "PUT" }))
 export const newStory = (persona?: string): Promise<void> =>
-  onStory(fetch(`${base}/stories`, { method: "POST", body: JSON.stringify(persona ? { persona } : {}) }))
+  onStory(fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ persona }) }))
 export const deleteStory = (id: number): Promise<void> => onStory(fetch(`${base}/stories/${id}`, { method: "DELETE" }))
 const at = (id: string) => `${base}/personas/${encodeURIComponent(id)}`
 export const putPersona = async ({ id, ...body }: Persona): Promise<void> =>

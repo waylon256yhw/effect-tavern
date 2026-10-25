@@ -14,9 +14,9 @@
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one, DELETE /personas/<id> removes it.
 //                 Both answer the list.
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
-//   GET  /calls   the `call` events of recent turns by node id: the inspector's trace. They evaporate with the SSE
-//                 (a stop closes it before record's call), so the adapter keeps them in memory; the journal stays
-//                 outputs-only, and a restart starts the trace over.
+//   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
+//                 stop closes it before record's call), so the adapter files them in the library under the node they
+//                 made once it lands; they go with the node.
 //   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
 //                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
 //                 the format keys, the fiction's modules without their text, the guard and lore as counts, and what
@@ -50,13 +50,11 @@ const reason = (c: Cause.Cause<unknown>) => {
 }
 
 export type Call = Extract<Event, { kind: "call" }>
-const KEEP = 200 // ponytail: nodes whose calls stay in memory; a ring over the journal if a long story needs more
 // The two bodies besides Action and Player, decoded here like them.
 const NewStory = Schema.decodeUnknownSync(Schema.Struct({ persona: Schema.optionalKey(Schema.String) }))
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
-  const calls = new Map<number, Call[]>() // insertion order = age; an amend (demand, pin) appends to its node
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
   return async (req: IncomingMessage, res: ServerResponse) => {
     const s = lib.session // the open story's
@@ -73,7 +71,6 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       } catch (e) {
         return bad(e)
       }
-      calls.clear()
       return stories()
     }
     const storyAt = /^\/stories\/(\d+)$/.exec(req.url ?? "")
@@ -84,7 +81,6 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       } catch (e) {
         return bad(e, 404)
       }
-      calls.clear()
       return stories()
     }
     if (req.method === "GET" && req.url === "/personas") return json(200, lib.personas.list())
@@ -127,10 +123,9 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       } catch (e) {
         return json(404, { error: e instanceof Error ? e.message : String(e) })
       }
-      for (const id of c.dropped ?? []) calls.delete(id)
-      return json(200, c)
+      return json(200, c) // the dropped nodes' calls went with them
     }
-    if (req.method === "GET" && req.url === "/calls") return json(200, Object.fromEntries(calls))
+    if (req.method === "GET" && req.url === "/calls") return json(200, lib.calls.list())
     if (req.method !== "POST" || req.url !== "/") return json(404, { error: "not found" })
     let action
     try {
@@ -144,7 +139,8 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const send = (name: string, v: unknown) => {
       if (!closed) res.write(`event: ${name}\ndata: ${JSON.stringify(v)}\n\n`)
     }
-    const made: Call[] = [] // this action's calls, filed under its node once the node exists
+    const made: Call[] = [] // this action's calls, filed under its node once the node exists (an amend appends)
+    const trace = lib.calls // the story the action runs in, whatever opens meanwhile
     const stop = Effect.runSync(Deferred.make<void>())
     const fiber = Effect.runFork(
       Stream.runForEach(perform(s, action, Deferred.await(stop)), (e) =>
@@ -154,11 +150,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
           if (e.kind === "delta" && e.part.type === "text-delta") narrating = true // reasoning is not prose: the client counts the same
           const v = shown(e)
           if (v.kind === "call") made.push(v)
-          if (v.kind === "change" && v.node) {
-            const id = v.node.id
-            calls.set(id, [...(calls.get(id) ?? []), ...made.splice(0)])
-            for (const k of calls.keys()) if (calls.size > KEEP) calls.delete(k)
-          }
+          if (v.kind === "change" && v.node) trace.add(v.node.id, made.splice(0))
           send(e.kind, v)
         }),
       ).pipe(

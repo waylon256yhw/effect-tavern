@@ -23,13 +23,25 @@ assert.deepEqual(L.snapshot(back.log), { nodes: [{ id: 0, parent: null, text: "r
 assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
 assert.throws(() => data.store<N>(99).read(), /no story 99/)
 
+// Calls: filed under a node in order, read back by node; gone with the node, and with the story.
+const trace = data.calls(story)
+trace.add(0, [{ phase: "narrate" }, { phase: "record" }])
+trace.add(2, [{ phase: "lookup" }])
+trace.add(0, [{ phase: "record" }]) // an amend appends
+assert.deepEqual(trace.list(), {
+  0: [{ phase: "narrate" }, { phase: "record" }, { phase: "record" }],
+  2: [{ phase: "lookup" }],
+})
+back.commit(L.drop(back.log, 2))
+assert.deepEqual(Object.keys(trace.list()), ["0"])
+
 // Stories list newest first per card, each with its size and head node; deleting one cascades to its nodes.
 const second = data.stories.create("wuxia")
 assert.deepEqual(
   data.stories.list("wuxia").map((s) => [s.id, s.persona, s.turns, s.head]),
   [
     [second, null, 0, null],
-    [story, "friend", 2, { id: 2, parent: 0, text: "d" }],
+    [story, "friend", 1, { id: 0, parent: null, text: "r" }], // node 2 dropped above: head fell back to the root
   ],
 )
 assert.equal(data.stories.list("other").length, 0)
@@ -39,6 +51,7 @@ assert.deepEqual(
   [second],
 )
 assert.throws(() => data.store<N>(story).read(), /no story/)
+assert.deepEqual(trace.list(), {})
 
 // Personas by name; the player row: JSON in, the same out.
 data.personas.put({ id: "friend", name: "旧友", text: "你是替故人送还遗物的旧友。" })

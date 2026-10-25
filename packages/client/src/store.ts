@@ -73,6 +73,8 @@ export const revising = Atom.make<{
   previous: { text: string; aside: boolean }
 } | null>(null)
 export const error = Atom.make<string | null>(null)
+/** A turn in flight: a draft that is not the ghost of a failed one. What holds the composer, the story and a new root. */
+export const working = Atom.make((get) => get(draft) !== null && get(error) === null)
 /** The page over the reader: none, the card page, the Timeline, or the Inspect page on one node. The reader stays
  *  mounted under it, so a turn in flight keeps streaming. */
 export type Page = "reader" | "card" | "timeline" | { inspect: Id }

@@ -9,7 +9,7 @@ import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
-import { card, draft, error, log, page, pin, registry, stories } from "./store.ts"
+import { card, error, log, page, pin, registry, stories, working } from "./store.ts"
 import { newStory, send } from "./wire.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
@@ -37,9 +37,7 @@ const Bounded = (props: { items: readonly string[] }) => {
 export const CardPage = () => {
   const view = read(card)
   const all = read(log)
-  const d = read(draft)
-  const err = read(error)
-  const busy = () => d() !== null && err() === null // a turn in flight: no new root under it
+  const busy = read(working) // no new root under a turn in flight
   const [at, setAt] = createSignal(0)
   const inStory = () => all().nodes.size > 0
   const openings = () => view()?.greetings ?? []

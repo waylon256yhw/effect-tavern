@@ -45,14 +45,12 @@ import {
   clear,
   compose,
   dismiss,
-  type Draft,
   draft,
   editing,
   error,
-  type Id,
-  page,
   latest,
   log,
+  page,
   path,
   pin,
   prose,
@@ -60,7 +58,10 @@ import {
   revising,
   settle,
   stage,
+  type Draft,
+  type Id,
   withdraw,
+  working,
 } from "./store.ts"
 import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchStories, send } from "./wire.ts"
 
@@ -479,7 +480,7 @@ const Reader = () => {
   const d = read(draft)
   const phase = read(stage)
   const err = read(error)
-  const busy = () => d() !== null && err() === null // a ghost draft (failed turn) holds nothing up
+  const busy = read(working)
   // the draft hangs under its parent: a sibling of a past turn cuts the line there while it is written
   const shown = createMemo(() => {
     const dr = d()

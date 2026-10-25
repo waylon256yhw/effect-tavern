@@ -47,6 +47,9 @@ export const library = ({
     get story() {
       return current
     },
+    get calls() {
+      return data.calls(current)
+    },
     stories: {
       /** A row names its story by the player's last line (the head's), or the head's first words; empty, "". */
       list: () =>

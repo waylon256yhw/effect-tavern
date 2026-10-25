@@ -4,7 +4,8 @@
 // fragments the player picks per story (who they are in the fiction; a card still gives a default in its frame).
 // `card`: a Card as the workshop will write it (the four templates stay TS modules until then). `story`: one log tree,
 // a card played as a persona, with the log's head and next beside it so an id never comes back after a drop. `node`: a
-// Turn per row, appended by the store's write. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
+// Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
+// node lands or is amended, gone with the node. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // Ceilings: full-text search over nodes; sync between two installs (the Android copy is a copy of this file).
@@ -19,6 +20,8 @@ create table if not exists story (id integer primary key autoincrement, card tex
   head integer, next integer not null default 0, updated integer not null);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
+create table if not exists call (seq integer primary key autoincrement, story integer not null, node integer not null,
+  json text not null, foreign key (story, node) references node (story, id) on delete cascade);
 `
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
@@ -91,6 +94,20 @@ export const open = (file: string) => {
         ),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
     },
+    /** One story's trace: calls by node id, in the order they were made. */
+    calls: (story: Id) => ({
+      list: (): Record<number, unknown[]> => {
+        const by: Record<number, unknown[]> = {}
+        for (const r of q("select node, json from call where story = ? order by seq").all(story) as Row[])
+          (by[r["node"] as number] ??= []).push(parse<unknown>(r))
+        return by
+      },
+      add: (node: Id, calls: readonly unknown[]) =>
+        tx(() => {
+          for (const c of calls)
+            q("insert into call (story, node, json) values (?, ?, ?)").run(story, node, JSON.stringify(c))
+        }),
+    }),
     /** log.ts's Store over one story: read the tree whole, write each Change as rows in one transaction. */
     store: <T extends Noded>(story: Id): Store<T> => ({
       read: (): Snapshot<T> => {

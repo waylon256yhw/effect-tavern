@@ -588,9 +588,6 @@
 .session .writing .snippets {
   position-anchor: --writing;
 }
-.session .snippets .hint {
-  display: none; /* a column this narrow shows two letters of a hint: the names stand alone */
-}
 /* a persona row: the name is the pick, the pencil edits; both in the menu's columns */
 .snippets .pair {
   padding-right: var(--space-1);

@@ -10,7 +10,7 @@ import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
 import { Edit, Pin, Probe, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
-import { card, draft, error, path, type Persona, personas, pin, player, stories } from "./store.ts"
+import { card, path, type Persona, personas, pin, player, stories, working } from "./store.ts"
 import { openTimeline } from "./timeline.tsx"
 import { deletePersona, deleteStory, newStory, openStory, putPersona, putPlayer } from "./wire.ts"
 
@@ -21,8 +21,8 @@ const units: [Intl.RelativeTimeFormatUnit, number][] = [
 ]
 const rel = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
 /** "2 hours ago", "yesterday", "now". */
-export const ago = (at: number, now = Date.now()): string => {
-  const d = at - now
+const ago = (at: number): string => {
+  const d = at - Date.now()
   const u = units.find(([, ms]) => Math.abs(d) >= ms)
   return u ? rel.format(Math.round(d / u[1]), u[0]) : "now"
 }
@@ -66,7 +66,7 @@ const SWITCHES: { key: keyof Writing; label: string; values: [string | boolean, 
   },
 ]
 /** The switches in force, by name; none set, the card's. */
-export const chosen = (w: Writing | undefined): string[] => {
+const chosen = (w: Writing | undefined): string[] => {
   const on = SWITCHES.flatMap((s) => s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => l))
   return on.length ? on : ["跟随卡片"]
 }
@@ -93,9 +93,7 @@ export const Session = (props: { at: string }) => {
   const me = read(player)
   const pinned = read(pin)
   const line = read(path)
-  const d = read(draft)
-  const err = read(error)
-  const busy = () => d() !== null && err() === null // a turn in flight: the story stays put
+  const busy = read(working) // the story stays put while a turn is in flight
   const nameOf = (p: string | null) => (p === null ? undefined : people().find((x) => x.id === p)?.name)
   // The persona form: a new one, or the one being edited (its text under the name); Delete only on an existing one.
   let form!: HTMLDialogElement
@@ -116,11 +114,7 @@ export const Session = (props: { at: string }) => {
   }
   const set = (key: keyof Writing, value: string | boolean | undefined) => {
     const p = me()
-    if (!p) return
-    const w: Record<string, unknown> = { ...p.writing }
-    if (value === undefined) delete w[key]
-    else w[key] = value
-    void putPlayer({ ...p, writing: w as Writing })
+    if (p) void putPlayer({ ...p, writing: { ...p.writing, [key]: value } }) // an undefined value leaves the JSON: unset
   }
   return (
     <div class="session">
@@ -163,7 +157,6 @@ export const Session = (props: { at: string }) => {
             onClick={(e) => (closeUp(e.currentTarget), void newStory())}
           >
             <span class="name">As the card has it</span>
-            <span class="hint">No persona of yours</span>
           </button>
           <For each={people()} keyed={(p) => p.id}>
             {(p) => (
@@ -177,7 +170,6 @@ export const Session = (props: { at: string }) => {
                 >
                   {p().name}
                 </button>
-                <span class="hint">{p().text}</span>
                 <button type="button" class="icon" aria-label="Edit persona" onClick={() => edit(p())}>
                   <Edit />
                 </button>
@@ -187,7 +179,6 @@ export const Session = (props: { at: string }) => {
           <hr />
           <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => edit(null)}>
             <span class="name">New persona</span>
-            <span class="hint">A name and who you are</span>
           </button>
         </div>
         <ul>
