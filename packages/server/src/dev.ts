@@ -112,6 +112,7 @@ const live = (): SessionModel => {
     reasoningBack: caps.reasoningBack,
     effort: "low",
     ttl: conn.cacheTtl,
+    hat: process.env["HAT"] ?? conn.hat, // HAT=<id> puts a library hat on the dev connection
   }
 }
 const model: SessionModel = process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false } : live()

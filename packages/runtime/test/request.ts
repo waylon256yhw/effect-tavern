@@ -3,7 +3,7 @@
 // each one see.
 import type { Message } from "@effect-tavern/provider"
 import assert from "node:assert/strict"
-import type { Msg } from "../src/fragment.ts"
+import type { Hat, Msg } from "../src/fragment.ts"
 import { request, type Ask, type Common } from "../src/request.ts"
 
 const frame: Msg[] = [
@@ -207,5 +207,58 @@ const cc = (m: Message) => (m.providerOptions!.anthropic as { cacheControl: { tt
 assert.deepEqual([cc(wired[3]!).ttl, cc(wired[5]!).ttl], ["1h", undefined])
 assert.deepEqual(wired[5]!.content, reply.parts)
 assert.equal(line.narrate[5]!.content, "PROSE#1")
+
+// ───────── The connection's hat and the player's tail ─────────
+const drawn = { text: "我拔剑。", note: "虚晃一招" }
+// No hat, an empty one, no tail: today's document byte for byte (narrate's prefix cache untouched).
+for (const s of stages)
+  assert.deepEqual(
+    request({ ...c(drawn), tail: [] }, asks[s], { hat: { id: "bare", name: "bare" }, ttl: "1h" }),
+    request(c(drawn), asks[s], { ttl: "1h" }),
+    s,
+  )
+const hat: Hat = {
+  id: "h",
+  name: "continuation",
+  narrate: {
+    head: [
+      { role: "user", text: "HS-U" },
+      { role: "system", text: "HAT-SYS" },
+      { role: "assistant", text: "HS-A" },
+    ],
+    tail: [
+      { role: "assistant", text: "TAIL-A" },
+      { role: "user", text: "TAIL-U" },
+    ],
+  },
+  review: { head: [{ role: "system", text: "REVIEW" }] },
+}
+const worn = (s: Ask["stage"]) =>
+  request({ ...c(drawn), tail: [{ role: "system", text: "PLAYER-TAIL" }] }, asks[s], { hat })
+// narrate: frame, fiction, the hat's system, its handshake, history, the line, directives, the player's tail, the hat's tail
+const n = worn("narrate")
+assert.deepEqual(n.map(text), [
+  ...frame.map((f) => f.text),
+  "A: swordsman",
+  "HAT-SYS",
+  "HS-U",
+  "HS-A",
+  "hello",
+  "PROSE#1",
+  ...line.narrate.slice(6).map(text),
+  "PLAYER-TAIL",
+  "TAIL-A",
+  "TAIL-U",
+])
+assert.deepEqual(marks(n), [6, 8]) // the head's breakpoint on the last head message: the handshake is in the prefix
+// check, polish, record wear review.head after the frame, the breakpoint on it, nothing of narrate's hat
+for (const s of ["check", "polish", "record"] as const) {
+  assert.equal(text(worn(s)[3]!), "REVIEW", s)
+  assert.deepEqual(marks(worn(s)), [3], s)
+}
+for (const s of stages) assert.equal(/HAT-SYS|HS-|TAIL-/.test(doc(worn(s))), s === "narrate", s)
+// lookup, decide, direct wear nothing, and no stage but narrate reads a tail fragment
+for (const s of ["lookup", "decide", "direct"] as const) assert.deepEqual(worn(s), line[s], s)
+for (const s of ["check", "polish", "record"] as const) assert.ok(!doc(worn(s)).includes("PLAYER-TAIL"), s)
 
 console.log("request ok")

@@ -6,7 +6,9 @@
 // pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). Opening another story
 // is another session; the wire
 // adapter asks `session` on every request, so a switch is in force at once. Deleting the open story opens the newest
-// remaining one, or a new one when none is left: there is always a story open.
+// remaining one, or a new one when none is left: there is always a story open. A hat is the player's too, named by a
+// connection (`SessionModel.hat`) and read from the table on every request the same way: an edit is in force from the
+// next request, and a deleted hat leaves the connection bare (the id resolves to nothing).
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
@@ -35,9 +37,10 @@ export const library = ({
     const id = p.persona?.[card.id]
     return id === undefined ? undefined : data.personas.list().find((x) => x.id === id)?.text
   }
+  const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   const open = (id: Id): Session => {
     if (!data.stories.list(card.id).some((s) => s.id === id)) throw new Error(`no story ${id}`)
-    return makeSession({ card, player, model, store: data.store<Turn>(id), players, persona })
+    return makeSession({ card, player, model, store: data.store<Turn>(id), players, persona, hat })
   }
   let current = data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
   let session = open(current)
@@ -71,6 +74,7 @@ export const library = ({
         if (id === current) to(data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id))
       },
     },
+    hats: data.hats,
     personas: {
       ...data.personas,
       /** Gone from the table, and from every card it was picked on: the card's own persona is back in force there. */

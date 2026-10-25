@@ -75,7 +75,12 @@ export const standard = <S extends Schema.Top & Schema.Constraint & Schema.Const
  *  one role the wire still allows there, content unchanged. Leading system messages (the head) are untouched.
  *  Gemini takes system messages only as the leading run (they become systemInstruction; @ai-sdk/google throws on any
  *  later one), so there every system message after the first non-system one goes out as user, content unchanged. */
-export const wire = (format: Format, messages: readonly Message[]): Message[] => {
+export const wire = (format: Format, messages: readonly Message[], prefill?: boolean): Message[] => {
+  // the one prefill rule: the request does not end in an assistant message (an assistant inside, a hat's, is fine)
+  if (prefill === false && messages.at(-1)?.role === "assistant")
+    throw new Error(
+      "request ends in an assistant message, and this connection does not take a prefill (capabilities.prefill is false): end the hat's tail in a user or system message",
+    )
   const head = messages.findIndex((m) => m.role !== "system")
   return messages.map((m, i) =>
     m.role === "system" &&
@@ -120,6 +125,8 @@ const fail = (wrapped: unknown) => {
 export interface Model {
   format: Format
   model: LanguageModel
+  /** The connection's `capabilities.prefill`; false rejects a request ending in an assistant message at the wire. */
+  prefill?: boolean
 }
 
 export const object = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(
@@ -132,7 +139,7 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
     generateText({
       model: m.model,
       output: Output.object({ schema: standard(schema), name: o.name }),
-      messages: wire(m.format, messages),
+      messages: wire(m.format, messages, m.prefill),
       abortSignal,
       ...settings(m.format, o),
     }),
@@ -143,7 +150,12 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
 
 export const text = (m: Model, messages: readonly Message[], o: CallOptions = {}) =>
   Effect.tryPromise((abortSignal) =>
-    generateText({ model: m.model, messages: wire(m.format, messages), abortSignal, ...settings(m.format, o) }),
+    generateText({
+      model: m.model,
+      messages: wire(m.format, messages, m.prefill),
+      abortSignal,
+      ...settings(m.format, o),
+    }),
   ).pipe(
     Effect.mapError(fail),
     Effect.map((r) => ({
@@ -179,37 +191,39 @@ export interface Reply {
  *  would crash the process. So the iterator is never cancelled: interruption aborts the signal and the drain runs on
  *  to the `abort` part ai-sdk then emits, which is dropped. */
 export const streamed = (m: Model, messages: readonly Message[], o: CallOptions = {}) =>
-  Effect.sync(() => {
-    const ac = new AbortController()
-    const r = streamText({
-      model: m.model,
-      messages: wire(m.format, messages),
-      abortSignal: ac.signal,
-      ...settings(m.format, o),
-    })
-    const parts = Stream.callback<Part, ModelError>((queue) =>
-      Effect.gen(function* () {
-        yield* Effect.addFinalizer(() => Effect.sync(() => ac.abort()))
-        void (async () => {
-          try {
-            for await (const p of r.fullStream as AsyncIterable<Part>) {
-              if (p.type === "error") return void (await Effect.runPromise(Queue.fail(queue, fail(p.error))))
-              if (p.type !== "abort") await Effect.runPromise(Queue.offer(queue, p))
+  Effect.try({ try: () => wire(m.format, messages, m.prefill), catch: fail }).pipe(
+    Effect.map((wired) => {
+      const ac = new AbortController()
+      const r = streamText({
+        model: m.model,
+        messages: wired,
+        abortSignal: ac.signal,
+        ...settings(m.format, o),
+      })
+      const parts = Stream.callback<Part, ModelError>((queue) =>
+        Effect.gen(function* () {
+          yield* Effect.addFinalizer(() => Effect.sync(() => ac.abort()))
+          void (async () => {
+            try {
+              for await (const p of r.fullStream as AsyncIterable<Part>) {
+                if (p.type === "error") return void (await Effect.runPromise(Queue.fail(queue, fail(p.error))))
+                if (p.type !== "abort") await Effect.runPromise(Queue.offer(queue, p))
+              }
+              await Effect.runPromise(Queue.end(queue))
+            } catch (e) {
+              await Effect.runPromise(Queue.fail(queue, fail(e)))
             }
-            await Effect.runPromise(Queue.end(queue))
-          } catch (e) {
-            await Effect.runPromise(Queue.fail(queue, fail(e)))
-          }
-        })()
-      }),
-    )
-    const reply: Effect.Effect<Reply, ModelError> = Effect.tryPromise(async (): Promise<Reply> => ({
-      text: await r.text,
-      parts: replyParts((await r.responseMessages).find((m) => m.role === "assistant") as AssistantModelMessage),
-      usage: usage(await r.usage),
-      finishReason: await r.finishReason,
-    })).pipe(Effect.mapError(fail))
-    return { parts, reply }
-  })
+          })()
+        }),
+      )
+      const reply: Effect.Effect<Reply, ModelError> = Effect.tryPromise(async (): Promise<Reply> => ({
+        text: await r.text,
+        parts: replyParts((await r.responseMessages).find((m) => m.role === "assistant") as AssistantModelMessage),
+        usage: usage(await r.usage),
+        finishReason: await r.finishReason,
+      })).pipe(Effect.mapError(fail))
+      return { parts, reply }
+    }),
+  )
 export const stream = (m: Model, messages: readonly Message[], o: CallOptions = {}): Stream.Stream<Part, ModelError> =>
   Stream.unwrap(Effect.map(streamed(m, messages, o), (s) => s.parts))

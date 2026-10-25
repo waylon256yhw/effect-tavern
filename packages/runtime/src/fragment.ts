@@ -12,6 +12,9 @@ export const Fragment = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   when: Schema.optionalKey(Cond),
   mode: Schema.optionalKey(Schema.Literals(["override", "yield", "both"])), // player fragments only: vs the card's same slot
+  // GLOSSARY §63: no depth, only head or tail. head (absent) = the frame slot; tail = the end of the narrate request,
+  // after this turn's directives and before the hat's tail (request.ts); no other stage reads a tail fragment
+  at: Schema.optionalKey(Schema.Literals(["head", "tail"])),
 })
 export type Fragment = typeof Fragment.Type
 export type Mode = NonNullable<Fragment["mode"]>
@@ -115,6 +118,20 @@ export const Player = Schema.Struct({
 })
 export type Player = typeof Player.Type
 export const decodePlayer = Schema.decodeUnknownSync(Player)
+
+// A hat: the protocol shell a connection wears so its model opens in continuation mode, a library row of the player's
+// (`/hats`) that a Connection names by id. Every message is player data; the harness has none of its own. narrate (writes
+// prose) wears narrate.head + narrate.tail; check, polish, record (read prose) wear review.head; lookup, decide, direct
+// (read ledger lines and menus) wear nothing. A message is a head message's shape, role and text, so it wires like one.
+const Said = Schema.Struct({ role: Schema.Literals(["system", "user", "assistant"]), text: Schema.String })
+const Said_ = Schema.optionalKey(Schema.Array(Said))
+export const Hat = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  narrate: Schema.optionalKey(Schema.Struct({ head: Said_, tail: Said_ })),
+  review: Schema.optionalKey(Schema.Struct({ head: Said_ })),
+})
+export type Hat = typeof Hat.Type
 export interface FrameSource {
   id: string
   frame: readonly Fragment[]

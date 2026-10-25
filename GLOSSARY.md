@@ -33,6 +33,8 @@ _不用_："导演"来指作者视角（director 是 harness 的阶段）、"小
 
 **persona**：玩家在虚构里是谁。卡框架的一个槽位，卡给默认，玩家覆盖或让位，为空就是没有玩家角色。玩家的 persona 是库里带名字的片段（`/personas`），是玩家的资产，卡的兄弟，不属于某一局：`Player.persona[卡]` 记着这张卡上在用哪一个，库在每次请求时把它的正文填进这张卡的玩家层 persona 槽；换 persona、改 persona 的正文都是一次头部重写，下一次请求起生效，不开新局；删掉 persona 就撤掉它在各卡上的选用，回到卡自带的。
 
+**hat（帽子）**：让一个模型按续写模式开口的协议壳，随模型和渠道换，是玩家的资产：库里带名字的一行（`/hats`），`Connection.hat` 按 id 引用，库在每次请求时读出来。两半按阶段读什么由代码定：narrate（写正文）戴 `narrate.head`（system 接在框架与 fiction 之后，user/assistant 的握手接在全部头部 system 之后、历史之前，缓存断点落在头部最后一条）与 `narrate.tail`（请求最末，本轮指令与玩家的尾部片段之后）；check、polish、record（读正文）戴 `review.head`（框架之后）；lookup、decide、direct 什么都不戴。harness 不带任何文本，每个字段默认为空；没有帽子时请求与原来逐字节相同。连接不接受 prefill 时，请求不得以 assistant 结尾，线上拒绝。玩家片段的 `at: "tail"` 是同一类位置的另一面：文风包、题材特化放在玩家层，落在 narrate 的尾部、帽子的尾部之前。
+
 **上下文即角色，模式强于指令**：模型续写的是它看到的文字的模式。于是表达力等于散文被原样读到的程度，它的来源是玩家一轮里的材料和钩子、作者定义里的声音和省略、开场作为范例。schema 的责任是对散文透明；harness 自己插进去的每句话按同一套语文规矩写（正向、范例式、不带 claudeism、不出现"roleplay"这类词）。
 
 **claudeism / slop**：模型在特定情境下过度重复的东西，从词（ministrations）、惯用语（a mix of X and Y）、句式，到情绪夸张、设定刻板。放进范例或开场就会被复读。

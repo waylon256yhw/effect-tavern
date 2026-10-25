@@ -30,6 +30,7 @@ const model = {
         : { text: "hello world" },
   ),
   prefill: false,
+  hat: "h",
 }
 const lib = library({ data: open(":memory:"), card: { ...chat, greetings: [{ text: "G" }] }, player, model })
 
@@ -210,6 +211,22 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await (await persona("monk")).json(), [])
     assert.equal(((await (await fetch(`${base}/player`)).json()) as { persona?: object }).persona, undefined) // the pick went with it
     assert.equal((await headOf("who now")).includes(monk.text), false)
+
+    // A hat is a library row the connection names by id (`model.hat` is "h" here): absent, the connection is bare; put,
+    // its narrate tail ends the next request; deleted, gone again. A bad body is a 400.
+    const hat = (v?: unknown) =>
+      fetch(`${base}/hats/h`, {
+        method: v === undefined ? "DELETE" : "PUT",
+        body: v === undefined ? undefined : JSON.stringify(v),
+      })
+    const h = { name: "续写", narrate: { tail: [{ role: "user", text: "HAT-TAIL" }] } }
+    assert.equal((await headOf("bare")).includes("HAT-TAIL"), false)
+    assert.deepEqual(await (await hat(h)).json(), [{ id: "h", ...h }])
+    assert.equal((await hat({ name: "x", narrate: { tail: [{ role: "tool", text: "" }] } })).status, 400)
+    assert.deepEqual(await (await fetch(`${base}/hats`)).json(), [{ id: "h", ...h }])
+    assert.equal((await headOf("worn")).includes("HAT-TAIL"), inspect)
+    assert.deepEqual(await (await hat()).json(), [])
+    assert.equal((await headOf("gone")).includes("HAT-TAIL"), false)
   } finally {
     server.close()
   }
