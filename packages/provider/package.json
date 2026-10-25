@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "verify": "tsc && bun test/url.ts && bun test/anthropic.ts"
+    "verify": "tsc && bun test/url.ts && bun test/anthropic.ts && bun test/wire.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.87",

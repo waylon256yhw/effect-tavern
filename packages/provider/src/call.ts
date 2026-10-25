@@ -72,13 +72,18 @@ export const standard = <S extends Schema.Top & Schema.Constraint & Schema.Const
 /** Wire placement. Anthropic takes a mid-conversation system message only directly after a user message (verified live:
  *  400 otherwise). The harness's views put directives after the player's line, but a past turn that had no player line
  *  (an note-only turn that delivered lore) leaves its system lines after an assistant message; those go out under the
- *  one role the wire still allows there, content unchanged. Leading system messages (the head) are untouched. */
-const wire = (format: Format, messages: readonly Message[]): Message[] =>
-  format === "anthropic"
-    ? messages.map((m, i) =>
-        m.role === "system" && messages[i - 1]?.role === "assistant" ? ({ ...m, role: "user" } as Message) : m,
-      )
-    : [...messages]
+ *  one role the wire still allows there, content unchanged. Leading system messages (the head) are untouched.
+ *  Gemini takes system messages only as the leading run (they become systemInstruction; @ai-sdk/google throws on any
+ *  later one), so there every system message after the first non-system one goes out as user, content unchanged. */
+export const wire = (format: Format, messages: readonly Message[]): Message[] => {
+  const head = messages.findIndex((m) => m.role !== "system")
+  return messages.map((m, i) =>
+    m.role === "system" &&
+    (format === "anthropic" ? messages[i - 1]?.role === "assistant" : format === "gemini" && head >= 0 && i > head)
+      ? ({ ...m, role: "user" } as Message)
+      : m,
+  )
+}
 
 const settings = (format: Format, o: CallOptions) => ({
   allowSystemInMessages: true, // the head and mid-history lore are system messages in the message list; ai 7 refuses them by default
