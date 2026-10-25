@@ -48,16 +48,18 @@ export const Composer = (props: {
   let menu: HTMLDivElement | undefined
   /** What a send carries: the main box, and the note box when it is there. */
   const filled = () => !!(text().trim() || (acting() && noteText().trim()))
+  // The caret lands after what went in; the hand stays in the line's box either way: a note is a word on the side,
+  // the line is what is being written, so opening or filling the note must not pull the typing over there.
   const put = (value: string, caret: number, note = false) => {
     registry.set(note ? noted : compose, value)
     requestAnimationFrame(() => {
-      const el = note ? noteBox : box
-      el?.focus()
-      el?.setSelectionRange(caret, caret)
+      ;(note ? noteBox : box)?.setSelectionRange(caret, caret)
+      box?.focus()
     })
   }
   // An Insert (a format key or a snippet) goes in at the caret and never sends: `text` before the caret, `after`
-  // behind it, the selection between them. A note snippet opens the note box and goes in there; an empty one only opens it.
+  // behind it, the selection between them. A note snippet opens the note box and goes in there (the line's box keeps
+  // the focus); an empty one only opens it.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
     menu?.hidePopover()
     const note = !!s.note && acting()
@@ -151,7 +153,8 @@ export const Composer = (props: {
             else ime.keyDown(e)
           }}
         />
-        {/* the note box: under the line, one line at rest; Escape on an empty one closes it (the chip's × for touch) */}
+        {/* the note box: under the line, one line at rest, reached by a tap or click; Escape on an empty one closes it
+            (the chip's × for touch) */}
         <Show when={acting() && toNarratorOn()}>
           <textarea
             ref={(el) => (noteBox = el)}
