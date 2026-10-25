@@ -536,12 +536,14 @@ export const makeSession = ({
       // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the
       // items of recall products stored on the path and not yet delivered (model-written memory walks the same road as
       // lore). Nothing to pick → no call.
-      // The pin: the entry's next unseen layer, forced open below, so the lookup is not offered it as well.
-      const forced = input.pin === undefined ? [] : deliver(g0, seen, [input.pin]).slice(0, 1)
-      if (input.pin !== undefined && !forced.length) throw new Error(`${input.pin}: nothing to pin`)
+      // The pin: the entry's deepest unseen layer, forced open below, so the lookup is not offered it as well; the
+      // unseen layers under it are read this turn, as an opened entry's always are (issue #9).
+      const pinned = input.pin === undefined ? [] : deliver(g0, seen, [input.pin])
+      if (input.pin !== undefined && !pinned.length) throw new Error(`${input.pin}: nothing to pin`)
+      const forced = pinned.slice(-1)
       const untold = readableOn(path).filter((e) => e.id !== input.pin)
       const idx = untold.map((e) => e.id)
-      const disclosures =
+      const looked =
         from !== "lookup"
           ? base!.read
           : deliver(
@@ -611,16 +613,24 @@ export const makeSession = ({
       const prev = path.at(-1)
       const carried = prev ? settleTurn(stateAt(path.slice(0, -1)), prev).post : []
       const gateEvents = [...events, ...carried]
-      const offered = L.offers(gated(path, disclosures, s1), deliveredOn(path, disclosures), gateEvents).map(
-        ({ id, layer }) => ({
-          id,
-          layer,
-        }),
-      )
+      // One delivery per layer per turn: a sibling's base.read already holds the pin's and the window's lower layers.
+      const once = (ds: readonly Disclosure[]) => [...new Map(ds.map((d) => [key(d), d])).values()]
+      const before = once([...looked, ...pinned.slice(0, -1)])
+      const g1 = gated(path, before, s1)
+      const ds1 = deliveredOn(path, before)
+      const offered = L.offers(g1, ds1, gateEvents).map(({ id, layer }) => ({ id, layer }))
+      // A window opens current+1; the unseen layers under it are read this turn, told like a lookup's (issue #9).
+      // ponytail: a sibling's gate counts those lower layers as shown this turn (they are in base.read), the fresh
+      // turn's did not, so a since/shown-gated window over unread layers can close on a reword; store the gate's own
+      // deliveries on the turn if a card hits it.
+      const disclosures = once([
+        ...before,
+        ...offered.filter((d) => !forced.some((f) => f.id === d.id)).flatMap((d) => L.read(g1, ds1, d.id) ?? []),
+      ])
       // The pinned entry is open with its forced layer and MUST be told, director or not: check verifies it, a miss is
       // the one correction rewrite, and an entry still unfired after that stays untold.
       const open: Disclosure[] = [...forced, ...offered.filter((d) => !forced.some((f) => f.id === d.id))]
-      const openIds = open.map((d) => d.id)
+      const openIds = [...new Set(open.map((d) => d.id))] // Literals(openIds) below: a duplicate must never reach it
       const mustIds = forced.map((d) => d.id)
       const briefed: Brief =
         from !== "lookup"
