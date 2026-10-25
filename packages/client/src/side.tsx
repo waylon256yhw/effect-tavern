@@ -3,16 +3,16 @@
 // pin, and the two pages that look at the story (Timeline, Inspector). The left card on desktop; on a phone, the sheet
 // the title opens. Both can be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a
 // story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
-// `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch), made and edited from the same menu.
+// `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one.
 import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
-import { createSignal, For, Show } from "solid-js"
+import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
-import { Edit, Pin, Probe, Snippets, Trash, Tree } from "./icons.tsx"
+import { Pin, Probe, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
-import { card, path, type Persona, personas, pin, player, stories, working } from "./store.ts"
+import { card, path, personas, pin, player, stories, working } from "./store.ts"
 import { openTimeline } from "./timeline.tsx"
-import { deletePersona, deleteStory, newStory, openStory, putPersona, putPlayer } from "./wire.ts"
+import { deleteStory, newStory, openStory, putPlayer } from "./wire.ts"
 
 const units: [Intl.RelativeTimeFormatUnit, number][] = [
   ["day", 864e5],
@@ -109,30 +109,7 @@ export const Session = (props: { at: string }) => {
     const next = id === undefined ? rest : { ...rest, [cardId()]: id }
     void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
   }
-  // The persona form: a new one (picked once saved), or the one being edited (its text under the name); Delete only on
-  // an existing one. The fields are set by hand: the same signal value twice (null, null) would leave typed text behind.
-  let form!: HTMLDialogElement
   let confirm!: HTMLDialogElement
-  let nameField!: HTMLInputElement
-  let textField!: HTMLTextAreaElement
-  const [editingPersona, setEditingPersona] = createSignal<Persona | null>(null)
-  const edit = (p: Persona | null) => {
-    setEditingPersona(p)
-    nameField.value = p?.name ?? ""
-    textField.value = p?.text ?? ""
-    form.showModal()
-  }
-  const save = (e: SubmitEvent) => {
-    e.preventDefault()
-    const f = new FormData(e.currentTarget as HTMLFormElement)
-    const name = (f.get("name") as string).trim()
-    const text = (f.get("text") as string).trim()
-    if (!name || !text) return
-    const was = editingPersona()
-    const id = was?.id ?? crypto.randomUUID().slice(0, 8)
-    void putPersona({ id, name, text }).then(() => was ?? pick(id))
-    form.close()
-  }
   const set = (key: keyof Writing, value: string | boolean | undefined) => {
     const p = me()
     if (p) void putPlayer({ ...p, writing: { ...p.writing, [key]: value } }) // an undefined value leaves the JSON: unset
@@ -206,31 +183,27 @@ export const Session = (props: { at: string }) => {
           </div>
         </dialog>
       </section>
-      {/* who the player is on this card: one chip, the persona in force (the card's own when none is picked); the
-          menu picks, edits or makes one. Head text like the switches: a change rewrites the cached prefix, no new story */}
+      {/* who the player is on this card: one chip, the persona in force (the card's own when none is picked); the menu
+          only picks among the player's personas by name (making and editing them is another place's job). Head text
+          like the switches: a change rewrites the cached prefix, no new story */}
       <section class="persona" aria-label="Persona">
         <h2>Persona</h2>
-        <button type="button" class="chosen" popovertarget={id("persona")} disabled={!me()}>
+        <button type="button" class="chosen" popovertarget={id("persona")} disabled={!me() || !people().length}>
           <span class="chip">{current()?.name ?? "跟随卡片"}</span>
         </button>
         <div id={id("persona")} class="snippets" popover role="menu" onKeyDown={roam}>
           <For each={people()} keyed={(p) => p.id}>
             {(p) => (
-              <div class="item pair" role="none">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  class="name"
-                  tabindex="-1"
-                  aria-checked={p().id === current()?.id ? "true" : "false"}
-                  onClick={(e) => (e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover(), pick(p().id))}
-                >
-                  {p().name}
-                </button>
-                <button type="button" class="icon" aria-label="Edit persona" onClick={() => edit(p())}>
-                  <Edit />
-                </button>
-              </div>
+              <button
+                type="button"
+                role="menuitemradio"
+                class="item"
+                tabindex="-1"
+                aria-checked={p().id === current()?.id ? "true" : "false"}
+                onClick={(e) => (e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover(), pick(p().id))}
+              >
+                <span class="name">{p().name}</span>
+              </button>
             )}
           </For>
           <hr />
@@ -244,39 +217,7 @@ export const Session = (props: { at: string }) => {
           >
             <span class="name">As the card has it</span>
           </button>
-          <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => edit(null)}>
-            <span class="name">New persona</span>
-          </button>
         </div>
-        <dialog class="confirm" ref={(el) => (form = el)} closedby="any">
-          <form onSubmit={save}>
-            <input name="name" class="field" placeholder="Name" ref={(el) => (nameField = el)} required />
-            <textarea
-              name="text"
-              class="field"
-              placeholder="Who you are in the story…"
-              rows="4"
-              ref={(el) => (textField = el)}
-              required
-            />
-            <div class="row">
-              <Show when={editingPersona()}>
-                {(p) => (
-                  <button type="button" class="chip danger" onClick={() => (form.close(), void deletePersona(p().id))}>
-                    Delete
-                  </button>
-                )}
-              </Show>
-              <span class="spacer" />
-              <button type="button" class="chip state" onClick={() => form.close()}>
-                Cancel
-              </button>
-              <button type="submit" class="chip state">
-                Save
-              </button>
-            </div>
-          </form>
-        </dialog>
       </section>
       {/* the switches are head text: a change rewrites the cached prefix, so they read as a preference, not a dial */}
       <section class="writing" aria-label="Writing">

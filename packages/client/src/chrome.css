@@ -579,25 +579,8 @@
   min-width: 0;
   margin: var(--space-1) 0 0;
 }
-/* a persona row: the name is the pick, the pencil edits; both in the menu's columns */
-.snippets .pair {
-  padding-right: var(--space-1);
-}
-.snippets .pair .name {
-  padding: 0;
-  text-align: left;
-  line-height: var(--control);
-  outline: none;
-}
-.snippets .pair .icon {
-  width: var(--control-sm);
-  height: var(--control-sm);
-}
-.snippets .pair:has(.name:focus-visible) {
-  background: var(--ghost-hover);
-}
-.snippets [aria-checked="true"] .name,
-.snippets .name[aria-checked="true"] {
+/* the pick in force among the menu's names */
+.snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
 /* the writing switches: one line of what is set; the menu is four rows of chips, the set one outlined */
