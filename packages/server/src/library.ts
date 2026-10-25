@@ -155,8 +155,8 @@ export const library = ({
         data.secrets.put(made)
         return secretView(made)
       },
-      /** A name or type changed; the value stays. */
-      set: (id: string, s: Pick<Secret, "name" | "type">) => {
+      /** A name or type changed, and the value when one is given (a retyped key); the hint follows it. */
+      set: (id: string, s: Pick<Secret, "name" | "type"> & { value?: string }) => {
         const old = data.secrets.list().find((x) => x.id === id)
         if (!old) throw new Error(`no secret ${id}`)
         data.secrets.put({ ...old, ...s })

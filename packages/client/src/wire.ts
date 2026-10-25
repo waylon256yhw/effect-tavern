@@ -106,8 +106,10 @@ export const addSecret = async (s: { name: string; type: SecretView["type"]; val
   await fetchSecrets()
   return made
 }
-export const setSecret = async (id: string, s: Pick<SecretView, "name" | "type">): Promise<void> =>
-  registry.set(secrets, await checked(fetch(`${base}/secrets/${enc(id)}`, json("PUT", s))))
+export const setSecret = async (
+  id: string,
+  s: Pick<SecretView, "name" | "type"> & { value?: string }, // a value replaces the key in place
+): Promise<void> => registry.set(secrets, await checked(fetch(`${base}/secrets/${enc(id)}`, json("PUT", s))))
 export const deleteSecret = async (id: string): Promise<void> =>
   registry.set(secrets, await got(fetch(`${base}/secrets/${enc(id)}`, { method: "DELETE" })))
 export const fetchRouting = async (): Promise<void> => registry.set(routing, await got(fetch(`${base}/routing`)))

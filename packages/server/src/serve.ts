@@ -17,8 +17,8 @@
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
-//                 {name, type, value} adds one and answers it the same way; PUT /secrets/<id> {name, type} renames or
-//                 retypes it; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
+//                 {name, type, value} adds one and answers it the same way; PUT /secrets/<id> {name, type, value?} renames,
+//                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
 //   GET  /providers  the player's model providers (provider providers.ts `Provider`), a key only as a secret id.
 //                 PUT /providers/<id> writes one (decoded as `Provider` without id), DELETE /providers/<id> removes it
 //                 and the routing pairs on it. Both answer the list. GET /providers/<id>/models lists the service's
@@ -72,7 +72,9 @@ const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
 const ProviderBody = Schema.decodeUnknownSync(Provider.mapFields(Struct.omit(["id"])))
 const SecretBody = Schema.decodeUnknownSync(Secret.mapFields(Struct.omit(["id"])))
-const SecretMeta = Schema.decodeUnknownSync(Secret.mapFields(Struct.pick(["name", "type"])))
+const SecretMeta = Schema.decodeUnknownSync(
+  Schema.Struct({ name: Secret.fields.name, type: Secret.fields.type, value: Schema.optionalKey(Secret.fields.value) }),
+)
 const TestBody = Schema.decodeUnknownSync(Schema.Struct({ model: Schema.optionalKey(Schema.String) }))
 const RoutingBody = Schema.decodeUnknownSync(Routing)
 

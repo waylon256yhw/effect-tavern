@@ -316,6 +316,18 @@ await run(false)
     await call("DELETE", "/providers/relay")
     assert.deepEqual((await call("GET", "/routing")).body, {})
     assert.equal(prose(await act("gone")), "hello world")
+    // a retyped key replaces the value in place: one entry, the new hint, the old key gone from the vault
+    const NEXT = "sk-next-9876543210fedcba"
+    const rekeyed = await fetch(`${base}/secrets/${made.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name: "Relay key", type: "auth_token", value: NEXT }),
+    })
+    const after = await rekeyed.text()
+    assert.ok(!after.includes(NEXT))
+    assert.deepEqual(JSON.parse(after), [
+      { id: made.id, name: "Relay key", type: "auth_token", hint: "sk-nex****dcba" },
+    ])
+    assert.equal((await call("PUT", `/secrets/${made.id}`, { name: "x", type: "api_key", value: 1 })).status, 400)
     assert.deepEqual((await call("DELETE", `/secrets/${made.id}`)).body, [])
   } finally {
     server.close()

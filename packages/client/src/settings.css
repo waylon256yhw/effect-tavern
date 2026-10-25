@@ -932,18 +932,10 @@
 .modal-body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-4);
-}
-.modal-body:hover {
-  scrollbar-color: var(--alpha-2) transparent;
 }
 .modal .field {
   height: 38px;
