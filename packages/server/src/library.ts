@@ -10,7 +10,7 @@
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
-import { makeSession, type Session, type SessionModel, type Turn } from "@effect-tavern/runtime/src/session.ts"
+import { makeSession, type Session, type SessionModels, type Turn } from "@effect-tavern/runtime/src/session.ts"
 import type { Data } from "./data.ts"
 
 export const library = ({
@@ -22,7 +22,7 @@ export const library = ({
   data: Data
   card: Card
   player: Player
-  model: SessionModel
+  model: SessionModels
 }) => {
   const players = {
     read: () => {
