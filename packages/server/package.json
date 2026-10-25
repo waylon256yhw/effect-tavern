@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "verify": "tsc && bun test/data.ts && bun test/serve.ts",
-    "start": "bun src/main.ts"
+    "start": "bun src/main.ts",
+    "compile": "bun build --compile src/main.ts --asset ../client/dist --outfile dist/tavern && rm -f .*.bun-build",
+    "compile:android": "bun build --compile --target=bun-linux-arm64-android src/main.ts --asset ../client/dist --outfile dist/tavern-android"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",
