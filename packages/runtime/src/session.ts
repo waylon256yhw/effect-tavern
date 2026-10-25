@@ -51,6 +51,7 @@ import {
   deliveredIn,
   deliveredOn,
   notesOf,
+  splitAside,
   textOf as proseOf,
   type Brief,
   type Input,
@@ -666,9 +667,11 @@ export const makeSession = ({
             correction,
           })
           const r = yield* write(msgs)
-          if (r.finishReason !== "length" || !M.prefill) return r.parts
+          // ponytail: the deltas stream raw, the `<<aside>>` line and the aside included; only the node's reply is split.
+          // Hold text deltas back at a line start that could become the delimiter if the live draft must not show it.
+          if (r.finishReason !== "length" || !M.prefill) return splitAside(r.parts)
           const r2 = yield* write([...msgs, { role: "assistant", content: r.text }]) // resume with the partial as prefix
-          return [...r.parts, ...r2.parts]
+          return splitAside([...r.parts, ...r2.parts])
         })
       let reply: Turn["reply"] = from === "check" ? base!.reply : yield* narrate()
       let fired: Disclosure[] = []

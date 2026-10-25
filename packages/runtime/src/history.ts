@@ -62,7 +62,7 @@ export const narratorHistory = <B>(
     ...path.slice(start).flatMap((t): Msg[] => [
       ...(t.input.text ? [{ role: "user", text: t.input.text } as Msg] : []), // a greeting node has no input
       ...deliveredIn(t).map((d): Msg => ({ role: "system", text: loreText(d) })),
-      { role: "assistant", text: prose(t), parts: t.reply },
+      { role: "assistant", text: prose(t), parts: t.reply.filter((p) => p.type !== "aside") }, // the aside never goes back
     ]),
   ]
 }
