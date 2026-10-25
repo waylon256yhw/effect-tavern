@@ -48,19 +48,22 @@ export const Composer = (props: {
   let menu: HTMLDivElement | undefined
   /** What a send carries: the main box, and the note box when it is there. */
   const filled = () => !!(text().trim() || (acting() && noteText().trim()))
-  // The caret lands after what went in; the hand stays in the line's box either way: a note is a word on the side,
-  // the line is what is being written, so opening or filling the note must not pull the typing over there.
-  const put = (value: string, caret: number, note = false) => {
+  // The caret lands after what went in. A note with words leaves the hand in the line's box (the line is what is being
+  // written, the note a word on the side); the bare one only opens the note box, so the hand goes there to write it.
+  const put = (value: string, caret: number, note = false, there = false) => {
     registry.set(note ? noted : compose, value)
     requestAnimationFrame(() => {
       ;(note ? noteBox : box)?.setSelectionRange(caret, caret)
-      box?.focus()
+      ;(there ? noteBox : box)?.focus()
     })
   }
   // An Insert (a format key or a snippet) goes in at the caret and never sends: `text` before the caret, `after`
   // behind it, the selection between them. A note snippet opens the note box and goes in there (the line's box keeps
   // the focus); an empty one only opens it.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
+    // a popover closing with the focus inside it gives the focus back to where it was before it opened, after this
+    // frame; the blur keeps that from undoing the focus `put` sets
+    ;(document.activeElement as HTMLElement | null)?.blur()
     menu?.hidePopover()
     const note = !!s.note && acting()
     if (note) registry.set(aside, true)
@@ -69,7 +72,12 @@ export const Composer = (props: {
     const a = el?.selectionStart ?? v.length
     const b = el?.selectionEnd ?? a
     const inner = v.slice(a, b)
-    put(v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b), a + s.text.length + inner.length, note)
+    put(
+      v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b),
+      a + s.text.length + inner.length,
+      note,
+      note && !s.text,
+    )
   }
   const Items = (p: { of: readonly Snippet[] }) => (
     <For each={p.of} keyed={(s) => s.name}>
@@ -113,9 +121,10 @@ export const Composer = (props: {
         class="box"
         // The whole box is the input: a press on its padding or the keys row lands in the text, never blurs it.
         onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest("button, textarea, [popover]")) return
+          const t = e.target as HTMLElement
+          if (t.closest("button, textarea, [popover]")) return
           e.preventDefault()
-          box?.focus()
+          ;(t.closest(".tray") ? noteBox : box)?.focus()
         }}
       >
         <Show when={keys().length > 0}>
@@ -153,27 +162,38 @@ export const Composer = (props: {
             else ime.keyDown(e)
           }}
         />
-        {/* the note box: under the line, one line at rest, reached by a tap or click; Escape on an empty one closes it
-            (the chip's × for touch) */}
+        {/* the note's tray: an inset block under the line, the marginal line's mark at its left (the reader's), its ×
+            at its right; Escape on an empty box closes it too */}
         <Show when={acting() && toNarratorOn()}>
-          <textarea
-            ref={(el) => (noteBox = el)}
-            class="note"
-            value={noteText()}
-            placeholder={TO_NARRATOR}
-            enterkeyhint="enter"
-            aria-label="Note to the narrator"
-            onInput={(e) => registry.set(noted, e.currentTarget.value)}
-            onCompositionStart={noteIme.compositionStart}
-            onCompositionEnd={noteIme.compositionEnd}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && revise()) props.onCancel()
-              else if (e.key === "Escape" && !noteText()) {
-                registry.set(aside, false)
-                box?.focus()
-              } else noteIme.keyDown(e)
-            }}
-          />
+          <div class="tray">
+            <textarea
+              ref={(el) => (noteBox = el)}
+              class="note"
+              value={noteText()}
+              placeholder={TO_NARRATOR}
+              enterkeyhint="enter"
+              aria-label="Note to the narrator"
+              onInput={(e) => registry.set(noted, e.currentTarget.value)}
+              onCompositionStart={noteIme.compositionStart}
+              onCompositionEnd={noteIme.compositionEnd}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && revise()) props.onCancel()
+                else if (e.key === "Escape" && !noteText()) {
+                  registry.set(aside, false)
+                  box?.focus()
+                } else noteIme.keyDown(e)
+              }}
+            />
+            <button
+              type="button"
+              class="icon"
+              aria-label="Close the note"
+              onPointerDown={keep}
+              onClick={() => (registry.set(aside, false), registry.set(noted, ""), box?.focus())}
+            >
+              <Close />
+            </button>
+          </div>
         </Show>
         <div class="row">
           <Show when={quick().length > 0}>
@@ -196,7 +216,9 @@ export const Composer = (props: {
               onKeyDown={roam}
               onFocusOut={(e) => !menu?.contains(e.relatedTarget as HTMLElement | null) && menu?.hidePopover()}
               onToggle={(e) =>
-                e.newState === "open" && e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
+                e.newState === "open" &&
+                e.currentTarget.matches(":popover-open") && // the event is queued: a pick may already have closed it
+                e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
               }
             >
               {/* two groups, in the story and to the narrator, parted by a line: the items are the card's language, the chrome adds no words */}
@@ -217,18 +239,6 @@ export const Composer = (props: {
                 </button>
               </span>
             )}
-          </Show>
-          <Show when={acting() && toNarratorOn()}>
-            <button
-              type="button"
-              class="chip state"
-              aria-label="Close the note"
-              onPointerDown={keep}
-              onClick={() => (registry.set(aside, false), registry.set(noted, ""))}
-            >
-              To the narrator
-              <Close />
-            </button>
           </Show>
           <Show when={pinned()}>
             <button type="button" class="icon" aria-label="Unpin" onClick={() => registry.set(pin, null)}>

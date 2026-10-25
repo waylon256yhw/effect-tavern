@@ -332,15 +332,17 @@ const Said = (props: {
       <Edit aria-hidden="true" />
     </button>
   )
+  // one block: the line's bubble and, close under it, the note as a marginal line (a word on the side, not a second
+  // speech); the block keeps the turn's gap to the prose
   return (
-    <>
+    <div class="spoke">
       <Show when={props.input.text}>
         <Bubble field="text" text={props.input.text} />
       </Show>
       <Show when={props.input.note}>
         <Bubble field="note" text={props.input.note!} />
       </Show>
-    </>
+    </div>
   )
 }
 
