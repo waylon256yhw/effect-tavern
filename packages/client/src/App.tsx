@@ -11,7 +11,7 @@
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
-import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { CardPage } from "./card.tsx"
 import { Composer } from "./composer.tsx"
@@ -55,6 +55,7 @@ import {
   pin,
   prose,
   registry,
+  stories,
   revising,
   settle,
   stage,
@@ -174,6 +175,18 @@ const stick = () => {
 }
 const Latest = () => {
   const [away, setAway] = createSignal(false)
+  const lib = read(stories)
+  // another story opened: the reader lands at its live edge whatever the hand was doing (the row was just clicked),
+  // so following is on when its nodes arrive and the growth sticks
+  createEffect(
+    () => lib()?.current,
+    (cur, prev) => {
+      if (prev !== undefined && cur !== prev) {
+        follow.on = true
+        follow.touched = -Infinity
+      }
+    },
+  )
   onSettled(() => {
     const onScroll = () => {
       const g = gap()

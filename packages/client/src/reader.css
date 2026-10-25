@@ -27,6 +27,7 @@ body {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden; /* dust in flight (dust.ts) must not raise a horizontal scrollbar */
+  scrollbar-gutter: stable; /* a classic scrollbar's width is reserved whether or not the story overflows: the column never shifts between stories */
   container-type: size;
   /* a thin thumb at the column's edge, only while the pointer is over it (the mask fades its ends) */
   scrollbar-width: thin;
