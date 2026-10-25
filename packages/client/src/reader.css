@@ -537,23 +537,32 @@ button:focus-visible {
     transparent
   );
 }
-/* the note's row: under a hairline across the box, the note's words on the line's own text axis, the × at the right;
-   one box, no box inside it. The field is a line at rest, at the prose size like every input (iOS zooms anything smaller) */
+/* the note's block: a faint inset under the line's box, nothing drawn on it, its small × at the right; the note's
+   words on the line's own text axis. The field is a line at rest, at the prose size like every input (iOS zooms anything smaller) */
 .composer .tray {
   display: flex;
-  align-items: flex-start;
-  box-shadow: inset 0 var(--hairline) 0 var(--line);
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 var(--space-1);
+  padding: 0 var(--space-1) 0 var(--space-1);
+  border-radius: var(--radius);
+  background: light-dark(rgb(20 20 20 / 0.03), rgb(255 255 255 / 0.035));
 }
 .composer textarea.note {
   flex: 1;
   min-height: calc(1.5 * var(--text-prose) + 2 * var(--space-1));
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1);
   color: var(--ink-2);
 }
 .composer .tray .icon {
   flex: none;
   width: var(--control-sm);
   height: var(--control-sm);
+  color: var(--ink-3);
+}
+.composer .tray .icon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }
 .composer .row {
   display: flex;
