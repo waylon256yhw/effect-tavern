@@ -162,8 +162,8 @@ export const Composer = (props: {
             else ime.keyDown(e)
           }}
         />
-        {/* the note's tray: an inset block under the line, the marginal line's mark at its left (the reader's), its ×
-            at its right; Escape on an empty box closes it too */}
+        {/* the note's row: under a hairline, the note on the line's own text axis, its × at the right; Escape on an
+            empty box closes it too */}
         <Show when={acting() && toNarratorOn()}>
           <div class="tray">
             <textarea
