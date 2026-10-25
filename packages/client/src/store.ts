@@ -9,8 +9,8 @@ import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
-import * as Atom from "effect/reactivity/Atom"
-import * as AtomRegistry from "effect/reactivity/AtomRegistry"
+import * as Atom from "./atom.ts"
+import { registry } from "./atom.ts"
 
 export type Id = number
 export interface Draft {
@@ -22,7 +22,7 @@ export interface Draft {
 }
 export type Wire = Event | { kind: "error"; message: string }
 
-export const registry = AtomRegistry.make()
+export { registry }
 export const log = Atom.make<L.Log<Node>>(L.of<Node>())
 export const draft = Atom.make<Draft | null>(null)
 /** What the client draws the card by (GET /card): read once at open, before anything subscribes, hence keepAlive. */
