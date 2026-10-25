@@ -1,6 +1,6 @@
 // The session beside the reading: what holds for the whole story and is byte-stable in the request head: the card,
 // this card's stories (which one is open), the persona the player is on this card, the writing switches, the armed
-// pin, and the two pages that look at the story (Timeline, Inspector). The left card on desktop; on a phone, the sheet
+// pin, the two pages that look at the story (Timeline, Inspector) and the settings. The left card on desktop; on a phone, the sheet
 // the title opens. Both can be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a
 // story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
 // `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one.
@@ -8,8 +8,9 @@ import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
-import { Pin, Probe, Snippets, Trash, Tree } from "./icons.tsx"
+import { Pin, Probe, Settings, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
+import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, working } from "./store.ts"
 import { openTimeline } from "./timeline.tsx"
 import { deleteStory, newStory, openStory, putPlayer } from "./wire.ts"
@@ -301,6 +302,15 @@ export const Session = (props: { at: string }) => {
           onClick={(e) => (closeUp(e.currentTarget), openInspector())}
         >
           <Probe />
+        </button>
+        <button
+          type="button"
+          class="icon"
+          aria-label="Settings"
+          data-hint="Settings"
+          onClick={(e) => (closeUp(e.currentTarget), openSettings())}
+        >
+          <Settings />
         </button>
       </nav>
     </div>

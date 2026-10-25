@@ -16,6 +16,17 @@
 //                 Both answer the list. Which persona is in force on a card is the player's (`Player.persona`).
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
+//   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
+//                 {name, type, value} adds one and answers it the same way; PUT /secrets/<id> {name, type, value?} renames,
+//                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
+//   GET  /providers  the player's model providers (provider providers.ts `Provider`), a key only as a secret id.
+//                 PUT /providers/<id> writes one (decoded as `Provider` without id), DELETE /providers/<id> removes it
+//                 and the routing pairs on it. Both answer the list. GET /providers/<id>/models lists the service's
+//                 models (string[]; a failure is a 502 {error}). POST /providers/<id>/test {model?} makes one minimal
+//                 request, a one-token answer with a model, the listing without: the Trace {url, method, status, ms},
+//                 or a 502 {error, trace?}.
+//   GET  /routing which (provider, model) runs each stage: {default?, stages?}; PUT /routing replaces it (in force
+//                 from the next request).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
 //                 stop closes it before record's call), so the adapter files them in the library under the node they
@@ -27,13 +38,14 @@
 //                 Fragment bodies, guard lines and lore never leave the server.
 // `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
 // gets phase, answer and usage only.
+import { Provider, Secret } from "@effect-tavern/provider"
 import { decodePlayer, Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import { decodeAction, perform, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Deferred, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { extname, join, resolve, sep } from "node:path"
-import type { Library } from "./library.ts"
+import { Routing, type Library } from "./library.ts"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
   new Promise<string>((resolve, reject) => {
@@ -58,6 +70,13 @@ export type Call = Extract<Event, { kind: "call" }>
 // The body besides Action and Player, decoded here like them.
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
+const ProviderBody = Schema.decodeUnknownSync(Provider.mapFields(Struct.omit(["id"])))
+const SecretBody = Schema.decodeUnknownSync(Secret.mapFields(Struct.omit(["id"])))
+const SecretMeta = Schema.decodeUnknownSync(
+  Schema.Struct({ name: Secret.fields.name, type: Secret.fields.type, value: Schema.optionalKey(Secret.fields.value) }),
+)
+const TestBody = Schema.decodeUnknownSync(Schema.Struct({ model: Schema.optionalKey(Schema.String) }))
+const RoutingBody = Schema.decodeUnknownSync(Routing)
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
@@ -107,6 +126,67 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         return bad(e)
       }
       return json(200, lib.hats.list())
+    }
+    if (req.method === "GET" && req.url === "/secrets") return json(200, lib.secrets.list())
+    if (req.method === "POST" && req.url === "/secrets") {
+      try {
+        return json(200, lib.secrets.add(SecretBody(JSON.parse(await body(req)))))
+      } catch (e) {
+        return bad(e)
+      }
+    }
+    const secretAt = /^\/secrets\/([^/]+)$/.exec(req.url ?? "")
+    if (secretAt && (req.method === "PUT" || req.method === "DELETE")) {
+      const id = decodeURIComponent(secretAt[1]!)
+      try {
+        if (req.method === "PUT") lib.secrets.set(id, SecretMeta(JSON.parse(await body(req))))
+        else lib.secrets.del(id)
+      } catch (e) {
+        return bad(e)
+      }
+      return json(200, lib.secrets.list())
+    }
+    if (req.method === "GET" && req.url === "/providers") return json(200, lib.providers.list())
+    const providerAt = /^\/providers\/([^/]+)(\/models|\/test)?$/.exec(req.url ?? "")
+    if (providerAt) {
+      const id = decodeURIComponent(providerAt[1]!)
+      const known = lib.providers.list().some((p) => p.id === id)
+      if (!providerAt[2] && (req.method === "PUT" || req.method === "DELETE")) {
+        try {
+          if (req.method === "PUT") lib.providers.put({ id, ...ProviderBody(JSON.parse(await body(req))) })
+          else lib.providers.del(id)
+        } catch (e) {
+          return bad(e)
+        }
+        return json(200, lib.providers.list())
+      }
+      if (!known && providerAt[2]) return json(404, { error: `no provider ${id}` })
+      if (providerAt[2] === "/models" && req.method === "GET") {
+        try {
+          return json(200, await lib.providers.models(id))
+        } catch (e) {
+          return bad(e, 502)
+        }
+      }
+      if (providerAt[2] === "/test" && req.method === "POST") {
+        let model: string | undefined
+        try {
+          model = TestBody(JSON.parse((await body(req)) || "{}")).model
+        } catch (e) {
+          return bad(e)
+        }
+        const r = await lib.providers.test(id, model)
+        return r.error === undefined ? json(200, r.trace) : json(502, r)
+      }
+    }
+    if (req.method === "GET" && req.url === "/routing") return json(200, lib.routing.read())
+    if (req.method === "PUT" && req.url === "/routing") {
+      try {
+        lib.routing.write(RoutingBody(JSON.parse(await body(req))))
+      } catch (e) {
+        return bad(e)
+      }
+      return json(200, lib.routing.read())
     }
     if (req.method === "GET" && req.url === "/card")
       return json(200, {

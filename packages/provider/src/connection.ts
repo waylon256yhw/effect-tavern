@@ -142,8 +142,11 @@ export const compile = (c: Connection, o: CompileOptions = {}): LanguageModel =>
   }
 }
 
-/** GET {base}/models with the format's auth. Model ids only; a 404 means the endpoint does not list, not that it is down. */
-export const listModels = async (c: Connection, fetch: Fetch = fetchFor(c)): Promise<string[]> => {
+/** GET {base}/models with the format's auth. Model ids only; a 404 means the endpoint does not list, not that it is down.
+ *  `onTrace` sees the one fetch, as on `compile`. */
+export const listModels = async (c: Connection, o: CompileOptions = {}): Promise<string[]> => {
+  const inner = o.fetch ?? fetchFor(c)
+  const fetch = o.onTrace ? traced(o.onTrace, false, inner) : inner
   const res = await fetch(plan(c.format, c.endpoint).models, { headers: { ...c.headers, ...authHeaders(c) } })
   if (!res.ok) throw new Error(`model listing failed: HTTP ${res.status}`)
   const body = (await res.json()) as { data?: Array<{ id?: string }>; models?: Array<{ name?: string }> }

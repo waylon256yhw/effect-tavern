@@ -1,5 +1,6 @@
 export * from "./call.ts"
 export * from "./connection.ts"
 export * from "./fake.ts"
+export * from "./providers.ts"
 export { normalize, plan } from "./url.ts"
 export * from "./dev.ts"

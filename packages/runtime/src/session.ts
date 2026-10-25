@@ -117,8 +117,12 @@ export type SessionModel = Model & {
   hat?: string // the connection's hat, a library id (`Connection.hat`), read per request through makeSession's `hat`
 }
 /** Stages bound to connections: one SessionModel for every stage, or a default plus the stages named apart. lookup and
- *  check can take a light model; record answers readouts (state judgement), not pure extraction: never route it down by default. */
-export type SessionModels = SessionModel | ({ default: SessionModel } & Partial<Record<Phase, SessionModel>>)
+ *  check can take a light model; record answers readouts (state judgement), not pure extraction: never route it down by default.
+ *  A function is asked on every call, like `hat`: the library's routing, in force from the next request. */
+export type SessionModels =
+  | SessionModel
+  | ({ default: SessionModel } & Partial<Record<Phase, SessionModel>>)
+  | ((phase: Phase) => SessionModel)
 
 // ───────── The session's own words ─────────
 // Every instruction the loop says to the model, as fragments with ids, in the open. Data lines (State:, Actions:,
@@ -218,6 +222,8 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
 }
 // ponytail: 8000 estimated tokens is a harness guess (about eight Chinese turns verbatim, well under any context window);
 // a connection's own window or an exact count (tokens.ts) would set it if one is ever wanted per model.
+// ponytail: a provider's model entry stores `contextTokens` (provider providers.ts, the settings page): the future
+// consumer of this constant, unread until the fold policy is per model.
 const policy: Policy = { budget: 8000, keep: 2, block: 2 }
 
 /** Runs an action's stream and gives back the node it ended with. */
@@ -258,7 +264,8 @@ export const makeSession = ({
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
   policy?: Policy // the fold boundary; tests pass a small budget to fold short scripted prose
 }) => {
-  const modelFor = (p: Phase): SessionModel => ("default" in models ? (models[p] ?? models.default) : models)
+  const modelFor = (p: Phase): SessionModel =>
+    typeof models === "function" ? models(p) : "default" in models ? (models[p] ?? models.default) : models
   let player = players?.read() ?? given
   /** The player layer as the frame reads it: the persona in force, when there is one, joins the per-card layer last. */
   const layered = (): Player => {

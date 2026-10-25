@@ -4,7 +4,8 @@
 // and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
-import type { Format, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
+import type { Format, Hat, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
@@ -60,6 +61,17 @@ export interface Persona {
 export const stories = Atom.make<{ current: Id; stories: readonly StoryRow[] } | null>(null).pipe(Atom.keepAlive)
 export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
 export const player = Atom.make<Player | null>(null).pipe(Atom.keepAlive)
+/** The player's settings (GET /providers, /secrets, /routing, /hats): the model providers, the key vault as hints,
+ *  which (provider, model) runs each stage, the hats (提示词模板 in the UI). Read when the settings page opens. */
+export type Pair = { provider: string; model: string }
+export interface Routing {
+  default?: Pair
+  stages?: Partial<Record<Phase, Pair>>
+}
+export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
+export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
+export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
+export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
 export const compose = Atom.make("") // the composer's main box: the line (participant mode) or the direction (author mode); an Options row writes here and never sends
 export const noted = Atom.make("") // the note box under the line: a word to the narrator that goes with this send (participant mode only)
@@ -82,9 +94,9 @@ export const revising = Atom.make<{
 export const error = Atom.make<string | null>(null)
 /** A turn in flight: a draft that is not the ghost of a failed one. What holds the composer, the story and a new root. */
 export const working = Atom.make((get) => get(draft) !== null && get(error) === null)
-/** The page over the reader: none, the card page, the Timeline, or the Inspect page on one node. The reader stays
+/** The page over the reader: none, the card page, the Timeline, the settings, or the Inspect page on one node. The reader stays
  *  mounted under it, so a turn in flight keeps streaming. */
-export type Page = "reader" | "card" | "timeline" | { inspect: Id }
+export type Page = "reader" | "card" | "timeline" | "settings" | { inspect: Id }
 export const page = Atom.make<Page>("reader")
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())

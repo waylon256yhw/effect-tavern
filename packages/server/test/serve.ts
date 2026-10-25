@@ -1,6 +1,7 @@
 // The adapter on a scripted session over a real socket: an action goes in as JSON, its events come back as SSE in the
 // session's order, a bad body is a 400, a bad action is an `error` event, and `inspect` decides whether `call` events
 // carry the request. `greet` opens a new root, `checkout` moves head, DELETE /nodes/<id> drops a subtree and answers with the Change.
+import { LLMock } from "@copilotkit/aimock"
 import { fake, fakeText } from "@effect-tavern/provider"
 import type { Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, player } from "@effect-tavern/runtime/test/cards/wuxia.ts"
@@ -233,6 +234,149 @@ const run = async (inspect: boolean) => {
 }
 await run(true)
 await run(false)
+
+// Settings on the wire, against a stub upstream that speaks openai-compatible: a secret goes in once and comes back
+// only as a hint (no provider or secret response ever carries the value); a provider names it by id; the listing and
+// the test go through the provider's endpoint with its key; a routing pair is in force from the next request, per
+// stage, and a pair that does not resolve fails that request naming the provider; deleting the provider clears it.
+{
+  const VALUE = "sk-test-0123456789abcdef"
+  const seen: string[] = []
+  const chunk = (delta: object, finish: string | null) =>
+    `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
+  const upstream = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url} ${req.headers.authorization}`)
+    if (req.url === "/v1/models") return void res.end(JSON.stringify({ data: [{ id: "m" }, { id: "n" }] }))
+    let s = ""
+    req.on("data", (c) => (s += c))
+    req.on("end", () => {
+      if (JSON.parse(s).stream) {
+        res.writeHead(200, { "content-type": "text/event-stream" })
+        res.end(chunk({ role: "assistant", content: "ROUTED" }, null) + chunk({}, "stop") + "data: [DONE]\n\n")
+      } else
+        res.end(
+          JSON.stringify({
+            id: "c",
+            object: "chat.completion",
+            created: 0,
+            model: "m",
+            choices: [{ index: 0, message: { role: "assistant", content: "o" }, finish_reason: "length" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+        )
+    })
+  }).listen(0)
+  const up = `http://localhost:${(upstream.address() as AddressInfo).port}`
+  const routed = library({ data: open(":memory:"), card: chat, player, model })
+  const server = serve(routed, { inspect: true }).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  const call = async (method: string, path: string, v?: unknown) => {
+    const r = await fetch(base + path, { method, body: v === undefined ? undefined : JSON.stringify(v) })
+    const text = await r.text()
+    assert.ok(!text.includes(VALUE), `${method} ${path} leaked the key`)
+    return { status: r.status, body: text ? (JSON.parse(text) as any) : undefined }
+  }
+  try {
+    const made = (await call("POST", "/secrets", { name: "Relay key", type: "api_key", value: VALUE })).body
+    assert.deepEqual(made, { id: made.id, name: "Relay key", type: "api_key", hint: "sk-tes****cdef" })
+    assert.equal((await call("POST", "/secrets", { name: "x", type: "password", value: "v" })).status, 400)
+    const relay = {
+      name: "Relay",
+      enabled: true,
+      defaultFormat: "openai-compatible",
+      endpoints: { "openai-compatible": { url: up } },
+      secret: made.id,
+      models: [{ id: "m" }],
+    }
+    assert.deepEqual((await call("PUT", "/providers/relay", relay)).body, [{ id: "relay", ...relay }])
+    assert.equal((await call("PUT", "/providers/bad", { ...relay, key: VALUE, enabled: "yes" })).status, 400)
+    assert.deepEqual((await call("GET", "/providers/relay/models")).body, ["m", "n"])
+    assert.ok(seen.at(-1)!.endsWith(`Bearer ${VALUE}`)) // the key rode to the upstream, never back to the client
+    const listed = (await call("POST", "/providers/relay/test")).body
+    assert.deepEqual([listed.url, listed.status, typeof listed.ms], [`${up}/v1/models`, 200, "number"])
+    const asked = (await call("POST", "/providers/relay/test", { model: "m" })).body
+    assert.deepEqual([asked.url, asked.method, asked.status], [`${up}/v1/chat/completions`, "POST", 200])
+    assert.equal((await call("POST", "/providers/none/test")).status, 404)
+
+    // routing: narrate on the relay, every other stage on the environment's model
+    const act = async (text: string) =>
+      sse(await (await fetch(base, { method: "POST", body: JSON.stringify({ kind: "act", input: { text } }) })).text())
+    const prose = (evs: ReturnType<typeof sse>) =>
+      (evs.at(-1)!.data as Extract<Event, { kind: "change" }>)
+        .node!.turn.reply.map((p) => (p as { text: string }).text)
+        .join("")
+    assert.equal(prose(await act("before")), "hello world")
+    const pair = { provider: "relay", model: "m" }
+    assert.deepEqual((await call("PUT", "/routing", { stages: { narrate: pair } })).body, { stages: { narrate: pair } })
+    assert.equal(prose(await act("after")), "ROUTED")
+    await call("PUT", "/providers/relay", { ...relay, enabled: false })
+    const off = await act("off")
+    assert.deepEqual([off.at(-1)!.event, /provider "Relay": disabled/.test(off.at(-1)!.data.message!)], ["error", true])
+    // a disabled provider keeps its pairs (it can be switched back on); a model dropped from its list takes its pairs
+    assert.deepEqual((await call("GET", "/routing")).body, { stages: { narrate: pair } })
+    const other = { provider: "relay", model: "n" }
+    await call("PUT", "/routing", { default: pair, stages: { narrate: pair, lookup: other } })
+    await call("PUT", "/providers/relay", { ...relay, enabled: false, models: [{ id: "n" }] })
+    assert.deepEqual((await call("GET", "/routing")).body, { stages: { lookup: other } })
+    await call("PUT", "/routing", { default: pair })
+    await call("DELETE", "/providers/relay")
+    assert.deepEqual((await call("GET", "/routing")).body, {})
+    assert.equal(prose(await act("gone")), "hello world")
+    // a retyped key replaces the value in place: one entry, the new hint, the old key gone from the vault
+    const NEXT = "sk-next-9876543210fedcba"
+    const rekeyed = await fetch(`${base}/secrets/${made.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name: "Relay key", type: "auth_token", value: NEXT }),
+    })
+    const after = await rekeyed.text()
+    assert.ok(!after.includes(NEXT))
+    assert.deepEqual(JSON.parse(after), [
+      { id: made.id, name: "Relay key", type: "auth_token", hint: "sk-nex****dcba" },
+    ])
+    assert.equal((await call("PUT", `/secrets/${made.id}`, { name: "x", type: "api_key", value: 1 })).status, 400)
+    assert.deepEqual((await call("DELETE", `/secrets/${made.id}`)).body, [])
+  } finally {
+    server.close()
+    upstream.close()
+  }
+}
+
+// The listing and the test against aimock's native Anthropic surface (anthropic-version enforced): the model route
+// answers the catalog, the test answers the Trace of the fetch it made, the listing's without a model, a one-token
+// /v1/messages with one.
+{
+  const mock = new LLMock({ port: 0, policy: { requiredHeaders: "enforce", modelCatalog: "native" } })
+  mock.on({ model: "claude-haiku-5-5" }, { content: "ok" })
+  await mock.start()
+  const data = open(":memory:")
+  data.secrets.put({ id: "k", name: "K", type: "api_key", value: "test-key" })
+  data.providers.put({
+    id: "a",
+    name: "A",
+    enabled: false, // a probe does not need it switched on
+    defaultFormat: "anthropic",
+    endpoints: { anthropic: { url: mock.url } },
+    secret: "k",
+    models: [],
+  })
+  const server = serve(library({ data, card: chat, player, model })).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  const post = async (v: unknown) =>
+    (await fetch(`${base}/providers/a/test`, { method: "POST", body: JSON.stringify(v) })).json() as Promise<any>
+  try {
+    assert.deepEqual(await (await fetch(`${base}/providers/a/models`)).json(), ["claude-haiku-5-5"])
+    const listed = await post({})
+    assert.deepEqual(
+      [listed.url, listed.method, listed.status, typeof listed.ms],
+      [`${mock.url}/v1/models`, "GET", 200, "number"],
+    )
+    const asked = await post({ model: "claude-haiku-5-5" })
+    assert.deepEqual([asked.url, asked.method, asked.status], [`${mock.url}/v1/messages`, "POST", 200])
+  } finally {
+    server.close()
+    await mock.stop()
+  }
+}
 
 // The app on one port: /api is the session with the prefix stripped; a path with an extension is a file of the build
 // (hashed assets cached for good) or a 404; any other path is the client's index.html.

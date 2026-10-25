@@ -260,5 +260,21 @@ for (const s of stages) assert.equal(/HAT-SYS|HS-|TAIL-/.test(doc(worn(s))), s =
 // lookup, decide, direct wear nothing, and no stage but narrate reads a tail fragment
 for (const s of ["lookup", "decide", "direct"] as const) assert.deepEqual(worn(s), line[s], s)
 for (const s of ["check", "polish", "record"] as const) assert.ok(!doc(worn(s)).includes("PLAYER-TAIL"), s)
+// a hat's empty message (a row left blank in the settings editor) never reaches the document, in any slot or stage
+const blank = { role: "system", text: "  " } as const
+const padded: Hat = {
+  ...hat,
+  narrate: {
+    head: [blank, ...hat.narrate!.head!, blank],
+    tail: [{ ...blank, role: "assistant" }, ...hat.narrate!.tail!],
+  },
+  review: { head: [blank, ...hat.review!.head!] },
+}
+for (const s of stages)
+  assert.deepEqual(
+    request({ ...c(drawn), tail: [{ role: "system", text: "PLAYER-TAIL" }] }, asks[s], { hat: padded }),
+    worn(s),
+    s,
+  )
 
 console.log("request ok")

@@ -9,12 +9,14 @@
     "verify": "tsc && bun --conditions=browser --conditions=development test/store.ts && bun test/record.ts && bun test/inspect.ts && bun test/tokens.ts && bun test/lanes.ts && bun test/phrase.ts && bun test/manifest.ts"
   },
   "dependencies": {
+    "@effect-tavern/provider": "workspace:*",
     "@effect-tavern/runtime": "workspace:*",
     "@solidjs/web": "2.0.0-rc.15",
     "solid-js": "2.0.0-rc.15"
   },
   "devDependencies": {
     "@iconify-json/ph": "1.2.2",
+    "@lobehub/icons-static-svg": "1.100.0",
     "@solidjs/diagnostics": "2.0.0-rc.15",
     "@solidjs/vite-plugin": "3.0.0-next.50",
     "@types/node": "^26.6.4",

@@ -1,0 +1,3323 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Settings · 模型服务与设置</title>
+  <style>
+    /* ───────── 1. Design Tokens (packages/client/src/tokens.css) ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f3f3ef, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151514);
+      --surface-2: light-dark(#ffffff, #1c1c1b);
+      --surface-3: light-dark(#ffffff, #242423);
+
+      --ink: light-dark(#151515, #f5f5f3);
+      --ink-2: light-dark(#525252, #a3a3a1);
+      --ink-3: light-dark(#8a8a8a, #6f6f6d);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.045), rgb(255 255 255 / 0.045));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.09), rgb(255 255 255 / 0.085));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.18), rgb(255 255 255 / 0.16));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.32), rgb(255 255 255 / 0.28));
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --ghost-hover: var(--alpha-1);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --danger: light-dark(#dc2626, #f87171);
+      --danger-soft: light-dark(rgb(220 38 38 / 0.1), rgb(248 113 113 / 0.14));
+      --ok: light-dark(#16a34a, #22c55e);
+      --ok-soft: light-dark(rgb(22 163 74 / 0.12), rgb(34 197 94 / 0.15));
+      --warn: light-dark(#d97706, #fbbf24);
+      --warn-soft: light-dark(rgb(217 119 6 / 0.12), rgb(251 191 36 / 0.14));
+      --scrim: light-dark(rgb(0 0 0 / 0.24), rgb(0 0 0 / 0.6));
+      --ring: var(--alpha-4);
+
+      --hairline: 1px;
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.4)),
+        inset 0 0 0 var(--hairline) light-dark(rgb(20 20 20 / 0.06), rgb(255 255 255 / 0.06));
+      --shadow-2:
+        0 2px 4px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.45)),
+        0 8px 20px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.45)),
+        inset 0 0 0 var(--hairline) light-dark(rgb(20 20 20 / 0.07), rgb(255 255 255 / 0.07));
+      --shadow-pop:
+        inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)),
+        0 0 0 1px light-dark(var(--line), transparent),
+        0 16px 44px light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.72)),
+        0 4px 12px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.5));
+
+      --radius-sm: 6px;
+      --radius: 9px;
+      --radius-card: 12px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control-lg: 38px;
+      --control: 34px;
+      --control-sm: 28px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      --text-caption: 0.75rem;    /* 12px */
+      --text-footnote: 0.8125rem; /* 13px */
+      --text-body: 0.9375rem;     /* 15px */
+      --text-heading: 1.0625rem;  /* 17px */
+      --text-title: 1.25rem;      /* 20px */
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 28px;
+
+      --dur-1: 80ms;
+      --dur-2: 150ms;
+      --dur-3: 240ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    @media (resolution >= 2x) {
+      :root { --hairline: 0.5px; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: 1.5;
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea, select {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+    }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+    }
+    h1, h2, h3, p, ul { margin: 0; padding: 0; list-style: none; }
+
+    /* ───────── 2. Minimal Floating Demo Switcher (Bottom-Left Pill) ───────── */
+    .demo-dock {
+      position: fixed;
+      bottom: 14px;
+      left: 14px;
+      z-index: 90;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-caption);
+    }
+    .demo-dock button {
+      height: 24px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+    .demo-dock button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+    .demo-dock .sep {
+      width: 1px;
+      height: 12px;
+      background: var(--line);
+    }
+
+    /* ───────── 3. Three-Card Canvas Layout (Matches Reader's .canvas in chrome.css) ───────── */
+    .app-wrap {
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      overflow: hidden;
+      background: var(--surface-0);
+    }
+    .app-wrap[data-vp="mobile"] {
+      background: light-dark(#e2e2de, #050505);
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-3);
+    }
+
+    /* Desktop: Three independent rounded cards floating on --surface-0 with breathing negative space */
+    .canvas {
+      flex: 1;
+      height: 100%;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 13.5rem 16.5rem minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      gap: var(--space-5);
+      padding: var(--space-5);
+      background: var(--surface-0);
+      position: relative;
+      overflow: hidden;
+    }
+    .canvas[data-columns="two"] {
+      grid-template-columns: 13.5rem minmax(0, 1fr);
+    }
+
+    /* Mobile 390px Frame */
+    .app-wrap[data-vp="mobile"] .canvas {
+      max-width: 390px;
+      max-height: 820px;
+      border-radius: 38px;
+      box-shadow: var(--shadow-pop);
+      background: var(--surface-1);
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 0;
+      padding: 0;
+    }
+
+    /* ───────── 4. Card 1: Left Navigation Card ───────── */
+    .nav-card {
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: var(--space-5) var(--space-3);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      gap: var(--space-4);
+      user-select: none;
+    }
+    .nav-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0 var(--space-2);
+    }
+    .nav-head h1 {
+      font-size: var(--text-title);
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 40px;
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      font-size: var(--text-body);
+      font-weight: 500;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      color: var(--ink-3);
+      flex: none;
+    }
+    .nav-item:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .nav-item[aria-current="page"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .nav-item[aria-current="page"] svg {
+      color: var(--ink);
+    }
+
+    /* ───────── 5. Mobile Safe-Area Header + Icon Switcher ───────── */
+    .mobile-bar {
+      display: none;
+      flex-direction: column;
+      /* Generous safe-area top + horizontal inset to clear curved corners & notch */
+      padding: 22px var(--space-5) var(--space-3);
+      background: var(--surface-1);
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .mobile-bar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 38px;
+    }
+    .mobile-bar-title {
+      font-size: var(--text-heading);
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    .mobile-icon-tabs {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .mobile-icon-tabs button {
+      width: 34px;
+      height: 30px;
+      border-radius: var(--radius-pill);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-3);
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .mobile-icon-tabs button svg {
+      width: 17px;
+      height: 17px;
+    }
+    .mobile-icon-tabs button:hover {
+      color: var(--ink);
+    }
+    .mobile-icon-tabs button[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+    }
+
+    /* ───────── 6. Card 2: Middle Master List Card ───────── */
+    .master-card {
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+    }
+    .master-top {
+      padding: var(--space-4) var(--space-3) var(--space-2);
+    }
+    .master-top .input-box {
+      height: 36px;
+      background: var(--surface-0);
+    }
+    .master-list {
+      flex: 1;
+      padding: var(--space-2) var(--space-3);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .p-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 42px;
+      padding: 0 10px;
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      text-align: left;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .p-row:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .p-row[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .p-row .p-name {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .master-foot {
+      padding: var(--space-3);
+      border-top: var(--hairline) solid var(--line);
+    }
+    .master-foot .btn {
+      width: 100%;
+      height: 36px;
+      border-radius: var(--radius);
+    }
+
+    /* ───────── 7. Card 3: Right Detail Card (Raised one step like Reader .panel) ───────── */
+    .detail-card {
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      position: relative;
+      overflow: hidden;
+    }
+    .detail-header {
+      flex: none;
+      height: 62px;
+      padding: 0 var(--space-6);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .detail-header h2 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .detail-header .spacer { flex: 1; }
+
+    .detail-scroll {
+      flex: 1;
+      padding: var(--space-5) var(--space-6) var(--space-6);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+    }
+
+    /* ───────── 8. Shared Controls (Buttons, Inputs, Toggles, Selects, Sliders, Avatars) ───────── */
+    .icon-btn {
+      width: var(--control);
+      height: var(--control);
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-2);
+      flex: none;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .icon-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .icon-btn.sm {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      border-radius: var(--radius-sm);
+    }
+    .icon-btn svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .btn {
+      height: var(--control);
+      padding: 0 14px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink);
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: background var(--dur-1), box-shadow var(--dur-1);
+    }
+    .btn:hover {
+      background: var(--surface-3);
+      box-shadow: inset 0 0 0 var(--hairline) var(--alpha-4);
+    }
+    .btn.sm {
+      height: var(--control-sm);
+      padding: 0 10px;
+      font-size: var(--text-caption);
+      border-radius: var(--radius-sm);
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: var(--primary-ink);
+      box-shadow: none;
+    }
+    .btn.primary:hover { opacity: 0.9; }
+    .btn.ghost {
+      background: transparent;
+      box-shadow: none;
+      color: var(--ink-2);
+    }
+    .btn.ghost:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .btn svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .input-box {
+      display: flex;
+      align-items: center;
+      height: var(--control-lg);
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      background: var(--surface-0);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      transition: box-shadow var(--dur-1), background var(--dur-1);
+      gap: var(--space-2);
+    }
+    .input-box:focus-within {
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 1px var(--alpha-4);
+    }
+    .input-box input {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      outline: none;
+      font-size: var(--text-body);
+    }
+    .input-box input.mono {
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+    }
+    .input-box svg {
+      width: 16px;
+      height: 16px;
+      color: var(--ink-3);
+      flex: none;
+    }
+
+    /* Expandable Inline Search (icon by default -> expands horizontally on click) */
+    .inline-search {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      width: 28px;
+      padding: 0 7px;
+      gap: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink-2);
+      overflow: hidden;
+      cursor: pointer;
+      flex: none;
+      transition:
+        width var(--dur-2) var(--ease-out),
+        padding var(--dur-2) var(--ease-out),
+        gap var(--dur-2) var(--ease-out),
+        background var(--dur-1) var(--ease),
+        box-shadow var(--dur-1) var(--ease),
+        border-radius var(--dur-1) var(--ease);
+    }
+    .inline-search:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .inline-search svg {
+      width: 14px;
+      height: 14px;
+      color: currentColor;
+      flex: none;
+    }
+    .inline-search input {
+      width: 0;
+      min-width: 0;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      outline: none;
+      font-size: var(--text-footnote);
+      color: var(--ink);
+      transition: opacity var(--dur-1) var(--ease);
+    }
+    .inline-search input::-webkit-search-cancel-button {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .inline-search[data-open="true"] {
+      width: clamp(9rem, 32%, 14rem);
+      height: 30px;
+      padding: 0 10px;
+      gap: 6px;
+      border-radius: var(--radius);
+      background: var(--surface-0);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink-3);
+      cursor: text;
+    }
+    .inline-search[data-open="true"]:focus-within {
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 1px var(--alpha-4);
+    }
+    .inline-search[data-open="true"] input {
+      flex: 1;
+      width: 100%;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .app-wrap[data-vp="mobile"] .inline-search[data-open="true"] {
+      width: 8.75rem;
+    }
+    @media (max-width: 780px) {
+      .inline-search[data-open="true"] {
+        width: 8.75rem;
+      }
+    }
+
+    /* Custom Lightweight Dropdown (replaces native OS <select> to eliminate NSMenu blink/lag & heavy focus ring) */
+    .c-select {
+      position: relative;
+      width: 100%;
+    }
+    .c-select-btn {
+      width: 100%;
+      height: var(--control-lg);
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      background: var(--surface-0);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink);
+      font-size: var(--text-body);
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      text-align: left;
+      outline: none;
+      transition: background var(--dur-1) var(--ease);
+    }
+    .c-select.sm .c-select-btn {
+      height: 34px;
+      font-size: var(--text-footnote);
+    }
+    .c-select-btn:hover,
+    .c-select[data-open="true"] .c-select-btn {
+      background: var(--surface-2);
+    }
+    .c-select-label {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .c-select-btn .caret {
+      width: 13px;
+      height: 13px;
+      color: var(--ink-3);
+      flex: none;
+      transition: rotate var(--dur-1) var(--ease);
+    }
+    .c-select[data-open="true"] .c-select-btn .caret {
+      rotate: 180deg;
+    }
+    .c-select-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 80;
+      padding: 4px;
+      border-radius: var(--radius);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: 14rem;
+      overflow-y: auto;
+      opacity: 0;
+      pointer-events: none;
+      translate: 0 -3px;
+      transition: opacity 90ms var(--ease-out), translate 90ms var(--ease-out);
+    }
+    .c-select[data-open="true"] .c-select-menu {
+      opacity: 1;
+      pointer-events: auto;
+      translate: 0 0;
+    }
+    .c-select-opt {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      text-align: left;
+      transition: background 60ms, color 60ms;
+    }
+    .c-select-opt:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .c-select-opt[aria-selected="true"] {
+      background: var(--fill);
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .c-select-opt svg {
+      width: 13px;
+      height: 13px;
+      color: var(--ink);
+      flex: none;
+    }
+
+    .switch {
+      width: 42px;
+      height: 24px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-3);
+      padding: 2px;
+      display: inline-flex;
+      align-items: center;
+      transition: background var(--dur-2) var(--ease);
+      flex: none;
+    }
+    .switch[aria-checked="true"] {
+      background: var(--ok);
+    }
+    .switch .thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+      transition: translate var(--dur-2) var(--ease);
+    }
+    .switch[aria-checked="true"] .thumb {
+      translate: 18px 0;
+    }
+
+    /* Stepped Discrete Slider (5 fixed stops for Reasoning Effort) */
+    .effort-stepper {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 6px 2px 2px;
+      user-select: none;
+    }
+    .effort-rail-wrap {
+      position: relative;
+      height: 22px;
+      display: flex;
+      align-items: center;
+    }
+    .effort-rail {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--alpha-2);
+    }
+    .effort-rail-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--ink);
+      transition: width var(--dur-2) var(--ease);
+    }
+    .effort-stops {
+      position: relative;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+    }
+    .effort-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 2px var(--alpha-3);
+      transition: transform var(--dur-1), background var(--dur-1), box-shadow var(--dur-1);
+    }
+    .effort-dot.passed {
+      background: var(--ink-2);
+      box-shadow: none;
+    }
+    .effort-dot.active {
+      width: 18px;
+      height: 18px;
+      background: var(--ink);
+      box-shadow: 0 0 0 3px var(--surface-2), var(--shadow-1);
+    }
+    .effort-range-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+      margin: 0;
+    }
+    .effort-ticks {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      text-align: center;
+    }
+    .effort-tick-btn {
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      padding: 2px 0;
+      border-radius: var(--radius-sm);
+      transition: color var(--dur-1), font-weight var(--dur-1);
+    }
+    .effort-tick-btn:hover {
+      color: var(--ink-2);
+    }
+    .effort-tick-btn.active {
+      color: var(--ink);
+      font-weight: 650;
+    }
+    .effort-tick-btn:first-child { text-align: left; }
+    .effort-tick-btn:last-child { text-align: right; }
+
+    .token-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+
+    .link-btn {
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      color: var(--ink-2);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      transition: color var(--dur-1), background var(--dur-1);
+    }
+    .link-btn:hover {
+      color: var(--ink);
+      background: var(--ghost-hover);
+    }
+
+    .btn-join {
+      display: inline-flex;
+      align-items: center;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      overflow: hidden;
+    }
+    .btn-join > .btn {
+      box-shadow: none;
+      border-radius: 0;
+      background: transparent;
+    }
+    .btn-join > .btn + .btn {
+      border-left: var(--hairline) solid var(--line-strong);
+      padding-inline: 10px;
+    }
+
+    .btn.xs {
+      height: 22px;
+      padding: 0 8px;
+      font-size: var(--text-caption);
+      border-radius: var(--radius-sm);
+    }
+
+    .dashed-btn {
+      width: 100%;
+      height: 34px;
+      border-radius: var(--radius);
+      border: 1px dashed var(--line-strong);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .dashed-btn svg {
+      width: 14px;
+      height: 14px;
+      flex: none;
+    }
+    .dashed-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+
+    .avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--text-caption);
+      font-weight: 700;
+      color: #fff;
+      flex: none;
+    }
+    .avatar.lg {
+      width: 52px;
+      height: 52px;
+      font-size: var(--text-title);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: transparent;
+      flex: none;
+    }
+    .status-dot.on {
+      background: var(--ok);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+    }
+    .tag.mono { font-family: var(--font-mono); }
+    .tag.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-weight: 600;
+    }
+    .tag.warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+      font-weight: 600;
+    }
+    .tag.bad {
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .wscroll {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .wscroll:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    .section-block {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 28px;
+    }
+    .section-title h3 {
+      font-size: var(--text-body);
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .section-title .right {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .resolved-url {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      padding-left: 2px;
+      overflow-wrap: anywhere;
+    }
+    .resolved-url.err {
+      color: var(--danger);
+    }
+
+    /* ───────── 9. Grouped Model Cards ───────── */
+    .model-groups {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .m-group {
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      overflow: hidden;
+    }
+    .m-group > summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      height: 40px;
+      padding: 0 var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-footnote);
+      font-weight: 600;
+      color: var(--ink-2);
+      background: color-mix(in srgb, var(--surface-0) 40%, var(--surface-2));
+    }
+    .m-group > summary::-webkit-details-marker { display: none; }
+    .m-group > summary .chev {
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+      transition: rotate var(--dur-1);
+    }
+    .m-group[open] > summary .chev {
+      rotate: 90deg;
+    }
+    .m-rows {
+      display: flex;
+      flex-direction: column;
+    }
+    .m-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      min-height: 46px;
+      padding: 6px var(--space-4);
+      border-top: var(--hairline) solid var(--line);
+      transition: background var(--dur-1);
+    }
+    .m-row:hover {
+      background: var(--ghost-hover);
+    }
+    .m-row .m-name {
+      font-weight: 550;
+      color: var(--ink);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .m-row .m-badges {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .m-row .m-acts {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    /* ───────── 10. Slide-Over Side Card (Sync Models Drawer inside Detail Card) ───────── */
+    .drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      background: var(--scrim);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur-3) var(--ease);
+    }
+    .drawer-backdrop[data-open="true"] {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .side-drawer {
+      position: absolute;
+      top: var(--space-3);
+      right: var(--space-3);
+      bottom: var(--space-3);
+      width: min(29rem, calc(100% - 2 * var(--space-3)));
+      z-index: 45;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-2);
+      box-shadow: var(--shadow-pop);
+      display: flex;
+      flex-direction: column;
+      translate: calc(100% + var(--space-4)) 0;
+      transition: translate var(--dur-3) var(--ease);
+      overflow: hidden;
+    }
+    .side-drawer[data-open="true"] {
+      translate: 0 0;
+    }
+    .drawer-head {
+      height: 56px;
+      padding: 0 var(--space-4) 0 var(--space-5);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .drawer-head h3 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .drawer-head .spacer { flex: 1; }
+    .drawer-search {
+      padding: var(--space-3) var(--space-5);
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .drawer-body {
+      flex: 1;
+      padding: var(--space-4) var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .m-row.added {
+      background: color-mix(in srgb, var(--ok) 9%, transparent);
+    }
+
+    /* ───────── 11. Modals (Add Provider Onboarding & Model Settings) ───────── */
+    dialog.modal {
+      width: min(27rem, calc(100vw - 2 * var(--space-4)));
+      max-width: 100%;
+      margin: auto;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-2);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      outline: none;
+      overflow: hidden;
+    }
+    dialog.modal[open] {
+      display: flex;
+      flex-direction: column;
+    }
+    dialog.modal::backdrop {
+      background: var(--scrim);
+    }
+    .modal-head {
+      height: 54px;
+      padding: 0 var(--space-4) 0 var(--space-5);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      border-bottom: var(--hairline) solid var(--line);
+    }
+    .modal-head h3 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .modal-body {
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      max-height: 72vh;
+      overflow-y: auto;
+    }
+    .modal-foot {
+      padding: var(--space-3) var(--space-5);
+      border-top: var(--hairline) solid var(--line);
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+    }
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-field label {
+      font-size: var(--text-footnote);
+      font-weight: 600;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .form-row-inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      min-height: 38px;
+    }
+    .form-row-inline .lbl {
+      font-size: var(--text-body);
+      font-weight: 500;
+    }
+
+    /* ───────── 12. Default Model & Template Cards ───────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+      gap: var(--space-4);
+    }
+    .setting-card {
+      padding: var(--space-4) var(--space-5);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .setting-card.hero {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-5);
+    }
+
+    .msg-card {
+      display: grid;
+      grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+      gap: var(--space-3);
+      align-items: start;
+      padding: var(--space-3);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+    }
+    .msg-card textarea {
+      width: 100%;
+      min-height: 3.4rem;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-0);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      line-height: 1.55;
+      resize: vertical;
+      outline: none;
+    }
+    .msg-card textarea:focus {
+      box-shadow: inset 0 0 0 1.5px var(--ink-2);
+    }
+
+    /* ───────── 13. Responsive & Mobile 390px Rules ───────── */
+    .mobile-back-btn { display: none; }
+    @media (max-width: 62rem) {
+      .canvas, .canvas[data-columns="two"] {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 0;
+        padding: 0;
+      }
+      .nav-card { display: none; }
+      .mobile-bar { display: flex; }
+      .master-card, .detail-card {
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .canvas[data-pane="detail"] .master-card { display: none; }
+      .canvas[data-pane="list"] .detail-card { display: none; }
+      .mobile-back-btn { display: inline-flex; }
+      .detail-header, .detail-scroll { padding-inline: var(--space-5); }
+      .setting-card.hero { flex-direction: column; align-items: stretch; }
+      .msg-card { grid-template-columns: minmax(0, 1fr); }
+      dialog.modal {
+        width: calc(100vw - 24px);
+      }
+      .modal-head { padding: 0 var(--space-4); }
+      .modal-body { padding: var(--space-4); }
+      .modal-foot { padding: var(--space-3) var(--space-4); }
+    }
+    .app-wrap[data-vp="mobile"] .nav-card { display: none; }
+    .app-wrap[data-vp="mobile"] .mobile-bar { display: flex; }
+    .app-wrap[data-vp="mobile"] .master-card,
+    .app-wrap[data-vp="mobile"] .detail-card {
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .app-wrap[data-vp="mobile"] .canvas[data-pane="detail"] .master-card { display: none; }
+    .app-wrap[data-vp="mobile"] .canvas[data-pane="list"] .detail-card { display: none; }
+    .app-wrap[data-vp="mobile"] .mobile-back-btn { display: inline-flex; }
+    .app-wrap[data-vp="mobile"] .detail-header,
+    .app-wrap[data-vp="mobile"] .detail-scroll { padding-inline: var(--space-4); }
+    .app-wrap[data-vp="mobile"] .setting-card.hero { flex-direction: column; align-items: stretch; }
+    .app-wrap[data-vp="mobile"] .msg-card { grid-template-columns: minmax(0, 1fr); }
+    body[data-vp="mobile"] dialog.modal {
+      width: calc(min(390px, 100vw) - 24px);
+      max-width: calc(390px - 24px);
+    }
+    body[data-vp="mobile"] .modal-head { padding: 0 var(--space-4); height: 48px; }
+    body[data-vp="mobile"] .modal-body { padding: var(--space-4); gap: var(--space-3); }
+    body[data-vp="mobile"] .modal-foot { padding: var(--space-3) var(--space-4); }
+  </style>
+</head>
+<body>
+  <!-- Floating Demo Switcher (Theme + Viewport) -->
+  <div class="demo-dock" aria-label="Demo Switcher">
+    <button type="button" data-theme-btn="dark" aria-pressed="true">Dark</button>
+    <button type="button" data-theme-btn="light" aria-pressed="false">Light</button>
+    <span class="sep"></span>
+    <button type="button" data-vp-btn="desktop" aria-pressed="true">Desktop</button>
+    <button type="button" data-vp-btn="mobile" aria-pressed="false">390px</button>
+  </div>
+
+  <div class="app-wrap" id="appWrap" data-vp="desktop">
+    <div class="canvas" id="canvasRoot" data-columns="three" data-pane="list"></div>
+  </div>
+
+  <!-- ───────── Modal 1: Add Custom Provider Onboarding ───────── -->
+  <dialog class="modal" id="addProviderModal" closedby="any">
+    <div class="modal-head">
+      <h3>添加自定义服务商</h3>
+      <button type="button" class="icon-btn sm" aria-label="Close" onclick="closeModal('addProviderModal')">
+        <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18"><path d="M200 56L56 200M200 200L56 56"/></svg>
+      </button>
+    </div>
+    <form id="addProviderForm" onsubmit="submitNewProvider(event)">
+      <div class="modal-body" style="gap:var(--space-3)">
+        <div class="token-grid">
+          <div class="form-field">
+            <label>服务商名称 <span style="color:var(--danger)">*</span></label>
+            <div class="input-box">
+              <input type="text" id="newProvName" placeholder="例如 OpenAI / 硅基中转" required />
+            </div>
+          </div>
+          <div class="form-field">
+            <label>API 密钥</label>
+            <div class="input-box">
+              <input type="password" id="newProvKey" class="mono" placeholder="输入 API 密钥" />
+            </div>
+          </div>
+        </div>
+        <div class="form-field" style="gap:var(--space-3);border-top:var(--hairline) solid var(--line);padding-top:var(--space-3)">
+          <label style="color:var(--ink-2)">端点设置</label>
+          <div class="form-field">
+            <label>
+              <span>OpenAI</span>
+              <span id="newProvBadgeOpenai"><span class="tag ok">默认</span></span>
+            </label>
+            <div class="input-box">
+              <input type="url" id="newProvUrlOpenai" class="mono" placeholder="Base URL: https://api.openai.com" value="https://api.openai.com" oninput="syncNewProvPreview()" />
+            </div>
+            <div class="resolved-url" id="newProvPreviewOpenai">https://api.openai.com/v1/chat/completions</div>
+          </div>
+          <div class="form-field">
+            <label>
+              <span>Anthropic</span>
+              <span id="newProvBadgeAnthropic"><button type="button" class="btn xs" onclick="setNewProvDefault('anthropic')">设为默认</button></span>
+            </label>
+            <div class="input-box">
+              <input type="url" id="newProvUrlAnthropic" class="mono" placeholder="Base URL: https://api.anthropic.com" oninput="syncNewProvPreview()" />
+            </div>
+            <div class="resolved-url" id="newProvPreviewAnthropic" style="display:none"></div>
+          </div>
+          <div class="form-field">
+            <label>
+              <span>Gemini</span>
+              <span id="newProvBadgeGemini"><button type="button" class="btn xs" onclick="setNewProvDefault('gemini')">设为默认</button></span>
+            </label>
+            <div class="input-box">
+              <input type="url" id="newProvUrlGemini" class="mono" placeholder="Base URL: https://generativelanguage.googleapis.com" oninput="syncNewProvPreview()" />
+            </div>
+            <div class="resolved-url" id="newProvPreviewGemini" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" onclick="closeModal('addProviderModal')">取消</button>
+        <button type="submit" class="btn primary">添加</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ───────── Modal 2: Single Model Settings (Gear Modal) ───────── -->
+  <dialog class="modal" id="modelSettingsModal" closedby="any">
+    <div class="modal-head">
+      <h3 id="modelModalTitle">模型设置</h3>
+      <button type="button" class="icon-btn sm" aria-label="Close" onclick="closeModal('modelSettingsModal')">
+        <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18"><path d="M200 56L56 200M200 200L56 56"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modelModalBody"></div>
+    <div class="modal-foot">
+      <button type="button" class="btn primary" onclick="closeModal('modelSettingsModal')">完成</button>
+    </div>
+  </dialog>
+
+  <!-- ───────── Modal 3: Add Manual Model ───────── -->
+  <dialog class="modal" id="addModelModal" closedby="any" style="width:min(24rem,92%)">
+    <div class="modal-head">
+      <h3>添加模型</h3>
+      <button type="button" class="icon-btn sm" aria-label="Close" onclick="closeModal('addModelModal')">
+        <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18"><path d="M200 56L56 200M200 200L56 56"/></svg>
+      </button>
+    </div>
+    <form onsubmit="submitManualModel(event)">
+      <div class="modal-body">
+        <div class="form-field">
+          <label>模型 ID <span style="color:var(--danger)">*</span></label>
+          <div class="input-box">
+            <input type="text" id="manualModelIdInput" class="mono" placeholder="例如 claude-opus-4-6" required />
+          </div>
+        </div>
+        <div class="form-field">
+          <label>分组名称</label>
+          <div class="input-box">
+            <input type="text" id="manualModelGroupInput" placeholder="自动按前缀归组" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" onclick="closeModal('addModelModal')">取消</button>
+        <button type="submit" class="btn primary">添加</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    /* ═══════════════════════════════════════════════════════════════════════════
+       1. URL NORMALIZER & PLANNER
+       ═══════════════════════════════════════════════════════════════════════════ */
+    const RULES = {
+      anthropic: { defaultPath: "/v1", operationPath: "/messages" },
+      "openai-compatible": { defaultPath: "/v1", operationPath: "/chat/completions" },
+      gemini: { defaultPath: "/v1beta", operationPath: "/models/{model}:streamGenerateContent" },
+    };
+
+    const DEFAULTS = {
+      anthropic: { prefill: false, structured: "schema", reasoningBack: false },
+      "openai-compatible": { prefill: true, structured: "schema", reasoningBack: true },
+      gemini: { prefill: true, structured: "schema", reasoningBack: true },
+    };
+
+    const EFFORT_STEPS = ["off", "low", "medium", "high", "max"];
+    const EFFORT_LABELS = { off: "关闭", low: "低", medium: "中", high: "高", max: "最高" };
+    const FORMAT_LABELS = {
+      "openai-compatible": "OpenAI",
+      anthropic: "Anthropic",
+      gemini: "Gemini",
+    };
+    const SECTION_TITLES = {
+      providers: "模型服务",
+      routing: "默认模型",
+      templates: "提示词模板",
+      personas: "玩家人设"
+    };
+
+    function resolveEndpointPreview(format, rawInput, exactPrefix = false, sampleModel = "{model}") {
+      const trimmed = (rawInput || "").trim();
+      if (!trimmed) return { ok: false, text: "请输入 API 地址" };
+      let u;
+      try {
+        u = new URL(trimmed);
+      } catch {
+        return { ok: false, text: "无效的 URL 格式" };
+      }
+      if (u.protocol !== "http:" && u.protocol !== "https:") {
+        return { ok: false, text: "仅支持 http 或 https 协议" };
+      }
+      if (u.search || u.hash) {
+        return { ok: false, text: "地址不可包含查询参数 (?query) 或锚点 (#hash)" };
+      }
+      let pathname = u.pathname.replace(/\/+$/, "");
+      const op = RULES[format].operationPath;
+      if (format !== "gemini" && pathname.endsWith(op)) {
+        pathname = pathname.slice(0, -op.length).replace(/\/+$/, "");
+      }
+      const useExact = exactPrefix || pathname.length > 0;
+      const base = useExact ? `${u.origin}${pathname}` : `${u.origin}${RULES[format].defaultPath}`;
+      const target =
+        format === "gemini"
+          ? `${base}/models/${sampleModel}:streamGenerateContent`
+          : `${base}${RULES[format].operationPath}`;
+      return { ok: true, base, target };
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       2. APPLICATION STATE
+       ═══════════════════════════════════════════════════════════════════════════ */
+    const state = {
+      section: "providers",     // "providers" | "routing" | "templates" | "personas"
+      mobilePane: "list",       // "list" | "detail"
+      providerSearch: "",
+      modelInlineSearch: "",
+      allGroupsCollapsed: false,
+      showSecret: false,
+      drawerMode: null,         // null | "sync" | "endpoint"
+      drawerSearch: "",
+      editingModelId: null,
+
+      selectedProviderId: "p-anthropic",
+      selectedTemplateId: "tpl-handshake",
+      selectedPersonaId: "per-wanderer",
+
+      vaultKeys: [
+        { id: "vk-anthropic-main", name: "Anthropic 主力密钥", type: "api_key", value: "sk-ant-api03-9f8e7d6c5b4a3210", hint: "sk-ant-****3210" },
+        { id: "vk-siliconflow", name: "硅基流动通用密钥", type: "api_key", value: "sk-sf-77889900aabbccddeeff", hint: "sk-sf-****eeff" },
+        { id: "vk-gemini", name: "Google AI Studio", type: "api_key", value: "AIzaSyD-8899001122334455", hint: "AIzaSy****4455" },
+      ],
+
+      providers: [
+        {
+          id: "p-anthropic",
+          name: "Anthropic",
+          color: "#d97757",
+          enabled: true,
+          defaultFormat: "anthropic",
+          endpoints: {
+            anthropic: { url: "https://api.anthropic.com", exactPrefix: false },
+            "openai-compatible": { url: "", exactPrefix: false },
+          },
+          headers: [],
+          authType: "api_key",
+          key: "sk-ant-api03-9f8e7d6c5b4a3210",
+          cacheTtl: "1h",
+          proxyMode: "env",
+          proxyUrl: "",
+          testStatus: { ok: true, text: "200 · 260ms" },
+          remoteCatalog: [
+            { id: "claude-sonnet-4-5-20250929", group: "Claude 4.5" },
+            { id: "claude-haiku-4-5-20251001", group: "Claude 4.5" },
+            { id: "claude-opus-4-5-20251101", group: "Claude 4.5" },
+            { id: "claude-3-7-sonnet-20250219", group: "Claude 3.7" },
+            { id: "claude-3-5-haiku-20241022", group: "Claude 3.5" },
+          ],
+          models: [
+            {
+              id: "claude-sonnet-4-5-20250929",
+              group: "Claude 4.5",
+              templateId: "tpl-handshake",
+              effort: "medium",
+              maxOutputTokens: 8192,
+              capabilities: {},
+            },
+            {
+              id: "claude-haiku-4-5-20251001",
+              group: "Claude 4.5",
+              templateId: "",
+              effort: "off",
+              maxOutputTokens: 4096,
+              capabilities: {},
+            },
+            {
+              id: "claude-3-7-sonnet-20250219",
+              group: "Claude 3.7",
+              templateId: "tpl-prefill",
+              effort: "low",
+              maxOutputTokens: 8192,
+              capabilities: { prefill: true },
+            }
+          ]
+        },
+        {
+          id: "p-silicon",
+          name: "硅基流动",
+          color: "#6366f1",
+          enabled: true,
+          defaultFormat: "openai-compatible",
+          endpoints: {
+            "openai-compatible": { url: "https://api.siliconflow.cn/v1", exactPrefix: true },
+            anthropic: { url: "https://api.siliconflow.cn/v1", exactPrefix: false },
+          },
+          headers: [],
+          authType: "api_key",
+          key: "sk-sf-8899aabbccddeeff",
+          cacheTtl: "5m",
+          proxyMode: "direct",
+          proxyUrl: "",
+          testStatus: null,
+          remoteCatalog: [
+            { id: "deepseek-ai/DeepSeek-V3", group: "DeepSeek" },
+            { id: "deepseek-ai/DeepSeek-R1", group: "DeepSeek" },
+            { id: "Qwen/Qwen2.5-72B-Instruct", group: "Qwen" },
+            { id: "Qwen/QwQ-32B", group: "Qwen" },
+          ],
+          models: [
+            {
+              id: "deepseek-ai/DeepSeek-V3",
+              group: "DeepSeek",
+              templateId: "tpl-prefill",
+              effort: "off",
+              maxOutputTokens: 8192,
+              capabilities: { structured: "json" },
+            },
+            {
+              id: "deepseek-ai/DeepSeek-R1",
+              group: "DeepSeek",
+              templateId: "",
+              effort: "high",
+              maxOutputTokens: 16384,
+              capabilities: { structured: "json", reasoningBack: true },
+            },
+            {
+              id: "Qwen/Qwen2.5-72B-Instruct",
+              group: "Qwen",
+              templateId: "",
+              effort: "off",
+              maxOutputTokens: 4096,
+              capabilities: {},
+            }
+          ]
+        },
+        {
+          id: "p-gemini",
+          name: "Google Gemini",
+          color: "#10b981",
+          enabled: true,
+          defaultFormat: "gemini",
+          endpoints: {
+            "openai-compatible": { url: "", exactPrefix: false },
+            anthropic: { url: "", exactPrefix: false },
+            gemini: { url: "https://generativelanguage.googleapis.com", exactPrefix: false },
+          },
+          headers: [],
+          authType: "api_key",
+          key: "AIzaSyD-9876543210abcdef",
+          cacheTtl: "5m",
+          proxyMode: "env",
+          proxyUrl: "",
+          testStatus: null,
+          remoteCatalog: [
+            { id: "gemini-2.5-pro", group: "Gemini 2.5" },
+            { id: "gemini-2.5-flash", group: "Gemini 2.5" },
+            { id: "gemini-2.0-flash", group: "Gemini 2.0" },
+          ],
+          models: [
+            {
+              id: "gemini-2.5-pro",
+              group: "Gemini 2.5",
+              templateId: "",
+              effort: "medium",
+              maxOutputTokens: 8192,
+              capabilities: {},
+            },
+            {
+              id: "gemini-2.5-flash",
+              group: "Gemini 2.5",
+              templateId: "",
+              effort: "low",
+              maxOutputTokens: 4096,
+              capabilities: {},
+            }
+          ]
+        },
+        {
+          id: "p-openrouter",
+          name: "OpenRouter",
+          color: "#f59e0b",
+          enabled: false,
+          defaultFormat: "openai-compatible",
+          endpoints: {
+            "openai-compatible": { url: "https://openrouter.ai/api/v1", exactPrefix: true },
+            anthropic: { url: "https://openrouter.ai/api", exactPrefix: false },
+          },
+          headers: [],
+          authType: "api_key",
+          key: "",
+          cacheTtl: "5m",
+          proxyMode: "env",
+          proxyUrl: "",
+          testStatus: null,
+          remoteCatalog: [
+            { id: "anthropic/claude-3.7-sonnet", group: "Anthropic" },
+            { id: "google/gemini-2.5-pro", group: "Google" },
+          ],
+          models: []
+        }
+      ],
+
+      routing: {
+        defaultModel: "p-anthropic::claude-sonnet-4-5-20250929",
+        customStageRouting: true,
+        stages: {
+          lookup: "p-anthropic::claude-haiku-4-5-20251001",
+          decide: "default",
+          direct: "default",
+          narrate: "default",
+          check: "p-anthropic::claude-haiku-4-5-20251001",
+          polish: "default",
+          record: "default",
+        }
+      },
+
+      templates: [
+        {
+          id: "tpl-handshake",
+          name: "Claude 续写握手",
+          narrateHead: [
+            { role: "user", text: "请进入互动小说叙事状态，承接上文直接输出故事正文。" },
+            { role: "assistant", text: "明白，我将直接从故事正文写起。" }
+          ],
+          narrateTail: [],
+          reviewHead: [
+            { role: "system", text: "以下为已落稿的小说片段，请按结构审阅并作答。" }
+          ]
+        },
+        {
+          id: "tpl-prefill",
+          name: "尾预填续写模板",
+          narrateHead: [
+            { role: "user", text: "请以叙事者身份继续书写下一节。" },
+            { role: "assistant", text: "好的，我将严格承接设定展开描写。" }
+          ],
+          narrateTail: [
+            { role: "assistant", text: "【正文继续】" }
+          ],
+          reviewHead: []
+        }
+      ],
+
+      personas: [
+        {
+          id: "per-wanderer",
+          name: "青衫客",
+          color: "#0ea5e9",
+          cards: ["竹林"],
+          text: "背负长剑途经此地的外乡游侠，言辞简淡，腰间悬着一枚旧铜钱。习惯先观察周遭动静再出声。"
+        },
+        {
+          id: "per-pastor",
+          name: "年轻牧师",
+          color: "#8b5cf6",
+          cards: ["理"],
+          text: "刚接管小镇教堂不久的年轻牧师，性格温和耐心，与圣女青空理朝夕相处。"
+        },
+        {
+          id: "per-observer",
+          name: "过路行商",
+          color: "#64748b",
+          cards: [],
+          text: "坐在角落歇脚的过路行商，不插手江湖恩怨，只冷眼旁观局势起伏。"
+        }
+      ]
+    };
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function templateEndsWithAssistant(tplId) {
+      if (!tplId) return false;
+      const t = state.templates.find((x) => x.id === tplId);
+      const tail = t?.narrateTail;
+      return Boolean(tail && tail.length > 0 && tail[tail.length - 1].role === "assistant");
+    }
+
+    function effectiveFormat(provider, model) {
+      return model?.format || provider.defaultFormat || "openai-compatible";
+    }
+
+    function effectivePrefill(provider, model) {
+      if (typeof model.capabilities?.prefill === "boolean") return model.capabilities.prefill;
+      const fmt = effectiveFormat(provider, model);
+      return (DEFAULTS[fmt] || DEFAULTS["openai-compatible"]).prefill;
+    }
+
+    function hasPrefillConflict(provider, model) {
+      return templateEndsWithAssistant(model.templateId) && !effectivePrefill(provider, model);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       3. ICONS
+       ═══════════════════════════════════════════════════════════════════════════ */
+    const ICONS = {
+      search: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><circle cx="116" cy="116" r="76"/><path d="M170 170l50 50"/></svg>`,
+      plus: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M128 40v176M40 128h176"/></svg>`,
+      minus: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M48 128h160"/></svg>`,
+      gear: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="128" cy="128" r="40"/><path d="M130.05 206.11c-1.34 0-2.69 0-4 0L114 224a104.11 104.11 0 0 1-34.11-14.12l2.12-21.6a80 80 0 0 1-17.89-17.89l-21.6 2.12A104.11 104.11 0 0 1 28.4 138.4l17.89-12.05c0-1.34 0-2.69 0-4L28.4 110.3a104.11 104.11 0 0 1 14.12-34.11l21.6 2.12a80 80 0 0 1 17.89-17.89L79.89 38.8A104.11 104.11 0 0 1 114 24.68l12.05 17.89c1.34 0 2.69 0 4 0L142.1 24.68a104.11 104.11 0 0 1 34.11 14.12l-2.12 21.6a80 80 0 0 1 17.89 17.89l21.6-2.12a104.11 104.11 0 0 1 14.12 34.11l-17.89 12.05c0 1.34 0 2.69 0 4l17.89 12.05a104.11 104.11 0 0 1-14.12 34.11l-21.6-2.12a80 80 0 0 1-17.89 17.89l2.12 21.6A104.11 104.11 0 0 1 142.1 224Z"/></svg>`,
+      eye: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M128 56C48 56 16 128 16 128s32 72 112 72 112-72 112-72-32-72-112-72Z"/><circle cx="128" cy="128" r="36"/></svg>`,
+      sync: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M176 104h48V56"/><path d="M224 104a96 96 0 0 0-164-36L32 96"/><path d="M80 152H32v48"/><path d="M32 152a96 96 0 0 0 164 36l28-28"/></svg>`,
+      chevRight: `<svg class="chev" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"><path d="M96 48l80 80-80 80"/></svg>`,
+      caretDown: `<svg class="caret" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"><path d="M208 96l-80 80-80-80"/></svg>`,
+      collapseAll: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M88 96l40-40 40 40M88 160l40 40 40-40"/></svg>`,
+      back: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 128H40M112 56l-72 72 72 72"/></svg>`,
+      trash: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 56H40M104 104v64M152 104v64M200 56v152a8 8 0 0 1-8 8H64a8 8 0 0 1-8-8V56M168 56V40a16 16 0 0 0-16-16h-48a16 16 0 0 0-16 16v16"/></svg>`,
+      close: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M200 56L56 200M200 200L56 56"/></svg>`,
+      plugs: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M136 64l56 56-36 36-56-56 36-36ZM64 136l56 56-28 28a24 24 0 0 1-34 0l-22-22a24 24 0 0 1 0-34l28-28Z"/><path d="M144 144l-32 32M112 112l-32 32M64 192l-32 32M224 32l-32 32"/></svg>`,
+      sliders: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><line x1="40" y1="64" x2="216" y2="64"/><line x1="40" y1="128" x2="216" y2="128"/><line x1="40" y1="192" x2="216" y2="192"/><circle cx="96" cy="64" r="20" fill="var(--surface-1)"/><circle cx="168" cy="128" r="20" fill="var(--surface-1)"/><circle cx="112" cy="192" r="20" fill="var(--surface-1)"/></svg>`,
+      template: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M80 40c-24 0-32 16-32 40v24c0 16-16 24-16 24s16 8 16 24v24c0 24 8 40 32 40M176 40c24 0 32 16 32 40v24c0 16 16 24 16 24s-16 8-16 24v24c0 24-8 40-32 40"/></svg>`,
+      user: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="128" cy="96" r="56"/><path d="M40 216c18-38 50-56 88-56s70 18 88 56"/></svg>`,
+      key: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="88" cy="168" r="48"/><path d="M122 134l94-94M184 72l32 32M152 104l24 24"/></svg>`,
+      check: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"><path d="M40 136l56 56L216 72"/></svg>`,
+    };
+
+    function renderSelect({ value, options, onSelect, size = "" }) {
+      const cur = options.find((o) => String(o.value) === String(value)) || options[0] || { value: "", label: "" };
+      return `
+        <div class="c-select ${size}" data-open="false">
+          <button type="button" class="c-select-btn" onclick="toggleCustomSelect(this, event)">
+            <span class="c-select-label">${escapeHtml(cur.label)}</span>
+            ${ICONS.caretDown}
+          </button>
+          <div class="c-select-menu wscroll">
+            ${options.map((opt) => {
+              const active = String(opt.value) === String(cur.value);
+              return `
+                <button
+                  type="button"
+                  class="c-select-opt"
+                  aria-selected="${active}"
+                  onclick="pickCustomSelect(this, event); ${onSelect(String(opt.value))}"
+                >
+                  <span>${escapeHtml(opt.label)}</span>
+                  <span class="c-select-check">${active ? ICONS.check : ""}</span>
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleCustomSelect(btn, event) {
+      event.stopPropagation();
+      const root = btn.closest(".c-select");
+      if (!root) return;
+      const wasOpen = root.getAttribute("data-open") === "true";
+      document.querySelectorAll('.c-select[data-open="true"]').forEach((el) => {
+        el.setAttribute("data-open", "false");
+      });
+      root.setAttribute("data-open", wasOpen ? "false" : "true");
+    }
+
+    function pickCustomSelect(optBtn, event) {
+      event.stopPropagation();
+      const root = optBtn.closest(".c-select");
+      if (!root) return;
+      root.setAttribute("data-open", "false");
+      const labelText = optBtn.querySelector("span")?.textContent || "";
+      const labelEl = root.querySelector(".c-select-label");
+      if (labelEl) labelEl.textContent = labelText;
+      root.querySelectorAll(".c-select-opt").forEach((b) => {
+        const isTarget = b === optBtn;
+        b.setAttribute("aria-selected", String(isTarget));
+        const chk = b.querySelector(".c-select-check");
+        if (chk) chk.innerHTML = isTarget ? ICONS.check : "";
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       4. TAB 1: 模型服务 (Card 2: Master List + Card 3: Detail Card)
+       ═══════════════════════════════════════════════════════════════════════════ */
+    function buildModelGroupsHtml(p) {
+      const mq = state.modelInlineSearch.toLowerCase();
+      const visibleModels = p.models.filter((m) => m.id.toLowerCase().includes(mq));
+      const groups = {};
+      for (const m of visibleModels) {
+        const g = m.group || m.id.split(/[-/]/)[0] || "默认";
+        (groups[g] = groups[g] || []).push(m);
+      }
+
+      if (Object.keys(groups).length === 0) {
+        return `
+          <div class="setting-card" style="align-items:center;padding:var(--space-5);color:var(--ink-3)">
+            <span>${mq ? "无匹配模型" : "尚未添加模型"}</span>
+            ${!mq ? `<button type="button" class="btn sm" onclick="openSyncDrawer()">${ICONS.sync} 同步模型列表</button>` : ""}
+          </div>
+        `;
+      }
+
+      return Object.entries(groups).map(([gName, list]) => `
+        <details class="m-group" ${state.allGroupsCollapsed ? "" : "open"}>
+          <summary>
+            ${ICONS.chevRight}
+            <span>${escapeHtml(gName)}</span>
+          </summary>
+          <div class="m-rows">
+            ${list.map((m) => `
+              <div class="m-row">
+                <span class="avatar" style="width:22px;height:22px;font-size:10px;background:${p.color}">
+                  ${escapeHtml(gName.slice(0, 1).toUpperCase())}
+                </span>
+                <span class="m-name" style="flex:1">${escapeHtml(m.id)}</span>
+                <div class="m-acts">
+                  <button type="button" class="icon-btn sm" aria-label="模型设置" onclick="openModelSettings('${p.id}', '${escapeHtml(m.id)}')">
+                    ${ICONS.gear}
+                  </button>
+                  <button type="button" class="icon-btn sm" aria-label="移除模型" onclick="removeModelFromProvider('${p.id}', '${escapeHtml(m.id)}')">
+                    ${ICONS.minus}
+                  </button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </details>
+      `).join("");
+    }
+
+    function renderProvidersCards() {
+      const p = state.providers.find((x) => x.id === state.selectedProviderId) || state.providers[0];
+      const q = state.providerSearch.toLowerCase();
+      const filteredProviders = state.providers.filter((item) => item.name.toLowerCase().includes(q));
+      const defFmt = p.defaultFormat || "openai-compatible";
+      const defEp = p.endpoints[defFmt] || { url: "", exactPrefix: false };
+      const activeEpCount = Object.values(p.endpoints).filter((e) => e && e.url && e.url.trim()).length;
+      const drawerOpen = Boolean(state.drawerMode);
+
+      return `
+        <!-- Card 2: Provider Master List Card -->
+        <aside class="master-card" aria-label="模型平台列表">
+          <div class="master-top">
+            <div class="input-box">
+              ${ICONS.search}
+              <input
+                type="search"
+                placeholder="搜索模型平台..."
+                value="${escapeHtml(state.providerSearch)}"
+                oninput="state.providerSearch = this.value; render()"
+              />
+            </div>
+          </div>
+          <div class="master-list wscroll">
+            ${filteredProviders.map((item) => `
+              <button
+                type="button"
+                class="p-row"
+                aria-selected="${item.id === p.id}"
+                onclick="selectProvider('${item.id}')"
+              >
+                <span class="avatar" style="background:${item.color}">${escapeHtml(item.name.slice(0, 1).toUpperCase())}</span>
+                <span class="p-name">${escapeHtml(item.name)}</span>
+                <span class="status-dot ${item.enabled ? "on" : ""}"></span>
+              </button>
+            `).join("")}
+          </div>
+          <div class="master-foot">
+            <button type="button" class="btn" onclick="openAddProviderModal()">
+              ${ICONS.plus} <span>添加服务商</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- Card 3: Provider Detail Card -->
+        <section class="detail-card" aria-label="服务商详情">
+          <header class="detail-header">
+            <button type="button" class="icon-btn sm mobile-back-btn" onclick="setMobilePane('list')">
+              ${ICONS.back}
+            </button>
+            <div class="input-box" style="height:34px;max-width:14rem;min-width:7rem;flex:1">
+              <input
+                type="text"
+                value="${escapeHtml(p.name)}"
+                aria-label="服务商名称"
+                oninput="updateProviderName('${p.id}', this.value)"
+                onblur="render()"
+              />
+            </div>
+            <span class="spacer"></span>
+            ${state.providers.length > 1 ? `
+              <button type="button" class="icon-btn sm" aria-label="删除服务商" onclick="deleteProvider('${p.id}')">
+                ${ICONS.trash}
+              </button>
+            ` : ""}
+            <button
+              type="button"
+              class="switch"
+              role="switch"
+              aria-checked="${p.enabled}"
+              aria-label="启用服务商"
+              onclick="toggleProviderEnabled('${p.id}')"
+            >
+              <span class="thumb"></span>
+            </button>
+          </header>
+
+          <div class="detail-scroll wscroll">
+            <!-- API Key -->
+            <div class="section-block">
+              <div class="section-title">
+                <h3>API 密钥</h3>
+                <div class="right">
+                  ${p.testStatus ? `<span class="tag mono ${p.testStatus.ok ? "ok" : "bad"}">${p.testStatus.text}</span>` : ""}
+                </div>
+              </div>
+              <div style="display:flex;gap:var(--space-2)">
+                <div class="input-box" style="flex:1">
+                  <input
+                    type="${state.showSecret ? "text" : "password"}"
+                    class="mono"
+                    value="${escapeHtml(p.key)}"
+                    placeholder="输入或从密钥库选择"
+                    oninput="updateProviderKey('${p.id}', this.value)"
+                  />
+                  <button type="button" class="icon-btn sm" aria-label="显隐密钥" onclick="state.showSecret = !state.showSecret; render()">
+                    ${ICONS.eye}
+                  </button>
+                </div>
+                <details style="position:relative">
+                  <summary class="icon-btn" aria-label="密钥库" style="list-style:none;box-shadow:inset 0 0 0 var(--hairline) var(--line-strong);background:var(--surface-2)">
+                    ${ICONS.key}
+                  </summary>
+                  <div style="position:absolute;right:0;top:calc(100% + 6px);width:19rem;padding:var(--space-3);border-radius:var(--radius-card);background:var(--surface-3);box-shadow:var(--shadow-pop);z-index:30;display:flex;flex-direction:column;gap:var(--space-2)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-1)">
+                      <span style="font-size:var(--text-footnote);font-weight:600">密钥库</span>
+                      <button type="button" class="btn sm" onclick="saveCurrentKeyToVault('${p.id}')">存入当前密钥</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:4px">
+                      ${state.vaultKeys.map((vk) => `
+                        <div style="display:flex;align-items:center;gap:var(--space-2);padding:6px 8px;border-radius:var(--radius);background:${p.key === vk.value ? "var(--fill)" : "transparent"}">
+                          <button type="button" style="flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left" onclick="pickVaultKey('${p.id}', '${vk.id}')">
+                            <span style="font-size:var(--text-footnote);font-weight:500">${escapeHtml(vk.name)}</span>
+                            <span class="mono" style="font-size:var(--text-caption);color:var(--ink-3)">${escapeHtml(vk.hint)}</span>
+                          </button>
+                          <button type="button" class="icon-btn sm" aria-label="删除密钥" onclick="deleteVaultKey('${vk.id}')">
+                            ${ICONS.trash}
+                          </button>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </div>
+                </details>
+                <button type="button" class="btn" onclick="runConnectivityTest('${p.id}')">检测</button>
+              </div>
+            </div>
+
+            <!-- API Endpoint (Minimal outer row; multi-endpoint & live URL preview inside slide-over card) -->
+            <div class="section-block">
+              <div class="section-title">
+                <h3>API 地址</h3>
+                <button type="button" class="link-btn" onclick="openEndpointDrawer()">添加端点</button>
+                <div class="right">
+                  <span class="tag">${FORMAT_LABELS[defFmt]} · 默认${activeEpCount > 1 ? ` (+${activeEpCount - 1})` : ""}</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:var(--space-2)">
+                <div class="input-box" style="flex:1">
+                  <input
+                    type="url"
+                    class="mono"
+                    value="${escapeHtml(defEp.url)}"
+                    placeholder="https://api.example.com"
+                    oninput="updateDefaultEndpointUrl('${p.id}', this.value)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="icon-btn"
+                  aria-label="请求配置"
+                  style="box-shadow:inset 0 0 0 var(--hairline) var(--line-strong);background:var(--surface-2)"
+                  onclick="openEndpointDrawer()"
+                >
+                  ${ICONS.gear}
+                </button>
+              </div>
+            </div>
+
+            <!-- Models Section (Expandable icon-to-input inline search, zero vertical layout shift) -->
+            <div class="section-block">
+              <div class="section-title">
+                <h3>模型</h3>
+                <button type="button" class="icon-btn sm" aria-label="展开或折叠分组" onclick="toggleAllModelGroups()">
+                  ${ICONS.collapseAll}
+                </button>
+                <div
+                  class="inline-search"
+                  id="inlineModelSearchWrap"
+                  data-open="${Boolean(state.showModelSearch || state.modelInlineSearch)}"
+                  onclick="expandInlineModelSearch()"
+                >
+                  ${ICONS.search}
+                  <input
+                    type="search"
+                    id="inlineModelSearchInput"
+                    placeholder="搜索模型..."
+                    value="${escapeHtml(state.modelInlineSearch)}"
+                    oninput="onInlineModelSearch(this.value)"
+                    onblur="collapseInlineModelSearchIfEmpty()"
+                    onkeydown="if (event.key === 'Escape') closeInlineModelSearch(event)"
+                  />
+                </div>
+                <div class="right">
+                  <div class="btn-join">
+                    <button type="button" class="btn sm" onclick="openSyncDrawer()">
+                      ${ICONS.sync} <span>同步模型</span>
+                    </button>
+                    <button type="button" class="btn sm" aria-label="手动添加模型" onclick="openAddModelModal()">
+                      ${ICONS.plus}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="model-groups" id="modelGroupsContainer">
+                ${buildModelGroupsHtml(p)}
+              </div>
+            </div>
+          </div>
+
+          <!-- Slide-Over Floating Card (Shared by "请求配置" & "同步模型") -->
+          <div class="drawer-backdrop" data-open="${drawerOpen}" onclick="closeSideDrawer()"></div>
+          <aside class="side-drawer" data-open="${drawerOpen}" aria-label="${state.drawerMode === "endpoint" ? "请求配置" : "同步模型"}">
+            ${state.drawerMode === "endpoint" ? renderEndpointDrawerContent(p) : state.drawerMode === "sync" ? renderSyncDrawerContent(p) : ""}
+          </aside>
+        </section>
+      `;
+    }
+
+    function renderEndpointDrawerContent(p) {
+      const sampleModel = p.models[0]?.id || "{model}";
+      const orderedFormats = ["openai-compatible", "anthropic", "gemini"];
+
+      return `
+        <div class="drawer-head">
+          <h3>请求配置</h3>
+          <span class="spacer"></span>
+          <button type="button" class="icon-btn sm" aria-label="关闭" onclick="closeSideDrawer()">
+            ${ICONS.close}
+          </button>
+        </div>
+
+        <div class="drawer-body wscroll" style="padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)">
+          ${orderedFormats.map((fmt) => {
+            const ep = p.endpoints[fmt] || { url: "", exactPrefix: false };
+            const isDefault = p.defaultFormat === fmt;
+            const hasUrl = Boolean(ep.url && ep.url.trim());
+            const preview = resolveEndpointPreview(fmt, ep.url, ep.exactPrefix, sampleModel);
+            const showPreview = hasUrl || isDefault;
+            return `
+              <div class="form-field">
+                <label>
+                  <span style="display:inline-flex;align-items:center;gap:var(--space-2)">
+                    <strong style="font-weight:600;color:var(--ink)">${FORMAT_LABELS[fmt]}</strong>
+                    ${isDefault
+                      ? `<span class="tag ok">默认</span>`
+                      : `<button type="button" class="btn xs" onclick="setProviderDefaultFormat('${p.id}', '${fmt}')">设为默认</button>`
+                    }
+                  </span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:var(--text-caption);color:var(--ink-3)">
+                    <span>精确前缀</span>
+                    <button
+                      type="button"
+                      class="switch"
+                      role="switch"
+                      aria-checked="${Boolean(ep.exactPrefix)}"
+                      style="transform:scale(0.84);transform-origin:right center"
+                      onclick="toggleEndpointExactPrefix('${p.id}', '${fmt}')"
+                    >
+                      <span class="thumb"></span>
+                    </button>
+                  </span>
+                </label>
+                <div class="input-box">
+                  <input
+                    type="url"
+                    class="mono"
+                    value="${escapeHtml(ep.url)}"
+                    placeholder="Base URL: https://example.com"
+                    oninput="updateEndpointUrl('${p.id}', '${fmt}', this.value)"
+                  />
+                </div>
+                <div
+                  class="resolved-url ${preview.ok ? "" : "err"}"
+                  id="epPreview-${fmt}"
+                  style="${showPreview ? "" : "display:none"}"
+                >
+                  ${escapeHtml(preview.ok ? preview.target : preview.text)}
+                </div>
+              </div>
+            `;
+          }).join("")}
+
+          <div style="border-top:var(--hairline) solid var(--line);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-3)">
+            <div class="token-grid">
+              <div class="form-field">
+                <label>认证方式</label>
+                ${renderSelect({
+                  size: "sm",
+                  value: p.authType,
+                  options: [
+                    { value: "api_key", label: "API Key Header" },
+                    { value: "auth_token", label: "Bearer Token" },
+                  ],
+                  onSelect: (v) => `setProviderAuthType('${p.id}', '${v}')`,
+                })}
+              </div>
+              <div class="form-field">
+                <label>缓存有效期</label>
+                ${renderSelect({
+                  size: "sm",
+                  value: p.cacheTtl,
+                  options: [
+                    { value: "5m", label: "5 分钟" },
+                    { value: "1h", label: "1 小时" },
+                  ],
+                  onSelect: (v) => `setProviderTtl('${p.id}', '${v}')`,
+                })}
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label>网络代理</label>
+              ${renderSelect({
+                size: "sm",
+                value: p.proxyMode,
+                options: [
+                  { value: "env", label: "跟随系统环境" },
+                  { value: "direct", label: "强制直连" },
+                  { value: "custom", label: "自定义代理地址" },
+                ],
+                onSelect: (v) => `setProviderProxy('${p.id}', '${v}')`,
+              })}
+            </div>
+
+            <div class="form-field">
+              <label>
+                <span>自定义请求头</span>
+                <span class="tag mono">{}</span>
+              </label>
+              ${(p.headers || []).map((h, idx) => `
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:var(--space-2);align-items:center">
+                  <div class="input-box" style="height:32px">
+                    <input type="text" class="mono" placeholder="Header" value="${escapeHtml(h.key)}" oninput="updateCustomHeader('${p.id}', ${idx}, 'key', this.value)" />
+                  </div>
+                  <div class="input-box" style="height:32px">
+                    <input type="text" class="mono" placeholder="Value" value="${escapeHtml(h.value)}" oninput="updateCustomHeader('${p.id}', ${idx}, 'value', this.value)" />
+                  </div>
+                  <button type="button" class="icon-btn sm" onclick="removeCustomHeader('${p.id}', ${idx})">${ICONS.close}</button>
+                </div>
+              `).join("")}
+              <button type="button" class="dashed-btn" onclick="addCustomHeader('${p.id}')">
+                ${ICONS.plus} <span>添加请求头</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:var(--space-3) var(--space-4);border-top:var(--hairline) solid var(--line);display:flex;justify-content:flex-end;gap:var(--space-2)">
+          <button type="button" class="btn" onclick="closeSideDrawer()">取消</button>
+          <button type="button" class="btn primary" onclick="closeSideDrawer()">保存</button>
+        </div>
+      `;
+    }
+
+    function renderSyncDrawerContent(p) {
+      const q = state.drawerSearch.toLowerCase();
+      const catalog = p.remoteCatalog.filter((item) => item.id.toLowerCase().includes(q));
+      const groups = {};
+      for (const item of catalog) {
+        (groups[item.group] = groups[item.group] || []).push(item);
+      }
+
+      return `
+        <div class="drawer-head">
+          <h3>${escapeHtml(p.name)} 模型</h3>
+          <span class="tag mono">${p.remoteCatalog.length}</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn sm ghost" onclick="addAllRemoteModels('${p.id}')">
+            ${ICONS.plus} <span>添加全部</span>
+          </button>
+          <button type="button" class="icon-btn sm" onclick="closeSideDrawer()">
+            ${ICONS.close}
+          </button>
+        </div>
+        <div class="drawer-search">
+          <div class="input-box" style="height:36px">
+            ${ICONS.search}
+            <input
+              type="search"
+              placeholder="搜索模型..."
+              value="${escapeHtml(state.drawerSearch)}"
+              oninput="state.drawerSearch = this.value; render()"
+            />
+          </div>
+        </div>
+        <div class="drawer-body wscroll">
+          ${Object.entries(groups).map(([gName, items]) => `
+            <details class="m-group" open>
+              <summary>
+                ${ICONS.chevRight}
+                <span>${escapeHtml(gName)}</span>
+                <span class="tag mono">${items.length}</span>
+              </summary>
+              <div class="m-rows">
+                ${items.map((item) => {
+                  const added = p.models.some((m) => m.id === item.id);
+                  return `
+                    <div class="m-row ${added ? "added" : ""}">
+                      <span class="avatar" style="width:22px;height:22px;font-size:10px;background:${p.color}">
+                        ${escapeHtml(gName.slice(0, 1).toUpperCase())}
+                      </span>
+                      <span class="m-name">${escapeHtml(item.id)}</span>
+                      <div class="m-acts" style="margin-left:auto">
+                        <button
+                          type="button"
+                          class="icon-btn sm"
+                          onclick="toggleCatalogModel('${p.id}', '${escapeHtml(item.id)}', '${escapeHtml(item.group)}')"
+                        >
+                          ${added ? ICONS.minus : ICONS.plus}
+                        </button>
+                      </div>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </details>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       5. TAB 2: 默认模型 (Single Wide Detail Card on Right)
+       ═══════════════════════════════════════════════════════════════════════════ */
+    function renderRoutingCard() {
+      const pairs = state.providers
+        .filter((p) => p.enabled)
+        .flatMap((p) =>
+          p.models.map((m) => ({
+            key: `${p.id}::${m.id}`,
+            label: `${p.name} · ${m.id}`,
+          }))
+        );
+
+      const STAGES = [
+        { id: "narrate", title: "正文叙事" },
+        { id: "record", title: "状态与记录结算" },
+        { id: "decide", title: "行动判定" },
+        { id: "direct", title: "导演规划" },
+        { id: "lookup", title: "设定检出" },
+        { id: "check", title: "护栏检查" },
+        { id: "polish", title: "文风润色" },
+      ];
+
+      return `
+        <section class="detail-card">
+          <header class="detail-header">
+            <h2>默认模型</h2>
+          </header>
+          <div class="detail-scroll wscroll">
+            <div class="setting-card hero">
+              <div>
+                <h3 style="font-size:var(--text-heading);font-weight:650">主默认模型</h3>
+              </div>
+              <div style="min-width:20rem">
+                ${renderSelect({
+                  value: state.routing.defaultModel,
+                  options: pairs.map((pair) => ({ value: pair.key, label: pair.label })),
+                  onSelect: (v) => `state.routing.defaultModel = '${escapeHtml(v)}'`,
+                })}
+              </div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-title">
+                <h3>按阶段指定模型</h3>
+                <div class="right">
+                  <button
+                    type="button"
+                    class="switch"
+                    role="switch"
+                    aria-checked="${state.routing.customStageRouting}"
+                    onclick="state.routing.customStageRouting = !state.routing.customStageRouting; render()"
+                  >
+                    <span class="thumb"></span>
+                  </button>
+                </div>
+              </div>
+
+              ${state.routing.customStageRouting ? `
+                <div class="cards-grid">
+                  ${STAGES.map((st) => {
+                    const cur = state.routing.stages[st.id] || "default";
+                    return `
+                      <div class="setting-card">
+                        <div style="display:flex;align-items:center;justify-content:space-between">
+                          <span style="font-weight:600">${st.title}</span>
+                          <span class="tag mono">${st.id}</span>
+                        </div>
+                        ${renderSelect({
+                          value: cur,
+                          options: [
+                            { value: "default", label: "跟随主默认模型" },
+                            ...pairs.map((pair) => ({ value: pair.key, label: pair.label })),
+                          ],
+                          onSelect: (v) => `state.routing.stages['${st.id}'] = '${escapeHtml(v)}'`,
+                        })}
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              ` : ""}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       6. TAB 3: 提示词模板 (Card 2: List + Card 3: Detail)
+       ═══════════════════════════════════════════════════════════════════════════ */
+    function renderTemplatesCards() {
+      const t = state.templates.find((x) => x.id === state.selectedTemplateId) || state.templates[0];
+
+      return `
+        <aside class="master-card">
+          <div class="master-list wscroll" style="padding-top:var(--space-4)">
+            ${state.templates.map((item) => `
+              <button
+                type="button"
+                class="p-row"
+                aria-selected="${item.id === t.id}"
+                onclick="state.selectedTemplateId = '${item.id}'; state.mobilePane = 'detail'; render()"
+              >
+                <span class="p-name">${escapeHtml(item.name)}</span>
+                <span class="tag mono">${item.narrateHead.length + item.narrateTail.length}</span>
+              </button>
+            `).join("")}
+          </div>
+          <div class="master-foot">
+            <button type="button" class="btn" onclick="createNewTemplate()">
+              ${ICONS.plus} <span>新建模板</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="detail-card">
+          <header class="detail-header">
+            <button type="button" class="icon-btn sm mobile-back-btn" onclick="setMobilePane('list')">
+              ${ICONS.back}
+            </button>
+            <div class="input-box" style="height:34px;max-width:18rem">
+              <input
+                type="text"
+                value="${escapeHtml(t.name)}"
+                oninput="updateTemplateName('${t.id}', this.value)"
+              />
+            </div>
+            <span class="spacer"></span>
+            ${state.templates.length > 1 ? `
+              <button type="button" class="icon-btn sm" onclick="deleteTemplate('${t.id}')">
+                ${ICONS.trash}
+              </button>
+            ` : ""}
+          </header>
+
+          <div class="detail-scroll wscroll">
+            ${renderTemplateSlot(t, "narrateHead", "前置引导消息 (Head)", t.narrateHead)}
+            ${renderTemplateSlot(t, "narrateTail", "尾部续写预填 (Tail)", t.narrateTail)}
+            ${renderTemplateSlot(t, "reviewHead", "审阅阶段引导 (Review)", t.reviewHead)}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderTemplateSlot(t, slotKey, label, list) {
+      return `
+        <div class="section-block">
+          <div class="section-title">
+            <h3>${label}</h3>
+            <div class="right">
+              <button type="button" class="btn sm" onclick="addTemplateMessage('${t.id}', '${slotKey}')">
+                ${ICONS.plus} <span>添加消息</span>
+              </button>
+            </div>
+          </div>
+          ${list.length === 0 ? `
+            <div class="setting-card" style="padding:var(--space-3) var(--space-4);color:var(--ink-3);font-size:var(--text-footnote)">
+              未配置消息
+            </div>
+          ` : `
+            <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+              ${list.map((msg, idx) => `
+                <div class="msg-card">
+                  ${renderSelect({
+                    size: "sm",
+                    value: msg.role,
+                    options: [
+                      { value: "system", label: "System" },
+                      { value: "user", label: "User" },
+                      { value: "assistant", label: "Assistant" },
+                    ],
+                    onSelect: (v) => `updateTemplateMsgRole('${t.id}', '${slotKey}', ${idx}, '${v}')`,
+                  })}
+                  <textarea rows="2" placeholder="输入消息内容..." oninput="updateTemplateMsgText('${t.id}', '${slotKey}', ${idx}, this.value)">${escapeHtml(msg.text)}</textarea>
+                  <button type="button" class="icon-btn sm" onclick="removeTemplateMsg('${t.id}', '${slotKey}', ${idx})">
+                    ${ICONS.close}
+                  </button>
+                </div>
+              `).join("")}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       7. TAB 4: 玩家人设 (Card 2: List + Card 3: Detail)
+       ═══════════════════════════════════════════════════════════════════════════ */
+    function renderPersonasCards() {
+      const per = state.personas.find((x) => x.id === state.selectedPersonaId) || state.personas[0];
+
+      return `
+        <aside class="master-card">
+          <div class="master-list wscroll" style="padding-top:var(--space-4)">
+            ${state.personas.map((item) => `
+              <button
+                type="button"
+                class="p-row"
+                aria-selected="${item.id === per.id}"
+                onclick="state.selectedPersonaId = '${item.id}'; state.mobilePane = 'detail'; render()"
+              >
+                <span class="avatar" style="background:${item.color}">${escapeHtml(item.name.slice(0, 1))}</span>
+                <span class="p-name">${escapeHtml(item.name)}</span>
+                ${item.cards.length ? `<span class="tag">${item.cards[0]}</span>` : ""}
+              </button>
+            `).join("")}
+          </div>
+          <div class="master-foot">
+            <button type="button" class="btn" onclick="createNewPersona()">
+              ${ICONS.plus} <span>新建人设</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="detail-card">
+          <header class="detail-header">
+            <button type="button" class="icon-btn sm mobile-back-btn" onclick="setMobilePane('list')">
+              ${ICONS.back}
+            </button>
+            <div class="input-box" style="height:34px;max-width:16rem">
+              <input
+                type="text"
+                value="${escapeHtml(per.name)}"
+                oninput="perNameChange('${per.id}', this.value)"
+              />
+            </div>
+            <div style="display:flex;gap:6px">
+              ${per.cards.map((c) => `<span class="tag">${escapeHtml(c)}</span>`).join("")}
+            </div>
+            <span class="spacer"></span>
+            ${state.personas.length > 1 ? `
+              <button type="button" class="icon-btn sm" onclick="deletePersona('${per.id}')">
+                ${ICONS.trash}
+              </button>
+            ` : ""}
+          </header>
+
+          <div class="detail-scroll wscroll">
+            <div class="section-block" style="flex:1">
+              <div class="section-title">
+                <h3>人设描述</h3>
+                <div class="right">
+                  <span class="tag mono">${per.text.length} 字</span>
+                </div>
+              </div>
+              <textarea
+                style="width:100%;min-height:16rem;padding:var(--space-4);border-radius:var(--radius-card);background:var(--surface-2);box-shadow:inset 0 0 0 var(--hairline) var(--line);line-height:1.75;resize:vertical;outline:none"
+                placeholder="描述玩家角色的外貌、身份与性格特征..."
+                oninput="updatePersonaText('${per.id}', this.value)"
+              >${escapeHtml(per.text)}</textarea>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       8. MAIN RENDER & INTERACTIONS
+       ═══════════════════════════════════════════════════════════════════════════ */
+    function render() {
+      const canvas = document.getElementById("canvasRoot");
+      canvas.setAttribute("data-columns", state.section === "routing" ? "two" : "three");
+      canvas.setAttribute("data-pane", state.section === "routing" ? "detail" : state.mobilePane);
+
+      canvas.innerHTML = `
+        <!-- Card 1: Left Navigation Card -->
+        <nav class="nav-card" aria-label="设置导航">
+          <div class="nav-head">
+            <h1>设置</h1>
+          </div>
+          <div class="nav-list">
+            <button type="button" class="nav-item" aria-current="${state.section === "providers" ? "page" : "false"}" onclick="switchSection('providers')">
+              ${ICONS.plugs} <span>模型服务</span>
+            </button>
+            <button type="button" class="nav-item" aria-current="${state.section === "routing" ? "page" : "false"}" onclick="switchSection('routing')">
+              ${ICONS.sliders} <span>默认模型</span>
+            </button>
+            <button type="button" class="nav-item" aria-current="${state.section === "templates" ? "page" : "false"}" onclick="switchSection('templates')">
+              ${ICONS.template} <span>提示词模板</span>
+            </button>
+            <button type="button" class="nav-item" aria-current="${state.section === "personas" ? "page" : "false"}" onclick="switchSection('personas')">
+              ${ICONS.user} <span>玩家人设</span>
+            </button>
+          </div>
+        </nav>
+
+        <!-- Mobile Top Bar (Safe-area inset + Icon-only Switcher) -->
+        <header class="mobile-bar">
+          <div class="mobile-bar-row">
+            <span class="mobile-bar-title">${SECTION_TITLES[state.section]}</span>
+            <div class="mobile-icon-tabs" role="tablist" aria-label="设置分类">
+              <button type="button" role="tab" aria-label="模型服务" aria-selected="${state.section === "providers"}" onclick="switchSection('providers')">
+                ${ICONS.plugs}
+              </button>
+              <button type="button" role="tab" aria-label="默认模型" aria-selected="${state.section === "routing"}" onclick="switchSection('routing')">
+                ${ICONS.sliders}
+              </button>
+              <button type="button" role="tab" aria-label="提示词模板" aria-selected="${state.section === "templates"}" onclick="switchSection('templates')">
+                ${ICONS.template}
+              </button>
+              <button type="button" role="tab" aria-label="玩家人设" aria-selected="${state.section === "personas"}" onclick="switchSection('personas')">
+                ${ICONS.user}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        ${state.section === "providers" ? renderProvidersCards() : ""}
+        ${state.section === "routing" ? renderRoutingCard() : ""}
+        ${state.section === "templates" ? renderTemplatesCards() : ""}
+        ${state.section === "personas" ? renderPersonasCards() : ""}
+      `;
+    }
+
+    function switchSection(s) {
+      state.section = s;
+      state.mobilePane = "list";
+      state.drawerMode = null;
+      render();
+    }
+    function setMobilePane(p) {
+      state.mobilePane = p;
+      render();
+    }
+    function selectProvider(id) {
+      state.selectedProviderId = id;
+      state.mobilePane = "detail";
+      state.drawerMode = null;
+      render();
+    }
+    function toggleProviderEnabled(id) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p) p.enabled = !p.enabled;
+      render();
+    }
+    function updateProviderName(id, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p && val.trim()) p.name = val.trim();
+    }
+    function setProviderDefaultFormat(id, fmt) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      p.defaultFormat = fmt;
+      render();
+    }
+    function updateProviderKey(id, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p) p.key = val;
+    }
+    function pickVaultKey(providerId, vaultKeyId) {
+      const p = state.providers.find((x) => x.id === providerId);
+      const vk = state.vaultKeys.find((x) => x.id === vaultKeyId);
+      if (p && vk) {
+        p.key = vk.value;
+        p.authType = vk.type;
+        render();
+      }
+    }
+    function saveCurrentKeyToVault(providerId) {
+      const p = state.providers.find((x) => x.id === providerId);
+      if (!p || !p.key.trim()) return;
+      const raw = p.key.trim();
+      if (state.vaultKeys.some((x) => x.value === raw)) return;
+      const prefix = raw.slice(0, 6);
+      const suffix = raw.slice(-4);
+      state.vaultKeys.push({
+        id: "vk-" + Date.now().toString(36),
+        name: `${p.name} 密钥`,
+        type: p.authType || "api_key",
+        value: raw,
+        hint: `${prefix}****${suffix}`,
+      });
+      render();
+    }
+    function deleteVaultKey(vaultKeyId) {
+      state.vaultKeys = state.vaultKeys.filter((x) => x.id !== vaultKeyId);
+      render();
+    }
+    function updateDefaultEndpointUrl(id, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      const fmt = p.defaultFormat || "openai-compatible";
+      p.endpoints[fmt] = p.endpoints[fmt] || { url: "", exactPrefix: false };
+      p.endpoints[fmt].url = val;
+    }
+    function updateEndpointUrl(id, fmt, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      p.endpoints[fmt] = p.endpoints[fmt] || { url: "", exactPrefix: false };
+      p.endpoints[fmt].url = val;
+      const el = document.getElementById("epPreview-" + fmt);
+      if (!el) return;
+      const hasUrl = Boolean(val && val.trim());
+      if (!hasUrl && p.defaultFormat !== fmt) {
+        el.style.display = "none";
+        return;
+      }
+      el.style.display = "";
+      const preview = resolveEndpointPreview(fmt, val, p.endpoints[fmt].exactPrefix, p.models[0]?.id || "{model}");
+      el.textContent = preview.ok ? preview.target : preview.text;
+      el.className = "resolved-url " + (preview.ok ? "" : "err");
+    }
+    function toggleEndpointExactPrefix(id, fmt) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      p.endpoints[fmt] = p.endpoints[fmt] || { url: "", exactPrefix: false };
+      p.endpoints[fmt].exactPrefix = !p.endpoints[fmt].exactPrefix;
+      render();
+    }
+    function addGeminiEndpoint(id) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      const base = p.endpoints[p.defaultFormat]?.url || "https://generativelanguage.googleapis.com";
+      p.endpoints.gemini = { url: base, exactPrefix: false };
+      render();
+    }
+    function addCustomHeader(id) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      p.headers = p.headers || [];
+      p.headers.push({ key: "", value: "" });
+      render();
+    }
+    function updateCustomHeader(id, idx, field, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p && p.headers && p.headers[idx]) {
+        p.headers[idx][field] = val;
+      }
+    }
+    function removeCustomHeader(id, idx) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p && p.headers) {
+        p.headers.splice(idx, 1);
+        render();
+      }
+    }
+    function setProviderAuthType(id, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p) p.authType = val;
+    }
+    function setProviderTtl(id, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p) p.cacheTtl = val;
+    }
+    function setProviderProxy(id, val) {
+      const p = state.providers.find((x) => x.id === id);
+      if (p) p.proxyMode = val;
+    }
+    function runConnectivityTest(id) {
+      const p = state.providers.find((x) => x.id === id);
+      if (!p) return;
+      const ok = Boolean(p.key && p.key.trim().length > 3);
+      p.testStatus = {
+        ok,
+        text: ok ? `200 · ${Math.floor(160 + Math.random() * 180)}ms` : "401 Unauthorized"
+      };
+      render();
+    }
+    function deleteProvider(id) {
+      if (state.providers.length <= 1) return;
+      state.providers = state.providers.filter((x) => x.id !== id);
+      state.selectedProviderId = state.providers[0].id;
+      render();
+    }
+    function removeModelFromProvider(pid, mid) {
+      const p = state.providers.find((x) => x.id === pid);
+      if (p) p.models = p.models.filter((m) => m.id !== mid);
+      render();
+    }
+    function expandInlineModelSearch() {
+      state.showModelSearch = true;
+      const wrap = document.getElementById("inlineModelSearchWrap");
+      const input = document.getElementById("inlineModelSearchInput");
+      if (wrap) wrap.setAttribute("data-open", "true");
+      if (input) input.focus();
+    }
+    function collapseInlineModelSearchIfEmpty() {
+      if (state.modelInlineSearch && state.modelInlineSearch.trim()) return;
+      state.showModelSearch = false;
+      const wrap = document.getElementById("inlineModelSearchWrap");
+      if (wrap) wrap.setAttribute("data-open", "false");
+    }
+    function closeInlineModelSearch(e) {
+      e.stopPropagation();
+      state.modelInlineSearch = "";
+      state.showModelSearch = false;
+      const wrap = document.getElementById("inlineModelSearchWrap");
+      const input = document.getElementById("inlineModelSearchInput");
+      if (input) {
+        input.value = "";
+        input.blur();
+      }
+      if (wrap) wrap.setAttribute("data-open", "false");
+      onInlineModelSearch("");
+    }
+    function onInlineModelSearch(val) {
+      state.modelInlineSearch = val;
+      const p = state.providers.find((x) => x.id === state.selectedProviderId) || state.providers[0];
+      const container = document.getElementById("modelGroupsContainer");
+      if (container && p) {
+        container.innerHTML = buildModelGroupsHtml(p);
+      }
+    }
+    function toggleAllModelGroups() {
+      state.allGroupsCollapsed = !state.allGroupsCollapsed;
+      const p = state.providers.find((x) => x.id === state.selectedProviderId) || state.providers[0];
+      const container = document.getElementById("modelGroupsContainer");
+      if (container && p) {
+        container.innerHTML = buildModelGroupsHtml(p);
+      }
+    }
+
+    /* Slide-over Side Drawer Handlers ("endpoint" & "sync") */
+    function openEndpointDrawer() {
+      state.drawerMode = "endpoint";
+      render();
+    }
+    function openSyncDrawer() {
+      state.drawerSearch = "";
+      state.drawerMode = "sync";
+      render();
+    }
+    function closeSideDrawer() {
+      state.drawerMode = null;
+      render();
+    }
+    function toggleCatalogModel(pid, mid, group) {
+      const p = state.providers.find((x) => x.id === pid);
+      if (!p) return;
+      if (p.models.some((m) => m.id === mid)) {
+        p.models = p.models.filter((m) => m.id !== mid);
+      } else {
+        p.models.push({ id: mid, group, templateId: "", effort: "off", maxOutputTokens: 4096, capabilities: {} });
+      }
+      render();
+    }
+    function addAllRemoteModels(pid) {
+      const p = state.providers.find((x) => x.id === pid);
+      if (!p) return;
+      for (const item of p.remoteCatalog) {
+        if (!p.models.some((m) => m.id === item.id)) {
+          p.models.push({ id: item.id, group: item.group, templateId: "", effort: "off", maxOutputTokens: 4096, capabilities: {} });
+        }
+      }
+      render();
+    }
+
+    /* Modal 1: Add Custom Provider Onboarding */
+    function openAddProviderModal() {
+      state.newProvDefaultFormat = "openai-compatible";
+      document.getElementById("newProvName").value = "";
+      document.getElementById("newProvKey").value = "";
+      document.getElementById("newProvUrlOpenai").value = "https://api.openai.com";
+      document.getElementById("newProvUrlAnthropic").value = "";
+      document.getElementById("newProvUrlGemini").value = "";
+      syncNewProvBadges();
+      syncNewProvPreview();
+      document.getElementById("addProviderModal").showModal();
+    }
+    function setNewProvDefault(fmt) {
+      state.newProvDefaultFormat = fmt;
+      syncNewProvBadges();
+    }
+    function syncNewProvBadges() {
+      const def = state.newProvDefaultFormat || "openai-compatible";
+      const map = [
+        ["openai-compatible", "newProvBadgeOpenai"],
+        ["anthropic", "newProvBadgeAnthropic"],
+        ["gemini", "newProvBadgeGemini"],
+      ];
+      for (const [fmt, id] of map) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.innerHTML =
+          fmt === def
+            ? `<span class="tag ok">默认</span>`
+            : `<button type="button" class="btn xs" onclick="setNewProvDefault('${fmt}')">设为默认</button>`;
+      }
+    }
+    function syncNewProvPreview() {
+      const pairs = [
+        ["openai-compatible", "newProvUrlOpenai", "newProvPreviewOpenai"],
+        ["anthropic", "newProvUrlAnthropic", "newProvPreviewAnthropic"],
+        ["gemini", "newProvUrlGemini", "newProvPreviewGemini"],
+      ];
+      for (const [fmt, inputId, previewId] of pairs) {
+        const inputEl = document.getElementById(inputId);
+        const previewEl = document.getElementById(previewId);
+        if (!inputEl || !previewEl) continue;
+        const raw = inputEl.value.trim();
+        if (!raw) {
+          previewEl.style.display = "none";
+          previewEl.textContent = "";
+        } else {
+          previewEl.style.display = "";
+          const res = resolveEndpointPreview(fmt, raw, false, "{model}");
+          previewEl.textContent = res.ok ? res.target : res.text;
+          previewEl.className = "resolved-url " + (res.ok ? "" : "err");
+        }
+      }
+    }
+    function submitNewProvider(e) {
+      e.preventDefault();
+      const name = document.getElementById("newProvName").value.trim();
+      const key = document.getElementById("newProvKey").value.trim();
+      const urlOpenai = document.getElementById("newProvUrlOpenai").value.trim();
+      const urlAnthropic = document.getElementById("newProvUrlAnthropic").value.trim();
+      const urlGemini = document.getElementById("newProvUrlGemini").value.trim();
+
+      const defaultFormat = state.newProvDefaultFormat || (
+        urlOpenai
+          ? "openai-compatible"
+          : urlAnthropic
+            ? "anthropic"
+            : urlGemini
+              ? "gemini"
+              : "openai-compatible"
+      );
+
+      const endpoints = {
+        "openai-compatible": { url: urlOpenai, exactPrefix: false },
+        anthropic: { url: urlAnthropic, exactPrefix: false },
+        gemini: { url: urlGemini, exactPrefix: false },
+      };
+
+      const colors = ["#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6"];
+      const id = "p-" + Date.now().toString(36);
+      state.providers.push({
+        id,
+        name,
+        color: colors[state.providers.length % colors.length],
+        enabled: true,
+        defaultFormat,
+        endpoints,
+        headers: [],
+        authType: "api_key",
+        key,
+        cacheTtl: "5m",
+        proxyMode: "env",
+        proxyUrl: "",
+        testStatus: null,
+        remoteCatalog: [
+          { id: "gpt-4.1", group: "GPT-4.1" },
+          { id: "gpt-4.1-mini", group: "GPT-4.1" },
+          { id: "claude-sonnet-4-5-20250929", group: "Claude 4.5" }
+        ],
+        models: [
+          { id: "gpt-4.1", group: "GPT-4.1", templateId: "", effort: "off", maxOutputTokens: 8192, capabilities: {} }
+        ]
+      });
+      closeModal("addProviderModal");
+      selectProvider(id);
+    }
+
+    /* Modal 2: Single Model Settings Modal */
+    function openModelSettings(pid, mid) {
+      const p = state.providers.find((x) => x.id === pid);
+      const m = p?.models.find((x) => x.id === mid);
+      if (!p || !m) return;
+      state.editingModelId = mid;
+      renderModelModalContent(p, m);
+      document.getElementById("modelSettingsModal").showModal();
+    }
+
+    function renderModelModalContent(p, m) {
+      document.getElementById("modelModalTitle").textContent = m.id;
+      const effFmt = effectiveFormat(p, m);
+      const fmtDef = DEFAULTS[effFmt] || DEFAULTS["openai-compatible"];
+      const prefillOn = effectivePrefill(p, m);
+      const reasoningBackOn = typeof m.capabilities?.reasoningBack === "boolean" ? m.capabilities.reasoningBack : fmtDef.reasoningBack;
+      const structuredMode = m.capabilities?.structured || fmtDef.structured;
+      const effortIdx = Math.max(0, EFFORT_STEPS.indexOf(m.effort || "off"));
+      const conflict = hasPrefillConflict(p, m);
+
+      document.getElementById("modelModalBody").innerHTML = `
+        <div
+          id="modelModalConflictBanner"
+          style="padding:10px 12px;border-radius:var(--radius);background:var(--warn-soft);color:var(--warn);font-size:var(--text-footnote);${conflict ? "" : "display:none"}"
+        >
+          所选提示词模板包含 Assistant 尾部预填，请开启下方「允许预填续写」。
+        </div>
+
+        <div class="token-grid">
+          <div class="form-field">
+            <label>提示词模板</label>
+            ${renderSelect({
+              value: m.templateId || "",
+              options: [
+                { value: "", label: "无模板" },
+                ...state.templates.map((t) => ({ value: t.id, label: t.name })),
+              ],
+              onSelect: (v) => `setModalTemplate('${p.id}', '${escapeHtml(m.id)}', '${escapeHtml(v)}')`,
+            })}
+          </div>
+
+          <div class="form-field">
+            <label>请求端点协议</label>
+            ${renderSelect({
+              value: m.format || "",
+              options: [
+                { value: "", label: `默认 (${FORMAT_LABELS[p.defaultFormat]})` },
+                { value: "openai-compatible", label: "OpenAI" },
+                { value: "anthropic", label: "Anthropic" },
+                { value: "gemini", label: "Gemini" },
+              ],
+              onSelect: (v) => `setModalModelFormat('${p.id}', '${escapeHtml(m.id)}', '${escapeHtml(v)}')`,
+            })}
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label>结构化输出方式</label>
+          ${renderSelect({
+            value: structuredMode,
+            options: [
+              { value: "schema", label: "JSON Schema (原生)" },
+              { value: "tool", label: "Tool Call (强制工具)" },
+              { value: "json", label: "JSON Object (提示词内嵌)" },
+            ],
+            onSelect: (v) => `setModalCap('${p.id}', '${escapeHtml(m.id)}', 'structured', '${escapeHtml(v)}')`,
+          })}
+        </div>
+
+        <div class="form-field">
+          <label>
+            <span>思考强度</span>
+            <span class="tag mono" id="effortValBadge">${EFFORT_LABELS[EFFORT_STEPS[effortIdx]]}</span>
+          </label>
+          <div class="effort-stepper">
+            <div class="effort-rail-wrap">
+              <div class="effort-rail">
+                <div class="effort-rail-fill" id="effortRailFill" style="width:${effortIdx * 25}%"></div>
+              </div>
+              <div class="effort-stops" id="effortStopsRow">
+                ${EFFORT_STEPS.map((st, idx) => `
+                  <span class="effort-dot ${idx < effortIdx ? "passed" : ""} ${idx === effortIdx ? "active" : ""}"></span>
+                `).join("")}
+              </div>
+              <input
+                type="range"
+                id="effortRangeInput"
+                class="effort-range-overlay"
+                min="0"
+                max="4"
+                step="1"
+                value="${effortIdx}"
+                aria-label="思考强度档位"
+                oninput="setModalEffortSlider('${p.id}', '${escapeHtml(m.id)}', this.value)"
+              />
+            </div>
+            <div class="effort-ticks" id="effortTicksRow">
+              ${EFFORT_STEPS.map((st, idx) => `
+                <button
+                  type="button"
+                  class="effort-tick-btn ${idx === effortIdx ? "active" : ""}"
+                  onclick="setModalEffortSlider('${p.id}', '${escapeHtml(m.id)}', '${idx}')"
+                >
+                  ${EFFORT_LABELS[st]}
+                </button>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="token-grid">
+          <div class="form-field">
+            <label>上下文上限 (Token)</label>
+            <div class="input-box">
+              <input
+                type="number"
+                class="mono"
+                min="1024"
+                step="1024"
+                placeholder="默认"
+                value="${m.contextTokens ?? ""}"
+                oninput="setModalTokenInput('${p.id}', '${escapeHtml(m.id)}', 'contextTokens', this.value)"
+              />
+            </div>
+          </div>
+          <div class="form-field">
+            <label>最大输出 (Token)</label>
+            <div class="input-box">
+              <input
+                type="number"
+                class="mono"
+                min="256"
+                step="256"
+                placeholder="默认"
+                value="${m.maxOutputTokens ?? ""}"
+                oninput="setModalTokenInput('${p.id}', '${escapeHtml(m.id)}', 'maxOutputTokens', this.value)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row-inline">
+          <span class="lbl">允许预填续写 (Prefill)</span>
+          <button
+            type="button"
+            id="modalPrefillSwitch"
+            class="switch"
+            role="switch"
+            aria-checked="${prefillOn}"
+            onclick="toggleModalSwitch('${p.id}', '${escapeHtml(m.id)}', 'prefill', this)"
+          >
+            <span class="thumb"></span>
+          </button>
+        </div>
+
+        <div class="form-row-inline">
+          <span class="lbl">回传历史思考过程</span>
+          <button
+            type="button"
+            id="modalReasoningSwitch"
+            class="switch"
+            role="switch"
+            aria-checked="${reasoningBackOn}"
+            onclick="toggleModalSwitch('${p.id}', '${escapeHtml(m.id)}', 'reasoningBack', this)"
+          >
+            <span class="thumb"></span>
+          </button>
+        </div>
+      `;
+    }
+
+    function syncModalConflictAndSwitches(p, m) {
+      const banner = document.getElementById("modelModalConflictBanner");
+      if (banner) {
+        banner.style.display = hasPrefillConflict(p, m) ? "" : "none";
+      }
+      const effFmt = effectiveFormat(p, m);
+      const fmtDef = DEFAULTS[effFmt] || DEFAULTS["openai-compatible"];
+      const prefillSwitch = document.getElementById("modalPrefillSwitch");
+      if (prefillSwitch) {
+        prefillSwitch.setAttribute("aria-checked", String(effectivePrefill(p, m)));
+      }
+      const reasoningSwitch = document.getElementById("modalReasoningSwitch");
+      if (reasoningSwitch) {
+        const rb = typeof m.capabilities?.reasoningBack === "boolean" ? m.capabilities.reasoningBack : fmtDef.reasoningBack;
+        reasoningSwitch.setAttribute("aria-checked", String(rb));
+      }
+    }
+
+    function setModalTemplate(pid, mid, tplId) {
+      const p = state.providers.find((x) => x.id === pid);
+      const m = p?.models.find((x) => x.id === mid);
+      if (!m) return;
+      m.templateId = tplId;
+      syncModalConflictAndSwitches(p, m);
+    }
+    function setModalModelFormat(pid, mid, fmt) {
+      const p = state.providers.find((x) => x.id === pid);
+      const m = p?.models.find((x) => x.id === mid);
+      if (!m) return;
+      m.format = fmt || undefined;
+      syncModalConflictAndSwitches(p, m);
+    }
+    function setModalCap(pid, mid, key, val) {
+      const p = state.providers.find((x) => x.id === pid);
+      const m = p?.models.find((x) => x.id === mid);
+      if (!m) return;
+      m.capabilities = m.capabilities || {};
+      m.capabilities[key] = val;
+      syncModalConflictAndSwitches(p, m);
+    }
+    function toggleModalSwitch(pid, mid, key, btnEl) {
+      const cur = btnEl.getAttribute("aria-checked") === "true";
+      setModalCap(pid, mid, key, !cur);
+    }
+    function setModalEffortSlider(pid, mid, idxStr) {
+      const p = state.providers.find((x) => x.id === pid);
+      const m = p?.models.find((x) => x.id === mid);
+      if (!m) return;
+      const idx = Math.max(0, Math.min(4, Number(idxStr)));
+      const step = EFFORT_STEPS[idx] || "off";
+      m.effort = step;
+      const badge = document.getElementById("effortValBadge");
+      if (badge) badge.textContent = EFFORT_LABELS[step];
+      const fill = document.getElementById("effortRailFill");
+      if (fill) fill.style.width = `${idx * 25}%`;
+      const range = document.getElementById("effortRangeInput");
+      if (range) range.value = String(idx);
+      const stops = document.querySelectorAll("#effortStopsRow .effort-dot");
+      stops.forEach((dot, i) => {
+        dot.className = `effort-dot ${i < idx ? "passed" : ""} ${i === idx ? "active" : ""}`;
+      });
+      const ticks = document.querySelectorAll("#effortTicksRow .effort-tick-btn");
+      ticks.forEach((btn, i) => {
+        btn.className = `effort-tick-btn ${i === idx ? "active" : ""}`;
+      });
+    }
+    function setModalTokenInput(pid, mid, field, valStr) {
+      const p = state.providers.find((x) => x.id === pid);
+      const m = p?.models.find((x) => x.id === mid);
+      if (!m) return;
+      const num = parseInt(valStr, 10);
+      m[field] = Number.isFinite(num) && num > 0 ? num : undefined;
+    }
+
+    /* Modal 3: Manual Add Model */
+    function openAddModelModal() {
+      document.getElementById("manualModelIdInput").value = "";
+      document.getElementById("manualModelGroupInput").value = "";
+      document.getElementById("addModelModal").showModal();
+    }
+    function submitManualModel(e) {
+      e.preventDefault();
+      const id = document.getElementById("manualModelIdInput").value.trim();
+      const group = document.getElementById("manualModelGroupInput").value.trim() || id.split(/[-/]/)[0] || "自定义";
+      const p = state.providers.find((x) => x.id === state.selectedProviderId);
+      if (p && id && !p.models.some((m) => m.id === id)) {
+        p.models.push({ id, group, templateId: "", effort: "off", maxOutputTokens: 4096, capabilities: {} });
+      }
+      closeModal("addModelModal");
+      render();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).close();
+    }
+
+    /* Template Handlers */
+    function createNewTemplate() {
+      const id = "tpl-" + Date.now().toString(36);
+      state.templates.push({
+        id,
+        name: "新建提示词模板",
+        narrateHead: [{ role: "system", text: "" }],
+        narrateTail: [],
+        reviewHead: []
+      });
+      state.selectedTemplateId = id;
+      state.mobilePane = "detail";
+      render();
+    }
+    function updateTemplateName(id, val) {
+      const t = state.templates.find((x) => x.id === id);
+      if (t) t.name = val;
+    }
+    function deleteTemplate(id) {
+      if (state.templates.length <= 1) return;
+      state.templates = state.templates.filter((x) => x.id !== id);
+      state.selectedTemplateId = state.templates[0].id;
+      render();
+    }
+    function addTemplateMessage(tid, slotKey) {
+      const t = state.templates.find((x) => x.id === tid);
+      if (!t) return;
+      t[slotKey].push({ role: slotKey === "narrateTail" ? "assistant" : "user", text: "" });
+      render();
+    }
+    function updateTemplateMsgRole(tid, slotKey, idx, role) {
+      const t = state.templates.find((x) => x.id === tid);
+      if (t && t[slotKey][idx]) t[slotKey][idx].role = role;
+    }
+    function updateTemplateMsgText(tid, slotKey, idx, text) {
+      const t = state.templates.find((x) => x.id === tid);
+      if (t && t[slotKey][idx]) t[slotKey][idx].text = text;
+    }
+    function removeTemplateMsg(tid, slotKey, idx) {
+      const t = state.templates.find((x) => x.id === tid);
+      if (t) t[slotKey].splice(idx, 1);
+      render();
+    }
+
+    /* Persona Handlers */
+    function createNewPersona() {
+      const id = "per-" + Date.now().toString(36);
+      state.personas.push({
+        id,
+        name: "新建人设",
+        color: "#10b981",
+        cards: [],
+        text: ""
+      });
+      state.selectedPersonaId = id;
+      state.mobilePane = "detail";
+      render();
+    }
+    function perNameChange(id, val) {
+      const p = state.personas.find((x) => x.id === id);
+      if (p) p.name = val;
+    }
+    function updatePersonaText(id, val) {
+      const p = state.personas.find((x) => x.id === id);
+      if (p) p.text = val;
+    }
+    function deletePersona(id) {
+      if (state.personas.length <= 1) return;
+      state.personas = state.personas.filter((x) => x.id !== id);
+      state.selectedPersonaId = state.personas[0].id;
+      render();
+    }
+
+    /* Demo Switcher Wiring */
+    document.querySelectorAll("[data-theme-btn]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const th = btn.getAttribute("data-theme-btn");
+        document.documentElement.setAttribute("data-theme", th);
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b === btn))
+        );
+      });
+    });
+    document.querySelectorAll("[data-vp-btn]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const vp = btn.getAttribute("data-vp-btn");
+        document.getElementById("appWrap").setAttribute("data-vp", vp);
+        document.body.setAttribute("data-vp", vp);
+        document.querySelectorAll("[data-vp-btn]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b === btn))
+        );
+      });
+    });
+
+    document.addEventListener("click", () => {
+      document.querySelectorAll('.c-select[data-open="true"]').forEach((el) => {
+        el.setAttribute("data-open", "false");
+      });
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        document.querySelectorAll('.c-select[data-open="true"]').forEach((el) => {
+          el.setAttribute("data-open", "false");
+        });
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

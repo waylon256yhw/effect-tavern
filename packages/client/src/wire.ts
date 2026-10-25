@@ -3,7 +3,9 @@
 // answers the listing with the story now open: the client starts over on it (nodes, calls, the draft and the pin gone).
 // `DELETE /nodes/<id>` drops a node and everything under it (the reply is the Change): the Timeline's branch delete.
 // Closing the response is the stop (before the first delta it withdraws the turn, after it the prose halts).
-import type { Player } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Trace } from "@effect-tavern/provider/src/connection.ts"
+import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
+import type { Hat, Player } from "@effect-tavern/runtime/src/fragment.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
@@ -12,16 +14,21 @@ import {
   calls,
   card,
   editing,
+  hats,
   log,
   page,
   type Persona,
   personas,
   pin,
   player,
+  providers,
   registry,
+  routing,
+  secrets,
   settle,
   stories,
   type CardView,
+  type Routing,
   type Wire,
 } from "./store.ts"
 
@@ -67,6 +74,54 @@ export const deletePersona = async (id: string): Promise<void> => {
 }
 export const putPlayer = async (p: Player): Promise<void> =>
   registry.set(player, await got(fetch(`${base}/player`, { method: "PUT", body: JSON.stringify(p) })))
+
+// The settings (/providers, /secrets, /routing, /hats): each write answers the list it changed, which replaces the
+// atom; nothing is optimistic. A key goes up once (POST /secrets) and comes back as a hint only.
+const json = (method: string, v: unknown): RequestInit => ({ method, body: JSON.stringify(v) })
+const enc = encodeURIComponent
+/** A body or its {error}: a non-2xx answer throws the server's reason. */
+const checked = async <T>(res: Promise<Response>): Promise<T> => {
+  const r = await res
+  const v = (await r.json()) as T & { error?: string }
+  if (!r.ok) throw new Error(v.error ?? `HTTP ${r.status}`)
+  return v
+}
+export const fetchProviders = async (): Promise<void> => registry.set(providers, await got(fetch(`${base}/providers`)))
+export const putProvider = async ({ id, ...body }: Provider): Promise<void> => {
+  registry.set(providers, await checked(fetch(`${base}/providers/${enc(id)}`, json("PUT", body))))
+  await fetchRouting() // a pair on a model it no longer lists went with it
+}
+export const deleteProvider = async (id: string): Promise<void> => {
+  registry.set(providers, await got(fetch(`${base}/providers/${enc(id)}`, { method: "DELETE" })))
+  await fetchRouting() // the pairs on it are gone with it
+}
+export const listModels = (id: string): Promise<string[]> => checked(fetch(`${base}/providers/${enc(id)}/models`))
+/** One minimal request through the provider: "200 · 260ms", or the error. */
+export const testProvider = async (id: string, model?: string): Promise<{ ok: boolean; text: string }> => {
+  const r = await fetch(`${base}/providers/${enc(id)}/test`, json("POST", model === undefined ? {} : { model }))
+  const v = (await r.json()) as Trace & { error?: string; trace?: Trace }
+  return r.ok ? { ok: true, text: `${v.status} · ${v.ms}ms` } : { ok: false, text: v.error ?? `HTTP ${r.status}` }
+}
+export const fetchSecrets = async (): Promise<void> => registry.set(secrets, await got(fetch(`${base}/secrets`)))
+export const addSecret = async (s: { name: string; type: SecretView["type"]; value: string }): Promise<SecretView> => {
+  const made = await checked<SecretView>(fetch(`${base}/secrets`, json("POST", s)))
+  await fetchSecrets()
+  return made
+}
+export const setSecret = async (
+  id: string,
+  s: Pick<SecretView, "name" | "type"> & { value?: string }, // a value replaces the key in place
+): Promise<void> => registry.set(secrets, await checked(fetch(`${base}/secrets/${enc(id)}`, json("PUT", s))))
+export const deleteSecret = async (id: string): Promise<void> =>
+  registry.set(secrets, await got(fetch(`${base}/secrets/${enc(id)}`, { method: "DELETE" })))
+export const fetchRouting = async (): Promise<void> => registry.set(routing, await got(fetch(`${base}/routing`)))
+export const putRouting = async (r: Routing): Promise<void> =>
+  registry.set(routing, await checked(fetch(`${base}/routing`, json("PUT", r))))
+export const fetchHats = async (): Promise<void> => registry.set(hats, await got(fetch(`${base}/hats`)))
+export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
+  registry.set(hats, await checked(fetch(`${base}/hats/${enc(id)}`, json("PUT", body))))
+export const deleteHat = async (id: string): Promise<void> =>
+  registry.set(hats, await got(fetch(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
 
 /** Sends one action; returns the stop. */
 export const send = (action: Action): (() => void) => {

@@ -3,8 +3,17 @@
 // is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a runtime/server
 // edit, or a restart, keeps the story; the session plays the card's newest story, or opens one. An empty story opens on
 // the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
-// picked on the server would stay as an orphan root beside the player's).
-import { capabilities, compile, fake, fakeText, localAnthropic, type FakeCall } from "@effect-tavern/provider"
+// picked on the server would stay as an orphan root beside the player's). Which model runs each stage is the library's
+// routing (the settings page); MODEL=fake puts the scripted model over it.
+import {
+  capabilities,
+  compile,
+  fake,
+  fakeText,
+  localAnthropic,
+  localAnthropicKey,
+  type FakeCall,
+} from "@effect-tavern/provider"
 import type { SessionModel } from "@effect-tavern/runtime/src/session.ts"
 import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { mkdirSync } from "node:fs"
@@ -98,12 +107,13 @@ const answer = (o: FakeCall) => {
   }
 }
 
-const live = (): SessionModel => {
+/** The environment's model, in force for any stage the routing row does not name: the local Anthropic key, when the
+ *  machine has one. */
+const live = (): SessionModel | undefined => {
+  const conn = localAnthropic()
+  if (!conn) return undefined
   // the proxy rides on Bun's fetch (provider connection.ts): on Node a live request goes direct and fails behind one
   if (!("Bun" in globalThis)) throw new Error("live model needs Bun: bun --bun vp run dev, or MODEL=fake")
-  const conn = localAnthropic()
-  if (!conn)
-    throw new Error("no connection: put an Anthropic key where provider's localAnthropic() reads it, or MODEL=fake")
   const caps = capabilities(conn)
   return {
     format: conn.format,
@@ -115,10 +125,30 @@ const live = (): SessionModel => {
     hat: process.env["HAT"] ?? conn.hat, // HAT=<id> puts a library hat on the dev connection
   }
 }
-const model: SessionModel =
-  process.env["MODEL"] === "fake" ? { ...fake(answer), prefill: false, hat: process.env["HAT"] } : live() // HAT works on the scripted model too
+const scripted = process.env["MODEL"] === "fake"
+const model = scripted ? { ...fake(answer), prefill: false, hat: process.env["HAT"] } : live() // HAT works on the scripted model too
+
+// First start on a developer machine: the local Anthropic key becomes the vault's one secret and the library's one
+// provider, its Haiku the default, so the settings page opens on what the dev loop already ran on.
+const key = localAnthropicKey()
+if (key && !data.providers.list().length && !data.secrets.list().length) {
+  data.secrets.put({ id: "anthropic", name: "Anthropic", type: "api_key", value: key })
+  data.providers.put({
+    id: "anthropic",
+    name: "Anthropic",
+    enabled: true,
+    defaultFormat: "anthropic",
+    endpoints: { anthropic: { url: "https://api.anthropic.com" } },
+    secret: "anthropic",
+    models: [
+      { id: "claude-haiku-5-5", effort: "low" },
+      { id: "claude-sonnet-5-5", effort: "low" },
+    ],
+  })
+  data.routing.write({ default: { provider: "anthropic", model: "claude-haiku-5-5" } })
+}
 const card = await loadCard(name)
-const lib = library({ data, card, player, model })
+const lib = library({ data, card, player, model, pinned: scripted }) // MODEL=fake scripts every stage, whatever the routing says
 if (lib.session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
   const greeting = card.greetings[Number(process.env["GREETING"])]
   if (greeting) lib.session.greet(greeting)

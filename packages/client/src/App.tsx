@@ -34,6 +34,7 @@ import {
   Warning,
 } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
+import { Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record } from "./record.ts"
@@ -731,6 +732,9 @@ export const App = () => {
       </Show>
       <Show when={pg() === "timeline"}>
         <Timeline />
+      </Show>
+      <Show when={pg() === "settings"}>
+        <Settings />
       </Show>
       <Show when={typeof pg() === "object"}>
         <Inspect id={(pg() as { inspect: Id }).inspect} />

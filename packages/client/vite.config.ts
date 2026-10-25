@@ -1,6 +1,7 @@
 import solid from "@solidjs/vite-plugin"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { fileURLToPath } from "node:url"
+import { FileSystemIconLoader } from "unplugin-icons/loaders"
 import Icons from "unplugin-icons/vite"
 import { defineConfig, type Plugin, type RunnableDevEnvironment } from "vite-plus"
 
@@ -26,5 +27,11 @@ const api = (): Plugin => ({
   },
 })
 
-// Icons: Iconify's `ph` set (Phosphor), each `~icons/ph/<name>` compiled into a Solid component.
-export default defineConfig({ plugins: [solid(), Icons({ compiler: "solid", scale: 1 }), api()] })
+// Icons: Iconify's `ph` set (Phosphor), each `~icons/ph/<name>` compiled into a Solid component; `~icons/lobe/<slug>`
+// is one mono LobeHub brand SVG (MIT, the static-svg package), read from disk per named import (src/family.tsx).
+const lobe = FileSystemIconLoader(
+  fileURLToPath(new URL("./node_modules/@lobehub/icons-static-svg/icons", import.meta.url)),
+)
+export default defineConfig({
+  plugins: [solid(), Icons({ compiler: "solid", scale: 1, customCollections: { lobe } }), api()],
+})
