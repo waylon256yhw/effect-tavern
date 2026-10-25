@@ -54,7 +54,7 @@ import {
   type Player,
   type Snippet,
 } from "./fragment.ts"
-import { folded, ledger, makeSummaries, narratorHistory } from "./history.ts"
+import { folded, ledger, makeSummaries, narratorHistory, type Policy } from "./history.ts"
 import {
   deliveredIn,
   deliveredOn,
@@ -216,7 +216,9 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       ? Schema.Struct(fired)
       : Schema.Struct(violated)
 }
-const policy = { keep: 2, block: 2 } // ponytail: turn counts; token budget when a real tokenizer is in the loop
+// ponytail: 8000 estimated tokens is a harness guess (about eight Chinese turns verbatim, well under any context window);
+// a connection's own window or an exact count (tokens.ts) would set it if one is ever wanted per model.
+const policy: Policy = { budget: 8000, keep: 2, block: 2 }
 
 /** Runs an action's stream and gives back the node it ended with. */
 export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn, E> =>
@@ -245,6 +247,7 @@ export const makeSession = ({
   players,
   persona,
   hat,
+  policy: P = policy,
 }: {
   card: Card
   player: Player // the harness default; a stored player wins over it
@@ -253,6 +256,7 @@ export const makeSession = ({
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
   persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
+  policy?: Policy // the fold boundary; tests pass a small budget to fold short scripted prose
 }) => {
   const modelFor = (p: Phase): SessionModel => ("default" in models ? (models[p] ?? models.default) : models)
   let player = players?.read() ?? given
@@ -295,6 +299,17 @@ export const makeSession = ({
     return itemText((turnOf(ref.node).products[ref.product] as unknown[])[ref.index])
   }
   const summaries = makeSummaries<Beat>(textOf)
+  // A turn's cost in the narrator's transcript (input, prose, the lore delivered with it), memoized: a turn is immutable.
+  const costs = new WeakMap<Turn, number>()
+  const cost = (t: Turn) => {
+    let c = costs.get(t)
+    if (c === undefined)
+      costs.set(t, (c = tokens([t.input.text, proseOf(t.reply), ...deliveredIn(t).map(textOf)].join("\n"))))
+    return c
+  }
+  const foldOf = (path: readonly Turn[]) => folded(path, cost, P)
+  /** The one summary every view of this path folds to (narrator, ledger), the same cached object. */
+  const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   let seeds = 0
 
   const wording = (id: string) =>
@@ -377,11 +392,14 @@ export const makeSession = ({
     const s = gated(path)
     const seen = deliveredOn(path)
     const seenKeys = new Set(seen.map(key))
+    const prefix = new Set(path.slice(0, foldOf(path)).map((t) => t.id))
     const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
     const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
     // The product's fold decides which rows exist (a keyed table is the newest row per key: a person re-rowed with what
     // a later scene added is one entry); the seen filter runs after it, so reading the newest row never brings a
-    // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did).
+    // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did). The
+    // fold filter runs after it too: a row enters the Index only once its node is folded; in the tail its prose is still
+    // verbatim in the narrator's transcript, and a lookup would tell it again.
     const recall = products
       .filter((p) => p.recall !== undefined)
       .flatMap((p) =>
@@ -390,7 +408,7 @@ export const makeSession = ({
           path.map((t) => ({ id: t.id, v: t.products[p.id] })),
         ),
       )
-      .filter((e) => !seenKeys.has(`${e.id}#1`))
+      .filter((e) => !seenKeys.has(`${e.id}#1`) && prefix.has(entryRef(e.id)!.node))
       .map((e) => ({ id: e.id, hook: e.hook }))
     return [...lore, ...recall]
   }
@@ -438,7 +456,7 @@ export const makeSession = ({
       { reasoningBack: M.reasoningBack, ttl: M.ttl, ...(worn && { hat: worn }) },
     )
   }
-  const ledgerOf = (path: readonly Turn[]) => ledger(path, (t) => settledOf(path, t).events)
+  const ledgerOf = (path: readonly Turn[]) => ledger(path, (t) => settledOf(path, t).events, summaryOf(path))
   const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: textOf(d) }))
 
   // ───────── Calls, each announced before and reported after ─────────
@@ -656,7 +674,7 @@ export const makeSession = ({
       }
       // narrate, streamed, with truncation recovery and at most one correction rewrite
       const fed = known(path)
-      const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
+      const sum = summaryOf(path)
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
