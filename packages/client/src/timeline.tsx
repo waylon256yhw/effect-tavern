@@ -1,5 +1,5 @@
 // The Timeline: the session's log tree as a page over the reader, the Inspector's sibling (ported from
-// docs/timeline-prototype.html against docs/timeline-prototype-brief.md). Every thread, branch and version as a
+// docs/timeline-prototype.html against docs/timeline-prototype-brief.md). Every branch and version as a
 // station on a rail: a knot on the line, two lines of text beside it; src/lanes.ts places them and never reads head,
 // so head, the reading line and the draft are highlights over a picture that holds still. Two steps: a tap selects a
 // station and the right pane shows it (where a checkout would land, what is below it, its versions); the pane's
@@ -209,7 +209,7 @@ export const Timeline = () => {
     >
       <div class="row1">
         <span class="nid">Draft</span>
-        <span class="where">{p.c.parent === null ? "new thread" : `#${p.c.parent}`}</span>
+        <span class="where">{p.c.parent === null ? "root" : `#${p.c.parent}`}</span>
       </div>
       <div class="row2">{d()?.input.text || d()?.input.note || d()?.text || "Writing…"}</div>
     </div>
@@ -224,8 +224,7 @@ export const Timeline = () => {
         <h1>{view()?.title}</h1>
         <span class="spacer" />
         <span class="sums">
-          {laid().threads.filter((t) => t.root !== null).length} threads · {all().nodes.size} nodes · head{" "}
-          {all().head === null ? "null" : `#${all().head}`}
+          {all().nodes.size} nodes · head {all().head === null ? "null" : `#${all().head}`}
         </span>
         <span class="seg" role="tablist" aria-label="View">
           <button
@@ -293,9 +292,7 @@ export const Timeline = () => {
                       width: `${Math.max(260, t().lanes * (LANE + GAP) - GAP)}px`,
                     }}
                   >
-                    <span>
-                      Thread {i() + 1} <span class="dim">· root {t().root === null ? "draft" : `#${t().root}`}</span>
-                    </span>
+                    <span>Root {t().root === null ? "draft" : `#${t().root}`}</span>
                     <span class="dim">
                       {t().root === null ? 1 : L.below(all(), t().root!) + 1} nodes
                       <Show when={t().root !== null && heading(view()?.heading, node(t().root!)!)}>
@@ -393,7 +390,6 @@ export const Timeline = () => {
                     <span>
                       parent <b>{n().parent === null ? "none" : `#${n().parent}`}</b>
                     </span>
-                    <span>thread {laid().at.get(n().id)!.thread + 1}</span>
                     <span>
                       <b>{n().turn.sibling ?? (n().parent === null ? "root" : "act")}</b>
                       <Show when={siblings().length > 1}>
