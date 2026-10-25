@@ -566,24 +566,33 @@ const program = Effect.gen(function* () {
   assert.deepEqual([v4.read, untold(v4.id)], [[{ id: "li", layer: 2 }], []])
   // A recall row enters the Index only once its node folds: in the tail its prose is still verbatim in the transcript.
   // (Budget 0: two turns kept, the boundary a block of two behind them; `untold(x)` is what the turn after x may read.)
-  const waits = (from: Turn, k: number) =>
+  // The row's node sits at index i on its path; it is absent on every wait until the boundary passes i, then present.
+  // Counted from i, not hard-coded: the turns before it belong to other assertions and move when they do.
+  const depth = (id: number) => {
+    let d = 0
+    for (let n = V.node(id); n.parent != null; n = V.node(n.parent)) d++
+    return d
+  }
+  const settles = (from: Turn, id: string) =>
     Effect.gen(function* () {
+      const i = depth(from.id)
+      let k = 0
+      while (Math.floor((i + 1 + ++k - 2) / 2) * 2 <= i); // the first k with folded(i + 1 + k) > i, keep 2 block 2
       const seen: string[][] = []
       for (let j = 0; j < k; j++) seen.push(untold((from = yield* go(V.act(from.id, { text: "wait" }))).id))
-      return { at: from, seen }
+      assert.deepEqual(seen, [...Array<string[]>(k - 1).fill([]), [id]])
+      return from
     })
   const r1 = yield* go(V.act(v4.id, { text: "names li" }))
   assert.deepEqual([r1.products.people, untold(r1.id)], [[{ name: "Li", note: `N#${n}` }], []])
-  const q1 = yield* waits(r1, 3)
-  assert.deepEqual(q1.seen, [[], [], [`people@${r1.id}#0`]]) // r1 folds at eight turns on the path
+  const f1 = yield* settles(r1, `people@${r1.id}#0`)
   // Two rows with one key are one index entry, the newest row, and the fold runs first: with the old row folded and the
   // new one in the tail, the key is absent, not the old row back.
-  const r2 = yield* go(V.act(q1.at.id, { text: "names li" }))
+  const r2 = yield* go(V.act(f1.id, { text: "names li" }))
   assert.deepEqual(untold(r2.id), [])
-  const q2 = yield* waits(r2, 3)
-  assert.deepEqual(q2.seen, [[], [], [`people@${r2.id}#0`]])
+  const f2 = yield* settles(r2, `people@${r2.id}#0`)
   // Reading the newest row tells the key: the superseded row does not come back as unread.
-  const r3 = yield* go(V.act(q2.at.id, { text: "about Li" }))
+  const r3 = yield* go(V.act(f2.id, { text: "about Li" }))
   assert.deepEqual([r3.read, untold(r3.id)], [[{ id: `people@${r2.id}#0`, layer: 1 }], []])
   // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
   let light = 0
