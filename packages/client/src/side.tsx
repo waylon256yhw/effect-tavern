@@ -28,8 +28,15 @@ const ago = (at: number): string => {
 }
 
 // The switches named in the language of the sentences they compile to (fragment.ts); a value not set leaves the
-// card's own text in force, and pressing the set one again unsets it.
-const SWITCHES: { key: keyof Writing; label: string; values: [string | boolean, string][] }[] = [
+// card's own text in force, and pressing the set one again unsets it. A switch with a `default` (what the runtime does
+// when unset) shows it pressed while unset; pressing the default unsets, pressing another sets it.
+interface Switch {
+  key: keyof Writing
+  label: string
+  values: [string | boolean, string][]
+  default?: string | boolean
+}
+const SWITCHES: Switch[] = [
   {
     key: "pov",
     label: "视角",
@@ -72,8 +79,12 @@ const SWITCHES: { key: keyof Writing; label: string; values: [string | boolean, 
       [true, "润色"],
       [false, "不润色"],
     ],
+    default: true,
   },
 ]
+const pressed = (s: Switch, w: Writing | undefined) => w?.[s.key] ?? s.default
+const pressing = (s: Switch, w: Writing | undefined, v: string | boolean) =>
+  v === (s.default ?? w?.[s.key]) ? undefined : v
 /** The switches in force, by name; none set, the card's. */
 const chosen = (w: Writing | undefined): string[] => {
   const on = SWITCHES.flatMap((s) => s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => l))
@@ -247,8 +258,8 @@ export const Session = (props: { at: string }) => {
                     {(v) => (
                       <button
                         type="button"
-                        aria-pressed={me()?.writing?.[s().key] === v()[0] ? "true" : "false"}
-                        onClick={() => set(s().key, me()?.writing?.[s().key] === v()[0] ? undefined : v()[0])}
+                        aria-pressed={pressed(s(), me()?.writing) === v()[0] ? "true" : "false"}
+                        onClick={() => set(s().key, pressing(s(), me()?.writing, v()[0]))}
                       >
                         {v()[1]}
                       </button>

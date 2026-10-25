@@ -252,11 +252,11 @@ const Latest = () => {
 /** The node being written: anchored at the top of the screen when it starts, a blinking cursor where the next
  *  character lands, the die while the beat is judged. A rewrite (check failed) blows the first draft away as dust
  *  (Telegram's) and writes the second from the top; the dead draft keeps its place, so the column holds still. Once the
- *  prose is done (check, record) the cursor goes and the Record slot waits with three dots. A failed turn stays as a
+ *  prose is done (check, polish, record) the cursor goes and the Record slot waits with three dots. A failed turn stays as a
  *  grey ghost with the error under it; its line is back in the box. */
 const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) => {
   onSettled(anchor)
-  const settling = () => props.phase === "check" || props.phase === "record"
+  const settling = () => props.phase === "check" || props.phase === "polish" || props.phase === "record"
   const writing = () => !settling() && !props.error
   return (
     <section class={{ draft: true, dead: props.error !== null }}>
