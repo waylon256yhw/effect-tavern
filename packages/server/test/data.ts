@@ -74,6 +74,29 @@ data.hats.put(hat)
 assert.deepEqual(data.hats.list(), [hat])
 data.hats.del("h")
 assert.deepEqual(data.hats.list(), [])
+// Secrets and providers: the same named-row shape; routing: one row, JSON in, the same out.
+const secret = { id: "s", name: "Key", type: "api_key" as const, value: "sk-0123456789abcdef" }
+data.secrets.put(secret)
+assert.deepEqual(data.secrets.list(), [secret])
+const provider = {
+  id: "p",
+  name: "Relay",
+  enabled: true,
+  defaultFormat: "anthropic" as const,
+  endpoints: { anthropic: { url: "https://relay.example/v1", exactPrefix: true } },
+  secret: "s",
+  proxy: false as const,
+  models: [{ id: "m", format: "openai-compatible" as const, capabilities: { prefill: true } }],
+}
+data.providers.put(provider)
+assert.deepEqual(data.providers.list(), [provider])
+data.providers.del("p")
+data.secrets.del("s")
+assert.deepEqual([data.providers.list(), data.secrets.list()], [[], []])
+assert.equal(data.routing.read(), undefined)
+const routing = { default: { provider: "p", model: "m" }, stages: { lookup: { provider: "p", model: "n" } } }
+data.routing.write(routing)
+assert.deepEqual(data.routing.read(), routing)
 assert.equal(data.player.read(), undefined)
 data.player.write({ writing: { pov: "second" }, global: [], forCard: {}, persona: { wuxia: "friend" } })
 assert.deepEqual(data.player.read(), {
