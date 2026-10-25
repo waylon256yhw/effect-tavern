@@ -517,6 +517,17 @@ const program = Effect.gen(function* () {
   // Reading the newest row tells the key: the superseded row does not come back as unread.
   const r3 = yield* go(V.act(r2.id, { text: "about Li" }))
   assert.deepEqual([r3.read, untold(r3.id)], [[{ id: `people@${r2.id}#0`, layer: 1 }], []])
+  // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
+  let light = 0
+  const lookup = { ...fake((o) => (light++, script(o))), prefill: true }
+  const B = makeSession({ card: full, player, model: { default: model, lookup } })
+  const before = made().length
+  yield* go(B.act(null, { text: "about li" }))
+  const phases = made()
+    .slice(before)
+    .map((e) => e.phase)
+  assert.deepEqual([light, phases.filter((p) => p === "lookup").length], [1, 1])
+  assert.ok(phases.includes("narrate") && phases.includes("record")) // unnamed: the default answered them
   console.log(str(lastNarr()))
 })
 

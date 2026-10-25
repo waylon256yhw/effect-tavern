@@ -96,7 +96,7 @@ export type Change = Log.Change<Node>
 export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
 
-/** The connection as the session sees it: one Model for every stage; a real harness binds stages to connections. */
+/** The connection as the session sees it: a Model with the settings the session reads off it. */
 export type SessionModel = Model & {
   prefill: boolean
   reasoningBack?: boolean
@@ -104,6 +104,9 @@ export type SessionModel = Model & {
   maxOutputTokens?: number
   ttl?: CacheTtl // the head's cache lifetime; the connection's setting
 }
+/** Stages bound to connections: one SessionModel for every stage, or a default plus the stages named apart. lookup and
+ *  check can take a light model; record answers readouts (state judgement), not pure extraction: never route it down by default. */
+export type SessionModels = SessionModel | ({ default: SessionModel } & Partial<Record<Phase, SessionModel>>)
 
 // ───────── The session's own words ─────────
 // Every instruction the loop says to the model, as fragments with ids, in the open. Data lines (State:, Actions:,
@@ -221,18 +224,19 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
 export const makeSession = ({
   card,
   player: given,
-  model: M,
+  model: models,
   store,
   players,
   persona,
 }: {
   card: Card
   player: Player // the harness default; a stored player wins over it
-  model: SessionModel
+  model: SessionModels
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
   persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
 }) => {
+  const modelFor = (p: Phase): SessionModel => ("default" in models ? (models[p] ?? models.default) : models)
   let player = players?.read() ?? given
   /** The player layer as the frame reads it: the persona in force, when there is one, joins the per-card layer last. */
   const layered = (): Player => {
@@ -397,8 +401,8 @@ export const makeSession = ({
   /** A stage's document: the frame at this state, the input and what a thought in it is, then the stage's own ask. */
   const ask = (state: State, input: Input, a: Ask) =>
     request({ frame: headOf(frame(layered(), card), { state }), input, thought: wording("input.thought") }, a, {
-      reasoningBack: M.reasoningBack,
-      ttl: M.ttl,
+      reasoningBack: modelFor(a.stage).reasoningBack,
+      ttl: modelFor(a.stage).ttl,
     })
   const ledgerOf = (path: readonly Turn[]) => ledger(path, (t) => settledOf(path, t).events)
   const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: textOf(d) }))
@@ -414,7 +418,12 @@ export const makeSession = ({
     Effect.gen(function* () {
       yield* emit({ kind: "stage", phase })
       const t0 = Date.now()
-      const r = yield* object(M, schema, msgs, { name: phase, effort: "off", temperature: 0, maxOutputTokens })
+      const r = yield* object(modelFor(phase), schema, msgs, {
+        name: phase,
+        effort: "off",
+        temperature: 0,
+        maxOutputTokens,
+      })
       yield* emit({ kind: "call", phase, msgs, out: r.value, usage: r.usage, ms: Date.now() - t0 })
       return r.value
     })
@@ -605,6 +614,7 @@ export const makeSession = ({
       const fed = known(path)
       const sum = summaries.compress(path, path.length - folded(path.length, policy.keep, policy.block))
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
+      const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
       // A stopped stream ends after the current pull without the `finish` part: the text so far is the reply, usage unknown.
       let cut = false
