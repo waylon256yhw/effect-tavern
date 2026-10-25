@@ -67,14 +67,23 @@ export const open = (file: string) => {
         ),
       del: (id: string) => void q("delete from persona where id = ?").run(id),
     },
-    /** One card's stories, newest first: a story is a log tree played as one persona (by id; none = the card's default). */
+    /** One card's stories, newest first: a story is a log tree played as one persona (by id; none = the card's default),
+     *  with its size and its head node (what a list names it by), parsed for the caller to read. */
     stories: {
       list: (card: string) =>
-        q("select id, persona, updated from story where card = ? order by updated desc, id desc").all(card) as {
-          id: Id
-          persona: string | null
-          updated: number
-        }[],
+        (
+          q(
+            `select s.id, s.persona, s.updated, (select count(*) from node where story = s.id) as turns,
+               (select json from node where story = s.id and id = s.head) as json
+             from story s where card = ? order by updated desc, id desc`,
+          ).all(card) as Row[]
+        ).map((r) => ({
+          id: r["id"] as Id,
+          persona: r["persona"] as string | null,
+          updated: r["updated"] as number,
+          turns: r["turns"] as number,
+          head: parse<unknown>(r) ?? null,
+        })),
       create: (card: string, persona?: string): Id =>
         Number(
           q("insert into story (card, persona, updated) values (?, ?, ?)").run(card, persona ?? null, Date.now())

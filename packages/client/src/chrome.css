@@ -243,24 +243,6 @@
   margin-top: 2px;
 }
 
-/* the scene list: one ghost row per run of a title; the Contents sheet on phones, the left card on desktop */
-.scenes {
-  display: grid;
-}
-.scene {
-  min-height: var(--control);
-  padding: 0 var(--space-2);
-  border-radius: var(--radius);
-  text-align: left;
-  font-size: var(--text-body);
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.scene:hover {
-  background: var(--alpha-1);
-}
 .icon[aria-pressed="true"],
 .icon[aria-expanded="true"] {
   color: var(--ink);
@@ -458,6 +440,251 @@
   background: var(--danger);
   color: #fff;
 }
+/* the persona form in the same dialog: a name and a text, the keys in a row */
+.confirm form {
+  display: grid;
+  gap: var(--space-2);
+}
+.confirm .field {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-prose);
+  outline: none;
+  resize: none;
+}
+.confirm .field:focus {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+}
+.confirm .spacer {
+  flex: 1;
+}
+
+/* the session (side.tsx): the card, this card's stories, the writing switches, the pin, the pages; the left card on
+   desktop, the sheet the title opens on a phone. Nothing here wraps but a persona's text in its form. */
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.sheet .session {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
+}
+.session h1 {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side h2,
+.session h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  min-height: var(--control-sm);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.session h2 .icon {
+  width: var(--control-sm);
+  height: var(--control-sm);
+}
+.session h2 .icon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.session h2 .icon:first-of-type {
+  margin-left: auto;
+}
+.side section,
+.session section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* the card: its name and its line, one button to the card page */
+.cardhead {
+  display: grid;
+  gap: var(--space-1);
+  margin: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+  text-align: left;
+}
+.cardhead:hover {
+  background: var(--ghost-hover);
+}
+.cardhead p {
+  margin: 0;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* a story row: the player's last line, and under it the persona, the size and the time; the open one sits on a tint */
+.stories ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+.story {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+.story:hover:not(:disabled) {
+  background: var(--ghost-hover);
+}
+.story[aria-current] {
+  background: var(--alpha-1);
+}
+.story .first,
+.story .meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.story .meta {
+  font-size: var(--text-footnote);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+/* the session's menus hang under their section's header row, exactly as wide as the content column: never past the
+   card's edge */
+.session .stories h2 {
+  anchor-name: --stories;
+}
+.session .writing h2 {
+  anchor-name: --writing;
+}
+.session .snippets {
+  position-anchor: auto;
+  position-area: bottom;
+  box-sizing: border-box;
+  width: anchor-size(width);
+  min-width: 0;
+  margin: var(--space-1) 0 0;
+}
+.session .stories .snippets {
+  position-anchor: --stories;
+}
+.session .writing .snippets {
+  position-anchor: --writing;
+}
+.session .snippets .hint {
+  display: none; /* a column this narrow shows two letters of a hint: the names stand alone */
+}
+/* a persona row: the name is the pick, the pencil edits; both in the menu's columns */
+.snippets .pair {
+  padding-right: var(--space-1);
+}
+.snippets .pair .name {
+  padding: 0;
+  text-align: left;
+  line-height: var(--control);
+  outline: none;
+}
+.snippets .pair .icon {
+  width: var(--control-sm);
+  height: var(--control-sm);
+}
+.snippets .pair:has(.name:focus-visible) {
+  background: var(--ghost-hover);
+}
+/* the writing switches: one line of what is set; the menu is four rows of chips, the set one outlined */
+.writing fieldset {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-1) 2px; /* the menu is the content column's width: 192px holds three four-character chips only with the padding this thin */
+  border: 0;
+}
+/* the setting in force: one chip per switch, stacked, the menu's anchor */
+.writing .chosen {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  box-sizing: content-box;
+}
+.writing .chosen:hover:not(:disabled) {
+  background: var(--ghost-hover);
+}
+.writing legend {
+  padding: 0;
+  font-size: var(--text-caption);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.writing .seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.writing .seg button {
+  height: var(--control-sm);
+  padding: 0 2px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.writing .seg button[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.pinned p {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ink-2);
+  text-align: left;
+}
+.pinned svg {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.pinned span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the pages that look at the story, at the bottom */
+.tools {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: auto;
+}
 
 /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */
 @media (min-width: 64rem) {
@@ -528,46 +755,29 @@
     scrollbar-color: transparent transparent;
     transition: scrollbar-color var(--dur-3) var(--ease);
   }
-  .side:hover {
+  .side:hover,
+  .glance .scrolls:hover {
     scrollbar-color: var(--alpha-2) transparent;
   }
-  .side h1 {
-    margin: 0;
-    font-size: var(--text-title);
-    font-weight: 600;
-    line-height: var(--leading-tight);
-    white-space: nowrap;
+  .side {
+    align-self: stretch;
+  }
+  .side .session {
+    flex: 1;
+  }
+  .glance {
     overflow: hidden;
-    text-overflow: ellipsis;
   }
-  .side h2 {
-    margin: 0;
-    font-size: var(--text-caption);
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .side section {
-    gap: var(--space-2);
-  }
-  .pinned p {
+  .glance .scrolls {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--ink-2);
-    text-align: left;
-  }
-  .pinned svg {
-    flex: none;
-    width: var(--icon-sm);
-    height: var(--icon-sm);
-  }
-  .pinned span {
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex-direction: column;
+    gap: var(--space-5);
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--dur-3) var(--ease);
   }
   .panel {
     align-self: stretch;

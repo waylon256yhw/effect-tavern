@@ -1,15 +1,12 @@
 // The composer: the one raised object under the column. The box, the format keys, the snippets menu (+, or / on an
-// empty box), the ⋯ Session menu (the Inspector, Start over, Delete story), the channel chip, Send / Stop.
+// empty box), the channel chip, Send / Stop. The session's own actions live beside the reading (side.tsx).
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { openCard } from "./card.tsx"
-import { Check, Close, Edit, Insert, More, PinFill, Send, Snippets, Stop } from "./icons.tsx"
+import { Check, Close, Edit, Insert, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
-import { openInspector } from "./inspector.tsx"
-import { openTimeline } from "./timeline.tsx"
-import { aside, card, compose, error, log, path, pin, registry, revising, started, turnOf } from "./store.ts"
-import { dropNodes } from "./wire.ts"
+import { roam } from "./side.tsx"
+import { aside, card, compose, path, pin, registry, revising, turnOf } from "./store.ts"
 
 export const Composer = (props: {
   busy: boolean
@@ -39,25 +36,6 @@ export const Composer = (props: {
   const line = read(path)
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
-  // A thread is a root's subtree, so starting over is a new root: the card page, where the opening is picked (or the
-  // story begun on an empty line); the old thread stays as the first turn's version. Deleting a thread drops its root;
-  // an emptied journal lands on the card page too. Neither acts on a thread with no player turn yet: there is nothing
-  // to leave behind or take.
-  const begun = read(started)
-  const clean = () => {
-    registry.set(pin, null)
-    registry.set(error, null)
-  }
-  const startOver = () => {
-    clean()
-    openCard()
-  }
-  let confirmDrop!: HTMLDialogElement
-  const deleteStory = async () => {
-    clean()
-    await dropNodes(registry.get(path)[0]!.turn.id) // the item is disabled while the line is empty
-    if (registry.get(log).nodes.size === 0) openCard()
-  }
   const isNote = () => !acting() || toNarratorOn()
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
   const prompt = () => (isNote() ? "To the narrator, not in the story…" : "Your line…")
@@ -107,16 +85,6 @@ export const Composer = (props: {
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
   const ime = imeController(submit)
   const keep = (e: Event) => e.preventDefault() // a tap on a control must not take focus (and the phone's keyboard) from the box
-  // The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Tab leaves the menu and closes it;
-  // Escape and outside clicks are the popover's.
-  const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
-    const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")]
-    const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
-    const d = { ArrowDown: 1, ArrowUp: -1, Home: -i, End: items.length - 1 - i }[e.key]
-    if (d === undefined) return
-    e.preventDefault()
-    items.at((i + d) % items.length)?.focus()
-  }
   return (
     <form
       class="composer"
@@ -199,72 +167,6 @@ export const Composer = (props: {
               <Items of={toNarrator()} />
             </div>
           </Show>
-          {/* the session's own menu, apart from the card's language in Snippets: what to look at (the Inspector) */}
-          <button
-            type="button"
-            class="icon"
-            aria-label="Session"
-            aria-haspopup="menu"
-            popovertarget="session"
-            onPointerDown={keep}
-          >
-            <More />
-          </button>
-          <div
-            id="session"
-            class="snippets"
-            popover
-            role="menu"
-            onKeyDown={roam}
-            onToggle={(e) =>
-              e.newState === "open" && e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
-            }
-          >
-            <For
-              each={[
-                { name: "Card", hint: "What this card is, and its openings", go: openCard },
-                { name: "Inspector", hint: "What the engine did this turn", go: openInspector },
-                { name: "Timeline", hint: "Every thread, branch and version of this story", go: openTimeline },
-                { name: "Start over", hint: "A new story; this one stays as a version", go: startOver, off: true },
-                {
-                  name: "Delete story",
-                  hint: "Every turn of this story, for good",
-                  go: () => confirmDrop.showModal(),
-                  off: true,
-                },
-              ]}
-              keyed={(i) => i.name}
-            >
-              {(i) => (
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="item"
-                  tabindex="-1"
-                  disabled={i().off && (props.busy || !begun())}
-                  onClick={(e) => {
-                    e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()
-                    i().go()
-                  }}
-                >
-                  <span class="name">{i().name}</span>
-                  <span class="hint">{i().hint}</span>
-                </button>
-              )}
-            </For>
-          </div>
-          {/* the one destructive action asks once, in the app's own dialog: Cancel on the left, the deed in red */}
-          <dialog class="confirm" ref={(el) => (confirmDrop = el)} closedby="any">
-            <p>Delete this story? Every turn in it is gone for good.</p>
-            <div class="row">
-              <button type="button" class="chip state" onClick={() => confirmDrop.close()}>
-                Cancel
-              </button>
-              <button type="button" class="chip danger" onClick={() => (confirmDrop.close(), void deleteStory())}>
-                Delete
-              </button>
-            </div>
-          </dialog>
           <Show when={revise()}>
             {(r) => (
               <span class="chip state">

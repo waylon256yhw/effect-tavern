@@ -207,7 +207,8 @@ section:has(> .editor) > .actions {
   gap: var(--space-1);
 }
 
-/* the bar on top (phone): the card's title, and Status with a dot when this turn moved the state */
+/* the bar on top (phone): the card's title (a tap opens the session sheet), and Status with a dot when this turn
+   moved the state */
 .topbar {
   box-sizing: border-box;
   height: calc(var(--topbar) + var(--safe-top));
@@ -217,9 +218,12 @@ section:has(> .editor) > .actions {
   gap: var(--space-2);
   background: var(--surface-1);
 }
-.topbar h1 {
+.topbar .title {
   flex: 1;
   min-width: 0;
+  text-align: left;
+}
+.topbar h1 {
   margin: 0;
   font-size: var(--text-heading);
   font-weight: 600;

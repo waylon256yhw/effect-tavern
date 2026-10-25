@@ -4,7 +4,7 @@
 // and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
-import type { Format, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Format, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
@@ -30,9 +30,9 @@ export interface CardView {
   id: string
   title: string
   summary?: string // one line on what this card is
-  heading?: string // what titles a turn (Card.heading); absent, turns have no titles and there is no scene list
+  heading?: string // what titles a turn (Card.heading); absent, turns have no titles
   input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
-  greetings: readonly Greeting[] // the openings: a new thread starts with one (greet, by index) or, with none, with the player's line
+  greetings: readonly Greeting[] // the openings: a story starts with one (greet, by index) or, with none, with the player's line
   director: boolean
   guard: number // must-nots check enforces: a count, never the words
   lore: { entries: number; layers: number } // the card's size; what is readable now is on the node
@@ -44,6 +44,23 @@ export interface CardView {
   format: readonly Format[]
 }
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
+/** The library (GET /stories, /personas, /player): this card's stories and which is open (a story is one root's tree,
+ *  played as one persona), the player's personas, and the player layer the writing switches live in. Read at open. */
+export interface StoryRow {
+  id: Id
+  persona: string | null
+  updated: number
+  turns: number
+  last: string // the player's last line (the head's), or the head's first words; "" when empty
+}
+export interface Persona {
+  id: string
+  name: string
+  text: string
+}
+export const stories = Atom.make<{ current: Id; stories: readonly StoryRow[] } | null>(null).pipe(Atom.keepAlive)
+export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
+export const player = Atom.make<Player | null>(null).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
 export const compose = Atom.make("") // the composer's text; an Options row writes here and never sends
 export const aside = Atom.make(false) // this one send goes to the narrator (participant mode's deviation); clears after the send
@@ -79,8 +96,6 @@ export const turnOf = (line: readonly Node[], id: Id): string => {
   const i = line.findIndex((n) => n.id === id)
   return i >= 0 ? `turn ${i + 1}` : `#${id}`
 }
-/** Whether the reading line holds a player's turn: what Start over leaves behind and Delete story takes. */
-export const started = Atom.make((get) => get(path).some((n) => n.turn.input.text || n.turn.input.note))
 
 export const prose = (n: Node): string =>
   n.turn.reply

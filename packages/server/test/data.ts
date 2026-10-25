@@ -23,13 +23,13 @@ assert.deepEqual(L.snapshot(back.log), { nodes: [{ id: 0, parent: null, text: "r
 assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
 assert.throws(() => data.store<N>(99).read(), /no story 99/)
 
-// Stories list newest first per card; deleting one cascades to its nodes.
+// Stories list newest first per card, each with its size and head node; deleting one cascades to its nodes.
 const second = data.stories.create("wuxia")
 assert.deepEqual(
-  data.stories.list("wuxia").map((s) => [s.id, s.persona]),
+  data.stories.list("wuxia").map((s) => [s.id, s.persona, s.turns, s.head]),
   [
-    [second, null],
-    [story, "friend"],
+    [second, null, 0, null],
+    [story, "friend", 2, { id: 2, parent: 0, text: "d" }],
   ],
 )
 assert.equal(data.stories.list("other").length, 0)

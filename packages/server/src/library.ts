@@ -48,7 +48,14 @@ export const library = ({
       return current
     },
     stories: {
-      list: () => data.stories.list(card.id),
+      /** A row names its story by the player's last line (the head's), or the head's first words; empty, "". */
+      list: () =>
+        data.stories.list(card.id).map(({ head, ...s }) => {
+          const t = head as Turn | null
+          const said = t?.input.text || t?.input.note
+          const told = t?.reply.find((p) => p.type === "text")
+          return { ...s, last: said || (told ? told.text.trimStart().split("\n")[0]! : "") }
+        }),
       open: to,
       create: (persona?: string) => to(data.stories.create(card.id, persona)),
       del: (id: Id) => {

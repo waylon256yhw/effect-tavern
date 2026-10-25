@@ -178,6 +178,8 @@ const run = async (inspect: boolean) => {
     const fresh = sse(await (await post({ kind: "act", parent: null, input: { text: "who am i" } })).text())
     const head = (fresh.find((e) => e.event === "call")!.data as Extract<Event, { kind: "call" }>).msgs
     assert.equal(JSON.stringify(head).includes(monk.text), inspect)
+    const listed = (await (await fetch(`${base}/stories`)).json()) as { stories: { turns: number; last: string }[] }
+    assert.deepEqual([listed.stories[0]!.turns, listed.stories[0]!.last], [1, "who am i"]) // the row is named by the player's last line
     assert.equal(
       ((await (await fetch(`${base}/stories/${first}`, { method: "PUT" })).json()) as { current: number }).current,
       first,

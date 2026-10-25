@@ -2,7 +2,7 @@
 // clues with pinnability from `readable`, the pin's fate, notes; an unchanged root yields nothing. Then the turn
 // heading under a field path or a product key, and the reading line folded into scene runs.
 import assert from "node:assert/strict"
-import { heading, record, scenes, status } from "../src/record.ts"
+import { heading, record, status } from "../src/record.ts"
 
 const rules = {
   fields: [
@@ -68,19 +68,4 @@ assert.equal(heading("mood", at(1, { mood: "high" })), "high")
 assert.equal(heading("scene.place", at(1, {}, { scene: { place: "竹林小径" } })), "竹林小径")
 assert.equal(heading("scene.place", at(1, {}, { scene: { place: "" } })), undefined)
 assert.equal(heading("scene.place", at(1, {})), undefined)
-// Scenes: runs of one title along the line; an untitled node joins the run before it; the id is the run's first node
-assert.deepEqual(
-  scenes("scene.place", [
-    at(1, {}, { scene: { place: "竹林" } }),
-    at(2, {}, { scene: { place: "竹林" } }),
-    at(3, {}),
-    at(4, {}, { scene: { place: "渡口" } }),
-    at(5, {}, { scene: { place: "竹林" } }),
-  ]),
-  [
-    { title: "竹林", id: 1 },
-    { title: "渡口", id: 4 },
-    { title: "竹林", id: 5 },
-  ],
-)
 console.log("ok")

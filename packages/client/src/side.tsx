@@ -1,0 +1,336 @@
+// The session beside the reading: what holds for the whole story and is byte-stable in the request head: the card,
+// this card's stories (which one is open, its persona), the writing switches, the armed pin, and the two pages that
+// look at the story (Timeline, Inspector). The left card on desktop; on a phone, the sheet the title opens. Both can
+// be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a story is one root's tree
+// played as one persona, fixed when it is made (the library rebuilds the session on open); a persona is picked when
+// a story is started, and edited from the same menu.
+import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
+import { createSignal, For, Show } from "solid-js"
+import { read } from "./bridge.ts"
+import { openCard } from "./card.tsx"
+import { Edit, Pin, Probe, Snippets, Trash, Tree } from "./icons.tsx"
+import { openInspector } from "./inspector.tsx"
+import { card, draft, error, path, type Persona, personas, pin, player, stories } from "./store.ts"
+import { openTimeline } from "./timeline.tsx"
+import { deletePersona, deleteStory, newStory, openStory, putPersona, putPlayer } from "./wire.ts"
+
+const units: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["day", 864e5],
+  ["hour", 36e5],
+  ["minute", 6e4],
+]
+const rel = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
+/** "2 hours ago", "yesterday", "now". */
+export const ago = (at: number, now = Date.now()): string => {
+  const d = at - now
+  const u = units.find(([, ms]) => Math.abs(d) >= ms)
+  return u ? rel.format(Math.round(d / u[1]), u[0]) : "now"
+}
+
+// The switches named in the language of the sentences they compile to (fragment.ts); a value not set leaves the
+// card's own text in force, and pressing the set one again unsets it.
+const SWITCHES: { key: keyof Writing; label: string; values: [string | boolean, string][] }[] = [
+  {
+    key: "pov",
+    label: "视角",
+    values: [
+      ["second", "第二人称"],
+      ["third", "第三人称"],
+      ["none", "无主角"],
+    ],
+  },
+  {
+    key: "echo",
+    label: "引言",
+    values: [
+      [true, "转述言行"],
+      [false, "直接反应"],
+    ],
+  },
+  {
+    key: "agency",
+    label: "主导",
+    values: [
+      ["strict", "仅限输入"],
+      ["free", "允许续写"],
+    ],
+  },
+  {
+    key: "verbosity",
+    label: "篇幅",
+    values: [
+      ["concise", "简短"],
+      ["medium", "适中"],
+      ["detailed", "详尽"],
+    ],
+  },
+]
+/** The switches in force, by name; none set, the card's. */
+export const chosen = (w: Writing | undefined): string[] => {
+  const on = SWITCHES.flatMap((s) => s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => l))
+  return on.length ? on : ["跟随卡片"]
+}
+
+/** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
+export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")]
+  const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
+  const d = { ArrowDown: 1, ArrowUp: -1, Home: -i, End: items.length - 1 - i }[e.key]
+  if (d === undefined) return
+  e.preventDefault()
+  items.at((i + d) % items.length)?.focus()
+}
+const closeUp = (el: HTMLElement) => {
+  el.closest<HTMLElement>("[popover]")?.hidePopover()
+  el.closest("dialog")?.close() // the phone's sheet: a pick is the end of the visit
+}
+
+export const Session = (props: { at: string }) => {
+  const id = (s: string) => `${props.at}-${s}`
+  const view = read(card)
+  const lib = read(stories)
+  const people = read(personas)
+  const me = read(player)
+  const pinned = read(pin)
+  const line = read(path)
+  const d = read(draft)
+  const err = read(error)
+  const busy = () => d() !== null && err() === null // a turn in flight: the story stays put
+  const nameOf = (p: string | null) => (p === null ? undefined : people().find((x) => x.id === p)?.name)
+  // The persona form: a new one, or the one being edited (its text under the name); Delete only on an existing one.
+  let form!: HTMLDialogElement
+  let confirm!: HTMLDialogElement
+  const [editingPersona, setEditingPersona] = createSignal<Persona | null>(null)
+  const edit = (p: Persona | null) => {
+    setEditingPersona(p)
+    form.showModal()
+  }
+  const save = (e: SubmitEvent) => {
+    e.preventDefault()
+    const f = new FormData(e.currentTarget as HTMLFormElement)
+    const name = (f.get("name") as string).trim()
+    const text = (f.get("text") as string).trim()
+    if (!name || !text) return
+    void putPersona({ id: editingPersona()?.id ?? crypto.randomUUID().slice(0, 8), name, text })
+    form.close()
+  }
+  const set = (key: keyof Writing, value: string | boolean | undefined) => {
+    const p = me()
+    if (!p) return
+    const w: Record<string, unknown> = { ...p.writing }
+    if (value === undefined) delete w[key]
+    else w[key] = value
+    void putPlayer({ ...p, writing: w as Writing })
+  }
+  return (
+    <div class="session">
+      <button type="button" class="cardhead" onClick={openCard} aria-label="The card">
+        <h1>{view()?.title}</h1>
+        <Show when={view()?.summary}>{(s) => <p>{s()}</p>}</Show>
+      </button>
+      <section class="stories" aria-label="Stories">
+        <h2>
+          Stories
+          <button
+            type="button"
+            class="icon"
+            aria-label="New story"
+            data-hint="New story"
+            aria-haspopup="menu"
+            popovertarget={id("newstory")}
+            disabled={busy()}
+          >
+            <Snippets />
+          </button>
+          <button
+            type="button"
+            class="icon"
+            aria-label="Delete story"
+            data-hint="Delete story"
+            disabled={busy()}
+            onClick={() => confirm.showModal()}
+          >
+            <Trash />
+          </button>
+        </h2>
+        {/* who to be in the new story: the card's own, or one of the player's personas (each editable), or a new one */}
+        <div id={id("newstory")} class="snippets" popover role="menu" onKeyDown={roam}>
+          <button
+            type="button"
+            role="menuitem"
+            class="item"
+            tabindex="-1"
+            onClick={(e) => (closeUp(e.currentTarget), void newStory())}
+          >
+            <span class="name">As the card has it</span>
+            <span class="hint">No persona of yours</span>
+          </button>
+          <For each={people()} keyed={(p) => p.id}>
+            {(p) => (
+              <div class="item pair" role="none">
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="name"
+                  tabindex="-1"
+                  onClick={(e) => (closeUp(e.currentTarget), void newStory(p().id))}
+                >
+                  {p().name}
+                </button>
+                <span class="hint">{p().text}</span>
+                <button type="button" class="icon" aria-label="Edit persona" onClick={() => edit(p())}>
+                  <Edit />
+                </button>
+              </div>
+            )}
+          </For>
+          <hr />
+          <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => edit(null)}>
+            <span class="name">New persona</span>
+            <span class="hint">A name and who you are</span>
+          </button>
+        </div>
+        <ul>
+          <For each={lib()?.stories ?? []} keyed={(s) => s.id}>
+            {(s) => (
+              <li>
+                <button
+                  type="button"
+                  class="story"
+                  aria-current={s().id === lib()?.current ? "true" : undefined}
+                  disabled={busy()}
+                  onClick={(e) => {
+                    closeUp(e.currentTarget)
+                    if (s().id !== lib()?.current) void openStory(s().id)
+                  }}
+                >
+                  <span class="first">{s().last || "Empty"}</span>
+                  <span class="meta">
+                    {[nameOf(s().persona), s().turns ? `${s().turns} turns` : undefined, ago(s().updated)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </button>
+              </li>
+            )}
+          </For>
+        </ul>
+        <dialog class="confirm" ref={(el) => (confirm = el)} closedby="any">
+          <p>Delete this story? Every turn in it is gone for good.</p>
+          <div class="row">
+            <button type="button" class="chip state" onClick={() => confirm.close()}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="chip danger"
+              onClick={() => (confirm.close(), void deleteStory(lib()!.current))}
+            >
+              Delete
+            </button>
+          </div>
+        </dialog>
+        <dialog class="confirm" ref={(el) => (form = el)} closedby="any">
+          <form onSubmit={save}>
+            <input name="name" class="field" placeholder="Name" value={editingPersona()?.name ?? ""} required />
+            <textarea
+              name="text"
+              class="field"
+              placeholder="Who you are in the story…"
+              rows="4"
+              value={editingPersona()?.text ?? ""}
+              required
+            />
+            <div class="row">
+              <Show when={editingPersona()}>
+                {(p) => (
+                  <button type="button" class="chip danger" onClick={() => (form.close(), void deletePersona(p().id))}>
+                    Delete
+                  </button>
+                )}
+              </Show>
+              <span class="spacer" />
+              <button type="button" class="chip state" onClick={() => form.close()}>
+                Cancel
+              </button>
+              <button type="submit" class="chip state">
+                Save
+              </button>
+            </div>
+          </form>
+        </dialog>
+      </section>
+      {/* the switches are head text: a change rewrites the cached prefix, so they read as a preference, not a dial */}
+      <section class="writing" aria-label="Writing">
+        <h2>Writing</h2>
+        {/* the switches in force as a stack of chips, one each: nothing to wrap, nothing to cut */}
+        <button type="button" class="chosen" popovertarget={id("writing")} disabled={!me()}>
+          <For each={chosen(me()?.writing)} keyed={(l) => l}>
+            {(l) => <span class="chip">{l()}</span>}
+          </For>
+        </button>
+        <div id={id("writing")} class="snippets" popover>
+          <For each={SWITCHES} keyed={(s) => s.key}>
+            {(s) => (
+              <fieldset>
+                <legend>{s().label}</legend>
+                <div class="seg">
+                  <For each={s().values} keyed={(v) => String(v[0])}>
+                    {(v) => (
+                      <button
+                        type="button"
+                        aria-pressed={me()?.writing?.[s().key] === v()[0] ? "true" : "false"}
+                        onClick={() => set(s().key, me()?.writing?.[s().key] === v()[0] ? undefined : v()[0])}
+                      >
+                        {v()[1]}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </fieldset>
+            )}
+          </For>
+        </div>
+      </section>
+      <Show when={pinned()}>
+        {(p) => (
+          <section class="pinned">
+            <h2>Pinned</h2>
+            <p>
+              <Pin aria-hidden="true" />
+              <span>{p()}</span>
+            </p>
+          </section>
+        )}
+      </Show>
+      <nav class="tools" aria-label="Pages">
+        <button
+          type="button"
+          class="icon"
+          aria-label="Timeline"
+          data-hint="Timeline"
+          onClick={(e) => (closeUp(e.currentTarget), openTimeline())}
+        >
+          <Tree />
+        </button>
+        <button
+          type="button"
+          class="icon"
+          aria-label="Inspector"
+          data-hint="Inspector"
+          disabled={line().length === 0}
+          onClick={(e) => (closeUp(e.currentTarget), openInspector())}
+        >
+          <Probe />
+        </button>
+      </nav>
+    </div>
+  )
+}
+
+/** Desktop's left card. */
+export const Side = () => (
+  <aside class="side">
+    <Session at="side" />
+  </aside>
+)

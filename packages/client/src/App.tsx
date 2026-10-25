@@ -1,7 +1,8 @@
 // One screen: the reading line as sections, the draft growing at its end, a composer at the bottom, a slim bar on top
-// whose Status button opens the full state table. Under each section a Record pill opens a full-page sheet of that
+// whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
+// stories, the writing switches, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
 // turn's readings (src/record.ts projects them; this file only draws); the last section carries the Options container,
-// whose rows fill the composer and never send. From 64rem the same pieces sit on three cards: title and pin on the
+// whose rows fill the composer and never send. From 64rem the same pieces sit on three cards: the session on the
 // left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
 // docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
 // menu a popover anchored to its button: the platform is the component library. This file is the reader: the flow,
@@ -19,13 +20,11 @@ import { imeController } from "./ime.ts"
 import {
   Check,
   Close,
-  Contents,
   DieFill,
   Down,
   Edit,
   Insert,
   Next,
-  Pin,
   Prev,
   Record,
   Reword,
@@ -36,7 +35,8 @@ import {
 import { Inspect } from "./inspector.tsx"
 import { Timeline } from "./timeline.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
-import { record, scenes } from "./record.ts"
+import { record } from "./record.ts"
+import { Session, Side } from "./side.tsx"
 import {
   apply,
   arrived,
@@ -62,7 +62,7 @@ import {
   stage,
   withdraw,
 } from "./store.ts"
-import { fetchCard, fetchNodes, send } from "./wire.ts"
+import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchStories, send } from "./wire.ts"
 
 const waiting: Record<string, string> = {
   lookup: "Reading",
@@ -315,32 +315,7 @@ const Said = (props: {
   )
 }
 
-const Scenes = () => {
-  const view = read(card)
-  const line = read(path)
-  const runs = createMemo(() => scenes(view()?.heading, line()))
-  return (
-    <Show when={runs().length}>
-      <nav class="scenes" aria-label="Scenes">
-        <For each={runs()} keyed={(s) => s.id}>
-          {(s) => (
-            <button
-              class="scene"
-              onClick={(e) => {
-                e.currentTarget.closest("dialog")?.close()
-                document.getElementById(`node-${s().id}`)?.scrollIntoView({ block: "start" })
-              }}
-            >
-              {s().title}
-            </button>
-          )}
-        </For>
-      </nav>
-    </Show>
-  )
-}
-
-/** The slim bar on top: the card's title, Contents (the scene list) and Status with a dot when this turn changed the state. */
+/** The slim bar on top: the card's title (the session sheet) and Status with a dot when this turn changed the state. */
 const Topbar = () => {
   const view = read(card)
   const last = read(latest)
@@ -351,15 +326,12 @@ const Topbar = () => {
   })
   return (
     <header class="topbar">
-      <Show when={view()?.title}>{(t) => <h1>{t()}</h1>}</Show>
-      <Show when={view()?.heading !== undefined}>
-        <button class="icon" aria-label="Contents" commandfor="contents" command="show-modal">
-          <Contents />
-        </button>
-        <Sheet id="contents" heading="Contents">
-          <Scenes />
-        </Sheet>
-      </Show>
+      <button type="button" class="title" commandfor="session" command="show-modal">
+        <h1>{view()?.title}</h1>
+      </button>
+      <Sheet id="session" heading="Session">
+        <Session at="sheet" />
+      </Sheet>
       <button class="icon" aria-label="Status" commandfor="status" command="show-modal">
         <Status />
         <Show when={changed()}>
@@ -516,7 +488,7 @@ const Reader = () => {
   let stop: (() => void) | null = null
   onSettled(() => {
     // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
-    void Promise.all([fetchCard(), fetchNodes()]).then(() => {
+    void Promise.all([fetchCard(), fetchNodes(), fetchStories(), fetchPersonas(), fetchPlayer()]).then(() => {
       if (registry.get(log).nodes.size === 0) registry.set(page, "card")
     })
   })
@@ -640,31 +612,9 @@ const Reader = () => {
   )
 }
 
-/** Desktop's left card: the title, the scene list, and the armed pin. */
-const Side = () => {
-  const view = read(card)
-  const pinned = read(pin)
-  return (
-    <aside class="side">
-      <Show when={view()?.title}>{(t) => <h1>{t()}</h1>}</Show>
-      <Scenes />
-      <Show when={pinned()}>
-        {(p) => (
-          <section class="pinned">
-            <h2>Pinned</h2>
-            <p>
-              <Pin aria-hidden="true" />
-              <span>{p()}</span>
-            </p>
-          </section>
-        )}
-      </Show>
-    </aside>
-  )
-}
-
-/** Desktop's right card: the Status table and the latest turn's Record with its sibling actions, inline. Rendered by
- *  the Reader (the actions are its), as a sibling of the panel in the canvas grid; the latest section's pill hides. */
+/** Desktop's right card: the Status table and the latest turn's Record scroll, its sibling actions stay at the foot
+ *  (the phone sheet's shape). Rendered by the Reader (the actions are its), as a sibling of the panel in the canvas
+ *  grid; the latest section's pill hides. */
 const Glance = (props: {
   busy: boolean
   onSwipe: (n: Node) => void
@@ -673,25 +623,31 @@ const Glance = (props: {
 }) => {
   const last = read(latest)
   return (
-    <aside class="side">
-      <section class="status">
-        <h2>Status</h2>
-        <StatusTable />
-      </section>
+    <aside class="side glance">
+      <div class="scrolls">
+        <section class="status">
+          <h2>Status</h2>
+          <StatusTable />
+        </section>
+        <Show when={last()}>
+          {(l) => (
+            <section>
+              <h2>Record</h2>
+              <TurnRecord node={l().node} prev={l().prev} />
+            </section>
+          )}
+        </Show>
+      </div>
       <Show when={last()}>
         {(l) => (
-          <section>
-            <h2>Record</h2>
-            <TurnRecord node={l().node} prev={l().prev} />
-            <Rewrite
-              for={l().node.id}
-              rerun={!!(l().node.turn.input.text || l().node.turn.input.note)}
-              busy={props.busy}
-              onSwipe={() => props.onSwipe(l().node)}
-              onReword={(note) => props.onReword(l().node, note)}
-              onEdit={() => props.onEdit(l().node)}
-            />
-          </section>
+          <Rewrite
+            for={l().node.id}
+            rerun={!!(l().node.turn.input.text || l().node.turn.input.note)}
+            busy={props.busy}
+            onSwipe={() => props.onSwipe(l().node)}
+            onReword={(note) => props.onReword(l().node, note)}
+            onEdit={() => props.onEdit(l().node)}
+          />
         )}
       </Show>
     </aside>

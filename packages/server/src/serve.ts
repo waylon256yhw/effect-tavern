@@ -6,7 +6,8 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories, newest first, and which one is open. POST /stories {persona?} opens a new one,
+//   GET  /stories this card's stories (id, persona, turns, the last line, updated), newest first, and which one is open.
+//                 POST /stories {persona?} opens a new one,
 //                 PUT /stories/<id> opens that one (404 when there is none), DELETE /stories/<id> removes it (the open
 //                 one gone, the newest remaining opens, or a new one). Each answers the listing; the client re-reads
 //                 /nodes, and the trace starts over.

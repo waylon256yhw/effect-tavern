@@ -1,15 +1,16 @@
 // The card page: the card on the player's side (docs/card-page-brief.md, docs/card-page-prototype.html). One bounded
 // sheet: the name and the introduction, three derived rows (manifest.ts), the openings in a well that scrolls, and one
-// action. Landed on when the log is empty; opened from the ⋯ Session menu any time, Escape or Back returns. Browsing
-// openings writes nothing: Begin greets the one shown, and it lands as a root; mid-story the same pick opens a new
-// thread beside the old one. A card with no opening begins on an empty line, the player's first words start it.
+// action. Landed on when the story is empty; opened from the session's card head any time, Escape or Back returns.
+// Browsing openings writes nothing: Begin greets the one shown, and it lands as the story's root; mid-story the same
+// pick starts a new story (this persona again) beside the old one. A card with no opening begins on an empty line,
+// the player's first words start it.
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
-import { card, draft, error, log, page, pin, registry } from "./store.ts"
-import { send } from "./wire.ts"
+import { card, draft, error, log, page, pin, registry, stories } from "./store.ts"
+import { newStory, send } from "./wire.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
 export const openCard = () => registry.set(page, "card")
@@ -44,10 +45,14 @@ export const CardPage = () => {
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const back = () => registry.set(page, "reader")
-  const begin = () => {
-    registry.set(pin, null) // the old thread's pin and error do not carry into a new one
+  const begin = async () => {
+    registry.set(pin, null) // the old story's pin and error do not carry into a new one
     registry.set(error, null)
-    send(openings().length ? { kind: "greet", greeting: at() } : { kind: "checkout", node: null }) // none: an empty line
+    if (inStory()) {
+      const lib = registry.get(stories)
+      await newStory(lib?.stories.find((s) => s.id === lib.current)?.persona ?? undefined)
+    }
+    if (openings().length) send({ kind: "greet", greeting: at() }) // none: an empty line
     back()
   }
   onSettled(() => {
@@ -171,8 +176,13 @@ export const CardPage = () => {
                 <Show when={opening()}>
                   {(g) => <span class="est mono">~{compact.format(tokens(g().text))} tokens</span>}
                 </Show>
-                <button type="button" class={{ begin: true, primary: !inStory() }} disabled={busy()} onClick={begin}>
-                  {inStory() ? "New thread" : "Begin"}
+                <button
+                  type="button"
+                  class={{ begin: true, primary: !inStory() }}
+                  disabled={busy()}
+                  onClick={() => void begin()}
+                >
+                  {inStory() ? "New story" : "Begin"}
                   <Change />
                 </button>
               </footer>

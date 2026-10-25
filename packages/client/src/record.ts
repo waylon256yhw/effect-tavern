@@ -71,13 +71,3 @@ export const heading = (ref: string | undefined, node: Node): string | undefined
   const w = (node.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
   return typeof w === "string" && w ? w : undefined
 }
-
-/** The reading line folded into runs of one title: the navigation. A node without a title joins the run before it. */
-export const scenes = (ref: string | undefined, line: readonly Node[]): { title: string; id: number }[] => {
-  const out: { title: string; id: number }[] = []
-  for (const n of line) {
-    const t = heading(ref, n)
-    if (t !== undefined && t !== out.at(-1)?.title) out.push({ title: t, id: n.turn.id })
-  }
-  return out
-}
