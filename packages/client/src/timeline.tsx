@@ -407,14 +407,21 @@ export const Timeline = () => {
                     </span>
                   </div>
                 </div>
-                <blockquote class="quote">
-                  <Show when={n().turn.input.text || n().turn.input.note} fallback={<span class="dim">(opening)</span>}>
-                    {n().turn.input.text || n().turn.input.note}
-                  </Show>
-                  <Show when={n().turn.input.text && n().turn.input.note}>
-                    <span class="aside">note: {n().turn.input.note}</span>
-                  </Show>
-                </blockquote>
+                {/* the reader's line block (App.tsx Said), without its actions: this page is a view */}
+                <Show when={n().turn.input.text || n().turn.input.note} fallback={<span class="dim">(opening)</span>}>
+                  <div class="spoke">
+                    <Show when={n().turn.input.text}>
+                      <div class="said">
+                        <span class="text">{n().turn.input.text}</span>
+                      </div>
+                    </Show>
+                    <Show when={n().turn.input.note}>
+                      <div class="said note">
+                        <span class="text">{n().turn.input.note}</span>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
                 <div class="prose">{prose(n())}</div>
                 <Show when={siblings().length > 1}>
                   <div class="vlist">
