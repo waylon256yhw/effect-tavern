@@ -20,6 +20,7 @@ import { imeController } from "./ime.ts"
 import {
   Check,
   Close,
+  Copy,
   DieFill,
   Down,
   Edit,
@@ -315,23 +316,42 @@ const Said = (props: {
   onEdit?: (field: "text" | "note") => void
   revising?: "text" | "note" // the field of this line that is in the composer now: that bubble is marked
 }) => {
-  // on a landed node the bubble is the way to revise the line: it goes back into the composer (Cherry Studio's edit).
-  // The draft's bubble is the same button, disabled: one box, so the line does not re-wrap when the node lands.
-  const Bubble = (p: { field: "text" | "note"; text: string }) => (
-    <button
-      type="button"
-      class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}
-      aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
-      disabled={!props.onEdit}
-      onClick={() => {
-        props.onEdit!(p.field)
-        document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()
-      }}
-    >
-      <span>{p.text}</span>
-      <Edit aria-hidden="true" />
-    </button>
-  )
+  // The bubble is text, selectable like any; what can be done with it are two small actions at its end, each a click of
+  // its own (shown on hover, always on touch): revise puts it back in the composer (Cherry Studio's edit), copy copies.
+  // The draft has the same bubble with the actions disabled, so the line does not re-wrap when the node lands.
+  const Bubble = (p: { field: "text" | "note"; text: string }) => {
+    const [copied, setCopied] = createSignal(false)
+    const copy = () =>
+      void navigator.clipboard.writeText(p.text).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1200)
+      })
+    return (
+      <div class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}>
+        <span class="text">{p.text}</span>
+        <span class="acts">
+          <button
+            type="button"
+            class="icon"
+            aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
+            data-hint="Revise"
+            disabled={!props.onEdit}
+            onClick={() => {
+              props.onEdit!(p.field)
+              document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()
+            }}
+          >
+            <Edit />
+          </button>
+          <button type="button" class="icon" aria-label="Copy" data-hint="Copy" disabled={!props.onEdit} onClick={copy}>
+            <Show when={copied()} fallback={<Copy />}>
+              <Check />
+            </Show>
+          </button>
+        </span>
+      </div>
+    )
+  }
   // one block: the line's bubble and, close under it, the note as a marginal line (a word on the side, not a second
   // speech); the block keeps the turn's gap to the prose
   return (
