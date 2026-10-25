@@ -246,7 +246,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
   const [copied, setCopied] = createSignal(false)
   const copy = () => {
     const out = { regions: regs().map(({ msgs, ...r }) => ({ ...r, messages: msgs })), answer: c().out }
-    void navigator.clipboard.writeText(JSON.stringify(out, null, 2)).then(() => {
+    void navigator.clipboard?.writeText(JSON.stringify(out, null, 2)).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })

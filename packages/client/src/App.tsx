@@ -322,7 +322,8 @@ const Said = (props: {
   const Bubble = (p: { field: "text" | "note"; text: string }) => {
     const [copied, setCopied] = createSignal(false)
     const copy = () =>
-      void navigator.clipboard.writeText(p.text).then(() => {
+      // a plain-http page off localhost (a phone on the LAN) has no clipboard: the key then does nothing
+      void navigator.clipboard?.writeText(p.text).then(() => {
         setCopied(true)
         setTimeout(() => setCopied(false), 1200)
       })
@@ -338,7 +339,9 @@ const Said = (props: {
             disabled={!props.onEdit}
             onClick={() => {
               props.onEdit!(p.field)
-              document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()
+              // the note's box opens with the revision: focus it once it is there
+              const box = p.field === "note" ? ".composer textarea.note" : ".composer textarea:not(.note)"
+              requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(box)?.focus())
             }}
           >
             <Edit />
