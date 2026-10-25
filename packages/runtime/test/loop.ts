@@ -5,7 +5,7 @@ import { fake, fakeText, type Message } from "@effect-tavern/provider"
 import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import { prose, splitAside } from "../src/journal.ts"
-import { makeSession, outcome, type Event } from "../src/session.ts"
+import { makeSession, outcome, type Event, type Turn } from "../src/session.ts"
 import { chat, full, player } from "./cards/wuxia.ts"
 
 // ───────── Scripted model ─────────
@@ -128,7 +128,10 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
 
 // ───────── Through the interface: every event kept, the node read off the end ─────────
 const model = { ...fake((o) => script(o)), prefill: true }
-const S = makeSession({ card: full, player, model }) // the self-check RPG card
+// Scripted prose is a few tokens a turn, so a budget of 0 folds as early as `keep` and `block` allow: two turns kept,
+// the boundary a block of two behind them.
+const policy = { budget: 0, keep: 2, block: 2 }
+const S = makeSession({ card: full, player, model, policy }) // the self-check RPG card
 assert.equal(S.meta.input, "act") // the default channel the client opens on: undeclared is act
 const N = makeSession({ card: { ...full, input: "note" }, player, model })
 assert.equal(N.meta.input, "note")
@@ -204,15 +207,15 @@ const program = Effect.gen(function* () {
   assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
   assert.deepEqual(t1.products.notes, ["NOTE#2"]) // the echoed Known item is dropped; only the new fact is kept
 
-  // Turn 2: lookup lists only t1's people row (li#1 already on the path) and the input reads nothing; strikes settle,
-  // window opens, director, reveal fired. The narrator gets the feed record as `Current:` after the outcome.
+  // Turn 2: no lookup: li#1 is on the path and t1's people row is not readable while t1 is in the unfolded tail (its
+  // prose is still verbatim in the transcript); strikes settle, window opens, director, reveal fired. The narrator gets the feed record as `Current:` after the outcome.
   i = calls().length
   narrations.push("fire")
   warmths.push("warm")
   const t2 = yield* go(S.act(t1.id, { text: "strike B", note: "NOTE#2" }))
   assert.deepEqual([t2.answers, S.node(t2.id).state.bond], [{ warmth: "warm" }, 4])
-  assert.deepEqual(since(i), ["lookup", "decide", "decide", "decide", "direct", "narrate", "check", "record"])
-  assert.equal(str(prompts("lookup").at(-1)!).match(/^Index: (.*)$/m)![1], `people@${t1.id}#0=Li`)
+  assert.deepEqual(since(i), ["decide", "decide", "decide", "direct", "narrate", "check", "record"])
+  assert.deepEqual(S.node(t2.id).readable, []) // the row's node is in the tail
   assert.deepEqual(t2.read, [])
   assert.ok(/^Current: scene=place: P#2; present: name=B, mood=calm$/m.test(str(lastNarr())))
   assert.ok(
@@ -237,14 +240,12 @@ const program = Effect.gen(function* () {
   assert.ok(!/PROSE#/.test(str(prompts("direct").at(-1)!)) && !/Ledger/.test(str(lastNarr())))
 
   // Turn 3: history carries both lore layers; the previous note and tone are gone; head is byte-identical. The input
-  // asks about Li: lookup delivers t1's people row like a lore layer, and it lands in the tail as text.
+  // asks about Li, but t1's row is still in the tail: nothing to look up.
   i = calls().length
   warmths.push("warm")
   const t3 = yield* go(S.act(t2.id, { text: "speak about Li" }))
   const v3 = str(lastNarr())
-  assert.deepEqual(t3.read, [{ id: `people@${t1.id}#0`, layer: 1 }])
-  assert.deepEqual(S.node(t3.id).delivered[0]!.text, "name=Li, note=N#2")
-  assert.ok(v3.includes("name=Li, note=N#2"))
+  assert.deepEqual(t3.read, [])
   assert.ok(v3.includes(full.lore[0]!.layers[1]!) && v3.includes(full.lore[0]!.layers[0]!) && v3.includes(prose(t2)))
   assert.ok(!v3.includes("NOTE#2") && !v3.includes(t2.brief.tone!))
   assert.ok(v3.includes(full.fiction[1]!.text!)) // bond was 4 when this head was built; the answer lands after the prose
@@ -257,7 +258,7 @@ const program = Effect.gen(function* () {
     full.frame[2]!.text!,
     full.fiction[0]!.text!,
   ]) // player zone → frame → fiction
-  assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
+  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"])
   assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
   // Cache breakpoints: the head's last message and the last history message (t2's reply, what next turn resends
   // verbatim) carry markers; this turn's input and tail do not.
@@ -312,8 +313,10 @@ const program = Effect.gen(function* () {
   assert.ok(!str(lastNarr()).includes("Previous draft broke"))
   // A readout option can emit an event. It shows in the ledger the structured stages read next turn, and it opens a
   // window on that next turn: t5's "close" is carried into t6's gate, li's third layer is offered, the director runs.
+  // At four turns on the path the first block (t1, t2) folds, and t1's people row enters the lookup's Index.
   assert.ok(S.node(t5.id).events.includes("warmth:close") && /warmth:close/.test(str(prompts("decide").at(-1)!)))
-  assert.deepEqual(since(i), ["decide", "direct", "narrate", "check", "record"])
+  assert.deepEqual(since(i), ["lookup", "decide", "direct", "narrate", "check", "record"])
+  assert.equal(str(prompts("lookup").at(-1)!).match(/^Index: (.*)$/m)![1], `people@${t1.id}#0=Li`)
   assert.deepEqual(t6.brief.may, ["li"])
   assert.ok(str(lastNarr()).includes(`MAY reveal: ${full.lore[0]!.layers[2]}`))
   assert.equal(S.node(t6.id).state.bond, 16)
@@ -329,14 +332,28 @@ const program = Effect.gen(function* () {
   )
   assert.ok(v6.includes(full.lore[0]!.layers[1]!) && v6.includes(full.lore[0]!.layers[0]!)) // lore delivered inside the folded range survives in the fold
   const summary = (v: string) => v.match(/Summary:[^]*?(?=\n(?:user|assistant):|$)/)?.[0]
-  // Boundary moves in blocks: one more turn keeps the same summary; lore dedupe still sees the folded deliveries.
+  // Boundary moves in blocks: one more turn keeps the same summary; lore dedupe still sees the folded deliveries (li is
+  // fully delivered on the folded nodes), and the lookup reads t1's row, now folded.
   i = calls().length
-  const t7 = yield* go(S.act(t6.id, { text: "wait" }))
-  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"]) // li fully delivered on the folded nodes → nothing to look up
+  const t7 = yield* go(S.act(t6.id, { text: "speak about Li" }))
+  assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
+  assert.deepEqual(t7.read, [{ id: `people@${t1.id}#0`, layer: 1 }])
+  assert.deepEqual(S.node(t7.id).delivered[0]!.text, "name=Li, note=N#2")
   assert.ok(str(lastNarr()).includes("Summary:") && str(lastNarr()).includes(prose(t3)))
+  // The ledger folds at the same boundary: decide gets the narrator's own Summary, then lines for the tail turns only.
+  const line = (p: readonly Message[], head: string) => p.map(msgText).find((t) => t.startsWith(head))
+  const led = prompts("decide").at(-1)!
+  assert.ok(line(led, "Summary:") !== undefined && line(led, "Summary:") === line(lastNarr(), "Summary:"))
+  assert.deepEqual(
+    line(led, "Ledger:")!
+      .split("\n")
+      .slice(1)
+      .map((l) => l.split(" → ")[0]),
+    [t3, t5, t6].map((t) => t.input.text),
+  )
   yield* go(S.act(t7.id, { text: "wait more" }))
   const v8 = str(lastNarr())
-  assert.ok(v8.includes("name=Li, note=N#2")) // a recalled product row delivered inside the folded range survives like lore
+  assert.ok(v8.includes("name=Li, note=N#2")) // the row t7 was told, in the tail as text
   assert.ok(!v8.includes(prose(t3)) && v8.includes(prose(t6)))
   // The view is a function of (path, policy), not of what other branches have cached: a sibling of t7 re-renders the
   // shorter path and still folds only the first block, even though a longer fold was just built for t8.
@@ -535,7 +552,7 @@ const program = Effect.gen(function* () {
   // li's second layer unlocks at bond ≥ 8. Two warm turns reach it ("warm", not "close": close's event would open a
   // window next turn, which reads the layer under it); a cold turn after takes bond back to 3, and the layer is still
   // readable (so pinnable), then read by the lookup. Layer 3 never: only a window opens it.
-  const V = makeSession({ card: full, player, model })
+  const V = makeSession({ card: full, player, model, policy })
   const untold = (id: number) => V.node(id).readable.map((r) => r.id)
   const v0 = yield* go(V.act(null, { text: "about li" }))
   assert.deepEqual([v0.read, untold(v0.id)], [[{ id: "li", layer: 1 }], []])
@@ -547,12 +564,35 @@ const program = Effect.gen(function* () {
   assert.deepEqual([V.node(v2.id).state.bond, untold(v2.id)], [3, ["li"]]) // the instant no longer holds; the lock stays open
   const v4 = yield* go(V.act(v2.id, { text: "about li" }))
   assert.deepEqual([v4.read, untold(v4.id)], [[{ id: "li", layer: 2 }], []])
-  // Two undelivered rows with one key are one index entry, the newest row.
+  // A recall row enters the Index only once its node folds: in the tail its prose is still verbatim in the transcript.
+  // (Budget 0: two turns kept, the boundary a block of two behind them; `untold(x)` is what the turn after x may read.)
+  // The row's node sits at index i on its path; it is absent on every wait until the boundary passes i, then present.
+  // Counted from i, not hard-coded: the turns before it belong to other assertions and move when they do.
+  const depth = (id: number) => {
+    let d = 0
+    for (let n = V.node(id); n.parent != null; n = V.node(n.parent)) d++
+    return d
+  }
+  const settles = (from: Turn, id: string) =>
+    Effect.gen(function* () {
+      const i = depth(from.id)
+      let k = 0
+      while (Math.floor((i + 1 + ++k - 2) / 2) * 2 <= i); // the first k with folded(i + 1 + k) > i, keep 2 block 2
+      const seen: string[][] = []
+      for (let j = 0; j < k; j++) seen.push(untold((from = yield* go(V.act(from.id, { text: "wait" }))).id))
+      assert.deepEqual(seen, [...Array<string[]>(k - 1).fill([]), [id]])
+      return from
+    })
   const r1 = yield* go(V.act(v4.id, { text: "names li" }))
-  const r2 = yield* go(V.act(r1.id, { text: "names li" }))
-  assert.deepEqual([r1.products.people, untold(r2.id)], [[{ name: "Li", note: `N#${n - 1}` }], [`people@${r2.id}#0`]])
+  assert.deepEqual([r1.products.people, untold(r1.id)], [[{ name: "Li", note: `N#${n}` }], []])
+  const f1 = yield* settles(r1, `people@${r1.id}#0`)
+  // Two rows with one key are one index entry, the newest row, and the fold runs first: with the old row folded and the
+  // new one in the tail, the key is absent, not the old row back.
+  const r2 = yield* go(V.act(f1.id, { text: "names li" }))
+  assert.deepEqual(untold(r2.id), [])
+  const f2 = yield* settles(r2, `people@${r2.id}#0`)
   // Reading the newest row tells the key: the superseded row does not come back as unread.
-  const r3 = yield* go(V.act(r2.id, { text: "about Li" }))
+  const r3 = yield* go(V.act(f2.id, { text: "about Li" }))
   assert.deepEqual([r3.read, untold(r3.id)], [[{ id: `people@${r2.id}#0`, layer: 1 }], []])
   // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
   let light = 0

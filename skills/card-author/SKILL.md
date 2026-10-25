@@ -37,16 +37,16 @@ line.
 `lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`, assembled in one place
 (`src/request.ts`).
 
-| Card field | Read by |
-| --- | --- |
-| `frame` | every stage (the head of every document) |
-| `fiction`, transcript | narrate only |
-| `lore` | lookup (enum of readable entries), gate / direct (windows), narrate (as told text) |
-| `rules.actions` | decide (the menu), settle (code) |
-| `rules.readouts`, `products` | record, after the prose |
-| `guard` | check only; never shown to the narrator |
-| `lexicon` | polish only (sentences the patterns hit are rewritten) |
-| `greetings` | node 0; `do` settles before anything |
+| Card field                   | Read by                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| `frame`                      | every stage (the head of every document)                                           |
+| `fiction`, transcript        | narrate only                                                                       |
+| `lore`                       | lookup (enum of readable entries), gate / direct (windows), narrate (as told text) |
+| `rules.actions`              | decide (the menu), settle (code)                                                   |
+| `rules.readouts`, `products` | record, after the prose                                                            |
+| `guard`                      | check only; never shown to the narrator                                            |
+| `lexicon`                    | polish only (sentences the patterns hit are rewritten)                             |
+| `greetings`                  | node 0; `do` settles before anything                                               |
 
 The narrator never sees a number. State reaches it only as the fiction variants whose `when` holds.
 

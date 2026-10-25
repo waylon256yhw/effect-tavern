@@ -6,7 +6,7 @@ import { fake, text as generate, type Message } from "@effect-tavern/provider"
 import { Effect } from "effect"
 import assert from "node:assert/strict"
 import type { Msg } from "../src/fragment.ts"
-import { ledger, makeSummaries, narratorHistory } from "../src/history.ts"
+import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
 import { deliveredOn, notesOf, prose, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import * as Log from "../src/log.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
@@ -250,5 +250,21 @@ const program = Effect.gen(function* () {
 })
 
 await Effect.runPromise(program)
+
+// The fold boundary (§18.4): the fewest leading turns, in blocks, that leave the tail within the token budget, never
+// fewer than `keep` turns in the tail. Growing a path never moves it back, so the summary is stable between moves.
+{
+  const line = Array.from({ length: 40 }, (_, id) => ({ id }) as unknown as Turn)
+  const along = (cost: (t: Turn) => number, p = { budget: 10, keep: 2, block: 2 }) =>
+    line.map((_, i) => folded(line.slice(0, i + 1), cost, p))
+  assert.deepEqual(along(() => 3).slice(0, 12), [0, 0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 10]) // three turns fit
+  assert.ok(along(() => 0.2).every((n) => n === 0)) // under budget: never folds
+  assert.deepEqual(along(() => 100).slice(0, 6), [0, 0, 0, 2, 2, 4]) // over budget: the tail is `keep`, in blocks
+  const costs = line.map((_, i) => (i * 7919) % 13) // uneven turns
+  for (const block of [1, 2, 3]) {
+    const ns = along((t) => costs[t.id]!, { budget: 20, keep: 2, block })
+    ns.forEach((n, i) => assert.ok(n % block === 0 && i + 1 - n >= Math.min(2, i + 1) && n >= (ns[i - 1] ?? 0)))
+  }
+}
 
 console.log("ok")

@@ -4,7 +4,10 @@
 // A fold is a function of the turns INSIDE its range and nothing else: a later turn (one that will some day retract
 // an earlier note) cannot reach back into a fold that does not contain it. That is what keeps the summary's cache
 // breakpoint byte-stable between boundary moves; a retraction lands in the summary when the boundary passes its turn,
-// and until then in the tail's Known line, which is rewritten every turn anyway.
+// and until then in the tail's Known line, which is rewritten every turn anyway. The boundary (`folded`) is a token
+// budget stepped in blocks; a path only grows, so along it the boundary never moves back and moves a block at a time.
+// One boundary drives three views: the narrator's summary + transcript, the ledger's summary + tail lines, and which
+// recall rows the lookup may read (only rows whose node is folded: a tail row is still verbatim in the transcript).
 import type { Disclosure } from "./lore.ts"
 import type { Msg } from "./fragment.ts"
 import { deliveredIn, notesOf, prose, type Turn } from "./journal.ts"
@@ -44,9 +47,24 @@ export const makeSummaries = <B>(loreText: (d: Disclosure) => string) => {
 }
 export type Summaries<B> = ReturnType<typeof makeSummaries<B>>
 
-/** §18.4: how many leading turns to fold. The boundary moves in blocks, so the summary is byte-stable between moves. */
-export const folded = (len: number, keep: number, block: number) =>
-  Math.max(0, Math.floor((len - keep) / block) * block)
+export interface Policy {
+  budget: number // estimated tokens (tokens.ts) the unfolded tail may hold
+  keep: number // turns the tail always keeps
+  block: number // the boundary moves this many turns at a time
+}
+/** §18.4: how many leading turns to fold: the fewest, in whole blocks, that leave the tail's `cost` within the budget,
+ *  never fewer than `keep` turns in the tail. A longer path only adds cost to every tail, so the count is monotone
+ *  non-decreasing along a path and moves in blocks: the summary is byte-stable between moves. Walks back from the end
+ *  and stops at the budget, so a call costs the tail, not the path. */
+export const folded = <B>(path: readonly Turn<B>[], cost: (t: Turn<B>) => number, p: Policy) => {
+  const cap = Math.max(0, Math.floor((path.length - p.keep) / p.block) * p.block)
+  let j = path.length // the smallest j whose tail path[j..] fits
+  for (let sum = 0; j > 0 && (sum += cost(path[j - 1]!)) <= p.budget; j--);
+  return Math.min(cap, Math.ceil(j / p.block) * p.block)
+}
+/** The turns after the summary: the whole path when there is none. */
+const tailOf = <B>(path: readonly Turn<B>[], sum?: Summary) =>
+  sum ? path.slice(path.findIndex((t) => t.id === sum.to) + 1) : path
 
 /** Narrator: past input + prose + the lore delivered at that turn (so `read` can dedupe against it); never brief/notes/note.
  *  `sum` is the summary the POLICY chose for this path (what `compress` returned); the side table is a cache and a cache
@@ -56,10 +74,9 @@ export const narratorHistory = <B>(
   loreText: (d: Disclosure) => string,
   sum?: Summary,
 ): Msg[] => {
-  const start = sum ? path.findIndex((t) => t.id === sum.to) + 1 : 0
   return [
     ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
-    ...path.slice(start).flatMap((t): Msg[] => [
+    ...tailOf(path, sum).flatMap((t): Msg[] => [
       ...(t.input.text ? [{ role: "user", text: t.input.text } as Msg] : []), // a greeting node has no input
       ...deliveredIn(t).map((d): Msg => ({ role: "system", text: loreText(d) })),
       { role: "assistant", text: prose(t), parts: t.reply.filter((p) => p.type !== "aside") }, // the aside never goes back
@@ -67,13 +84,23 @@ export const narratorHistory = <B>(
   ]
 }
 
-/** Director / decide: facts only — input, events, fired, notes. No prose anywhere. */
-export const ledger = <B>(path: readonly Turn<B>[], eventsOf: (t: Turn<B>) => readonly string[]): Msg[] =>
-  path.length
-    ? [
-        {
-          role: "system",
-          text: `Ledger:\n${path.map((t) => `${t.input.text} → ${eventsOf(t).join(",") || "-"}; fired ${t.fired.map((d) => d.id).join(",") || "-"}; ${notesOf(t).join("; ")}`).join("\n")}`,
-        },
-      ]
-    : []
+/** Director / decide: facts only — input, events, fired, notes. No prose anywhere. The folded prefix is the narrator's
+ *  own summary (its events are already in the state the stage reads), then one line per tail turn. */
+export const ledger = <B>(
+  path: readonly Turn<B>[],
+  eventsOf: (t: Turn<B>) => readonly string[],
+  sum?: Summary,
+): Msg[] => {
+  const tail = tailOf(path, sum)
+  return [
+    ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
+    ...(tail.length
+      ? [
+          {
+            role: "system",
+            text: `Ledger:\n${tail.map((t) => `${t.input.text} → ${eventsOf(t).join(",") || "-"}; fired ${t.fired.map((d) => d.id).join(",") || "-"}; ${notesOf(t).join("; ")}`).join("\n")}`,
+          } as Msg,
+        ]
+      : []),
+  ]
+}
