@@ -632,8 +632,13 @@ button:focus-visible {
   letter-spacing: 0.2em; /* air between the two halves of a pair: it reads as a container */
   text-indent: 0.2em;
 }
-/* a key hint over a button: the platform's title tooltip waits a second, this one a quarter; pointer devices only */
+/* a key hint over a button: the platform's title tooltip waits a second, this one a quarter; pointer devices only.
+   The button is the hint's containing block: a static host would hand the absolute hint to the viewport, where a
+   button deep in the scrolled column parks its invisible hint a screen below the page and the document scrolls to it */
 @media (hover: hover) {
+  [data-hint] {
+    position: relative;
+  }
   [data-hint]::after {
     content: attr(data-hint);
     position: absolute;
