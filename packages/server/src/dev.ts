@@ -53,6 +53,14 @@ const answer = (o: FakeCall) => {
         }),
         delay: demo ? 1000 : 0,
       }
+    case "polish": // every marked sentence back unchanged: a pass-through, so the prose stands
+      return {
+        text: JSON.stringify(
+          Object.fromEntries(
+            [...text.matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(([, id, s]) => [id, s]),
+          ),
+        ),
+      }
     case "record": {
       const answers = Object.fromEntries(
         [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)].map(([, id, opts]) => [

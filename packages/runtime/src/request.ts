@@ -66,6 +66,7 @@ export type Ask =
       correction?: string
     }
   | { stage: "check"; rules: readonly string[]; open: readonly Told[]; must: readonly string[]; prose: string }
+  | { stage: "polish"; question: string; hints: readonly string[]; prose: string } // prose with <target> marks
   | {
       stage: "record"
       known: string
@@ -148,6 +149,8 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
           : []),
         usr(a.prose),
       ]
+    case "polish": // check's shape, the rules swapped for the rewrite and its per-target hints
+      return [...frame, sys([a.question, ...a.hints].join("\n")), usr(a.prose)]
     case "record":
       return [
         ...frame,

@@ -2,6 +2,7 @@
 // Frame ids are slots; how a player's slot meets the card's same slot is the player's per-fragment setting.
 import { Schema } from "effect"
 import { Cond, holds, type State } from "./cond.ts"
+import { Entry } from "./polish.ts"
 
 export const Fragment = Schema.Struct({
   id: Schema.String, // in the frame, the id is the slot
@@ -61,6 +62,9 @@ export const Writing = Schema.Struct({
   echo: Schema.optionalKey(Schema.Boolean), // restate the player's line before the reaction (转述), or start from the reaction
   agency: Schema.optionalKey(Schema.Literals(["strict", "free"])), // only what the player gave, or the narrator may continue them (co-writing)
   verbosity: Schema.optionalKey(Schema.Literals(["concise", "medium", "detailed"])),
+  // not head text: the polish stage after check (polish.ts), off only when false; no lexicon, nothing to polish
+  polish: Schema.optionalKey(Schema.Boolean),
+  lexicon: Schema.optionalKey(Schema.Array(Entry)), // the player's slop patterns, before the card's own
 })
 export type Writing = typeof Writing.Type
 const POV = {

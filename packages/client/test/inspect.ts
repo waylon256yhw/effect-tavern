@@ -14,7 +14,7 @@ assert.deepEqual(shape(rows(chat, { end: "end" })), [
   ["narrate", "ok"],
   ["record", "ok"],
 ])
-assert.deepEqual(missing(chat), ["lookup", "decide", "direct", "check"])
+assert.deepEqual(missing(chat), ["lookup", "decide", "direct", "check", "polish"])
 // the correction rewrite: check fails into a second narrate, both drafts numbered, each draft one tray
 const rewrite = rows(
   [

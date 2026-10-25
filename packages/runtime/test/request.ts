@@ -1,5 +1,5 @@
 // src/request.ts through its interface: the whole document each stage reads, asserted the way a person reads a preset,
-// top to bottom. One frame, one set of facts; the inputs vary, and the six stages differ only in what the module lets
+// top to bottom. One frame, one set of facts; the inputs vary, and the seven stages differ only in what the module lets
 // each one see.
 import type { Message } from "@effect-tavern/provider"
 import assert from "node:assert/strict"
@@ -64,6 +64,12 @@ const asks: Record<Ask["stage"], Ask> = {
     correction: "Previous draft broke: rule",
   },
   check: { stage: "check", rules: ["B does not die"], open, must: ["li"], prose: "PROSE#2" },
+  polish: {
+    stage: "polish",
+    question: "Rewrite each target.",
+    hints: ["hit-1: stock image"],
+    prose: 'A. <target id="hit-1" hits="指节发白">指节发白。</target>B.',
+  },
   record: {
     stage: "record",
     known: "Known: N1",
@@ -141,6 +147,11 @@ assert.deepEqual(
     .map(text),
   ["Rule: B does not die", "PROSE#2"],
 )
+// polish: check's shape, the rewrite and its hints above, the marked prose as the user message
+assert.deepEqual(line.polish.slice(3).map(text), [
+  "Rewrite each target.\nhit-1: stock image",
+  'A. <target id="hit-1" hits="指节发白">指节发白。</target>B.',
+])
 // record: facts and questions above, the scene as one user message with the player's line marked as theirs
 assert.deepEqual(line.record.slice(3).map(text), [
   "Known: N1\nCurrent: scene=place: P\nnotes: Notes are the record\noptions: Four things",
@@ -159,7 +170,7 @@ assert.ok(!/Player note:/.test(doc(note.narrate)))
 assert.equal(text(note.record.at(-1)!), "PROSE#2")
 // A thought in the line: every stage that reads the line hears what it is; check reads the prose and does not.
 const th = all({ text: "⦅wait⦆" })
-for (const s of stages) assert.equal(doc(th[s]).includes(thought), s !== "check", s)
+for (const s of stages) assert.equal(doc(th[s]).includes(thought), s !== "check" && s !== "polish", s)
 for (const s of stages) assert.ok(!doc(line[s]).includes(thought), s) // and none without one
 // A record question without readouts has no Questions line; a narrate with nothing to say has no tail.
 assert.equal(request(c({ text: "x" }), { ...asks.record, questions: undefined, current: undefined } as Ask).length, 5)

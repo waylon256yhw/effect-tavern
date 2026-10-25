@@ -18,7 +18,7 @@ export interface Row {
   call: Call
   draft?: number // narrate and check: which draft; set only when the turn had two
 }
-export const PHASES: readonly Phase[] = ["lookup", "decide", "direct", "narrate", "check", "record"]
+export const PHASES: readonly Phase[] = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"]
 
 export const rows = (calls: readonly Call[], turn: Pick<Turn<unknown>, "end">): Row[] => {
   let draft = 0

@@ -245,7 +245,7 @@ const applyNow = (e: Wire): void => {
         play.ended = false
         registry.update(draft, (d) => (d ? { ...d, text: "", prev: d.text || d.prev } : d))
       }
-      if (e.phase === "check" || e.phase === "record") play.ended = true // the prose is complete: the queue plays out
+      if (e.phase === "check" || e.phase === "polish" || e.phase === "record") play.ended = true // the prose is complete: the queue plays out
       return
     case "delta":
       if (e.part.type === "text-delta") enqueue(e.part.text)
