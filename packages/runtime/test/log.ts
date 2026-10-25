@@ -20,6 +20,11 @@ assert.deepEqual(ids(L.children(log, 0)), [1, 2]) // the versions, in id order
 assert.deepEqual([L.below(log, 0), L.below(log, 2), L.below(log, 3)], [3, 1, 0])
 assert.deepEqual([L.leaf(log, 0), L.leaf(log, 1), L.leaf(log, 2)], [3, 1, 3])
 
+// a deep line reads root → head (a chain is built by push and one reverse, not an unshift per node)
+const line = [...Array(2000).keys()]
+const deep = L.of<N>({ nodes: line.map((id) => ({ id, parent: id ? id - 1 : null, text: "" })), head: 1999 })
+assert.deepEqual(ids(L.path(deep)), line)
+
 // checkout: a version's whole follow-up comes back; null empties the line, the nodes stay
 ;[log, c] = L.checkout(log, 1)
 assert.deepEqual([c, ids(L.path(log))], [{ head: 1 }, [0, 1]])

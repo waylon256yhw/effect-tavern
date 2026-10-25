@@ -302,7 +302,18 @@ export const makeSession = ({
   // code folds over recorded outputs. The player's `adjust` goes last: a correction wins over everything the turn did.
   // `post` is what this turn emitted that no gate of its own could read: a greeting has no gate and a readout is answered
   // after the prose, so both open windows on the next turn.
+  // Memoized per turn on the state it was settled from: a path's states are the same objects every time it is folded
+  // (each is the last settle's `s`), so folding a node's path again costs a lookup per turn, not a settle. An amended
+  // turn is a new object and misses; so does a turn under it, whose from-state is new.
+  const settledFrom = new WeakMap<Turn, { from: State; out: ReturnType<typeof settleFresh> }>()
   const settleTurn = (s: State, t: Turn) => {
+    const hit = settledFrom.get(t)
+    if (hit?.from === s) return hit.out
+    const out = settleFresh(s, t)
+    settledFrom.set(t, { from: s, out })
+    return out
+  }
+  const settleFresh = (s: State, t: Turn) => {
     const o = t.opening ? rpg.apply(s, t.opening) : { s, events: [] as string[] }
     const b = rpg.fold(o.s, t.beats)
     const r = rpg.settleReadouts(b.s, t.answers)
@@ -323,7 +334,8 @@ export const makeSession = ({
    *  told layer already stayed (lore.ts keeps the deepest delivered); this keeps an untold one too. A card field named
    *  `lore` would collide, so none may be. */
   const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): Paths => {
-    const states = path.reduce<State[]>((acc, t) => [...acc, settleTurn(acc.at(-1)!, t).s], [rpg.initial]) // ponytail: one fold per call; cache per node if long logs drag
+    const states = [rpg.initial] // pushed, not spread: a spread per turn made one call O(depth²)
+    for (const t of path) states.push(settleTurn(states.at(-1)!, t).s)
     const at = s ?? states.at(-1)!
     const counters = L.counters([...path.map(deliveredIn), extra]) // the turn being made is the last, shown now
     const lore = Object.fromEntries(
@@ -338,6 +350,8 @@ export const makeSession = ({
   /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
    *  not yet delivered. The lookup's enum, the node's `readable`, and where `Input.pin` picks from. */
   const readableOn = (path: readonly Turn[]) => {
+    // ponytail: each call still scans the path (counters, floors, seen, recall), so a snapshot is O(nodes·depth) in cheap
+    // scans; carry those folds parent → child in one id-order pass if a story outgrows it.
     const s = gated(path)
     const seen = deliveredOn(path)
     const seenKeys = new Set(seen.map(key))
@@ -365,7 +379,7 @@ export const makeSession = ({
       id: t.id,
       parent: t.parent,
       turn: t,
-      state: stateAt(path),
+      state: settled.s, // the fold to t's end: what stateAt(path) would fold again
       events: settled.events,
       checks: settled.checks,
       delivered: deliveredIn(t).map((d) => ({ ...d, text: textOf(d) })),

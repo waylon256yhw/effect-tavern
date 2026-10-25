@@ -58,8 +58,8 @@ export const get = <T extends Noded>(log: Log<T>, id: Id): T => {
 export const chain = <T extends Noded>(log: Log<T>, id: Id | null): T[] => {
   const out: T[] = []
   for (let n = id === null ? undefined : get(log, id); n; n = n.parent === null ? undefined : log.nodes.get(n.parent))
-    out.unshift(n)
-  return out
+    out.push(n)
+  return out.reverse() // pushed then reversed: an unshift per node made a chain O(depth²)
 }
 /** The reading line: root → head. */
 export const path = <T extends Noded>(log: Log<T>): T[] => chain(log, log.head)
