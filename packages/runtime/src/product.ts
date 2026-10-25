@@ -8,8 +8,10 @@
 // `feed` says whether the folded value goes back to the model next turn; `recall` makes the folded items readable by
 // the lookup stage like lore (hook = the item, or one column). The harness owns a default list (notes, options, inner);
 // a card patches by id; the player toggles `on`.
-// Ceilings: deleting a keyed row (a row only leaves through `filter` on one of its columns); pinning a row so record
-// leaves it alone; a cap derived from state; `every` n turns.
+// Retraction is not a verb (issue #7): a fact that can change is a row of a `{ key }` table (record re-rows it, the fold
+// keeps the newest), and a row that should vanish re-rows into a `filter` column that hides it; `notes` stays an
+// append-only chronicle, what was said stays said, and its weight is the compression policy's business (issue #6).
+// Ceilings: pinning a row so record leaves it alone; a cap derived from state; `every` n turns.
 import { Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
 
