@@ -190,9 +190,6 @@ importers:
       '@solidjs/web':
         specifier: 2.0.0-rc.15
         version: 2.0.0-rc.15(solid-js@2.0.0-rc.15)
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
       solid-js:
         specifier: 2.0.0-rc.15
         version: 2.0.0-rc.15
