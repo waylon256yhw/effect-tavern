@@ -525,7 +525,7 @@ button:focus-visible {
   resize: none;
   outline: none;
   field-sizing: content;
-  word-break: break-all; /* a run with no break inside (digits, a URL) fills the line it started on instead of dropping whole to the next */
+  overflow-wrap: anywhere; /* the reader's rule, so a line wraps here as it will in its bubble: a word or a number stays whole, a URL breaks at its slashes */
   /* a thin thumb on no track: the mask below fades the element's ends, and a track would look cut there */
   scrollbar-width: thin;
   scrollbar-color: var(--alpha-3) transparent;
@@ -542,18 +542,18 @@ button:focus-visible {
    words on the line's own text axis. The field is a line at rest, at the prose size like every input (iOS zooms anything smaller) */
 .composer .tray {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* the × stays at the top right when the note wraps; on one line it is centred all the same */
   gap: var(--space-1);
   width: fit-content; /* as wide as the note: a short one keeps its × at hand, a long one wraps at the box's width */
   max-width: calc(100% - 2 * var(--space-1));
   margin: 0 var(--space-1);
-  padding: 0 var(--space-1) 0 var(--space-1);
+  padding: 0 var(--space-1) 0 0; /* 4 + 0 + the field's 4: the note's words on the line's 8px axis */
   border-radius: var(--radius);
   background: light-dark(rgb(20 20 20 / 0.03), rgb(255 255 255 / 0.035));
 }
 .composer textarea.note {
   width: auto; /* field-sizing: content sizes the width too once it is not fixed */
-  min-width: 0;
+  min-width: 9rem; /* the first character typed must not shrink the box from the placeholder's width to its own */
   min-height: calc(1.5 * var(--text-prose) + 2 * var(--space-1));
   padding: var(--space-1);
   color: var(--ink-2);
@@ -562,6 +562,7 @@ button:focus-visible {
   flex: none;
   width: var(--control-sm);
   height: var(--control-sm);
+  margin-top: var(--space-1);
   color: var(--ink-3);
 }
 .composer .tray .icon svg {
