@@ -525,6 +525,7 @@ button:focus-visible {
   resize: none;
   outline: none;
   field-sizing: content;
+  word-break: break-all; /* a run with no break inside (digits, a URL) fills the line it started on instead of dropping whole to the next */
   /* a thin thumb on no track: the mask below fades the element's ends, and a track would look cut there */
   scrollbar-width: thin;
   scrollbar-color: var(--alpha-3) transparent;
@@ -543,13 +544,16 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  width: fit-content; /* as wide as the note: a short one keeps its × at hand, a long one wraps at the box's width */
+  max-width: calc(100% - 2 * var(--space-1));
   margin: 0 var(--space-1);
   padding: 0 var(--space-1) 0 var(--space-1);
   border-radius: var(--radius);
   background: light-dark(rgb(20 20 20 / 0.03), rgb(255 255 255 / 0.035));
 }
 .composer textarea.note {
-  flex: 1;
+  width: auto; /* field-sizing: content sizes the width too once it is not fixed */
+  min-width: 0;
   min-height: calc(1.5 * var(--text-prose) + 2 * var(--space-1));
   padding: var(--space-1);
   color: var(--ink-2);
