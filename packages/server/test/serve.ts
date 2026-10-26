@@ -43,7 +43,7 @@ const sse = (text: string) =>
     .filter(Boolean)
     .map((block) => {
       const [ev, data] = block.split("\n")
-      return { event: ev!.slice(7), data: JSON.parse(data!.slice(6)) as Event & { message?: string } }
+      return { event: ev!.slice(7), data: JSON.parse(data!.slice(6)) as Event & { message?: string; code?: string } }
     })
 
 const run = async (inspect: boolean) => {
@@ -137,6 +137,7 @@ const run = async (inspect: boolean) => {
       await (await post({ kind: "setField", node: node.turn.id, effects: [{ path: "x", set: 1 }] })).text(),
     )
     assert.deepEqual([err.length, err[0]!.event, /x/.test(err[0]!.data.message!)], [1, "error", true])
+    assert.equal(err[0]!.data.code, undefined) // only the no-model failure carries a code
     // A parent that does not exist is a defect on the stream, not a new root (it once became its own parent and spun).
     const orphan = sse(await (await post({ kind: "act", parent: 99, input: { text: "hi" } })).text())
     assert.deepEqual([orphan.length, orphan[0]!.event, /99/.test(orphan[0]!.data.message!)], [1, "error", true])
@@ -579,6 +580,16 @@ await run(false)
     assert.equal(await summarized("6"), false)
     const nodes = await fetch(`http://localhost:${(bare.address() as AddressInfo).port}/nodes`)
     assert.equal(nodes.status, 200)
+    // the first line it is sent fails with the code the client links to Settings → 默认模型 by (issue #61)
+    const none = sse(
+      await (
+        await fetch(`http://localhost:${(bare.address() as AddressInfo).port}`, {
+          method: "POST",
+          body: JSON.stringify({ kind: "act", input: { text: "hi" } }),
+        })
+      ).text(),
+    ).at(-1)!
+    assert.deepEqual([none.event, none.data.code], ["error", "no-model"])
   } finally {
     server.close()
     bare.close()

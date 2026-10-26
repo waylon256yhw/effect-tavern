@@ -454,6 +454,13 @@ section:has(> .editor) > .actions {
 .error .icon {
   margin: -6px -8px -6px auto; /* the control's box hangs over the padding: the row stays one line of text tall */
 }
+/* the way out of an error, inline after it (no model: Settings → 默认模型) */
+.error .go {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
 
 button {
   font: inherit;

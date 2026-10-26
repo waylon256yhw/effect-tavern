@@ -22,7 +22,10 @@ export interface Draft {
   prev?: string // the discarded first draft, shown greyed under the rewrite
   fresh?: boolean // the line is nowhere else (an act, a revised line): a failed turn puts it back in the composer
 }
-export type Wire = Event | { kind: "error"; message: string }
+/** A failed turn as the server's `error` event says it: `code` "no-model" (no model to run it on) is the one the ghost
+ *  turns into a way into Settings → 默认模型. */
+export type Failure = { message: string; code?: string }
+export type Wire = Event | ({ kind: "error" } & Failure)
 
 export { registry }
 export const log = Atom.make<L.Log<Node>>(L.of<Node>())
@@ -98,7 +101,7 @@ export const revising = Atom.make<{
   field: "text" | "note"
   previous: { text: string; note: string; aside: boolean }
 } | null>(null)
-export const error = Atom.make<string | null>(null)
+export const error = Atom.make<Failure | null>(null)
 /** A turn in flight: a draft that is not the ghost of a failed one. What holds the composer, the story and a new root. */
 export const working = Atom.make((get) => get(draft) !== null && get(error) === null)
 /** The page over the reader: none, the card page, the Timeline, the settings, or the Inspect page on one node. The reader stays
@@ -282,7 +285,7 @@ const applyNow = (e: Wire): void => {
     case "error":
       made.length = 0
       resetPlay()
-      registry.set(error, e.message)
+      registry.set(error, { message: e.message, ...(e.code && { code: e.code }) })
       registry.set(stage, null)
       withdraw()
       return
