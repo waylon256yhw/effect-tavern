@@ -1,7 +1,8 @@
 // The developer's session: one card (CARD, default wuxia) on the local Anthropic connection, or on a scripted model
 // (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The library (data.ts)
 // is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a runtime/server
-// edit, or a restart, keeps the story; the session plays the card's newest story, or opens one. An empty story opens on
+// edit, or a restart, keeps the story; a second process on the same DATA gets a library of its own (data.ts `lock`).
+// Each request names its story; one that names none plays the card's newest, or a new one. An empty story opens on
 // the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
 // picked on the server would stay as an orphan root beside the player's). Which model runs each stage is the library's
 // routing (the settings page); MODEL=fake puts the scripted model over it.
@@ -149,8 +150,8 @@ if (key && !data.providers.list().length && !data.secrets.list().length) {
 }
 const card = await loadCard(name)
 const lib = library({ data, card, player, model, pinned: scripted }) // MODEL=fake scripts every stage, whatever the routing says
-if (lib.session.log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
+if (lib.session().log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
   const greeting = card.greetings[Number(process.env["GREETING"])]
-  if (greeting) lib.session.greet(greeting)
+  if (greeting) lib.session().greet(greeting)
 }
 export const handler = handle(lib, { inspect: true })

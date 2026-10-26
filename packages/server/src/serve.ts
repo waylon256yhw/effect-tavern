@@ -1,16 +1,19 @@
-// The wire adapter at the session's seam: one process, one session, no logic of its own.
-//   POST /        an Action (src/session.ts `Action`, decoded at this boundary) → the events it causes, as SSE, one
+// The wire adapter at the session's seam: one process, a session per story, no logic of its own. A request names its
+// story in `x-tavern-story` (the client's `stories.current`); without the header it is on the most recently updated
+// story, and a header naming no story is a 404 on every story route (/card, /nodes, /calls, POST /). The rest
+// (/player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story.
+//   POST /      an Action (src/session.ts `Action`, decoded at this boundary) → the events it causes, as SSE, one
 //                 `event:` per kind; a failure is an `error` event. Closing the response is the stop: before the first
 //                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
 //                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories (id, turns, the last line, updated), newest first, and which one is open.
-//                 POST /stories opens a new one,
-//                 PUT /stories/<id> opens that one (404 when there is none), DELETE /stories/<id> removes it (the open
-//                 one gone, the newest remaining opens, or a new one). Each answers the listing; the client re-reads
-//                 /nodes, and the trace starts over.
+//   GET  /stories this card's stories (id, turns, the last line, updated), newest first, and `current`: the
+//                 story the client is to be on (the one it named while that one is there, else the newest). POST
+//                 /stories makes a new one and answers it as `current`, PUT /stories/<id> answers that one (404 when
+//                 there is none), DELETE /stories/<id> removes it. The server opens nothing: the client adopts
+//                 `current`, sends it from then on, re-reads /nodes, and the trace starts over.
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
 //                 where it is picked), DELETE /personas/<id> removes it and its picks (the client re-reads /player).
 //                 Both answer the list. Which persona is in force on a card is the player's (`Player.persona`).
@@ -81,26 +84,24 @@ const RoutingBody = Schema.decodeUnknownSync(Routing)
 export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
   return async (req: IncomingMessage, res: ServerResponse) => {
-    const s = lib.session // the open story's
     const json = (status: number, v: unknown) => {
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
     }
     const bad = (e: unknown, status = 400) => json(status, { error: e instanceof Error ? e.message : String(e) })
-    const stories = () => json(200, { current: lib.story, stories: lib.stories.list() })
+    const named = req.headers["x-tavern-story"]
+    const asked = typeof named === "string" && named !== "" ? Number(named) : undefined
+    /** The listing, with the story the client is to be on: the one it named while that one is still there. */
+    const stories = (current = asked !== undefined && lib.exists(asked) ? asked : lib.newest()) =>
+      json(200, { current, stories: lib.stories.list() })
     if (req.method === "GET" && req.url === "/stories") return stories()
-    if (req.method === "POST" && req.url === "/stories") {
-      lib.stories.create()
-      return stories()
-    }
+    if (req.method === "POST" && req.url === "/stories") return stories(lib.stories.create())
     const storyAt = /^\/stories\/(\d+)$/.exec(req.url ?? "")
     if (storyAt && (req.method === "PUT" || req.method === "DELETE")) {
-      try {
-        if (req.method === "PUT") lib.stories.open(Number(storyAt[1]))
-        else lib.stories.del(Number(storyAt[1]))
-      } catch (e) {
-        return bad(e, 404)
-      }
+      const id = Number(storyAt[1])
+      if (!lib.exists(id)) return json(404, { error: `no story ${id}` })
+      if (req.method === "PUT") return stories(id)
+      lib.stories.del(id)
       return stories()
     }
     if (req.method === "GET" && req.url === "/personas") return json(200, lib.personas.list())
@@ -188,6 +189,23 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       }
       return json(200, lib.routing.read())
     }
+    if (req.method === "GET" && req.url === "/player") return json(200, lib.player)
+    if (req.method === "PUT" && req.url === "/player") {
+      try {
+        lib.setPlayer(decodePlayer(JSON.parse(await body(req))))
+      } catch (e) {
+        return json(400, { error: e instanceof Error ? e.message : String(e) })
+      }
+      return json(200, lib.player)
+    }
+    // Everything below is one story's: the one the request names, or the most recently updated when it names none.
+    const story = asked ?? lib.newest()
+    let s
+    try {
+      s = lib.session(story)
+    } catch (e) {
+      return bad(e, 404)
+    }
     if (req.method === "GET" && req.url === "/card")
       return json(200, {
         ...s.meta,
@@ -199,15 +217,6 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         format: s.format,
       })
     if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
-    if (req.method === "GET" && req.url === "/player") return json(200, s.player)
-    if (req.method === "PUT" && req.url === "/player") {
-      try {
-        s.setPlayer(decodePlayer(JSON.parse(await body(req))))
-      } catch (e) {
-        return json(400, { error: e instanceof Error ? e.message : String(e) })
-      }
-      return json(200, s.player)
-    }
     const dropping = req.method === "DELETE" && /^\/nodes\/(\d+)$/.exec(req.url ?? "")
     if (dropping) {
       let c
@@ -218,7 +227,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       }
       return json(200, c) // the dropped nodes' calls went with them
     }
-    if (req.method === "GET" && req.url === "/calls") return json(200, lib.calls.list())
+    if (req.method === "GET" && req.url === "/calls") return json(200, lib.calls(story).list())
     if (req.method !== "POST" || req.url !== "/") return json(404, { error: "not found" })
     let action
     try {
@@ -233,7 +242,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       if (!closed) res.write(`event: ${name}\ndata: ${JSON.stringify(v)}\n\n`)
     }
     const made: Call[] = [] // this action's calls, filed under its node once the node exists (an amend appends)
-    const trace = lib.calls // the story the action runs in, whatever opens meanwhile
+    const trace = lib.calls(story)
     const stop = Effect.runSync(Deferred.make<void>())
     const fiber = Effect.runFork(
       Stream.runForEach(perform(s, action, Deferred.await(stop)), (e) =>

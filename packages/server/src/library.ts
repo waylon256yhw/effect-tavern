@@ -3,10 +3,10 @@
 // the player's, a sibling of the card, not a step of a story: `Player.persona[card]` names the one in force, and the
 // library reads its text into the per-card persona slot on every request (the card's default overridden by the slot
 // rules, nothing else in the card touched), so an edit of the persona is in force from the next request and a change of
-// pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). Opening another story
-// is another session; the wire
-// adapter asks `session` on every request, so a switch is in force at once. Deleting the open story opens the newest
-// remaining one, or a new one when none is left: there is always a story open. A hat is the player's too, named by a
+// pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). The library holds no
+// "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens that story's
+// session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
+// the install's: the player layer (a write reaches every open session), personas, hats, providers and routing. A hat is the player's too, named by a
 // connection (`SessionModel.hat`) and read from the table on every request the same way: an edit is in force from the
 // next request, and a deleted hat leaves the connection bare (the id resolves to nothing).
 // The model each stage runs on is the routing row's (provider, model) pair, the stage's own or the default, resolved
@@ -121,26 +121,34 @@ export const library = ({
     return id === undefined ? undefined : data.personas.list().find((x) => x.id === id)?.text
   }
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
-  const open = (id: Id): Session => {
-    if (!data.stories.list(card.id).some((s) => s.id === id)) throw new Error(`no story ${id}`)
-    return makeSession({ card, player, model, store: data.store<Turn>(id), players, persona, hat })
+  // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
+  const sessions = new Map<Id, Session>()
+  const exists = (id: Id) => data.stories.list(card.id).some((s) => s.id === id)
+  /** The most recently updated story, or a new one when the card has none. */
+  const newest = () => data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
+  /** A story's session, opened on its first request and the same one for every request that names it after. */
+  const session = (id: Id = newest()): Session => {
+    let s = sessions.get(id)
+    if (s) return s
+    if (!exists(id)) throw new Error(`no story ${id}`)
+    s = makeSession({ card, player, model, store: data.store<Turn>(id), players, persona, hat })
+    sessions.set(id, s)
+    return s
   }
-  let current = data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
-  let session = open(current)
-  const to = (id: Id) => {
-    session = open(id)
-    current = id
+  /** The player layer is the install's, one for every story: a write reaches every open session. */
+  const setPlayer = (p: Player) => {
+    data.player.write(p)
+    for (const s of sessions.values()) s.setPlayer(p)
   }
   return {
-    get session() {
-      return session
+    session,
+    exists,
+    newest,
+    get player(): Player {
+      return players.read() ?? player
     },
-    get story() {
-      return current
-    },
-    get calls() {
-      return data.calls(current)
-    },
+    setPlayer,
+    calls: (id: Id) => data.calls(id),
     stories: {
       /** A row names its story by the player's last line (the head's), or the head's first words; empty, "". */
       list: () =>
@@ -150,11 +158,11 @@ export const library = ({
           const told = t?.reply.find((p) => p.type === "text")
           return { ...s, last: said || (told ? told.text.trimStart().split("\n")[0]! : "") }
         }),
-      open: to,
-      create: () => to(data.stories.create(card.id)),
+      create: (): Id => data.stories.create(card.id),
       del: (id: Id) => {
+        if (!exists(id)) throw new Error(`no story ${id}`)
         data.stories.del(id)
-        if (id === current) to(data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id))
+        sessions.delete(id)
       },
     },
     hats: data.hats,
@@ -218,10 +226,10 @@ export const library = ({
       /** Gone from the table, and from every card it was picked on: the card's own persona is back in force there. */
       del: (id: string) => {
         data.personas.del(id)
-        const p = session.player
+        const p = players.read() ?? player
         if (p.persona && Object.values(p.persona).includes(id)) {
           const rest = Object.fromEntries(Object.entries(p.persona).filter(([, v]) => v !== id))
-          session.setPlayer({ ...p, persona: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key
+          setPlayer({ ...p, persona: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key
         }
       },
     },

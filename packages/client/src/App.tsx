@@ -544,9 +544,12 @@ const Reader = () => {
   let stop: (() => void) | null = null
   onSettled(() => {
     // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
-    void Promise.all([fetchCard(), fetchNodes(), fetchStories(), fetchPersonas(), fetchPlayer()]).then(() => {
-      if (registry.get(log).nodes.size === 0) registry.set(page, "card")
-    })
+    // the listing first: it names the story every request after is on
+    void fetchStories()
+      .then(() => Promise.all([fetchCard(), fetchNodes(), fetchPersonas(), fetchPlayer()]))
+      .then(() => {
+        if (registry.get(log).nodes.size === 0) registry.set(page, "card")
+      })
   })
 
   const start = (
@@ -738,6 +741,12 @@ export const App = () => {
       </Show>
       <Show when={typeof pg() === "object"}>
         <Inspect id={(pg() as { inspect: Id }).inspect} />
+      </Show>
+      {/* an agent's tab (a driven browser) told apart from the player's at a glance */}
+      <Show when={navigator.webdriver}>
+        <div class="automation" aria-hidden="true">
+          automation
+        </div>
       </Show>
     </>
   )

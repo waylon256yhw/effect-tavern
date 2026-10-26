@@ -48,9 +48,12 @@ const sse = (text: string) =>
 const run = async (inspect: boolean) => {
   const server = serve(lib, { inspect }).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  let story: number | undefined // the story this client is on, as the client's `stories.current`: none = the newest
+  const fetch = (url: string, init: RequestInit = {}) =>
+    globalThis.fetch(url, story === undefined ? init : { ...init, headers: { "x-tavern-story": String(story) } })
   const post = (v: unknown, signal?: AbortSignal) => fetch(base, { method: "POST", body: JSON.stringify(v), signal })
   try {
-    assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(lib.session.snapshot()))
+    assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(lib.session().snapshot()))
     const about = (await (await fetch(`${base}/card`)).json()) as Record<string, unknown>
     assert.equal(about["input"], "act") // undeclared = act
     // the card's projection: the openings whole, the fiction without its text, the guard and lore as counts
@@ -95,8 +98,8 @@ const run = async (inspect: boolean) => {
     )
     const node = (evs.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
     assert.equal(node.turn.input.text, "hi")
-    assert.deepEqual(node, wired(lib.session.node(node.id))) // the wire carries the projection whole
-    assert.equal(lib.session.log.head, node.id)
+    assert.deepEqual(node, wired(lib.session().node(node.id))) // the wire carries the projection whole
+    assert.equal(lib.session().log.head, node.id)
     // the trace stays on the server, by node, stripped the same way as the stream; every call carries its duration
     const trace = (await (await fetch(`${base}/calls`)).json()) as Record<string, Extract<Event, { kind: "call" }>[]>
     assert.deepEqual(trace[node.turn.id], wired(calls))
@@ -110,19 +113,19 @@ const run = async (inspect: boolean) => {
 
     // stop: the client closes the response once the prose streams; the turn finishes into a `stopped` node it reads back.
     const ac = new AbortController()
-    const size = lib.session.log.nodes.size
+    const size = lib.session().log.nodes.size
     const slow = await post({ kind: "act", parent: null, input: { text: "slow" } }, ac.signal)
     const reader = slow.body!.getReader()
     let got = ""
     while (!/event: delta/.test(got)) got += new TextDecoder().decode((await reader.read()).value)
     ac.abort()
-    while (lib.session.log.nodes.size === size) await new Promise((r) => setTimeout(r, 10))
-    const stopped = [...lib.session.log.nodes.values()].at(-1)!
+    while (lib.session().log.nodes.size === size) await new Promise((r) => setTimeout(r, 10))
+    const stopped = [...lib.session().log.nodes.values()].at(-1)!
     const kept = (stopped.reply[0] as { text: string }).text
     assert.deepEqual([stopped.input.text, stopped.end, kept.length > 0 && kept.length < 240], ["slow", "stopped", true])
     assert.equal(
       ((await (await fetch(`${base}/nodes`)).json()) as { nodes: unknown[] }).nodes.length,
-      lib.session.log.nodes.size,
+      lib.session().log.nodes.size,
     )
 
     const bad = await post({ kind: "fly" })
@@ -143,13 +146,13 @@ const run = async (inspect: boolean) => {
     assert.deepEqual([g.parent, g.input.text, (g.reply[0] as { text: string }).text], [null, "", "G"])
     const noSuch = sse(await (await post({ kind: "greet", greeting: 3 })).text())
     assert.deepEqual([noSuch.length, noSuch[0]!.event], [1, "error"])
-    const tree = [...lib.session.log.nodes.keys()]
+    const tree = [...lib.session().log.nodes.keys()]
     // checkout: head to a version's newest leaf (its follow-up comes back); act without a parent lands under head
     const back = sse(await (await post({ kind: "checkout", node: node.id })).text())
     assert.deepEqual(back.at(-1)!.data, { kind: "change", head: node.id + 1 }) // "hi" → its pick "B"
     const under = sse(await (await post({ kind: "act", input: { text: "under head" } })).text())
     const u = (under.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
-    assert.deepEqual([u.parent, lib.session.log.head], [node.id + 1, u.id])
+    assert.deepEqual([u.parent, lib.session().log.head], [node.id + 1, u.id])
     const hadTrace = Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length
     const c = (await (await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).json()) as {
       dropped: number[]
@@ -168,7 +171,7 @@ const run = async (inspect: boolean) => {
     // the narrator's head (seen when inspecting) from the next request on, an edit of the persona too, no new story;
     // deleting it drops the pick. A new story opens empty; switching back finds the first story's nodes; a story that is
     // not there is a 404.
-    const first = lib.story
+    const first = lib.newest()
     const persona = (id: string, v?: unknown) =>
       fetch(`${base}/personas/${id}`, {
         method: v === undefined ? "DELETE" : "PUT",
@@ -185,6 +188,7 @@ const run = async (inspect: boolean) => {
       stories: { id: number }[]
     }
     assert.deepEqual([opened.current !== first, opened.stories.length], [true, 2])
+    story = opened.current // the client adopts what the listing names
     assert.deepEqual(((await (await fetch(`${base}/nodes`)).json()) as { nodes: unknown[] }).nodes, [])
     const headOf = async (text: string) => {
       const got = sse(await (await post({ kind: "act", parent: null, input: { text } })).text())
@@ -195,13 +199,24 @@ const run = async (inspect: boolean) => {
     assert.equal((await headOf("and now")).includes("你是还俗的武僧。"), inspect) // the edit is in force, same story
     const listed = (await (await fetch(`${base}/stories`)).json()) as { stories: { turns: number; last: string }[] }
     assert.deepEqual([listed.stories[0]!.turns, listed.stories[0]!.last], [2, "and now"]) // the row is named by the player's last line
+    // Two clients on two stories: each request is on the story its header names, and neither moves the other.
+    const on = (id: number) => ({ headers: { "x-tavern-story": String(id) } })
+    const sizeOn = async (id: number) =>
+      ((await (await globalThis.fetch(`${base}/nodes`, on(id))).json()) as { nodes: unknown[] }).nodes.length
+    assert.notEqual(lib.session(first), lib.session(opened.current))
+    assert.deepEqual(
+      [await sizeOn(first), await sizeOn(opened.current), await sizeOn(first)],
+      [lib.session(first).log.nodes.size, 2, lib.session(first).log.nodes.size],
+    )
+    assert.ok(lib.session(first).log.nodes.size > 2)
     assert.equal(
       ((await (await fetch(`${base}/stories/${first}`, { method: "PUT" })).json()) as { current: number }).current,
       first,
     )
+    story = first
     assert.equal(
       ((await (await fetch(`${base}/nodes`)).json()) as { nodes: unknown[] }).nodes.length,
-      lib.session.log.nodes.size,
+      lib.session(first).log.nodes.size,
     )
     assert.equal((await fetch(`${base}/stories/999`, { method: "PUT" })).status, 404)
     const left = (await (await fetch(`${base}/stories/${opened.current}`, { method: "DELETE" })).json()) as {
@@ -209,6 +224,12 @@ const run = async (inspect: boolean) => {
       stories: unknown[]
     }
     assert.deepEqual([left.current, left.stories.length], [first, 1])
+    // A client still naming the deleted story: its story routes are a 404, and the listing puts it on the newest.
+    assert.equal((await globalThis.fetch(`${base}/nodes`, on(opened.current))).status, 404)
+    assert.equal(
+      ((await (await globalThis.fetch(`${base}/stories`, on(opened.current))).json()) as { current: number }).current,
+      first,
+    )
     assert.deepEqual(await (await persona("monk")).json(), [])
     assert.equal(((await (await fetch(`${base}/player`)).json()) as { persona?: object }).persona, undefined) // the pick went with it
     assert.equal((await headOf("who now")).includes(monk.text), false)
@@ -412,13 +433,22 @@ await run(false)
   }
 }
 
-// The library alone: deleting the open story opens the newest remaining one, or a new one when none is left.
+// The library alone holds no open story: a session per story, opened on first use and kept; none named is the newest,
+// and a card with no story left gets a new one. A player write reaches every open session.
 const solo = library({ data: open(":memory:"), card: chat, player, model })
-const a = solo.story
-solo.stories.create()
-const b = solo.story
+const a = solo.newest()
+const b = solo.stories.create()
+assert.equal(solo.session(a), solo.session(a))
+assert.notEqual(solo.session(a), solo.session(b))
+solo.setPlayer({ ...solo.player, persona: { [chat.id]: "monk" } })
+assert.deepEqual(
+  [solo.session(a).player.persona, solo.session(b).player.persona],
+  [{ [chat.id]: "monk" }, { [chat.id]: "monk" }],
+)
 solo.stories.del(b)
-assert.equal(solo.story, a)
+assert.throws(() => solo.session(b), /no story/)
+assert.throws(() => solo.stories.del(b), /no story/)
+assert.equal(solo.newest(), a)
 solo.stories.del(a)
-assert.ok(solo.story !== a && solo.stories.list().length === 1)
+assert.ok(solo.newest() !== a && solo.stories.list().length === 1)
 console.log("ok")
