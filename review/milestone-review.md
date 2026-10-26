@@ -7,6 +7,7 @@
 ## 一、确凿需修的问题（Worth Doing Now）
 
 ### 1. 停止生成（`stop`）在重写/续写与 `polish` 阶段的时序 Bug
+
 - **重写或续写等待期点停止 → 服务端丢弃整轮、客户端轮询假死 30 秒**：
   - `packages/server/src/serve.ts:275` 在每次收到 `e.kind === "stage" && e.phase === "narrate"` 时，都会把 `narrating` 重置为 `false`（注释写着 `even on the correction rewrite`）。
   - 但运行时 `packages/runtime/src/session.ts:763-766` 的设计契约是：当 `check` 未通过触发第二稿重写、且在第二稿吐出第一个字之前收到 `stop` 时，**保留第一稿并以 `end: "stopped"` 落盘**；客户端 `packages/client/src/store.ts:182` 的 `arrived()` 也因为 `draft.prev` 非空而返回 `true`，`packages/client/src/App.tsx:628-641` 的 `onStop` 会据此切到 `stage = "record"` 并轮询 `fetchNodes()` 最多 100 次 × 300ms（30 秒）。
@@ -18,11 +19,13 @@
   - **修法**：客户端将 `stoppable` 收紧为 `phase() !== "check" && phase() !== "polish" && phase() !== "record"`（服务端**切勿**在 `check` / `polish` 把 `narrating` 置回 `false`，否则会在此时断连时直接中断协程丢掉整轮）。
 
 ### 2. SQLite `call` 表无界增长与文档过时
+
 - `README.md:113` 仍写着「server 按节点在内存里留着最近两百个节点的 calls，重启从头记」，但实际实现（`packages/server/src/data.ts:37-38, 182-198`）已改为全量写入 SQLite `call` 表，且没有上限或淘汰逻辑。
 - 虽然 `GET /calls` 仅在打开 Inspector 时按需拉取、且单次调用的消息体积受折叠预算约束（约为 $O(N \cdot \text{budget})$），但长局下 SQLite 文件仍会持续累積历史调用记录。
 - **修法**：为 `call` 表加上按节点数量的上限淘汰，并同步更新 `README.md:113` 的描述。
 
 ### 3. 两个低成本前端 UX 痛点
+
 - **点击当前故事直接触发内联重命名（`packages/client/src/side.tsx:182`）**：
   - `if (s().id === lib()?.current) return void setRenaming(true)` 在手机端打开 Session 抽屉后，若玩家点一下当前高亮的故事想收起抽屉回到阅读器，反而会进入 `<input>` 重命名状态并弹出手机软键盘。
 - **未配模型时首次发送报错缺少引导（`packages/server/src/library.ts:98`）**：
