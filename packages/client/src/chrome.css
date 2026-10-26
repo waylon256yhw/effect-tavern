@@ -711,6 +711,7 @@
     box-sizing: border-box;
     max-height: 100%;
     overflow-y: auto;
+    overflow-x: hidden; /* nothing in the card is wider than it; a shown hint at its edge must not add a bar */
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
