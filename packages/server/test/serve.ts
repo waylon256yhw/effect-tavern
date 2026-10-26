@@ -460,6 +460,57 @@ await run(false)
   }
 }
 
+// The fold budget follows the narrate pair's model entry, read per request: a 16k window leaves no tail budget, so the
+// fifth narrate (the first a block can fold under keep 2) reads a summary; a 200k one keeps the whole tail. A library with no routing and no
+// environment model still answers GET /nodes (the fold reads no model).
+{
+  const upstream = createServer((req, res) => {
+    req.resume().on("end", () => {
+      res.writeHead(200, { "content-type": "text/event-stream" })
+      const chunk = (delta: object, finish: string | null) =>
+        `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
+      res.end(chunk({ role: "assistant", content: "R" }, null) + chunk({}, "stop") + "data: [DONE]\n\n")
+    })
+  }).listen(0)
+  const data = open(":memory:")
+  data.secrets.put({ id: "k", name: "K", type: "api_key", value: "v" })
+  const relay = (contextTokens: number) => ({
+    id: "relay",
+    name: "Relay",
+    enabled: true,
+    defaultFormat: "openai-compatible" as const,
+    endpoints: { "openai-compatible": { url: `http://localhost:${(upstream.address() as AddressInfo).port}` } },
+    secret: "k",
+    models: [{ id: "m", contextTokens }],
+  })
+  data.providers.put(relay(16000))
+  data.routing.write({ stages: { narrate: { provider: "relay", model: "m" } } })
+  const server = serve(library({ data, card: chat, player, model }), { inspect: true }).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  const summarized = async (text: string) => {
+    const evs = sse(
+      await (await fetch(base, { method: "POST", body: JSON.stringify({ kind: "act", input: { text } }) })).text(),
+    )
+    const call = evs.find((e) => e.data.kind === "call" && e.data.phase === "narrate")!
+    return JSON.stringify((call.data as Extract<Event, { kind: "call" }>).msgs).includes("Summary:")
+  }
+  const bare = serve(library({ data: open(":memory:"), card: chat, player })).listen(0)
+  try {
+    const seen = []
+    for (const t of "1234") seen.push(await summarized(t))
+    assert.deepEqual(seen, [false, false, false, false]) // keep 2, block 2: nothing folds before the fifth
+    assert.equal(await summarized("5"), true)
+    data.providers.put(relay(200000))
+    assert.equal(await summarized("6"), false)
+    const nodes = await fetch(`http://localhost:${(bare.address() as AddressInfo).port}/nodes`)
+    assert.equal(nodes.status, 200)
+  } finally {
+    server.close()
+    bare.close()
+    upstream.close()
+  }
+}
+
 // The library alone holds no open story: a session per story, opened on first use and kept; none named is the newest,
 // and a card with no story left gets a new one. A player write reaches every open session.
 const solo = library({ data: open(":memory:"), card: chat, player, model })

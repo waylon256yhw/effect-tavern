@@ -54,7 +54,7 @@ import {
   type Player,
   type Snippet,
 } from "./fragment.ts"
-import { folded, ledger, makeSummaries, narratorHistory, type Policy } from "./history.ts"
+import { folded, ledger, makeSummaries, narratorHistory, policyFor, type Policy } from "./history.ts"
 import {
   deliveredIn,
   deliveredOn,
@@ -220,11 +220,6 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       ? Schema.Struct(fired)
       : Schema.Struct(violated)
 }
-// ponytail: 8000 estimated tokens is a harness guess (about eight Chinese turns verbatim, well under any context window);
-// a connection's own window or an exact count (tokens.ts) would set it if one is ever wanted per model.
-// ponytail: a provider's model entry stores `contextTokens` (provider providers.ts, the settings page): the future
-// consumer of this constant, unread until the fold policy is per model.
-const policy: Policy = { budget: 8000, keep: 2, block: 2 }
 
 /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
 export const floorAt = (unlock: Cond | readonly Cond[], s: State) => {
@@ -267,7 +262,7 @@ export const makeSession = ({
   players,
   persona,
   hat,
-  policy: P = policy,
+  policy: P = policyFor(),
 }: {
   card: Card
   player: Player // the harness default; a stored player wins over it
@@ -276,7 +271,9 @@ export const makeSession = ({
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
   persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
-  policy?: Policy // the fold boundary; tests pass a small budget to fold short scripted prose
+  // the fold boundary, a value or read on every fold (library.ts: the narrate model's window, so a routing edit is in
+  // force from the next request); tests pass a small budget to fold short scripted prose
+  policy?: Policy | (() => Policy)
 }) => {
   const modelFor = (p: Phase): SessionModel =>
     typeof models === "function" ? models(p) : "default" in models ? (models[p] ?? models.default) : models
@@ -321,7 +318,7 @@ export const makeSession = ({
       costs.set(t, (c = tokens([t.input.text, proseOf(t.reply), ...deliveredIn(t).map(textOf)].join("\n"))))
     return c
   }
-  const foldOf = (path: readonly Turn[]) => folded(path, cost, P)
+  const foldOf = (path: readonly Turn[]) => folded(path, cost, typeof P === "function" ? P() : P)
   /** The one summary every view of this path folds to (narrator, ledger), the same cached object. */
   const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   let seeds = 0

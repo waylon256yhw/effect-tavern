@@ -6,7 +6,7 @@ import { fake, text as generate, type Message } from "@effect-tavern/provider"
 import { Effect } from "effect"
 import assert from "node:assert/strict"
 import type { Msg } from "../src/fragment.ts"
-import { folded, ledger, makeSummaries, narratorHistory } from "../src/history.ts"
+import { folded, ledger, makeSummaries, narratorHistory, policyFor } from "../src/history.ts"
 import { deliveredOn, notesOf, prose, type Brief, type Input, type Turn as TurnOf } from "../src/journal.ts"
 import * as Log from "../src/log.ts"
 import { makeLore, type Disclosure } from "../src/lore.ts"
@@ -266,5 +266,11 @@ await Effect.runPromise(program)
     ns.forEach((n, i) => assert.ok(n % block === 0 && i + 1 - n >= Math.min(2, i + 1) && n >= (ns[i - 1] ?? 0)))
   }
 }
+
+// The fold budget off the narrate model's window: half of it less the head-and-reply reserve; unknown → 8000.
+assert.deepEqual(
+  [32000, 128000, 200000, 16000, 8000, undefined].map((w) => policyFor(w).budget),
+  [8000, 56000, 92000, 0, 0, 8000],
+)
 
 console.log("ok")
