@@ -74,7 +74,7 @@ The narrator never sees a number. State reaches it only as the fiction variants 
   implicit, the answer falls to the conservative option, the field never moves); and a band gated on a field must not
   describe the trajectory that field's readout measures (pei-cool before b52f7db5 did, and bond was flat five turns).
 - **Who may move a field**: a field only actions write is mechanical, the prose cannot move it. A field the fiction
-  may move needs a readout (lint `prose-cannot-move`, today card.ts:116).
+  may move needs a readout (lint `prose-cannot-move`).
 - **Knowledge revealed gradually** → `lore: [{ id, layers, unlock, offer }]`. `layers[0]`'s first sentence is the
   **hook**: the entry's one line in the lookup index, written as the player would say it, not a keyword. `unlock` is the
   floor: one Cond per layer (`{ all: [] }` is always true; a single Cond is layer 1's); once a state on the path
@@ -108,7 +108,7 @@ initials. Decide for each field who moves it: actions (mechanical) or a readout 
 readouts with their effects and events. Lay out lore: ids, how many layers, `unlock` per layer, `offer` on which events
 or counters. Lay out fiction: ids, labels, `when` bands with one-line placeholders. Count greetings and write their
 `do`. Patch or add products. Run `bun card check <card>` (#27, #28) until there is no error and every warning is one you
-meant. Until the CLI lands: `decodeCard` the object and read the throws; `makeCard` prints the write-path warning.
+meant. Until the CLI lands: `decodeCard` the object, read the throws, and call `lint` (src/lint.ts) on it.
 
 **2. Novelist** (the mechanism is frozen). Fill `frame`, every fiction band, every lore layer, every greeting. Run
 `card check` again for `field-in-prose` and `inline-product`. Run `card view` at the states that matter: each band

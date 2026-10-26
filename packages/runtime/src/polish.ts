@@ -78,9 +78,9 @@ const compile = (pattern: string) =>
   )
 
 /** The sentences of `text` that hit `lexicon` outside dialogue, as targets `hit-1`, `hit-2`, … in document order. None
- *  when the prose is under the floor or the lexicon is empty. */
-export const scan = (text: string, lexicon: readonly Entry[]): Target[] => {
-  if (text.length < FLOOR || !lexicon.length) return []
+ *  when the prose is under the floor or the lexicon is empty; lint scans card text with floor 0. */
+export const scan = (text: string, lexicon: readonly Entry[], floor = FLOOR): Target[] => {
+  if (text.length < floor || !lexicon.length) return []
   const masked = mask(text)
   const res = lexicon.filter((e) => e.pattern.replace(/\*/g, "")).map((e) => ({ e, re: compile(e.pattern) }))
   const out: Target[] = []
