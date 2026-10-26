@@ -11,6 +11,13 @@ import { makeSession, type Event } from "../src/session.ts"
 import { loadCard, player } from "./cards/index.ts"
 
 const which = process.argv[2] ?? "wuxia"
+// 盐道's turns: direction, not dialogue, each line is what a novelist tells the narrator to write next
+const yandao = [
+  "沈二带的驼队进镇，街上的人在看。先写镇子的样子，不要急着出事。",
+  "老柯带两个差役上来查驼队，沈二不让开包。写到动手为止，写两三个旁观者的反应。",
+  "切到县衙里。周秉文听到消息，写他和老柯的对话。",
+  "第二天早上，镇上的传言。收尾时留一个悬念。",
+]
 type Script = { card: Card; turns: Array<{ parent: number | null; input: { text: string; note?: string } }> }
 const script = async (): Promise<Script> => {
   const card = await loadCard(which)
@@ -41,7 +48,7 @@ const script = async (): Promise<Script> => {
         ],
       }
     default: {
-      const m = (await import(`./cards/${which}.ts`)) as { turns: string[] }
+      const m = which === "yandao" ? { turns: yandao } : ((await import(`./cards/${which}.ts`)) as { turns: string[] })
       // Linear: each turn follows the previous node; node 0 is the greeting when the card has one. The card's default
       // channel decides which box the typed text lands in: the client reads `input`, the session takes both.
       const first = card.greetings.length ? 1 : 0

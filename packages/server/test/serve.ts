@@ -4,7 +4,7 @@
 import { LLMock } from "@copilotkit/aimock"
 import { fake, fakeText } from "@effect-tavern/provider"
 import type { Event } from "@effect-tavern/runtime/src/session.ts"
-import { chat, player } from "@effect-tavern/runtime/test/cards/wuxia.ts"
+import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
 import assert from "node:assert/strict"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { createServer } from "node:http"

@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { decodeCard } from "../../src/card.ts"
+import { emit } from "./index.ts"
 
 const PLAYER = "你"
 const macros = (s: string, char: string) => s.replaceAll("{{user}}", PLAYER).replaceAll("{{char}}", char)
@@ -39,3 +40,6 @@ export const turns = [
   "我伸手把被子往她那边拉了拉，没说话，只是看着手机微光里她的手指。",
   "“那就别睡了。你想打几局，我在旁边看着。”我把可乐罐拿远了一点。",
 ]
+
+// `bun test/cards/banxing.ts`: the converted card as YAML under .dev/, for the toolchain to read like any other card
+if (import.meta.main) emit(load())

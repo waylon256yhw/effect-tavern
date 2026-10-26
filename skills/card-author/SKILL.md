@@ -15,9 +15,8 @@ do not substitute synonyms (no "world book", "keyword trigger", "memory system",
 
 ## What a card is
 
-A card is data, one schema (`Card` in card.ts), decoded by `decodeCard`. Until #29 lands a template card is a TS object
-in `packages/runtime/test/cards/<id>.ts` registered in `index.ts`; after #29 it is one YAML file with prose in `|` block
-scalars. The runtime derives everything from it: a card with no actions has no decide stage, no lore means no lookup,
+A card is data, one schema (`Card` in card.ts), decoded by `decodeCard`. A template card is one YAML file,
+`packages/runtime/test/cards/<id>.yaml`, with prose in `|-` block scalars; `loadCard(id)` in `index.ts` reads it. The runtime derives everything from it: a card with no actions has no decide stage, no lore means no lookup,
 no `director` means no direct stage.
 
 Two coordinates place a card, not two kinds of card:
@@ -25,7 +24,7 @@ Two coordinates place a card, not two kinds of card:
 - **Who the player is in the fiction**: the frame slot `persona`. Present → participant mode (the player is a character,
   the model plays the counterpart; 心声 exists). Absent → author mode (the player directs, the model writes everyone).
 - **Default input channel** `input`: `act` (the line enters the transcript) or `note` (direction to the narrator, this turn
-  only). A world card with no protagonist (盐道, `yandao.ts`) is `input: "note"` and fills the `pov` slot itself.
+  only). A world card with no protagonist (盐道, `yandao.yaml`) is `input: "note"` and fills the `pov` slot itself.
 
 The harness owns neutral defaults only: the `asks` wording, the writing switches compiled into `pov` / `verbosity`, the
 default products (notes, options, inner). A card never explains the harness to the model, never asks for output
@@ -125,14 +124,14 @@ Lint (#27): `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`, `unre
 
 ## Samples in the repo
 
-- `wuxia.ts` 竹林: participant mode, bands on `bond` with a readout, a three-layer lore entry (floor on bond, windows
+- `wuxia.yaml` 竹林: participant mode, bands on `bond` with a readout, a three-layer lore entry (floor on bond, windows
   on a beat event and a readout event), director on, a feed record product (`scene`) and a keyed recall table
   (`people`), guard, `heading: "scene.place"`.
-- `yandao.ts` 盐道: author mode, `input: "note"`, the card fills `pov`, a world instead of a person, one field moved by
+- `yandao.yaml` 盐道: author mode, `input: "note"`, the card fills `pov`, a world instead of a person, one field moved by
   a readout, a greeting whose `do` opens a lore window on turn 1.
-- `banxing.ts` 伴星: pure chat, read from a V3 export; `mes_example` kept as an unlabelled fiction fragment
+- `banxing.ts` 伴星: pure chat, read from a V3 export (a converter: `bun test/cards/banxing.ts` writes `.dev/banxing.yaml`); `mes_example` kept as an unlabelled fiction fragment
   (示范（角色的声音）), which held the voice in live runs.
-- `ri.ts` 理: an MVU card compiled from its source files into bands on one field, with hidden ending switches
+- `ri.ts` 理: an MVU card compiled from its source files (`bun test/cards/ri.ts` writes `.dev/ri.yaml`) into bands on one field, with hidden ending switches
   (`恋人`, `哥哥`).
 
 ## Semantic side: open, to decide with the owner

@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { decodeCard, type Card } from "../../src/card.ts"
+import { emit } from "./index.ts"
 import type { Cond } from "../../src/cond.ts"
 import type { Fragment } from "../../src/fragment.ts"
 
@@ -177,3 +178,6 @@ export const turns = [
   "“罗伦斯大人要是知道了，会怎么说？”我笑着问她，顺手替她理了理头纱。",
   "“今天的礼拜，我们一起主持吧。你选诗篇。”",
 ]
+
+// `bun test/cards/ri.ts`: the converted card as YAML under .dev/, for the toolchain to read like any other card
+if (import.meta.main) emit(load())
