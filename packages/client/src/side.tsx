@@ -160,7 +160,7 @@ export const Session = (props: { at: string }) => {
             class="icon"
             aria-label="Rename story"
             data-hint="Rename story"
-            disabled={busy()}
+            disabled={busy() || renaming()}
             onClick={() => setRenaming(true)}
           >
             <Edit />
