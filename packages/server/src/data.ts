@@ -10,11 +10,14 @@
 // Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
 // node lands or is amended, gone with the node. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
+// A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // Ceilings: full-text search over nodes; sync between two installs (the Android copy is a copy of this file).
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { basename, dirname, join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 const schema = `
@@ -41,7 +44,53 @@ export interface Persona {
   text: string
 }
 
-export const open = (file: string) => {
+/** A live process (EPERM: alive, another user's); a dead one, or a lock file that names none, is not. */
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM"
+  }
+}
+/** One process per library: `<file>.lock` holds the owner's pid. A dead owner's lock is taken over (and our own, when
+ *  Vite re-evaluates the module in the same process); while the owner lives, this process opens a fresh library of its
+ *  own at `<dir>/<pid>/<name>` instead, never the owner's (an agent has no business in the owner's stories). */
+const lock = (file: string): string => {
+  const path = `${file}.lock`
+  for (;;) {
+    try {
+      writeFileSync(path, String(process.pid), { flag: "wx" })
+      break
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
+    }
+    const pid = Number(readFileSync(path, "utf8"))
+    if (pid === process.pid) return file
+    if (alive(pid)) {
+      const own = join(dirname(file), String(process.pid), basename(file))
+      console.log(`${file} is open in process ${pid}: this one opens its own library, ${own}`)
+      mkdirSync(dirname(own), { recursive: true })
+      return lock(own)
+    }
+    rmSync(path, { force: true })
+  }
+  const release = () => {
+    try {
+      if (readFileSync(path, "utf8") === String(process.pid)) rmSync(path)
+    } catch {}
+  }
+  process.on("exit", release)
+  for (const sig of ["SIGINT", "SIGTERM"] as const)
+    process.once(sig, () => {
+      release()
+      if (!process.listenerCount(sig)) process.kill(process.pid, sig) // nobody else handles it: die of it as before
+    })
+  return file
+}
+
+export const open = (asked: string) => {
+  const file = asked === ":memory:" ? asked : lock(asked)
   const db = new DatabaseSync(file)
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on;")
   db.exec(schema)
@@ -68,6 +117,8 @@ export const open = (file: string) => {
     del: (id: string) => void q(`delete from ${table} where id = ?`).run(id),
   })
   return {
+    /** The file open: the one asked for, or this process's own when another process holds that one. */
+    file,
     /** The player layer, one row: the session's `players` store. What it holds is decoded by the caller. */
     player: {
       read: (): unknown => parse<unknown>(q("select json from player where id = 1").get() as Row | undefined),

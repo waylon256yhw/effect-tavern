@@ -764,3 +764,17 @@
     padding: var(--space-4) var(--space-6) var(--space-5);
   }
 }
+
+/* App.tsx: a driven browser's tab (navigator.webdriver), marked so the player's tab is told apart at a glance */
+.automation {
+  position: fixed;
+  inset: 0 auto auto 50%;
+  translate: -50%;
+  z-index: 1000;
+  padding: 2px 8px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--warn);
+  color: var(--primary-ink);
+  font-size: 11px;
+  pointer-events: none;
+}
