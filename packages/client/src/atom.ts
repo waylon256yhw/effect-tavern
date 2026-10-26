@@ -57,7 +57,13 @@ export const registry = {
   get: <A>(a: Atom<A>): A => {
     if (dirty) {
       dirty = false
-      flush()
+      try {
+        flush()
+      } catch {
+        // inside a flush (onSettled, a tracked effect) or an action, where flush() is not reentrant: the pending
+        // writes land in that flush's continuation and this read sees the value before them; the next get drains
+        dirty = true
+      }
     }
     return untrack(a)
   },
