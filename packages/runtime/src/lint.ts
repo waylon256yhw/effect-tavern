@@ -194,6 +194,35 @@ const INLINE: Entry[] = [
 const HOOK = 40 // ponytail: characters; a hook is the player's own words for the thing, one short sentence
 
 const rules: Rule[] = [
+  // A path no field declares throws only when evaluation reaches it (holds, apply), and decode never sees it.
+  (card) => {
+    const known = new Set([
+      ...card.rules.fields.map((f) => f.path),
+      ...card.lore.flatMap((e) => [`lore.${e.id}.since`, `lore.${e.id}.shown`]),
+    ])
+    const used: [string, string][] = [
+      ...conds(card).flatMap(([p, c]) => reads(c).map((r): [string, string] => [p, r])),
+      ...effects(card).flatMap(([p, e]): [string, string][] => [
+        ...("path" in e ? [[p, e.path] as [string, string]] : []),
+        ...("add" in e && typeof e.add === "object" ? [[p, e.add.path] as [string, string]] : []),
+      ]),
+      ...card.rules.actions.flatMap((a): [string, string][] =>
+        a.roll && typeof a.roll === "object" && "path" in a.roll ? [[`rules.actions.${a.id}.roll`, a.roll.path]] : [],
+      ),
+    ]
+    // heading may also name `<product>.<key>`, a key of one of the card's record products
+    const heading = card.heading?.split(".")[0]
+    if (card.heading && !(card.products ?? []).some((p) => p.id === heading)) used.push(["heading", card.heading])
+    return used
+      .filter(([, r]) => !known.has(r))
+      .map(([path, r]) => ({
+        rule: "unknown-path",
+        level: "error" as const,
+        path,
+        message: `${r} is not a declared field (nor lore.<id>.since / .shown)`,
+        hint: "declare it in rules.fields, or fix the spelling",
+      }))
+  },
   // A lore offer, a fiction band or an unlock that reads an event nothing emits never holds (b52f7db deleted such an
   // action by hand). The reverse is a warn: the event still reaches the narrator and the ledger, nothing else reads it.
   (card) => {

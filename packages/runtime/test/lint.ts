@@ -161,6 +161,34 @@ assert.deepEqual(
   ["error field-in-prose fiction.f.text", "error field-in-prose lore.l.layers[0]"],
 )
 
+// unknown-path: a Cond, an effect or a roll naming a path no field declares; lore counters of declared entries are fine.
+assert.deepEqual(
+  of({
+    ...lored([
+      {
+        id: "l",
+        layers: ["一。"],
+        unlock: { path: "bnod", op: "gte", value: 1 },
+        offer: { path: "lore.l.since", op: "gt", value: 2 },
+      },
+    ]),
+    heading: "place",
+    fiction: [{ id: "f", text: "带。", when: { path: "lore.x.shown", is: 0 } }],
+    rules: {
+      fields: [bond],
+      actions: [{ id: "a", text: "动", roll: { path: "luck" }, hit: [{ path: "gold", add: 1 }] }],
+      readouts: [readout],
+    },
+  }).filter((d) => d.includes("unknown-path")),
+  [
+    "error unknown-path fiction.f.when",
+    "error unknown-path lore.l.unlock",
+    "error unknown-path rules.actions.a.hit[0]",
+    "error unknown-path rules.actions.a.roll",
+    "error unknown-path heading",
+  ],
+)
+
 // inline-product: an output format asked in the text.
 assert.deepEqual(of({ ...base, frame: [{ id: "style", text: "每次回复末尾附上状态栏，并给出三个选项。" }] }), [
   "error inline-product frame.style.text",
