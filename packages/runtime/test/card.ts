@@ -209,5 +209,12 @@ assert.deepEqual(routed.apply(routed.initial, g.do!), { s: { route: "blood", hea
 assert.throws(() => Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", go: "blood" }] }))
 
 assert.deepEqual(decodeCard({ ...full, version: "1.2", source: "hand" }).version, "1.2") // optional metadata, decoded as-is
+// ───────── the YAML migration: each card file decodes to exactly the object its TypeScript literal decoded to ─────────
+{
+  const { loadCard } = await import("./cards/index.ts")
+  const { load } = await import("./cards/yandao.ts")
+  assert.deepStrictEqual(await loadCard("wuxia"), decodeCard(full))
+  assert.deepStrictEqual(await loadCard("yandao"), load())
+}
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")
