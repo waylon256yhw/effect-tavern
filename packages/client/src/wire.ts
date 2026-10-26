@@ -37,7 +37,10 @@ const base = "/api"
  *  two stories never move each other. Before the listing arrives it names none, and the server takes the newest. */
 const call = (url: string, init: RequestInit = {}): Promise<Response> => {
   const id = registry.get(stories)?.current
-  return fetch(url, id === undefined ? init : { ...init, headers: { "x-tavern-story": String(id) } })
+  if (id === undefined) return fetch(url, init)
+  const headers = new Headers(init.headers)
+  headers.set("x-tavern-story", String(id))
+  return fetch(url, { ...init, headers })
 }
 const got = async (res: Promise<Response>) => (await res).json()
 
