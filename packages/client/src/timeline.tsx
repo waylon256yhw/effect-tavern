@@ -14,7 +14,7 @@ import { read } from "./bridge.ts"
 import { Back, Checkout, Clue, Edit, Notes, Reword, Swipe, Trash } from "./icons.tsx"
 import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { heading } from "./record.ts"
-import { card, draft, type Id, log, page, path, prose, registry } from "./store.ts"
+import { card, draft, type Id, log, page, path, prose, registry, working } from "./store.ts"
 import { dropNodes, fetchCalls, send } from "./wire.ts"
 
 // px: a station's width (its height is the CSS's), the gap between lanes, the row step, the turn ruler, the padding, a thread's
@@ -51,6 +51,7 @@ export const Timeline = () => {
   const line = read(path)
   const d = read(draft)
   const view = read(card)
+  const busy = read(working) // the story stays put while a turn is in flight: no checkout, no drop (as in the reader)
   const [selected, setSelected] = createSignal<Id | null>(registry.get(log).head)
   const [pane, setPane] = createSignal<"pipeline" | "node">("pipeline") // the inspector's names: its pane switch is inherited
   const onLine = createMemo(() => new Set(line().map((n) => n.id)))
@@ -351,6 +352,7 @@ export const Timeline = () => {
                           type="button"
                           class="checkout"
                           data-hint={`Move head to #${target()}`}
+                          disabled={busy()}
                           onClick={() => checkout(n().id)}
                         >
                           <Checkout aria-hidden="true" />
@@ -362,6 +364,7 @@ export const Timeline = () => {
                         class="icon"
                         aria-label="Open in reader"
                         data-hint="Open in reader"
+                        disabled={busy() && !onLine().has(n().id)}
                         onClick={() => openInReader(n().id)}
                       >
                         <Notes />
@@ -380,6 +383,7 @@ export const Timeline = () => {
                         class="icon danger"
                         aria-label="Drop subtree"
                         data-hint={`Drop #${n().id} and everything under it`}
+                        disabled={busy()}
                         onClick={() => confirm.showModal()}
                       >
                         <Trash />
@@ -472,7 +476,7 @@ export const Timeline = () => {
           <button type="button" class="chip state" onClick={() => confirm.close()}>
             Cancel
           </button>
-          <button type="button" class="chip danger" onClick={() => void drop()}>
+          <button type="button" class="chip danger" disabled={busy()} onClick={() => void drop()}>
             Delete
           </button>
         </div>

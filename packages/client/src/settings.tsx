@@ -28,10 +28,17 @@ import {
   putRouting,
 } from "./wire.ts"
 
-export const openSettings = () => registry.set(page, "settings")
-const close = () => registry.set(page, "reader")
+export type Section = "providers" | "routing" | "templates" | "personas"
+let opening: Section = "providers"
+let backTo: "reader" | "card" = "reader" // Back returns to where Settings was opened from: the card page keeps its Begin
+/** The page on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's error, the card page). */
+export const openSettings = (at: Section = "providers") => {
+  opening = at
+  backTo = registry.get(page) === "card" ? "card" : "reader"
+  registry.set(page, "settings")
+}
+const close = () => registry.set(page, backTo)
 
-type Section = "providers" | "routing" | "templates" | "personas"
 const SECTIONS: [Section, string, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element][] = [
   ["providers", "模型服务", Plugs],
   ["routing", "默认模型", Sliders],
@@ -40,7 +47,7 @@ const SECTIONS: [Section, string, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JS
 ]
 
 export const Settings = () => {
-  const [section, setSection] = createSignal<Section>("providers")
+  const [section, setSection] = createSignal<Section>(opening)
   const [pane, setPane] = createSignal<"list" | "detail">("list")
   const [picked, setPicked] = createSignal<Partial<Record<Section, string>>>({})
   const paneOf = (s: Section): Pane => ({

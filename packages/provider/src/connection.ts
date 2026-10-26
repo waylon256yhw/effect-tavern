@@ -5,21 +5,14 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { LanguageModel } from "ai"
+import { capabilities, type Capabilities } from "./capabilities.ts"
 import { plan, type Endpoint, type Format } from "./url.ts"
 
+export { capabilities, DEFAULTS, type Capabilities } from "./capabilities.ts"
 export type { Endpoint, Format } from "./url.ts"
 
 /** Anthropic takes an API key (`x-api-key`) or an OAuth-style token (`Authorization: Bearer`); the others take either as bearer/key. */
 export type Credential = { type: "api_key"; key: string } | { type: "auth_token"; token: string }
-
-export interface Capabilities {
-  /** Accepts a trailing assistant message and continues it (truncation recovery). */
-  prefill: boolean
-  /** `schema`: native JSON-schema output. `tool`: a forced tool. `json`: json_object only, schema goes in the prompt. */
-  structured: "schema" | "tool" | "json"
-  /** Past turns' reasoning parts are sent back. */
-  reasoningBack: boolean
-}
 
 export interface Trace {
   url: string
@@ -47,17 +40,6 @@ export interface Connection {
    *  answer in continuation mode. Resolved per request by the library, like the player's persona. */
   hat?: string
 }
-
-// Anthropic: every current Claude (Haiku 5.5 included) answers 400 "does not support assistant message prefill";
-// verified live 2026-10-17. Truncation recovery by prefix is off for this format unless the user flips it for an old model.
-// Anthropic binds a thinking block to the exact content before it ("Invalid signature … bound to a different
-// conversation", verified live): a re-rendered history (ours) can never replay it. Off unless the prefix is frozen.
-const DEFAULTS: Record<Format, Capabilities> = {
-  anthropic: { prefill: false, structured: "schema", reasoningBack: false },
-  "openai-compatible": { prefill: true, structured: "schema", reasoningBack: true },
-  gemini: { prefill: true, structured: "schema", reasoningBack: true },
-}
-export const capabilities = (c: Connection): Capabilities => ({ ...DEFAULTS[c.format], ...c.capabilities })
 
 const secret = (c: Credential) => (c.type === "api_key" ? c.key : c.token)
 // ai-sdk factories refuse an empty key even when the real credential rides in a header. Never sent as a real key.

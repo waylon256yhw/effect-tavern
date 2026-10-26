@@ -1,6 +1,7 @@
 // §17.2–17.3: history is a per-stage view over the path, never stored. Only the narrator sees the transcript;
 // the director sees a ledger of facts. Compression is a derived view too: a prefix range is replaced by the CODE
-// fold of its notes plus the lore text delivered in it, cached by range (ids are unique, so a range names a prefix).
+// fold of its notes plus the lore text delivered in it, cached by range (ids are unique, so a range names a prefix)
+// and served only while the turns it covers are the ones it was folded from (an amend refolds it).
 // A fold is a function of the turns INSIDE its range and nothing else: a later turn (one that will some day retract
 // an earlier note) cannot reach back into a fold that does not contain it. That is what keeps the summary's cache
 // breakpoint byte-stable between boundary moves; a retraction lands in the summary when the boundary passes its turn,
@@ -18,26 +19,29 @@ export interface Summary {
   text: string
 }
 export const makeSummaries = <B>(loreText: (d: Disclosure) => string) => {
-  const table = new Map<string, Summary>()
+  // Keyed by range, kept with the turns it was folded from. Ids name a range but not its content: `Log.amend` (setField,
+  // demand) replaces a node in place under the same id, as a new object. An entry is served only while every turn it
+  // covers is still that same object; an amended one refolds the range and replaces the entry. Checking identity rather
+  // than keying on notes covers everything a fold reads off a node (notes, and recall items stored on it) for a pointer
+  // compare per turn, and an unchanged log still hits.
+  const table = new Map<string, { sum: Summary; over: readonly Turn<B>[] }>()
+  const current = (over: readonly Turn<B>[], path: readonly Turn<B>[]) =>
+    over.length <= path.length && over.every((t, i) => t === path[i])
   return {
     compress: (path: readonly Turn<B>[], keepLast: number): Summary | undefined => {
       const range = path.slice(0, Math.max(0, path.length - keepLast))
       if (range.length < 2) return undefined
       const k = `${range[0].id}-${range[range.length - 1].id}`
       const hit = table.get(k)
-      if (hit) return hit
+      if (hit && current(hit.over, range)) return hit.sum
       const facts = range.flatMap((t) => [...notesOf(t), ...deliveredIn(t).map(loreText)])
       const s: Summary = { from: range[0].id, to: range[range.length - 1].id, text: `Summary: ${facts.join(" ")}` }
-      table.set(k, s)
+      table.set(k, { sum: s, over: range })
       return s
     },
     summaryFor: (path: readonly Turn<B>[]): Summary | undefined => {
-      if (path.length === 0) return undefined
       let best: Summary | undefined
-      for (const s of table.values()) {
-        if (s.from !== path[0].id) continue
-        if (path.some((t) => t.id === s.to) && (!best || s.to > best.to)) best = s // longest cached prefix wins
-      }
+      for (const { sum, over } of table.values()) if (current(over, path) && (!best || sum.to > best.to)) best = sum // longest cached prefix wins
       return best
     },
     get size() {

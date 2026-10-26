@@ -34,7 +34,7 @@ import {
   Warning,
 } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
-import { Settings } from "./settings.tsx"
+import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record } from "./record.ts"
@@ -66,11 +66,12 @@ import {
   settle,
   stage,
   type Draft,
+  type Failure,
   type Id,
   withdraw,
   working,
 } from "./store.ts"
-import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchStories, send } from "./wire.ts"
+import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchRouting, fetchStories, send } from "./wire.ts"
 
 const waiting: Record<string, string> = {
   lookup: "Reading",
@@ -254,8 +255,9 @@ const Latest = () => {
  *  character lands, the die while the beat is judged. A rewrite (check failed) blows the first draft away as dust
  *  (Telegram's) and writes the second from the top; the dead draft keeps its place, so the column holds still. Once the
  *  prose is done (check, polish, record) the cursor goes and the Record slot waits with three dots. A failed turn stays as a
- *  grey ghost with the error under it; its line is back in the box. */
-const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) => {
+ *  grey ghost with the error under it; its line is back in the box. No model to run it on: the error opens Settings on
+ *  默认模型. */
+const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) => {
   onSettled(anchor)
   const settling = () => props.phase === "check" || props.phase === "polish" || props.phase === "record"
   const writing = () => !settling() && !props.error
@@ -301,7 +303,15 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: string | null }) =
         {(e) => (
           <p class="error" role="alert">
             <Warning aria-hidden="true" />
-            {e()}
+            <span>
+              {e().message}
+              <Show when={e().code === "no-model"}>
+                {" "}
+                <button type="button" class="go" onClick={() => openSettings("routing")}>
+                  Settings → 默认模型
+                </button>
+              </Show>
+            </span>
             <button type="button" class="icon" aria-label="Dismiss" onClick={dismiss}>
               <Close />
             </button>
@@ -544,9 +554,9 @@ const Reader = () => {
   let stop: (() => void) | null = null
   onSettled(() => {
     // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
-    // the listing first: it names the story every request after is on
+    // the listing first: it names the story every request after is on; the routing is the card page's Model row
     void fetchStories()
-      .then(() => Promise.all([fetchCard(), fetchNodes(), fetchPersonas(), fetchPlayer()]))
+      .then(() => Promise.all([fetchCard(), fetchNodes(), fetchPersonas(), fetchPlayer(), fetchRouting()]))
       .then(() => {
         if (registry.get(log).nodes.size === 0) registry.set(page, "card")
       })
@@ -666,7 +676,7 @@ const Reader = () => {
         </div>
         <Composer
           busy={busy()}
-          stoppable={phase() !== "check" && phase() !== "record"}
+          stoppable={phase() !== "check" && phase() !== "polish" && phase() !== "record"}
           onSend={onSend}
           onKeep={onKeep}
           onCancel={onCancel}

@@ -10,7 +10,8 @@ import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
-import { card, error, log, page, personas, pin, player, registry, working } from "./store.ts"
+import { openSettings } from "./settings.tsx"
+import { card, error, log, page, personas, pin, player, registry, routing, working } from "./store.ts"
 import { newStory, send } from "./wire.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
@@ -41,6 +42,7 @@ export const CardPage = () => {
   const busy = read(working) // no new root under a turn in flight
   const me = read(player)
   const people = read(personas)
+  const route = read(routing)
   /** The persona the player is on this card: the player's pick by name, none when the card's own holds. */
   const persona = () => {
     const id = me()?.persona?.[view()?.id ?? ""]
@@ -104,6 +106,18 @@ export const CardPage = () => {
                       <dd>{name()}</dd>
                     </div>
                   )}
+                </Show>
+                {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}
+                <Show when={!route().default}>
+                  <div class="row">
+                    <dt>Model</dt>
+                    <dd>
+                      No default
+                      <button type="button" class="more" onClick={() => openSettings("routing")}>
+                        Settings → 默认模型
+                      </button>
+                    </dd>
+                  </div>
                 </Show>
                 <div class="row">
                   <dt>Prompt</dt>

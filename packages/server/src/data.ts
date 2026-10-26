@@ -9,7 +9,7 @@
 // and stories never reads the three. `card`: a Card as the workshop will write it (the four templates stay TS modules until then).
 // `story`: one log tree of a card, with the log's head and next beside it so an id never comes back after a drop. `node`: a
 // Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
-// node lands or is amended, gone with the node. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
+// node lands or is amended, gone with the node, and kept for a story's last `traced` nodes only. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
 // A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
@@ -36,7 +36,11 @@ create table if not exists node (story integer not null references story (id) on
   parent integer, json text not null, primary key (story, id));
 create table if not exists call (seq integer primary key autoincrement, story integer not null, node integer not null,
   json text not null, foreign key (story, node) references node (story, id) on delete cascade);
+create index if not exists call_node on call (story, node);
 `
+/** How many nodes of a story keep their calls: the Inspector's trace is for recent turns, and a call holds the whole
+ *  request under `inspect`, so an unbounded trace would grow the library by a fold budget per turn. */
+export const traced = 200
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
 
@@ -195,10 +199,19 @@ export const open = (asked: string) => {
           (by[r["node"] as number] ??= []).push(parse<unknown>(r))
         return by
       },
+      /** Files a node's calls, then drops the calls of every node of the story but the last `traced`. "Last" is by each
+       *  node's newest call (seq), across every branch of the tree: an amended old node is recent again and keeps its
+       *  trace, a node off the reading path counts like any other, and a dropped node's calls are already gone (cascade).
+       *  The index on (story, node) keeps the trim (and that cascade) to the story's own rows. */
       add: (node: Id, calls: readonly unknown[]) =>
         tx(() => {
+          if (!calls.length) return
           for (const c of calls)
             q("insert into call (story, node, json) values (?, ?, ?)").run(story, node, JSON.stringify(c))
+          q(
+            `delete from call where story = ? and node not in
+               (select node from call where story = ? group by node order by max(seq) desc limit ?)`,
+          ).run(story, story, traced)
         }),
     }),
     /** log.ts's Store over one story: read the tree whole, write each Change as rows in one transaction. */

@@ -49,6 +49,14 @@ export const Routing = Schema.Struct({
   stages: Schema.optionalKey(Schema.Struct(Object.fromEntries(phases.map((p) => [p, Schema.optionalKey(Pair)])))),
 })
 export type Routing = { default?: typeof Pair.Type; stages?: Partial<Record<Phase, typeof Pair.Type>> }
+/** No pair for the stage and no environment model. Its `code` rides the stream's `error` event (serve.ts), so the client
+ *  offers its way into Settings → 默认模型 without reading the message. */
+export class NoModel extends Error {
+  readonly code = "no-model"
+  constructor() {
+    super("no model: pick a default model in settings")
+  }
+}
 
 export const library = ({
   data,
@@ -95,7 +103,7 @@ export const library = ({
     const r = pinned ? {} : routing()
     const pair = r.stages?.[phase] ?? r.default
     if (pair) return resolve(pair)
-    if (!env) throw new Error("no model: pick a default model in settings")
+    if (!env) throw new NoModel()
     return typeof env === "function" ? env(phase) : "default" in env ? (env[phase] ?? env.default) : env
   }
   /** The fold policy off the narrate pair's model entry (the one stage that reads the unfolded tail), never throwing:

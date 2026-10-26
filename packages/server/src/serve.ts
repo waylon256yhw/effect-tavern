@@ -3,7 +3,8 @@
 // story, and a header naming no story is a 404 on every story route (/card, /nodes, /calls, POST /). The rest
 // (/player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story.
 //   POST /      an Action (src/session.ts `Action`, decoded at this boundary) → the events it causes, as SSE, one
-//                 `event:` per kind; a failure is an `error` event. Closing the response is the stop: before the first
+//                 `event:` per kind; a failure is an `error` event {message, code?} (code "no-model": no routing pair
+//                 and no environment model, library.ts `NoModel`). Closing the response is the stop: before the first
 //                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
 //                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
@@ -39,7 +40,7 @@
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
 //                 stop closes it before record's call), so the adapter files them in the library under the node they
-//                 made once it lands; they go with the node.
+//                 made once it lands; they go with the node, and only a story's last 200 nodes keep theirs.
 //   GET  /cards   every card the install knows, as {id, title}: the open one, the template modules, the library's table.
 //   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
 //                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
@@ -55,7 +56,7 @@ import { Cause, Deferred, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { extname, join, resolve, sep } from "node:path"
-import { Routing, type Library } from "./library.ts"
+import { NoModel, Routing, type Library } from "./library.ts"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
   new Promise<string>((resolve, reject) => {
@@ -71,9 +72,12 @@ const body = (req: IncomingMessage, limit = 1 << 20) =>
     req.on("end", () => resolve(s))
     req.on("error", reject)
   })
-const reason = (c: Cause.Cause<unknown>) => {
+/** A failed action as its `error` event: the message, and the code of the one failure the client acts on (no model:
+ *  its way into Settings). */
+const failure = (c: Cause.Cause<unknown>): { message: string; code?: string } => {
   const e = Cause.squash(c)
-  return e instanceof Error ? e.message : String(e)
+  if (e instanceof NoModel) return { message: e.message, code: e.code }
+  return { message: e instanceof Error ? e.message : String(e) }
 }
 
 export type Call = Extract<Event, { kind: "call" }>
@@ -271,8 +275,8 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const fiber = Effect.runFork(
       Stream.runForEach(perform(s, action, Deferred.await(stop)), (e) =>
         Effect.sync(() => {
-          // Each draft starts over: a stop before its first character withdraws the turn, even on the correction rewrite.
-          if (e.kind === "stage" && e.phase === "narrate") narrating = false
+          // Once a character has streamed, every close stops the turn: a stop before the correction rewrite's (or the
+          // prefill continuation's) first character keeps the first draft, `stopped`, as the client expects (#58).
           if (e.kind === "delta" && e.part.type === "text-delta") narrating = true // reasoning is not prose: the client counts the same
           const v = shown(e)
           if (v.kind === "call") made.push(v)
@@ -280,7 +284,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
           send(e.kind, v)
         }),
       ).pipe(
-        Effect.catchCause((c) => Effect.sync(() => send("error", { message: reason(c) }))),
+        Effect.catchCause((c) => Effect.sync(() => send("error", failure(c)))),
         Effect.ensuring(Effect.sync(() => void (closed || res.end()))),
       ),
     )
