@@ -287,8 +287,9 @@ section:has(> .editor) > .actions {
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 /* the actions: revise and copy, as tall as the first line, shown while the pointer is on the bubble (always where there
-   is no hover); on the draft they are there but not yet (so the text keeps its width when the node lands) */
-.said .acts {
+   is no hover); on the draft they are there but not yet (so the text keeps its width when the node lands). A model
+   group's summary in the settings shows its actions the same way */
+:is(.said, .group > summary) .acts {
   display: flex;
   flex: none;
   gap: 2px;
@@ -296,7 +297,7 @@ section:has(> .editor) > .actions {
   opacity: 0;
   transition: opacity var(--dur-3) var(--ease);
 }
-.said:is(:hover, :focus-within) .acts {
+:is(.said, .group > summary):is(:hover, :focus-within) .acts {
   opacity: 1;
 }
 .said .acts .icon {
@@ -308,11 +309,11 @@ section:has(> .editor) > .actions {
   width: var(--icon-sm);
   height: var(--icon-sm);
 }
-.said .acts .icon:disabled {
+:is(.said, .group > summary) .acts .icon:disabled {
   visibility: hidden;
 }
 @media (hover: none) {
-  .said .acts {
+  :is(.said, .group > summary) .acts {
     opacity: 1;
   }
 }
