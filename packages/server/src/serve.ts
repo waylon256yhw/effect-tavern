@@ -9,10 +9,12 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories (id, turns, the last line, updated), newest first, and `current`: the
-//                 story the client is to be on (the one it named while that one is there, else the newest). POST
-//                 /stories makes a new one and answers it as `current`, PUT /stories/<id> answers that one (404 when
-//                 there is none), DELETE /stories/<id> removes it. The server opens nothing: the client adopts
+//   GET  /stories this card's stories (id, title or null, turns, the opening's first sentence, the last line, "" while
+//                 only the opening is there, updated), newest first, and `current`: the story the client is to be on
+//                 (the one it named while that one is there, else the newest). POST /stories makes a new one and
+//                 answers it as `current`, PUT /stories/<id> answers that one (404 when there is none), with a body
+//                 {title: string | null} names it instead (blank = null, `updated` untouched), DELETE /stories/<id>
+//                 removes it. The server opens nothing: the client adopts
 //                 `current`, sends it from then on, re-reads /nodes, and the trace starts over.
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
 //                 where it is picked), DELETE /personas/<id> removes it and its picks (the client re-reads /player).
@@ -85,6 +87,7 @@ const SecretMeta = Schema.decodeUnknownSync(
 )
 const TestBody = Schema.decodeUnknownSync(Schema.Struct({ model: Schema.optionalKey(Schema.String) }))
 const RoutingBody = Schema.decodeUnknownSync(Routing)
+const TitleBody = Schema.decodeUnknownSync(Schema.Struct({ title: Schema.NullOr(Schema.String) }))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
@@ -105,7 +108,16 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (storyAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = Number(storyAt[1])
       if (!lib.exists(id)) return json(404, { error: `no story ${id}` })
-      if (req.method === "PUT") return stories(id)
+      if (req.method === "PUT") {
+        const raw = await body(req)
+        if (raw === "") return stories(id)
+        try {
+          lib.stories.title(id, TitleBody(JSON.parse(raw)).title)
+        } catch (e) {
+          return bad(e)
+        }
+        return stories()
+      }
       lib.stories.del(id)
       return stories()
     }

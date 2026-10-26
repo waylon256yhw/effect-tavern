@@ -231,6 +231,30 @@ const run = async (inspect: boolean) => {
       ((await (await globalThis.fetch(`${base}/stories`, on(opened.current))).json()) as { current: number }).current,
       first,
     )
+    // A row is named by its opening's first sentence until the player titles it; the last line is "" while only the
+    // opening is there. A title is the player's: blank clears it, and a rename never moves `updated`.
+    type Row = { id: number; title: string | null; opening?: string; last: string; updated: number }
+    story = ((await (await fetch(`${base}/stories`, { method: "POST" })).json()) as { current: number }).current
+    const row = async (init?: RequestInit) =>
+      (
+        (await (await fetch(`${base}/stories${init ? `/${story}` : ""}`, init)).json()) as { stories: Row[] }
+      ).stories.find((s) => s.id === story)!
+    await (await post({ kind: "greet" })).text()
+    const fresh = await row()
+    assert.deepEqual([fresh.title, fresh.opening, fresh.last], [null, "G", ""])
+    await (await post({ kind: "act", input: { text: "onward" } })).text() // the stream read to its end: the turn is saved
+    const acted = await row()
+    assert.deepEqual([acted.opening, acted.last], ["G", "onward"])
+    const named = await row({ method: "PUT", body: JSON.stringify({ title: "  竹林夜话 " }) })
+    assert.deepEqual([named.title, named.updated], ["竹林夜话", acted.updated])
+    assert.equal((await fetch(`${base}/stories/${story}`, { method: "PUT", body: '{"title":1}' })).status, 400)
+    assert.equal((await row({ method: "PUT", body: JSON.stringify({ title: "" }) })).title, null)
+    assert.equal(
+      ((await (await fetch(`${base}/stories/${first}`, { method: "PUT" })).json()) as { current: number }).current,
+      first,
+    ) // body-less still opens
+    await fetch(`${base}/stories/${story}`, { method: "DELETE" })
+    story = first
     assert.deepEqual(await (await persona("monk")).json(), [])
     assert.equal(((await (await fetch(`${base}/player`)).json()) as { persona?: object }).persona, undefined) // the pick went with it
     assert.equal((await headOf("who now")).includes(monk.text), false)

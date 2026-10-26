@@ -76,6 +76,9 @@ const onStory = async (res: Promise<Response>): Promise<void> => {
 export const openStory = (id: number): Promise<void> => onStory(call(`${base}/stories/${id}`, { method: "PUT" }))
 export const newStory = (): Promise<void> => onStory(call(`${base}/stories`, { method: "POST" }))
 export const deleteStory = (id: number): Promise<void> => onStory(call(`${base}/stories/${id}`, { method: "DELETE" }))
+/** A name the player gives the story; blank clears it. Nothing else moves: only the listing comes back. */
+export const nameStory = async (id: number, title: string): Promise<void> =>
+  registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) })))
 const at = (id: string) => `${base}/personas/${encodeURIComponent(id)}`
 export const putPersona = async ({ id, ...body }: Persona): Promise<void> =>
   registry.set(personas, await got(call(at(id), { method: "PUT", body: JSON.stringify(body) })))
