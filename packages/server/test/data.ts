@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process"
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { open } from "../src/data.ts"
+import { open, traced } from "../src/data.ts"
 
 interface N extends L.Noded {
   text: string
@@ -38,6 +38,28 @@ assert.deepEqual(trace.list(), {
 })
 back.commit(L.drop(back.log, 2))
 assert.deepEqual(Object.keys(trace.list()), ["0"])
+
+// Only a story's last `traced` nodes keep their calls, last by newest call: the oldest go on each add, and an amended
+// old node is recent again (its earlier calls already gone), taking the slot of the then-oldest.
+{
+  const long = data.stories.create("trim")
+  const t = L.hold<N>(data.store<N>(long))
+  const calls = data.calls(long)
+  const count = traced + 5
+  for (let i = 0; i < count; i++) {
+    const n = t.commit(L.add(t.log, { parent: i ? i - 1 : null, text: String(i) })).node!
+    calls.add(n.id, [{ node: n.id }, { node: n.id, phase: "record" }])
+  }
+  const ids = (from: number) => Array.from({ length: count - from }, (_, k) => String(from + k))
+  assert.deepEqual(Object.keys(calls.list()), ids(5))
+  assert.deepEqual(calls.list()[5], [{ node: 5 }, { node: 5, phase: "record" }])
+  calls.add(0, [{ node: 0, again: true }])
+  assert.deepEqual(Object.keys(calls.list()), ["0", ...ids(6)])
+  assert.deepEqual(calls.list()[0], [{ node: 0, again: true }])
+  data.calls(story).add(0, [{ phase: "other story" }]) // another story's trim leaves this one alone
+  assert.equal(Object.keys(calls.list()).length, traced)
+  data.stories.del(long)
+}
 
 // Stories list newest first per card, each with its size and head node; deleting one cascades to its nodes.
 const second = data.stories.create("wuxia")

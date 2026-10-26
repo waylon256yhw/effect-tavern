@@ -39,7 +39,7 @@
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
 //                 stop closes it before record's call), so the adapter files them in the library under the node they
-//                 made once it lands; they go with the node.
+//                 made once it lands; they go with the node, and only a story's last 200 nodes keep theirs.
 //   GET  /cards   every card the install knows, as {id, title}: the open one, the template modules, the library's table.
 //   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
 //                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
