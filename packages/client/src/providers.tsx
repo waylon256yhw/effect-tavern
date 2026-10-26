@@ -59,7 +59,10 @@ const addModels = (p: Provider, ids: readonly string[]) =>
     ...p,
     models: [...p.models, ...ids.filter((id) => !p.models.some((m) => m.id === id)).map((id) => ({ id }))],
   })
-const removeModel = (p: Provider, id: string) => void putProvider({ ...p, models: p.models.filter((m) => m.id !== id) })
+const removeModels = (p: Provider, ids: readonly string[]) =>
+  void putProvider({ ...p, models: p.models.filter((m) => !ids.includes(m.id)) })
+/** A button inside a group's summary: it acts, the summary does not fold. */
+const quiet = (run: () => void) => (e: MouseEvent) => (e.preventDefault(), e.stopPropagation(), run())
 /** The endpoints with one format's URL set, or dropped when it is emptied. */
 const setUrl = (p: Provider, f: Format, url: string): Provider["endpoints"] => {
   const { [f]: old, ...rest } = p.endpoints
@@ -405,6 +408,18 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
                       <summary>
                         <Next class="chev" />
                         <span>{g()[0]}</span>
+                        <span class="acts">
+                          <button
+                            type="button"
+                            class="icon sm"
+                            aria-label="移除分组"
+                            onClick={quiet(() =>
+                              ask(`移除「${g()[0]}」分组的 ${g()[1].length} 个模型？`, () => removeModels(x(), g()[1])),
+                            )}
+                          >
+                            <Trash />
+                          </button>
+                        </span>
                       </summary>
                       <For each={g()[1]} keyed={(id) => id}>
                         {(id) => (
@@ -423,7 +438,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
                               type="button"
                               class="icon sm"
                               aria-label="移除模型"
-                              onClick={() => removeModel(x(), id())}
+                              onClick={() => removeModels(x(), [id()])}
                             >
                               <Minus />
                             </button>
@@ -754,6 +769,26 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                           <Next class="chev" />
                           <span>{g()[0]}</span>
                           <span class="tag mono">{g()[1].length}</span>
+                          <span class="acts">
+                            <button
+                              type="button"
+                              class="icon sm"
+                              aria-label="添加分组全部模型"
+                              disabled={g()[1].every((id) => x().models.some((m) => m.id === id))}
+                              onClick={quiet(() => addModels(x(), g()[1]))}
+                            >
+                              <Plus />
+                            </button>
+                            <button
+                              type="button"
+                              class="icon sm"
+                              aria-label="移除分组全部模型"
+                              disabled={!g()[1].some((id) => x().models.some((m) => m.id === id))}
+                              onClick={quiet(() => removeModels(x(), g()[1]))}
+                            >
+                              <Minus />
+                            </button>
+                          </span>
                         </summary>
                         <For each={g()[1]} keyed={(id) => id}>
                           {(id) => {
@@ -766,7 +801,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                                   type="button"
                                   class="icon sm"
                                   aria-label={added() ? "移除模型" : "添加模型"}
-                                  onClick={() => (added() ? removeModel(x(), id()) : addModels(x(), [id()]))}
+                                  onClick={() => (added() ? removeModels(x(), [id()]) : addModels(x(), [id()]))}
                                 >
                                   <Show when={added()} fallback={<Plus />}>
                                     <Minus />
