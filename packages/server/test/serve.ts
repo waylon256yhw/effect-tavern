@@ -336,6 +336,11 @@ await run(false)
     assert.deepEqual([off.at(-1)!.event, /provider "Relay": disabled/.test(off.at(-1)!.data.message!)], ["error", true])
     // a disabled provider keeps its pairs (it can be switched back on); a model dropped from its list takes its pairs
     assert.deepEqual((await call("GET", "/routing")).body, { stages: { narrate: pair } })
+    // the model-name table: the vendored baseline while the library has no fetched row
+    assert.equal(
+      ((await call("GET", "/models/names")).body as Record<string, { name: string }>)["meta/muse-spark-1.1"]?.name,
+      "Muse Spark 1.1",
+    )
     const other = { provider: "relay", model: "n" }
     await call("PUT", "/routing", { default: pair, stages: { narrate: pair, lookup: other } })
     await call("PUT", "/providers/relay", { ...relay, enabled: false, models: [{ id: "n" }] })

@@ -30,6 +30,8 @@
 //                 models (string[]; a failure is a 502 {error}). POST /providers/<id>/test {model?} makes one minimal
 //                 request, a one-token answer with a model, the listing without: the Trace {url, method, status, ms},
 //                 or a 502 {error, trace?}.
+//   GET  /models/names  the model-name table (provider names.ts `Names`): {[owner/model]: {name, family}}, what the
+//                 settings lists name and group a model id by, without the network.
 //   GET  /routing which (provider, model) runs each stage: {default?, stages?}; PUT /routing replaces it (in force
 //                 from the next request).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
@@ -188,6 +190,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         return r.error === undefined ? json(200, r.trace) : json(502, r)
       }
     }
+    if (req.method === "GET" && req.url === "/models/names") return json(200, lib.names())
     if (req.method === "GET" && req.url === "/routing") return json(200, lib.routing.read())
     if (req.method === "PUT" && req.url === "/routing") {
       try {

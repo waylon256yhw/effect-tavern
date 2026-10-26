@@ -5,7 +5,7 @@ export default defineConfig({
   fmt: {
     printWidth: 120,
     semi: false,
-    ignorePatterns: ["docs/**"], // archived research record stays verbatim
+    ignorePatterns: ["docs/**", "packages/server/src/names.json"], // archived research record and the generated name table stay verbatim
   },
   lint: {
     ignorePatterns: ["**/dist/**"],

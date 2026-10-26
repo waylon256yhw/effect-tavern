@@ -38,6 +38,7 @@ import {
 } from "@effect-tavern/runtime/src/session.ts"
 import { Effect, Schema } from "effect"
 import type { Data } from "./data.ts"
+import { names } from "./names.ts"
 
 const Pair = Schema.Struct({ provider: Schema.String, model: Schema.String })
 const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const satisfies Phase[]
@@ -226,6 +227,8 @@ export const library = ({
       },
     },
     routing: { read: routing, write: data.routing.write },
+    /** The model-name table in force (names.ts). */
+    names: () => names(data),
     /** Every card the install knows, by id and title: the open one, the templates, the library's table; first id wins. */
     cards: () =>
       [card, ...cards, ...data.cards()]

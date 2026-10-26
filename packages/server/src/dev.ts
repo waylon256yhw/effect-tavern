@@ -21,6 +21,7 @@ import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
 import { library } from "./library.ts"
+import { refresh } from "./names.ts"
 import { handle } from "./serve.ts"
 
 const name = process.env["CARD"] ?? "wuxia"
@@ -32,6 +33,7 @@ const dir =
     : fileURLToPath(new URL("../../../.dev/", import.meta.url)))
 mkdirSync(dir, { recursive: true })
 const data = open(`${dir}/tavern.db`)
+void refresh(data) // the model-name table, in the background: startup never waits on models.dev
 
 let n = 0
 /** By phase: lookup reads nothing, decide ends, direct opens what the gate offered, check is clean, record answers each
