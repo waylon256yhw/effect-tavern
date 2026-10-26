@@ -4,7 +4,8 @@
 // each card). `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
 // default in its frame). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `secret`:
 // the key vault (provider providers.ts `Secret`), the only table holding key material; `provider`: the player's model
-// providers, each naming a secret by id; `routing`: one row, which (provider, model) each stage runs on. Export of cards
+// providers, each naming a secret by id; `routing`: one row, which (provider, model) each stage runs on; `names`: one row,
+// the model-name table last fetched from models.dev and its ETag (names.ts). Export of cards
 // and stories never reads the three. `card`: a Card as the workshop will write it (the four templates stay TS modules until then).
 // `story`: one log tree of a card, with the log's head and next beside it so an id never comes back after a drop. `node`: a
 // Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
@@ -13,6 +14,7 @@
 // A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // Ceilings: full-text search over nodes; sync between two installs (the Android copy is a copy of this file).
+import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
@@ -27,6 +29,7 @@ create table if not exists hat (id text primary key, name text not null, json te
 create table if not exists secret (id text primary key, name text not null, json text not null);
 create table if not exists provider (id text primary key, name text not null, json text not null);
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
+create table if not exists names (id integer primary key check (id = 1), etag text, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null);
 create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
@@ -146,6 +149,15 @@ export const open = (asked: string) => {
     routing: {
       read: (): unknown => parse<unknown>(q("select json from routing where id = 1").get() as Row | undefined),
       write: (r: unknown) => void q("insert or replace into routing (id, json) values (1, ?)").run(JSON.stringify(r)),
+    },
+    /** The model-name table (names.ts) as last fetched, one row, with the ETag it came with. */
+    names: {
+      read: () => {
+        const r = q("select etag, json from names where id = 1").get() as Row | undefined
+        return r && { etag: r["etag"] as string | null, names: parse<Names>(r)! }
+      },
+      write: (t: { etag: string | null; names: Names }) =>
+        void q("insert or replace into names (id, etag, json) values (1, ?, ?)").run(t.etag, JSON.stringify(t.names)),
     },
     /** The library's cards by id and title, the Card in the json column left unread. */
     cards: (): { id: string; title: string }[] =>

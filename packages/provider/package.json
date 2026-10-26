@@ -8,7 +8,7 @@
     "./src/*": "./src/*"
   },
   "scripts": {
-    "verify": "tsc && bun test/url.ts && bun test/providers.ts && bun test/models.ts && bun test/anthropic.ts && bun test/wire.ts"
+    "verify": "tsc && bun test/url.ts && bun test/names.ts && bun test/providers.ts && bun test/models.ts && bun test/anthropic.ts && bun test/wire.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.87",

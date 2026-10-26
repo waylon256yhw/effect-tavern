@@ -4,6 +4,7 @@
 // and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
+import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format, Hat, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
@@ -72,6 +73,8 @@ export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
 /** Every card the install knows (GET /cards), by id and title: what a persona's picks are named by. */
 export const cards = Atom.make<readonly { id: string; title: string }[]>([]).pipe(Atom.keepAlive)
 export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
+/** The model-name table (GET /models/names), read through provider names.ts `lookup`: a model id's name, owner, family. */
+export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)
 export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
 export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue

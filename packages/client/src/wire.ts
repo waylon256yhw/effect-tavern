@@ -17,6 +17,7 @@ import {
   editing,
   hats,
   log,
+  names,
   page,
   type Persona,
   personas,
@@ -98,6 +99,7 @@ const checked = async <T>(res: Promise<Response>): Promise<T> => {
   return v
 }
 export const fetchCards = async (): Promise<void> => registry.set(cards, await got(call(`${base}/cards`)))
+export const fetchNames = async (): Promise<void> => registry.set(names, await got(call(`${base}/models/names`)))
 export const fetchProviders = async (): Promise<void> => registry.set(providers, await got(call(`${base}/providers`)))
 export const putProvider = async ({ id, ...body }: Provider): Promise<void> => {
   registry.set(providers, await checked(call(`${base}/providers/${enc(id)}`, json("PUT", body))))

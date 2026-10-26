@@ -1,8 +1,10 @@
 // A model's family glyph, from its id: Deckled's pattern (apps/website/src/view/family-glyph.tsx, one owner table, mono
 // at the secondary ink, no brand colour, a cube for the unknown), on LobeHub's mono SVGs (MIT, @lobehub/icons-static-svg,
-// `~icons/lobe/<slug>` in vite.config.ts). Matched against the whole lowercased id, so an owner prefix
+// `~icons/lobe/<slug>` in vite.config.ts). Matched against `owner/family` when the name table (store.ts `names`) knows
+// the id ("meta/muse", "anthropic/claude-fable"), else against the whole lowercased id, so an owner prefix
 // ("deepseek-ai/DeepSeek-V3", "anthropic/claude-3.7-sonnet") counts; the first match wins. Only the slugs named here
 // are read into the bundle.
+import { lookup } from "@effect-tavern/provider/src/names.ts"
 import Baichuan from "~icons/lobe/baichuan"
 import Claude from "~icons/lobe/claude"
 import Cohere from "~icons/lobe/cohere"
@@ -31,30 +33,31 @@ import Yi from "~icons/lobe/yi"
 import Zhipu from "~icons/lobe/zhipu"
 import Cube from "~icons/ph/cube"
 import { Dynamic } from "@solidjs/web"
+import { names } from "./store.ts"
 
 type Glyph = typeof Cube
 const FAMILIES: [RegExp, Glyph][] = [
   [/claude/, Claude],
-  [/gpt|chatgpt|^o[1-9]|\/o[1-9]|davinci|codex/, Openai],
+  [/gpt|chatgpt|^o[1-9]|\/o[1-9]|davinci|codex|^openai\//, Openai],
   [/gemini|gemma/, Gemini],
   [/deepseek/, Deepseek],
   [/qwen|qwq|qvq/, Qwen],
-  [/llama/, Meta],
+  [/llama|^meta\//, Meta],
   [/mistral|mixtral|codestral|magistral|ministral|pixtral/, Mistral],
   [/grok/, Grok],
   [/kimi|moonshot/, Kimi],
   [/glm|zhipu|z-ai|zai/, Zhipu],
   [/minimax/, Minimax],
-  [/doubao/, Doubao],
-  [/hunyuan/, Hunyuan],
+  [/doubao|^bytedance/, Doubao],
+  [/hunyuan|^tencent\//, Hunyuan],
   [/^yi-|\/yi-/, Yi],
-  [/step-/, Stepfun],
+  [/step-|stepfun/, Stepfun],
   [/baichuan/, Baichuan],
-  [/command/, Cohere],
-  [/spark/, Spark],
+  [/command|^cohere\//, Cohere],
+  [/iflytek|(^|\/)spark/, Spark], // iFlytek's own, not Meta's muse-spark or OpenAI's codex-spark
   [/ernie|wenxin/, Wenxin],
   [/nemotron/, Nvidia],
-  [/phi-/, Microsoft],
+  [/phi-|^microsoft\//, Microsoft],
   [/internlm/, Internlm],
   [/sensechat/, Sensenova],
   [/mimo/, Xiaomimimo],
@@ -62,7 +65,8 @@ const FAMILIES: [RegExp, Glyph][] = [
   [/rwkv/, Rwkv],
 ]
 export const familyGlyph = (id: string): Glyph => {
-  const s = id.toLowerCase()
+  const m = lookup(names(), id)
+  const s = (m ? `${m.owner}/${m.family}` : id).toLowerCase()
   return FAMILIES.find(([re]) => re.test(s))?.[1] ?? Cube
 }
 /** The glyph in its slot: decorative, the id beside it says the same. */

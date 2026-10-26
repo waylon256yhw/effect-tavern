@@ -5,6 +5,7 @@
 // dialogs', written on Save, on close and on submit.
 import type { Effort } from "@effect-tavern/provider/src/call.ts"
 import type { Capabilities } from "@effect-tavern/provider/src/connection.ts"
+import { lookup } from "@effect-tavern/provider/src/names.ts"
 import type { ModelEntry, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
 import { createSignal, For, onSettled, Show, untrack } from "solid-js"
@@ -43,7 +44,7 @@ import {
   Sync,
   Trash,
 } from "./icons.tsx"
-import { hats, providers, registry, routing, secrets } from "./store.ts"
+import { hats, names, providers, registry, routing, secrets } from "./store.ts"
 import {
   addSecret,
   deleteProvider,
@@ -72,6 +73,20 @@ const addModels = (p: Provider, ids: readonly string[]) =>
   })
 const removeModels = (p: Provider, ids: readonly string[]) =>
   void putProvider({ ...p, models: p.models.filter((m) => !ids.includes(m.id)) })
+/** A model id matches a search by itself or by its table name. */
+const hit = (id: string, q: string) =>
+  `${id} ${lookup(read(names)(), id)?.name ?? ""}`.toLowerCase().includes(q.toLowerCase())
+/** A model row's text: the table's name over the raw id, or the id alone when the table does not know it. */
+const ModelName = (props: { id: string }) => (
+  <Show when={lookup(read(names)(), props.id)} fallback={<span class="m-name">{props.id}</span>}>
+    {(m) => (
+      <span class="m-name">
+        {m().name}
+        <span class="m-id mono">{props.id}</span>
+      </span>
+    )}
+  </Show>
+)
 /** A button inside a group's summary: it acts, the summary does not fold. */
 const quiet = (run: () => void) => (e: MouseEvent) => (e.preventDefault(), e.stopPropagation(), run())
 /** The endpoints with one format's URL set, or dropped when it is emptied. */
@@ -252,8 +267,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
     setProbe(await testProvider(x.id, model))
   }
   const endpoints = (x: Provider) => FORMATS.filter((f) => x.endpoints[f]?.url.trim()).length
-  const models = (x: Provider) =>
-    x.models.map((m) => m.id).filter((id) => id.toLowerCase().includes(mq().toLowerCase()))
+  const models = (x: Provider) => x.models.map((m) => m.id).filter((id) => hit(id, mq()))
 
   onSettled(() => {
     // the page's Escape leaves the drawer to this: it closes the drawer, not the page (settings.tsx checks the DOM)
@@ -470,7 +484,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                         {(id) => (
                           <div class="m-row">
                             <Family id={id()} />
-                            <span class="m-name">{id()}</span>
+                            <ModelName id={id()} />
                             <button
                               type="button"
                               class="icon sm"
@@ -924,7 +938,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
   const p = () => list().find((x) => x.id === props.id)
   const [remote, setRemote] = createSignal<{ ids?: string[]; error?: string } | null>(null)
   const [q, setQ] = createSignal("")
-  const shown = () => (remote()?.ids ?? []).filter((id) => id.toLowerCase().includes(q().toLowerCase()))
+  const shown = () => (remote()?.ids ?? []).filter((id) => hit(id, q()))
   onSettled(() => {
     void props
       .ready()
@@ -1004,7 +1018,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                             return (
                               <div class={{ "m-row": true, added: added() }}>
                                 <Family id={id()} />
-                                <span class="m-name">{id()}</span>
+                                <ModelName id={id()} />
                                 <button
                                   type="button"
                                   class="icon sm"
