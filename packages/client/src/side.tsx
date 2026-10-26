@@ -8,7 +8,7 @@ import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
-import { Pin, Probe, Settings, Snippets, Trash, Tree } from "./icons.tsx"
+import { Edit, Pin, Probe, Settings, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, working } from "./store.ts"
@@ -130,7 +130,7 @@ export const Session = (props: { at: string }) => {
     const next = id === undefined ? rest : { ...rest, [cardId()]: id }
     void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
   }
-  const [renaming, setRenaming] = createSignal(false) // the open story's row is a name field
+  const [renaming, setRenaming] = createSignal(false) // the open story's row is a name field (the header's pencil)
   let confirm!: HTMLDialogElement
   const set = (key: keyof Writing, value: string | boolean | undefined) => {
     const p = me()
@@ -158,6 +158,16 @@ export const Session = (props: { at: string }) => {
           <button
             type="button"
             class="icon"
+            aria-label="Rename story"
+            data-hint="Rename story"
+            disabled={busy()}
+            onClick={() => setRenaming(true)}
+          >
+            <Edit />
+          </button>
+          <button
+            type="button"
+            class="icon"
             aria-label="Delete story"
             data-hint="Delete story"
             disabled={busy()}
@@ -179,9 +189,8 @@ export const Session = (props: { at: string }) => {
                       aria-current={s().id === lib()?.current ? "true" : undefined}
                       disabled={busy()}
                       onClick={(e) => {
-                        if (s().id === lib()?.current) return void setRenaming(true) // the open one: its name
-                        closeUp(e.currentTarget)
-                        void openStory(s().id)
+                        closeUp(e.currentTarget) // the open one too: on a phone, back to the reader
+                        if (s().id !== lib()?.current) void openStory(s().id)
                       }}
                     >
                       <span class="first">{s().title ?? s().opening ?? "Empty"}</span>
