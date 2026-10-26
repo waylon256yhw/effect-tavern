@@ -28,6 +28,7 @@ import {
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
+import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import {
   makeSession,
   type Phase,
@@ -95,6 +96,19 @@ export const library = ({
     if (!env) throw new Error("no model: pick a default model in settings")
     return typeof env === "function" ? env(phase) : "default" in env ? (env[phase] ?? env.default) : env
   }
+  /** The fold policy off the narrate pair's model entry (the one stage that reads the unfolded tail), never throwing:
+   *  `GET /nodes` folds before any model is needed, on a fresh install too. No pair, no entry, or pinned → 8000. */
+  const policy = () => {
+    const r = pinned ? {} : routing()
+    const pair = r.stages?.narrate ?? r.default
+    const m =
+      pair &&
+      data.providers
+        .list()
+        .find((x) => x.id === pair.provider)
+        ?.models.find((x) => x.id === pair.model)
+    return policyFor(m?.contextTokens)
+  }
   /** The routing row without the pairs `keep` refuses; written only when something went. */
   const prune = (keep: (pair: typeof Pair.Type) => boolean) => {
     const r = routing()
@@ -134,7 +148,7 @@ export const library = ({
     let s = sessions.get(id)
     if (s) return s
     if (!exists(id)) throw new Error(`no story ${id}`)
-    s = makeSession({ card, player, model, store: data.store<Turn>(id), players, persona, hat })
+    s = makeSession({ card, player, model, store: data.store<Turn>(id), players, persona, hat, policy })
     sessions.set(id, s)
     return s
   }

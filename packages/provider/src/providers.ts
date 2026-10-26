@@ -16,7 +16,7 @@ export const ModelEntry = Schema.Struct({
   hat: Schema.optionalKey(Schema.String), // a library hat id (`/hats`)
   effort: Schema.optionalKey(Schema.Literals(["off", "low", "medium", "high", "max"])),
   maxOutputTokens: Schema.optionalKey(Schema.Number),
-  contextTokens: Schema.optionalKey(Schema.Number), // stored and shown; nothing reads it yet (session.ts `policy`)
+  contextTokens: Schema.optionalKey(Schema.Number), // the narrate model's sets the fold budget (runtime history.ts `policyFor`)
   capabilities: Schema.optionalKey(
     Schema.Struct({
       prefill: Schema.optionalKey(Schema.Boolean),
