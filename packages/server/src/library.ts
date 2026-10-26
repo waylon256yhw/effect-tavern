@@ -169,7 +169,7 @@ export const library = ({
       },
     },
     hats: data.hats,
-    /** The vault as the wire shows it: never a value. A provider naming a deleted secret has no key. */
+    /** The vault as the wire lists it: never a value (that is `value`, one key on request). A provider naming a deleted secret has no key. */
     secrets: {
       list: () => data.secrets.list().map(secretView),
       add: (s: Omit<Secret, "id">) => {
@@ -184,6 +184,8 @@ export const library = ({
         data.secrets.put({ ...old, ...s })
       },
       del: data.secrets.del,
+      /** The one key that leaves: GET /secrets/<id>/value, the owner's reveal or copy. */
+      value: (id: string): string | undefined => data.secrets.list().find((x) => x.id === id)?.value,
     },
     providers: {
       list: data.providers.list,

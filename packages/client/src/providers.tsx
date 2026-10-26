@@ -1,5 +1,6 @@
 // The settings page's 模型服务 section: the provider list, one provider's detail (key, endpoint, grouped models), its
-// two drawers (request settings, the service's model list) and its dialogs (add a provider, one model's settings, add a
+// two drawers (request settings, the service's model list), the key vault's drawer (the section's, with or without a
+// provider in hand) and its dialogs (add a provider, one model's settings, add a
 // model by id). Every write goes through wire.ts and comes back as the list; the drafts here are the drawer's and the
 // dialogs', written on Save, on close and on submit.
 import type { Effort } from "@effect-tavern/provider/src/call.ts"
@@ -16,7 +17,6 @@ import {
   FORMAT,
   FORMATS,
   grouped,
-  hide,
   Menu,
   Modal,
   Name,
@@ -28,8 +28,10 @@ import {
 } from "./controls.tsx"
 import { Family } from "./family.tsx"
 import {
+  Check,
   Clue,
   Close,
+  Copy,
   Eye,
   EyeOff,
   Fold,
@@ -41,8 +43,17 @@ import {
   Sync,
   Trash,
 } from "./icons.tsx"
-import { hats, providers, registry, secrets } from "./store.ts"
-import { addSecret, deleteProvider, deleteSecret, listModels, putProvider, setSecret, testProvider } from "./wire.ts"
+import { hats, providers, registry, routing, secrets } from "./store.ts"
+import {
+  addSecret,
+  deleteProvider,
+  deleteSecret,
+  listModels,
+  putProvider,
+  secretValue,
+  setSecret,
+  testProvider,
+} from "./wire.ts"
 
 const EFFORTS: [Effort, string][] = [
   ["off", "关闭"],
@@ -68,6 +79,19 @@ const setUrl = (p: Provider, f: Format, url: string): Provider["endpoints"] => {
   const { [f]: old, ...rest } = p.endpoints
   return url.trim() ? { ...rest, [f]: { ...old, url: url.trim() } } : rest
 }
+const AUTH: { value: SecretView["type"]; label: string }[] = [
+  { value: "api_key", label: "API Key Header" },
+  { value: "auth_token", label: "Bearer Token" },
+]
+/** A key onto the clipboard, then `flash` for a moment. A plain-http page off localhost (a phone on the LAN) has no
+ *  clipboard: the button then does nothing. */
+const copyKey = async (value: string | Promise<string>, flash: (on: boolean) => void) => {
+  const v = await value
+  if (!v || !navigator.clipboard) return
+  await navigator.clipboard.writeText(v)
+  flash(true)
+  setTimeout(() => flash(false), 1200)
+}
 const DRAWER_OUT = 250 // ms: past the drawer's --dur-3 slide, so its content leaves with it
 /** Opens a dialog component from its parent: the dialog hands its open function up through `opener`. */
 type Opener<A> = (open: (a: A) => void) => void
@@ -78,6 +102,18 @@ export const Providers = (props: Pane) => {
   const shown = () => list().filter((p) => p.name.toLowerCase().includes(search().toLowerCase()))
   const current = () => list().find((p) => p.id === props.picked) ?? list()[0]
   let openAdd: () => void = () => {}
+  // the vault drawer: the section's, so it opens with no provider too; `vaultFor` is the provider it was opened from
+  const [vaultOpen, setVaultOpen] = createSignal(false)
+  const [vaultFor, setVaultFor] = createSignal<string | undefined>()
+  const openVault = (id: string | undefined) => (setVaultFor(id), setVaultOpen(true))
+  onSettled(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector(":popover-open, dialog[open]") && vaultOpen())
+        setVaultOpen(false)
+    }
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  })
   return (
     <>
       <aside class="master-card" aria-label="服务商">
@@ -108,35 +144,52 @@ export const Providers = (props: Pane) => {
             )}
           </For>
         </div>
-        <div class="master-foot">
+        <div class="master-foot row">
           <button type="button" class="btn" onClick={() => openAdd()}>
             <Plus /> <span>添加服务商</span>
+          </button>
+          <button
+            type="button"
+            class="icon boxed"
+            aria-label="密钥库"
+            data-hint="密钥库"
+            onClick={() => (props.onPick(props.picked ?? ""), openVault(undefined))}
+          >
+            <Key />
           </button>
         </div>
       </aside>
       <section class="detail-card" aria-label="服务商详情">
         {/* keyed by id: another provider is a fresh detail (key, probe, search, drawer start over), a save is not */}
         <Show when={current()?.id} keyed fallback={<div class="empty">尚未添加服务商</div>}>
-          {(id) => <ProviderDetail id={id} onBack={props.onBack} />}
+          {(id) => <ProviderDetail id={id} onBack={props.onBack} onVault={() => openVault(id)} />}
         </Show>
+        <Drawer open={vaultOpen()} label="密钥库" onClose={() => setVaultOpen(false)}>
+          <VaultDrawer for={vaultFor()} onClose={() => setVaultOpen(false)} />
+        </Drawer>
       </section>
       <AddProviderDialog opener={(f) => (openAdd = () => f(undefined))} onAdded={props.onPick} />
     </>
   )
 }
 
-const ProviderDetail = (props: { id: string; onBack: () => void }) => {
+const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => void }) => {
   const list = read(providers)
   const vault = read(secrets)
+  const route = read(routing)
   const p = () => list().find((x) => x.id === props.id)
   const save = (f: (p: Provider) => Provider) => {
     const x = p()
     if (x) void putProvider(f(x))
   }
-  const [typed, setTyped] = createSignal("") // a key being typed: never shown back once saved
+  const [typed, setTyped] = createSignal("") // a key being typed
   const [reveal, setReveal] = createSignal(false)
-  const [keyName, setKeyName] = createSignal("")
+  // the stored key while the eye is open, read on that click and dropped when it closes or the secret changes
+  const [plain, setPlain] = createSignal<{ id: string; value: string } | null>(null)
+  const [copied, setCopied] = createSignal(false)
   const [probe, setProbe] = createSignal<{ ok: boolean; text: string } | null>(null)
+  // 检测's last pick: the detail remounts per provider (keyed Show), so another provider starts from its default
+  const [probedModel, setProbedModel] = createSignal<string | undefined>()
   const [mq, setMq] = createSignal("")
   const [searching, setSearching] = createSignal(false)
   const [folded, setFolded] = createSignal(false)
@@ -152,35 +205,51 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
   let openAddModel: () => void = () => {}
 
   /** A typed key goes up once. Retyped on the provider's own secret (the one named after it), the value is replaced in
-   *  place; on a secret the player named, or under a name given in the vault, it is a new secret. */
+   *  place; on a secret the player named in the vault, it is a new secret under the provider's name. */
   // the key's write in flight: a drawer's first request and the probe wait for it, or they would go out keyless
   let savingKey: Promise<void> | undefined
   const keySaved = () => savingKey ?? Promise.resolve()
-  const storeKey = (name: string): Promise<void> => {
-    const run: Promise<void> = writeKey(name).finally(() => {
+  const storeKey = (): Promise<void> => {
+    const run: Promise<void> = writeKey().finally(() => {
       if (savingKey === run) savingKey = undefined
     })
     savingKey = run
     return run
   }
-  const writeKey = async (name: string) => {
+  const writeKey = async () => {
     const x = p()
     const value = typed().trim()
     if (!x || !value) return
     const own = secretOf(x)
     setTyped("")
-    setKeyName("")
-    if (!name.trim() && own && own.name === x.name) return setSecret(own.id, { name: own.name, type: own.type, value })
-    const s = await addSecret({ name: name.trim() || x.name, type: own?.type ?? "api_key", value })
+    setPlain(null)
+    if (own && own.name === x.name) return setSecret(own.id, { name: own.name, type: own.type, value })
+    const s = await addSecret({ name: x.name, type: own?.type ?? "api_key", value })
     await putProvider({ ...x, secret: s.id })
   }
-  const runProbe = async () => {
+  /** What the field holds: the typed text, else the stored key while the eye is open on it. */
+  const shownKey = (x: Provider) => typed() || (reveal() && plain()?.id === x.secret ? plain()!.value : "")
+  const flipReveal = async () => {
+    const on = !reveal() // a write lands on the next microtask: read the new value from here, not the signal
+    setReveal(on)
+    const x = p()
+    if (!on) return setPlain(null)
+    if (x && !typed() && secretOf(x)) setPlain({ id: x.secret!, value: await secretValue(x.secret!) })
+  }
+  const stored = (x: Provider) => (secretOf(x) ? secretValue(x.secret!) : "")
+  /** 检测's default model: the routing's pick on this provider (the default pair, else a stage's), else the first. */
+  const testModel = (x: Provider) =>
+    [route().default, ...Object.values(route().stages ?? {})].find(
+      (q) => q?.provider === x.id && x.models.some((m) => m.id === q.model),
+    )?.model ?? x.models[0]?.id
+  const runProbe = async (model: string | undefined) => {
     const x = p()
     if (!x) return
-    if (typed().trim()) void storeKey("")
+    setProbedModel(model)
+    if (typed().trim()) void storeKey()
     await keySaved()
-    setProbe({ ok: true, text: "…" })
-    setProbe(await testProvider(x.id, x.models[0]?.id))
+    setProbe({ ok: true, text: model ? `${model} · …` : "…" })
+    setProbe(await testProvider(x.id, model))
   }
   const endpoints = (x: Provider) => FORMATS.filter((f) => x.endpoints[f]?.url.trim()).length
   const models = (x: Provider) =>
@@ -226,7 +295,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
               <div
                 class="row keyrow"
                 onFocusOut={(e) =>
-                  !e.currentTarget.contains(e.relatedTarget as Node | null) && typed().trim() && void storeKey("")
+                  !e.currentTarget.contains(e.relatedTarget as Node | null) && typed().trim() && void storeKey()
                 }
               >
                 <div class="input-box grow">
@@ -234,84 +303,60 @@ const ProviderDetail = (props: { id: string; onBack: () => void }) => {
                     type={reveal() ? "text" : "password"}
                     class="mono"
                     autocomplete="off"
-                    value={typed()}
+                    value={shownKey(x())}
                     placeholder={vault().find((s) => s.id === x().secret)?.hint ?? "输入或从密钥库选择"}
                     aria-label="API 密钥"
-                    onInput={(e) => setTyped(e.currentTarget.value)}
-                    onKeyDown={(e) => e.key === "Enter" && void storeKey("")}
+                    onInput={(e) => (setTyped(e.currentTarget.value), setPlain(null))}
+                    onKeyDown={(e) => e.key === "Enter" && void storeKey()}
                   />
                   <button
                     type="button"
                     class="icon sm"
                     aria-label={reveal() ? "隐藏密钥" : "显示密钥"}
-                    onClick={() => setReveal(!reveal())}
+                    data-hint={reveal() ? "隐藏密钥" : "显示密钥"}
+                    onClick={() => void flipReveal()}
                   >
                     <Show when={reveal()} fallback={<Eye />}>
                       <EyeOff />
                     </Show>
                   </button>
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label="复制密钥"
+                    data-hint="复制密钥"
+                    onClick={() => void copyKey(typed().trim() || stored(x()), setCopied)}
+                  >
+                    <Show when={copied()} fallback={<Copy />}>
+                      <Check />
+                    </Show>
+                  </button>
                 </div>
-                <button type="button" class="icon boxed" aria-label="密钥库" popovertarget="vault">
+                <button
+                  type="button"
+                  class="icon boxed"
+                  aria-label="密钥库"
+                  data-hint="密钥库"
+                  onClick={() => (typed().trim() && void storeKey(), props.onVault())}
+                >
                   <Key />
                 </button>
-                <div id="vault" class="snippets vault" popover>
-                  <div class="vault-head">
-                    <span>密钥库</span>
-                  </div>
-                  <Show when={typed().trim()}>
-                    <div class="row">
-                      <div class="input-box grow sm">
-                        <input
-                          type="text"
-                          placeholder="密钥名称"
-                          value={keyName()}
-                          onInput={(e) => setKeyName(e.currentTarget.value)}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        class="btn sm"
-                        onClick={(e) => (hide(e.currentTarget), void storeKey(keyName()))}
-                      >
-                        存入当前密钥
-                      </button>
-                    </div>
-                  </Show>
-                  <For each={vault()} keyed={(s) => s.id}>
-                    {(s) => (
-                      <div class="vault-row" aria-current={s().id === x().secret ? "true" : undefined}>
-                        <button
-                          type="button"
-                          class="pick"
-                          onClick={(e) => {
-                            hide(e.currentTarget)
-                            setTyped("")
-                            void putProvider({ ...x(), secret: s().id })
-                          }}
-                        >
-                          <span class="name">{s().name}</span>
-                          <span class="mono hint">{s().hint}</span>
-                        </button>
-                        <button
-                          type="button"
-                          class="icon sm"
-                          aria-label="删除密钥"
-                          onClick={() =>
-                            ask(`删除密钥「${s().name}」？用到它的服务商将没有密钥。`, () => void deleteSecret(s().id))
-                          }
-                        >
-                          <Trash />
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                  <Show when={!vault().length}>
-                    <p class="none">密钥库为空</p>
-                  </Show>
-                </div>
-                <button type="button" class="btn" onClick={() => void runProbe()}>
-                  检测
-                </button>
+                <Show
+                  when={x().models.length}
+                  fallback={
+                    <button type="button" class="btn" onClick={() => void runProbe(undefined)}>
+                      检测
+                    </button>
+                  }
+                >
+                  <Menu
+                    action="检测"
+                    label="检测：选择模型"
+                    value={probedModel() ?? testModel(x())}
+                    options={x().models.map((m) => ({ value: m.id, label: m.id, glyph: m.id }))}
+                    onPick={(m) => void runProbe(m)}
+                  />
+                </Show>
               </div>
             </div>
 
@@ -594,10 +639,7 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                     small
                     label="认证方式"
                     value={d().type}
-                    options={[
-                      { value: "api_key", label: "API Key Header" },
-                      { value: "auth_token", label: "Bearer Token" },
-                    ]}
+                    options={AUTH}
                     onPick={(type) => edit((x) => ({ ...x, type }))}
                   />
                 </div>
@@ -707,6 +749,172 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
         </>
       )}
     </Show>
+  )
+}
+
+// ───────── The vault drawer: every secret, named, typed, revealed or copied one click at a time ─────────
+const VaultDrawer = (props: { for: string | undefined; onClose: () => void }) => {
+  const vault = read(secrets)
+  const list = read(providers)
+  const target = () => list().find((p) => p.id === props.for)
+  const [draft, setDraft] = createSignal<{ name: string; type: SecretView["type"]; value: string }>({
+    name: "",
+    type: "api_key",
+    value: "",
+  })
+  const add = async () => {
+    const d = draft()
+    if (!d.name.trim() || !d.value.trim()) return
+    await addSecret({ name: d.name.trim(), type: d.type, value: d.value.trim() })
+    setDraft({ ...d, name: "", value: "" })
+  }
+  return (
+    <>
+      <div class="drawer-head">
+        <h3>密钥库</h3>
+        <Show when={target()}>{(t) => <span class="tag">{t().name}</span>}</Show>
+        <span class="spacer" />
+        <button type="button" class="icon sm" aria-label="关闭" onClick={() => props.onClose()}>
+          <Close />
+        </button>
+      </div>
+      <div class="drawer-body scroller">
+        <div class="field-group">
+          <span class="label">添加密钥</span>
+          <div class="row">
+            <div class="input-box sm grow">
+              <input
+                type="text"
+                placeholder="密钥名称"
+                aria-label="密钥名称"
+                value={draft().name}
+                onInput={(e) => {
+                  const name = e.currentTarget.value
+                  setDraft((d) => ({ ...d, name }))
+                }}
+              />
+            </div>
+            <Menu
+              small
+              label="认证方式"
+              value={draft().type}
+              options={AUTH}
+              onPick={(type) => setDraft((d) => ({ ...d, type }))}
+            />
+          </div>
+          <div class="row">
+            <div class="input-box sm grow">
+              <input
+                type="password"
+                class="mono"
+                autocomplete="off"
+                placeholder="密钥"
+                aria-label="密钥"
+                value={draft().value}
+                onInput={(e) => {
+                  const value = e.currentTarget.value
+                  setDraft((d) => ({ ...d, value }))
+                }}
+                onKeyDown={(e) => e.key === "Enter" && void add()}
+              />
+            </div>
+            <button
+              type="button"
+              class="btn sm"
+              disabled={!draft().name.trim() || !draft().value.trim()}
+              onClick={() => void add()}
+            >
+              添加
+            </button>
+          </div>
+        </div>
+        <For each={vault()} keyed={(s) => s.id} fallback={<p class="none">密钥库为空</p>}>
+          {(s) => {
+            const [plain, setPlain] = createSignal<string | null>(null) // read on the eye's click, dropped on the next
+            const [copied, setCopied] = createSignal(false)
+            const flip = async () => setPlain(plain() === null ? await secretValue(s().id) : null)
+            return (
+              <div class="setting-card vault-card">
+                <div class="row">
+                  <div class="input-box sm grow">
+                    <input
+                      type="text"
+                      value={s().name}
+                      aria-label="密钥名称"
+                      onChange={(e) => {
+                        const name = e.currentTarget.value.trim()
+                        if (name) void setSecret(s().id, { name, type: s().type })
+                      }}
+                    />
+                  </div>
+                  <Menu
+                    small
+                    label="认证方式"
+                    value={s().type}
+                    options={AUTH}
+                    onPick={(type) => void setSecret(s().id, { name: s().name, type })}
+                  />
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label="删除密钥"
+                    data-hint="删除密钥"
+                    onClick={() =>
+                      ask(`删除密钥「${s().name}」？用到它的服务商将没有密钥。`, () => void deleteSecret(s().id))
+                    }
+                  >
+                    <Trash />
+                  </button>
+                </div>
+                <div class="row">
+                  <span class="mono hint grow">{plain() ?? s().hint}</span>
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={plain() === null ? "显示密钥" : "隐藏密钥"}
+                    data-hint={plain() === null ? "显示密钥" : "隐藏密钥"}
+                    onClick={() => void flip()}
+                  >
+                    <Show when={plain() !== null} fallback={<Eye />}>
+                      <EyeOff />
+                    </Show>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label="复制密钥"
+                    data-hint="复制密钥"
+                    onClick={() => void copyKey(secretValue(s().id), setCopied)}
+                  >
+                    <Show when={copied()} fallback={<Copy />}>
+                      <Check />
+                    </Show>
+                  </button>
+                  <Show when={target()}>
+                    {(t) => (
+                      <Show
+                        when={t().secret === s().id}
+                        fallback={
+                          <button
+                            type="button"
+                            class="btn xs"
+                            onClick={() => void putProvider({ ...t(), secret: s().id })}
+                          >
+                            使用
+                          </button>
+                        }
+                      >
+                        <span class="tag ok">使用中</span>
+                      </Show>
+                    )}
+                  </Show>
+                </div>
+              </div>
+            )
+          }}
+        </For>
+      </div>
+    </>
   )
 }
 
