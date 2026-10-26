@@ -245,6 +245,18 @@ const program = Effect.gen(function* () {
   script(directed)
   const inner = yield* run(directed, turns[1].id, { text: "leave" })
   assert.equal(summaries.summaryFor(chain(inner.id)), undefined)
+  // An amend (a `demand` rewriting a folded node's notes) keeps the id but not the content: the summary is refolded,
+  // never served stale, and replaces the entry rather than adding one (#64).
+  const t1 = held.log.nodes.get(turns[1].id)!
+  held.commit(Log.amend(held.log, t1.id, { products: { ...t1.products, notes: ["NOTE#1 amended"] } }))
+  assert.equal(summaries.summaryFor(chain(fork.id)), undefined) // the cached fold covers the old node
+  const again = summaries.compress(chain(turns[4].id), 2)!
+  assert.notEqual(again, sum)
+  assert.deepEqual([again.from, again.to], [sum.from, sum.to])
+  assert.ok(again.text.includes("NOTE#1 amended") && !sum.text.includes("NOTE#1 amended"))
+  assert.equal(summaries.compress(chain(turns[4].id), 2), again) // cached again
+  assert.equal(summaries.summaryFor(chain(fork.id)), again) // the sibling branch sees the refolded one
+  assert.equal(summaries.size, 1)
 
   console.log(text(v))
 })
