@@ -281,6 +281,52 @@ const run = async (inspect: boolean) => {
 await run(true)
 await run(false)
 
+// A stop during the correction rewrite, before its first character (#58): the first draft already streamed, so the close
+// stops the turn rather than withdrawing it, and the first draft stands as the `stopped` reply with its verdict.
+{
+  const json = { notes: ["N1"], options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
+  const guarded = library({
+    data: open(":memory:"),
+    card: { ...chat, guard: ["R"] },
+    player,
+    model: {
+      ...fake((o) =>
+        o.responseFormat?.type === "json"
+          ? { text: JSON.stringify(o.responseFormat.name === "check" ? { violated: ["R"] } : json) }
+          : o.prompt.some((m) => fakeText(m).includes("Previous draft broke:"))
+            ? { text: "SECOND DRAFT", delay: 300 } // its first character is 600 ms away: the stop lands before it
+            : { text: "FIRST DRAFT" },
+      ),
+      prefill: false,
+      hat: "h",
+    },
+  })
+  const server = serve(guarded).listen(0)
+  try {
+    const ac = new AbortController()
+    const r = await fetch(`http://localhost:${(server.address() as AddressInfo).port}`, {
+      method: "POST",
+      body: JSON.stringify({ kind: "act", parent: null, input: { text: "go" } }),
+      signal: ac.signal,
+    })
+    const reader = r.body!.getReader()
+    let got = ""
+    const narrates = () => got.match(/event: stage\ndata: \{"kind":"stage","phase":"narrate"\}/g)?.length ?? 0
+    while (narrates() < 2) got += new TextDecoder().decode((await reader.read()).value) // the rewrite has begun
+    assert.ok(!/SECOND/.test(got))
+    ac.abort()
+    for (let i = 0; i < 300 && guarded.session().log.nodes.size === 0; i++) await new Promise((f) => setTimeout(f, 10))
+    const stopped = [...guarded.session().log.nodes.values()].at(-1)
+    assert.ok(stopped, "the stopped turn was not recorded")
+    assert.deepEqual(
+      [stopped.input.text, stopped.end, (stopped.reply[0] as { text: string }).text, stopped.violated],
+      ["go", "stopped", "FIRST DRAFT", ["R"]],
+    )
+  } finally {
+    server.close()
+  }
+}
+
 // Settings on the wire, against a stub upstream that speaks openai-compatible: a secret goes in once and comes back
 // only as a hint (no provider or secret response ever carries the value); a provider names it by id; the listing and
 // the test go through the provider's endpoint with its key; a routing pair is in force from the next request, per

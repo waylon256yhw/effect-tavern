@@ -271,8 +271,8 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const fiber = Effect.runFork(
       Stream.runForEach(perform(s, action, Deferred.await(stop)), (e) =>
         Effect.sync(() => {
-          // Each draft starts over: a stop before its first character withdraws the turn, even on the correction rewrite.
-          if (e.kind === "stage" && e.phase === "narrate") narrating = false
+          // Once a character has streamed, every close stops the turn: a stop before the correction rewrite's (or the
+          // prefill continuation's) first character keeps the first draft, `stopped`, as the client expects (#58).
           if (e.kind === "delta" && e.part.type === "text-delta") narrating = true // reasoning is not prose: the client counts the same
           const v = shown(e)
           if (v.kind === "call") made.push(v)

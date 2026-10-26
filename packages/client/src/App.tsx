@@ -666,7 +666,7 @@ const Reader = () => {
         </div>
         <Composer
           busy={busy()}
-          stoppable={phase() !== "check" && phase() !== "record"}
+          stoppable={phase() !== "check" && phase() !== "polish" && phase() !== "record"}
           onSend={onSend}
           onKeep={onKeep}
           onCancel={onCancel}
