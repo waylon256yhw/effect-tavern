@@ -49,7 +49,8 @@ export interface Option<T extends string> {
   glyph?: string // a model id: its family glyph leads the row
 }
 /** A select without <select>: a trigger and a popover menu anchored under it, the pick checked. With `action`, the
- *  trigger is a button by that name and a pick runs it (检测: the model to test on). */
+ *  trigger is a button by that name and a pick runs it (检测: the model to test on). With nothing to pick, the
+ *  trigger is disabled and still names the pick it holds (a stale one too). */
 export const Menu = <T extends string>(props: {
   value: T | undefined
   options: readonly Option<T>[]
@@ -67,7 +68,13 @@ export const Menu = <T extends string>(props: {
       <Show
         when={props.action}
         fallback={
-          <button type="button" class={{ select: true, sm: !!props.small }} popovertarget={id} aria-label={props.label}>
+          <button
+            type="button"
+            class={{ select: true, sm: !!props.small }}
+            popovertarget={id}
+            aria-label={props.label}
+            disabled={props.options.length === 0}
+          >
             <Show when={current()?.glyph}>{(g) => <Family id={g()} />}</Show>
             <span class="label">{current()?.label ?? props.placeholder ?? ""}</span>
             <Caret class="caret" />
@@ -75,7 +82,13 @@ export const Menu = <T extends string>(props: {
         }
       >
         {(a) => (
-          <button type="button" class="btn" popovertarget={id} aria-label={props.label}>
+          <button
+            type="button"
+            class="btn"
+            popovertarget={id}
+            aria-label={props.label}
+            disabled={props.options.length === 0}
+          >
             {a()}
           </button>
         )}
