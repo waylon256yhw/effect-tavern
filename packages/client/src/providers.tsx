@@ -188,6 +188,8 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   const [plain, setPlain] = createSignal<{ id: string; value: string } | null>(null)
   const [copied, setCopied] = createSignal(false)
   const [probe, setProbe] = createSignal<{ ok: boolean; text: string } | null>(null)
+  // 检测's last pick: the detail remounts per provider (keyed Show), so another provider starts from its default
+  const [probedModel, setProbedModel] = createSignal<string | undefined>()
   const [mq, setMq] = createSignal("")
   const [searching, setSearching] = createSignal(false)
   const [folded, setFolded] = createSignal(false)
@@ -243,6 +245,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   const runProbe = async (model: string | undefined) => {
     const x = p()
     if (!x) return
+    setProbedModel(model)
     if (typed().trim()) void storeKey()
     await keySaved()
     setProbe({ ok: true, text: model ? `${model} · …` : "…" })
@@ -349,7 +352,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   <Menu
                     action="检测"
                     label="检测：选择模型"
-                    value={testModel(x())}
+                    value={probedModel() ?? testModel(x())}
                     options={x().models.map((m) => ({ value: m.id, label: m.id, glyph: m.id }))}
                     onPick={(m) => void runProbe(m)}
                   />
