@@ -3,6 +3,10 @@
 // player row round-trips its JSON.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { open } from "../src/data.ts"
 
 interface N extends L.Noded {
@@ -106,4 +110,27 @@ assert.deepEqual(data.player.read(), {
   persona: { wuxia: "friend" },
 })
 data.close()
+
+// The lock: one process per library file. A lock naming a live process (here our parent) is not ours: open diverts to
+// a fresh library at <dir>/<pid>/; a lock naming a dead process is taken over, and on exit the lock goes.
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-lock-"))
+  const file = join(dir, "tavern.db")
+  writeFileSync(`${file}.lock`, String(process.ppid))
+  const other = open(file)
+  assert.equal(other.file, join(dir, String(process.pid), "tavern.db"))
+  assert.equal(readFileSync(`${other.file}.lock`, "utf8"), String(process.pid))
+  assert.equal(readFileSync(`${file}.lock`, "utf8"), String(process.ppid)) // the owner's lock untouched
+  other.close()
+  writeFileSync(`${file}.lock`, String(spawnSync("true").pid)) // exited: a stale lock
+  const taken = open(file)
+  assert.equal(taken.file, file)
+  assert.equal(readFileSync(`${file}.lock`, "utf8"), String(process.pid))
+  assert.equal(open(file).file, file) // our own lock (Vite re-evaluating the module): the same library
+  taken.close()
+  process.on("exit", () => {
+    assert.ok(!existsSync(`${file}.lock`))
+    rmSync(dir, { recursive: true })
+  })
+}
 console.log("ok")
