@@ -16,7 +16,7 @@ import {
   type FakeCall,
 } from "@effect-tavern/provider"
 import type { SessionModel } from "@effect-tavern/runtime/src/session.ts"
-import { loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
+import { cardNames, loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
@@ -149,7 +149,11 @@ if (key && !data.providers.list().length && !data.secrets.list().length) {
   data.routing.write({ default: { provider: "anthropic", model: "claude-haiku-5-5" } })
 }
 const card = await loadCard(name)
-const lib = library({ data, card, player, model, pinned: scripted }) // MODEL=fake scripts every stage, whatever the routing says
+// the templates that load here (banxing and ri read files outside the checkout), listed by GET /cards
+const cards = (await Promise.allSettled(cardNames.map(loadCard))).flatMap((r) =>
+  r.status === "fulfilled" ? [{ id: r.value.id, title: r.value.title }] : [],
+)
+const lib = library({ data, card, cards, player, model, pinned: scripted }) // MODEL=fake scripts every stage, whatever the routing says
 if (lib.session().log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
   const greeting = card.greetings[Number(process.env["GREETING"])]
   if (greeting) lib.session().greet(greeting)

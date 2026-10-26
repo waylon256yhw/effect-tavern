@@ -147,6 +147,9 @@ export const open = (asked: string) => {
       read: (): unknown => parse<unknown>(q("select json from routing where id = 1").get() as Row | undefined),
       write: (r: unknown) => void q("insert or replace into routing (id, json) values (1, ?)").run(JSON.stringify(r)),
     },
+    /** The library's cards by id and title, the Card in the json column left unread. */
+    cards: (): { id: string; title: string }[] =>
+      q("select id, title from card order by title").all() as { id: string; title: string }[],
     /** One card's stories, newest first, each with its size and its head node (what a list names it by), parsed for
      *  the caller to read. */
     stories: {

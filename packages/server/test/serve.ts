@@ -11,6 +11,7 @@ import { createServer } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 import { open } from "../src/data.ts"
 import { library } from "../src/library.ts"
 import { app, handle, serve } from "../src/serve.ts"
@@ -430,6 +431,29 @@ await run(false)
   } finally {
     server.close()
     await rm(dist, { recursive: true })
+  }
+}
+
+// GET /cards: the open card, the templates, the library's table, one row per id (first wins), the id where there is no title.
+{
+  const dir = await mkdtemp(join(tmpdir(), "tavern-cards-"))
+  const file = join(dir, "t.db")
+  const data = open(file)
+  new DatabaseSync(file)
+    .prepare("insert into card values (?, ?, '{}', 0), (?, ?, '{}', 0)")
+    .run("mine", "我的", chat.id, "dup")
+  const cards = [{ id: "bare" }, { id: chat.id, title: "dup" }]
+  const server = serve(library({ data, card: chat, cards, player, model })).listen(0)
+  try {
+    const got = await (await fetch(`http://localhost:${(server.address() as AddressInfo).port}/cards`)).json()
+    assert.deepEqual(got, [
+      { id: chat.id, title: chat.title ?? chat.id },
+      { id: "bare", title: "bare" },
+      { id: "mine", title: "我的" },
+    ])
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true })
   }
 }
 

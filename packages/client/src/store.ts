@@ -69,6 +69,8 @@ export interface Routing {
   stages?: Partial<Record<Phase, Pair>>
 }
 export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
+/** Every card the install knows (GET /cards), by id and title: what a persona's picks are named by. */
+export const cards = Atom.make<readonly { id: string; title: string }[]>([]).pipe(Atom.keepAlive)
 export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
 export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
 export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)

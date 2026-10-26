@@ -13,10 +13,11 @@ import { read } from "./bridge.ts"
 import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
 import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
 import { Providers } from "./providers.tsx"
-import { card, hats, page, personas, player, providers, registry, routing, type Pair } from "./store.ts"
+import { cards, hats, page, personas, player, providers, registry, routing, type Pair } from "./store.ts"
 import {
   deleteHat,
   deletePersona,
+  fetchCards,
   fetchHats,
   fetchProviders,
   fetchRouting,
@@ -52,7 +53,7 @@ export const Settings = () => {
   const title = () => SECTIONS.find(([s]) => s === section())![1]
 
   onSettled(() => {
-    void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats()])
+    void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards()])
     // a popover, a dialog or an open drawer takes its own Escape (the drawer's is providers.tsx's); so does a field
     // that prevents it
     const onKey = (e: KeyboardEvent) => {
@@ -389,13 +390,16 @@ const SlotEditor = (props: {
 const Personas = (props: Pane) => {
   const people = read(personas)
   const me = read(player)
-  const view = read(card)
+  const known = read(cards)
   const persona = () => people().find((p) => p.id === props.picked) ?? people()[0]
-  /** The open card's title when this persona is the one picked on it; the client knows no other card. */
-  const onCard = (id: string) => {
-    const c = view()
-    return c && me()?.persona?.[c.id] === id ? c.title : undefined
-  }
+  /** Player.persona read backwards: each persona's cards by title (the id when the card is not listed). */
+  const picks = createMemo(() => {
+    const by = new Map<string, string[]>()
+    for (const [c, p] of Object.entries(me()?.persona ?? {}))
+      by.set(p, [...(by.get(p) ?? []), known().find((x) => x.id === c)?.title ?? c])
+    return by
+  })
+  const onCards = (id: string) => picks().get(id) ?? []
   const create = async () => {
     const id = newId("persona")
     await putPersona({ id, name: "新建人设", text: "" })
@@ -415,7 +419,7 @@ const Personas = (props: Pane) => {
               >
                 <Avatar name={x().name} />
                 <span class="p-name">{x().name}</span>
-                <Show when={onCard(x().id)}>{(t) => <span class="tag">{t()}</span>}</Show>
+                <For each={onCards(x().id)}>{(t) => <span class="tag">{t}</span>}</For>
               </button>
             )}
           </For>
@@ -433,7 +437,7 @@ const Personas = (props: Pane) => {
               <header class="detail-header">
                 <ToList onBack={props.onBack} />
                 <Name value={x().name} label="人设名称" onCommit={(name) => void putPersona({ ...x(), name })} />
-                <Show when={onCard(x().id)}>{(t) => <span class="tag">{t()}</span>}</Show>
+                <For each={onCards(x().id)}>{(t) => <span class="tag">{t}</span>}</For>
                 <span class="spacer" />
                 <button
                   type="button"
