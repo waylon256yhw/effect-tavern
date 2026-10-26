@@ -106,13 +106,14 @@ path`), not at decode; lint (#27) reports it statically.
 initials. Decide for each field who moves it: actions (mechanical) or a readout (the prose may). Write actions and
 readouts with their effects and events. Lay out lore: ids, how many layers, `unlock` per layer, `offer` on which events
 or counters. Lay out fiction: ids, labels, `when` bands with one-line placeholders. Count greetings and write their
-`do`. Patch or add products. Run `bun card check <card>` (#27, #28) until there is no error and every warning is one you
-meant. Until the CLI lands: `decodeCard` the object, read the throws, and call `lint` (src/lint.ts) on it.
+`do`. Patch or add products. Run `bun card check <card>` (in packages/runtime; a name or a path to a .yaml card)
+until there is no error and every warning is one you meant. Exit 1 means an error-level diagnostic.
 
 **2. Novelist** (the mechanism is frozen). Fill `frame`, every fiction band, every lore layer, every greeting. Run
 `card check` again for `field-in-prose` and `inline-product`. Run `card view` at the states that matter: each band
-boundary (`--state bond=7` and `bond=8`), each greeting (`--greeting n`), and read the document the narrator actually
-gets; the band and the readout that moves its field print side by side. The semantic rules below apply in this hat.
+boundary (`--state bond=7` and `bond=8`; repeat `--state` for more fields), each greeting (`--greeting n`, 0-based),
+each stage (`--stage narrate|record|lookup`), and read the document the narrator actually gets; the band and the
+readout that moves its field print side by side. The semantic rules below apply in this hat.
 
 ## What the schema and lint already check (do not hand-check)
 
