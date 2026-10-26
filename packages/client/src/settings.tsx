@@ -19,6 +19,7 @@ import {
   deletePersona,
   fetchCards,
   fetchHats,
+  fetchNames,
   fetchProviders,
   fetchRouting,
   fetchSecrets,
@@ -53,7 +54,7 @@ export const Settings = () => {
   const title = () => SECTIONS.find(([s]) => s === section())![1]
 
   onSettled(() => {
-    void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards()])
+    void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards(), fetchNames()])
     // a popover, a dialog or an open drawer takes its own Escape (the drawer's is providers.tsx's); so does a field
     // that prevents it
     const onKey = (e: KeyboardEvent) => {

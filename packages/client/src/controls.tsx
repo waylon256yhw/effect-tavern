@@ -2,12 +2,14 @@
 // <select>, a switch, a letter avatar, a name edited in place), the shells (a side drawer over the detail card, a
 // modal, the one delete confirm), and the small pure helpers the sections share. No state of a section lives here.
 import type { Capabilities } from "@effect-tavern/provider/src/connection.ts"
+import { lookup } from "@effect-tavern/provider/src/names.ts"
 import { normalize, plan, type Format } from "@effect-tavern/provider/src/url.ts"
 import type { JSX } from "@solidjs/web"
 import { createSignal, For, Show } from "solid-js"
 import { Family } from "./family.tsx"
 import { Back, Caret, Check, Close } from "./icons.tsx"
 import { roam } from "./side.tsx"
+import { names } from "./store.ts"
 
 export const FORMATS: Format[] = ["openai-compatible", "anthropic", "gemini"]
 export const FORMAT: Record<Format, string> = {
@@ -24,8 +26,9 @@ export const DEFAULTS: Record<Format, Capabilities> = {
 // an id the player never sees; not crypto.randomUUID, which a phone on plain http (no secure context) lacks
 let made = 0
 export const newId = (kind: string) => `${kind}-${Date.now().toString(36)}${(made++).toString(36)}`
-/** A model's group: its id up to the first `-`, `/` or `_` (the prototype's grouping). */
-const groupOf = (id: string) => id.split(/[-/_]/)[0] || "默认"
+/** A model's group: its owner when the name table knows it (`meta`, `anthropic`), else its id up to the first `-`, `/`
+ *  or `_` (the prototype's grouping). Tracked: the table arrives after the lists. */
+const groupOf = (id: string) => lookup(names(), id)?.owner ?? (id.split(/[-/_]/)[0] || "默认")
 export const grouped = (ids: readonly string[]): [string, string[]][] => {
   const by = new Map<string, string[]>()
   for (const id of ids) by.set(groupOf(id), [...(by.get(groupOf(id)) ?? []), id])

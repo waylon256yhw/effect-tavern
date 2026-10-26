@@ -670,6 +670,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* the raw id under the table's name, inside the row's 42px */
+.m-id {
+  display: block;
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .empty-card,
 .setting-card {
   padding: var(--space-4) var(--space-5);
