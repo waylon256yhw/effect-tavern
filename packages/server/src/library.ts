@@ -50,12 +50,15 @@ export type Routing = { default?: typeof Pair.Type; stages?: Partial<Record<Phas
 export const library = ({
   data,
   card,
+  cards = [],
   player,
   model: env,
   pinned = false,
 }: {
   data: Data
   card: Card
+  /** The cards besides the library's own: the TS template modules, by id and title. */
+  cards?: readonly { id: string; title?: string }[]
   player: Player
   model?: SessionModels
   pinned?: boolean
@@ -221,6 +224,11 @@ export const library = ({
       },
     },
     routing: { read: routing, write: data.routing.write },
+    /** Every card the install knows, by id and title: the open one, the templates, the library's table; first id wins. */
+    cards: () =>
+      [card, ...cards, ...data.cards()]
+        .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
+        .map((c) => ({ id: c.id, title: c.title ?? c.id })),
     personas: {
       ...data.personas,
       /** Gone from the table, and from every card it was picked on: the card's own persona is back in force there. */

@@ -13,6 +13,7 @@ import {
   apply,
   calls,
   card,
+  cards,
   editing,
   hats,
   log,
@@ -95,6 +96,7 @@ const checked = async <T>(res: Promise<Response>): Promise<T> => {
   if (!r.ok) throw new Error(v.error ?? `HTTP ${r.status}`)
   return v
 }
+export const fetchCards = async (): Promise<void> => registry.set(cards, await got(call(`${base}/cards`)))
 export const fetchProviders = async (): Promise<void> => registry.set(providers, await got(call(`${base}/providers`)))
 export const putProvider = async ({ id, ...body }: Provider): Promise<void> => {
   registry.set(providers, await checked(call(`${base}/providers/${enc(id)}`, json("PUT", body))))

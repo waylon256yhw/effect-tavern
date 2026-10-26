@@ -34,6 +34,7 @@
 //   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
 //                 stop closes it before record's call), so the adapter files them in the library under the node they
 //                 made once it lands; they go with the node.
+//   GET  /cards   every card the install knows, as {id, title}: the open one, the template modules, the library's table.
 //   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
 //                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
 //                 the format keys, the fiction's modules without their text, the guard and lore as counts, and what
@@ -198,6 +199,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       }
       return json(200, lib.player)
     }
+    if (req.method === "GET" && req.url === "/cards") return json(200, lib.cards())
     // Everything below is one story's: the one the request names, or the most recently updated when it names none.
     const story = asked ?? lib.newest()
     let s

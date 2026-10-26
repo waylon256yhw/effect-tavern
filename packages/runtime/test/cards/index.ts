@@ -57,6 +57,7 @@ const converters: Record<string, () => Promise<Card>> = {
   banxing: async () => (await import("./banxing.ts")).load(),
   ri: async () => (await import("./ri.ts")).load(),
 }
+export const cardNames = ["wuxia", "yandao", ...Object.keys(converters)]
 export const loadCard = async (name: string): Promise<Card> =>
   converters[name] ? converters[name]() : readCard(new URL(`${name}.yaml`, dir))
 
