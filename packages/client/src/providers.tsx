@@ -4,7 +4,7 @@
 // model by id). Every write goes through wire.ts and comes back as the list; the drafts here are the drawer's and the
 // dialogs', written on Save, on close and on submit.
 import type { Effort } from "@effect-tavern/provider/src/call.ts"
-import type { Capabilities } from "@effect-tavern/provider/src/connection.ts"
+import { DEFAULTS, type Capabilities } from "@effect-tavern/provider/src/capabilities.ts"
 import { lookup } from "@effect-tavern/provider/src/names.ts"
 import type { ModelEntry, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
@@ -13,7 +13,6 @@ import { read } from "./bridge.ts"
 import {
   ask,
   Avatar,
-  DEFAULTS,
   Drawer,
   FORMAT,
   FORMATS,

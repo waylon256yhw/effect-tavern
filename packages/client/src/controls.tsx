@@ -1,7 +1,6 @@
 // The settings page's shared pieces (settings.tsx, providers.tsx): the controls the prototype draws (a menu instead of
 // <select>, a switch, a letter avatar, a name edited in place), the shells (a side drawer over the detail card, a
 // modal, the one delete confirm), and the small pure helpers the sections share. No state of a section lives here.
-import type { Capabilities } from "@effect-tavern/provider/src/connection.ts"
 import { lookup } from "@effect-tavern/provider/src/names.ts"
 import { normalize, plan, type Format } from "@effect-tavern/provider/src/url.ts"
 import type { JSX } from "@solidjs/web"
@@ -16,12 +15,6 @@ export const FORMAT: Record<Format, string> = {
   "openai-compatible": "OpenAI",
   anthropic: "Anthropic",
   gemini: "Gemini",
-}
-// provider connection.ts DEFAULTS, copied: importing it would pull ai-sdk into the client
-export const DEFAULTS: Record<Format, Capabilities> = {
-  anthropic: { prefill: false, structured: "schema", reasoningBack: false },
-  "openai-compatible": { prefill: true, structured: "schema", reasoningBack: true },
-  gemini: { prefill: true, structured: "schema", reasoningBack: true },
 }
 // an id the player never sees; not crypto.randomUUID, which a phone on plain http (no secure context) lacks
 let made = 0
