@@ -162,22 +162,27 @@ export const open = (asked: string) => {
     /** The library's cards by id and title, the Card in the json column left unread. */
     cards: (): { id: string; title: string }[] =>
       q("select id, title from card order by title").all() as { id: string; title: string }[],
-    /** One card's stories, newest first, each with its size and its head node (what a list names it by), parsed for
-     *  the caller to read. */
+    /** One card's stories, newest first, each with its title, its size, its head node and its first root (what a list
+     *  names it by), parsed for the caller to read. */
     stories: {
       list: (card: string) =>
         (
           q(
-            `select s.id, s.updated, (select count(*) from node where story = s.id) as turns,
-               (select json from node where story = s.id and id = s.head) as json
+            `select s.id, s.title, s.updated, (select count(*) from node where story = s.id) as turns,
+               (select json from node where story = s.id and id = s.head) as json,
+               (select json from node where story = s.id and parent is null order by id limit 1) as root
              from story s where card = ? order by updated desc, id desc`,
           ).all(card) as Row[]
         ).map((r) => ({
           id: r["id"] as Id,
+          title: (r["title"] as string | null) ?? null,
           updated: r["updated"] as number,
           turns: r["turns"] as number,
           head: parse<unknown>(r) ?? null,
+          root: r["root"] == null ? null : (JSON.parse(r["root"] as string) as unknown),
         })),
+      /** A name the player gave, or none; `updated` untouched, so a rename never reorders the list. */
+      title: (id: Id, title: string | null) => void q("update story set title = ? where id = ?").run(title, id),
       create: (card: string): Id =>
         Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade

@@ -5,7 +5,7 @@
 // story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
 // `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one.
 import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
-import { For, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
 import { Pin, Probe, Settings, Snippets, Trash, Tree } from "./icons.tsx"
@@ -13,7 +13,7 @@ import { openInspector } from "./inspector.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, working } from "./store.ts"
 import { openTimeline } from "./timeline.tsx"
-import { deleteStory, newStory, openStory, putPlayer } from "./wire.ts"
+import { deleteStory, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
 
 const units: [Intl.RelativeTimeFormatUnit, number][] = [
   ["day", 864e5],
@@ -130,6 +130,7 @@ export const Session = (props: { at: string }) => {
     const next = id === undefined ? rest : { ...rest, [cardId()]: id }
     void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
   }
+  const [renaming, setRenaming] = createSignal(false) // the open story's row is a name field
   let confirm!: HTMLDialogElement
   const set = (key: keyof Writing, value: string | boolean | undefined) => {
     const p = me()
@@ -169,21 +170,55 @@ export const Session = (props: { at: string }) => {
           <For each={lib()?.stories ?? []} keyed={(s) => s.id}>
             {(s) => (
               <li>
-                <button
-                  type="button"
-                  class="story"
-                  aria-current={s().id === lib()?.current ? "true" : undefined}
-                  disabled={busy()}
-                  onClick={(e) => {
-                    closeUp(e.currentTarget)
-                    if (s().id !== lib()?.current) void openStory(s().id)
-                  }}
+                <Show
+                  when={renaming() && s().id === lib()?.current}
+                  fallback={
+                    <button
+                      type="button"
+                      class="story"
+                      aria-current={s().id === lib()?.current ? "true" : undefined}
+                      disabled={busy()}
+                      onClick={(e) => {
+                        if (s().id === lib()?.current) return void setRenaming(true) // the open one: its name
+                        closeUp(e.currentTarget)
+                        void openStory(s().id)
+                      }}
+                    >
+                      <span class="first">{s().title ?? s().opening ?? "Empty"}</span>
+                      <span class="meta">
+                        <span class="last">{s().last}</span>
+                        <span class="ago">{ago(s().updated)}</span>
+                      </span>
+                    </button>
+                  }
                 >
-                  <span class="first">{s().last || "Empty"}</span>
-                  <span class="meta">
-                    {[s().turns ? `${s().turns} turns` : undefined, ago(s().updated)].filter(Boolean).join(" · ")}
-                  </span>
-                </button>
+                  <div class="story" aria-current="true">
+                    {/* Enter or leaving the field names it, Escape keeps the name; blank brings the opening back */}
+                    <input
+                      class="first"
+                      aria-label="Story name"
+                      value={s().title ?? ""}
+                      placeholder={s().opening ?? "Empty"}
+                      ref={(el) => queueMicrotask(() => el.select())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur()
+                        if (e.key !== "Escape") return
+                        e.preventDefault() // the phone's sheet stays open
+                        setRenaming(false)
+                      }}
+                      onBlur={(e) => {
+                        if (!renaming()) return // Escape already closed it
+                        setRenaming(false)
+                        const t = e.currentTarget.value.trim()
+                        if (t !== (s().title ?? "")) void nameStory(s().id, t)
+                      }}
+                    />
+                    <span class="meta">
+                      <span class="last">{s().last}</span>
+                      <span class="ago">{ago(s().updated)}</span>
+                    </span>
+                  </div>
+                </Show>
               </li>
             )}
           </For>
