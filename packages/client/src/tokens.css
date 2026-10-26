@@ -88,7 +88,8 @@
   --text-footnote: 0.75rem; /* 12: secondary notes */
   --text-body: 0.875rem; /* 14: UI */
   --text-heading: 0.9375rem; /* 15: card and sheet titles */
-  --text-prose: 1rem; /* 16: the story; never below 16 in inputs (iOS zoom) */
+  --text-prose: 1rem; /* 16: the story */
+  --text-field: var(--text-body); /* a UI input; prose on touch, where iOS zooms anything smaller (below) */
   --text-title: 1.25rem; /* 20: page title */
   --leading-tight: 1.25;
   --leading-body: 1.45;
@@ -124,6 +125,11 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
+}
+@media (hover: none) {
+  :root {
+    --text-field: var(--text-prose);
+  }
 }
 @media (resolution >= 2x) {
   :root {

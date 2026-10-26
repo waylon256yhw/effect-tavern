@@ -441,7 +441,7 @@
   color: #fff;
 }
 /* a text field: an input or a textarea on a faint fill, the hairline on focus (the settings' dialogs and editors);
-   at the prose size like every input (iOS zooms anything smaller) */
+   at the field size: body on desktop, prose on touch (tokens.css) */
 .field {
   box-sizing: border-box;
   width: 100%;
@@ -451,7 +451,7 @@
   background: var(--alpha-1);
   color: inherit;
   font: inherit;
-  font-size: var(--text-prose);
+  font-size: var(--text-field);
   outline: none;
   resize: none;
 }

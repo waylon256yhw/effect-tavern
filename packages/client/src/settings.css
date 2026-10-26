@@ -372,11 +372,8 @@
   background: none;
   color: inherit;
   font: inherit;
-  font-size: var(--text-prose);
+  font-size: var(--text-field);
   outline: none;
-}
-.input-box input.mono {
-  font-size: var(--text-footnote);
 }
 .input-box > svg {
   flex: none;
