@@ -59,6 +59,25 @@ const r = at("record")
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))
 for (const line of r.sections[2]!.text.split("\n")) assert.ok(sent("record").join("\n").includes(line), line)
 
+// a card whose readouts are all gated off at this state: no Questions line in either document
+const gated: Card = {
+  ...yandao,
+  rules: {
+    ...yandao.rules,
+    readouts: yandao.rules.readouts!.map((q) => ({ ...q, when: { path: "局势", op: "lt", value: 0 } as const })),
+  },
+}
+const G = makeSession({ card: gated, player, model })
+calls.clear()
+await Effect.runPromise(
+  Stream.runForEach(G.act(G.greet(gated.greetings[0]!).node!.id, { text: "", note: "继续" }), (e) =>
+    Effect.sync(() => void (e.kind === "call" && calls.set(e.phase, e.msgs))),
+  ),
+)
+const quiet = view(gated, player, { stage: "record" }).doc.map(text)
+assert.ok(!quiet.some((t) => t.startsWith("Questions:")))
+assert.deepEqual(sent("record").slice(0, -1), quiet.slice(0, -1))
+
 // the band ↔ readout section puts the band on 局势 directly above the readout that moves it
 assert.match(n.sections[3]!.text, /^tension moves 局势\n {2}band tense [^]*\n {2}readout: [^]*\n {4}worse: /)
 assert.throws(() => view(yandao, player, { state: { 起点: "fight" } }))

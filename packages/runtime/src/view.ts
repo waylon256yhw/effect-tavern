@@ -106,7 +106,8 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
   const asks = products
     .filter((p) => p.on && (!p.when || holds(p.when, s)))
     .map((p) => `${p.id}: ${questionOf(player, card, p)}`)
-  const questions = card.rules.readouts?.length ? rpg.questions(s) : undefined
+  const qs = rpg.questions(s)
+  const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
 
   // ───────── the document ─────────
   const ask: Ask =
