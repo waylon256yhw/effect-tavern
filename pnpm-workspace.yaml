@@ -11,6 +11,8 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
 permissions:
+  "@copilotkit/aimock":
+    skills: true
   "@solidjs/diagnostics":
     skills: true
   "@solidjs/web":
