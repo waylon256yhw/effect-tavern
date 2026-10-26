@@ -79,7 +79,8 @@ export const authHeaders = (c: Connection): Record<string, string> => {
   }
 }
 
-type Fetch = typeof globalThis.fetch
+// the call signature, not `typeof fetch`: under Bun types that also carries `preconnect`, which a wrapper does not have
+type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
 /** The fetch this connection sends through: the runtime's, with `proxy` set on each request when the connection names
  *  one (`proxy` is not in the DOM RequestInit type, hence the cast). */
@@ -116,7 +117,8 @@ export const compile = (c: Connection, o: CompileOptions = {}): LanguageModel =>
   const { base } = plan(c.format, c.endpoint, c.model)
   const inner = o.fetch ?? fetchFor(c)
   const fetch = o.onTrace ? traced(o.onTrace, o.traceBody ?? false, inner) : inner
-  const common = { baseURL: base, headers: c.headers, fetch }
+  // ai-sdk types `fetch` as `typeof fetch`, which under Bun types also requires `preconnect`; the SDK only calls it
+  const common = { baseURL: base, headers: c.headers, fetch: fetch as typeof globalThis.fetch }
   const cred = c.credential
   switch (c.format) {
     case "anthropic":

@@ -1,3 +1,4 @@
+/// <reference types="bun" />
 // The four template cards by name, and the player layers the live scripts, the tests and the server share. A card is one
 // YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`; ri and
 // banxing are converters over third-party files (`bun test/cards/ri.ts` writes the converted card to .dev/ri.yaml).
@@ -5,10 +6,6 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { decodeCard, type Card } from "../../src/card.ts"
 import { decodeFragments as frags, type Player } from "../../src/fragment.ts"
-
-declare const Bun: {
-  YAML: { parse(text: string): unknown; stringify(value: unknown, r: null, indent: number): string }
-}
 
 // a compiled binary (server `bun run compile`) embeds this directory as cards/ beside its entry
 const dir = new URL(import.meta.url.includes("$bunfs") ? "cards/" : "./", import.meta.url)
