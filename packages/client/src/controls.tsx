@@ -28,7 +28,7 @@ let made = 0
 export const newId = (kind: string) => `${kind}-${Date.now().toString(36)}${(made++).toString(36)}`
 /** A model's group: its owner when the name table knows it (`meta`, `anthropic`), else its id up to the first `-`, `/`
  *  or `_` (the prototype's grouping). Tracked: the table arrives after the lists. */
-const groupOf = (id: string) => lookup(names(), id)?.owner ?? (id.split(/[-/_]/)[0] || "默认")
+const groupOf = (id: string) => lookup(names(), id)?.owner ?? (id.split(/[-/_]/)[0]!.toLowerCase() || "默认")
 export const grouped = (ids: readonly string[]): [string, string[]][] => {
   const by = new Map<string, string[]>()
   for (const id of ids) by.set(groupOf(id), [...(by.get(groupOf(id)) ?? []), id])
