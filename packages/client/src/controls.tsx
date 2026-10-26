@@ -48,7 +48,8 @@ export interface Option<T extends string> {
   label: string
   glyph?: string // a model id: its family glyph leads the row
 }
-/** A select without <select>: a trigger and a popover menu anchored under it, the pick checked. */
+/** A select without <select>: a trigger and a popover menu anchored under it, the pick checked. With `action`, the
+ *  trigger is a button by that name and a pick runs it (检测: the model to test on). */
 export const Menu = <T extends string>(props: {
   value: T | undefined
   options: readonly Option<T>[]
@@ -57,16 +58,28 @@ export const Menu = <T extends string>(props: {
   stale?: Option<T> // what the trigger shows when the value is set but not among the options (a dangling pick)
   label?: string
   small?: boolean
+  action?: string
 }) => {
   const id = `menu-${menus++}`
   const current = () => props.options.find((o) => o.value === props.value) ?? props.stale
   return (
     <>
-      <button type="button" class={{ select: true, sm: !!props.small }} popovertarget={id} aria-label={props.label}>
-        <Show when={current()?.glyph}>{(g) => <Family id={g()} />}</Show>
-        <span class="label">{current()?.label ?? props.placeholder ?? ""}</span>
-        <Caret class="caret" />
-      </button>
+      <Show
+        when={props.action}
+        fallback={
+          <button type="button" class={{ select: true, sm: !!props.small }} popovertarget={id} aria-label={props.label}>
+            <Show when={current()?.glyph}>{(g) => <Family id={g()} />}</Show>
+            <span class="label">{current()?.label ?? props.placeholder ?? ""}</span>
+            <Caret class="caret" />
+          </button>
+        }
+      >
+        {(a) => (
+          <button type="button" class="btn" popovertarget={id} aria-label={props.label}>
+            {a()}
+          </button>
+        )}
+      </Show>
       <div id={id} class="snippets menu scroller" popover role="menu" onKeyDown={roam}>
         <For each={props.options} keyed={(o) => o.value}>
           {(o) => (

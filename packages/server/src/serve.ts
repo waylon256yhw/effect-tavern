@@ -22,6 +22,8 @@
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
 //                 {name, type, value} adds one and answers it the same way; PUT /secrets/<id> {name, type, value?} renames,
 //                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
+//                 GET /secrets/<id>/value {value} is the one route that answers a key: the owner's deliberate reveal or
+//                 copy, one request per click (404 when there is none); no listing ever carries it.
 //   GET  /providers  the player's model providers (provider providers.ts `Provider`), a key only as a secret id.
 //                 PUT /providers/<id> writes one (decoded as `Provider` without id), DELETE /providers/<id> removes it
 //                 and the routing pairs on it. Both answer the list. GET /providers/<id>/models lists the service's
@@ -135,6 +137,11 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       } catch (e) {
         return bad(e)
       }
+    }
+    const valueAt = req.method === "GET" && /^\/secrets\/([^/]+)\/value$/.exec(req.url ?? "")
+    if (valueAt) {
+      const value = lib.secrets.value(decodeURIComponent(valueAt[1]!))
+      return value === undefined ? json(404, { error: "no such secret" }) : json(200, { value })
     }
     const secretAt = /^\/secrets\/([^/]+)$/.exec(req.url ?? "")
     if (secretAt && (req.method === "PUT" || req.method === "DELETE")) {

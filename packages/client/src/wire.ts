@@ -85,7 +85,8 @@ export const putPlayer = async (p: Player): Promise<void> =>
   registry.set(player, await got(call(`${base}/player`, { method: "PUT", body: JSON.stringify(p) })))
 
 // The settings (/providers, /secrets, /routing, /hats): each write answers the list it changed, which replaces the
-// atom; nothing is optimistic. A key goes up once (POST /secrets) and comes back as a hint only.
+// atom; nothing is optimistic. A key goes up once (POST /secrets) and comes back as a hint only;
+// the eye and copy read one value on purpose (secretValue).
 const json = (method: string, v: unknown): RequestInit => ({ method, body: JSON.stringify(v) })
 const enc = encodeURIComponent
 /** A body or its {error}: a non-2xx answer throws the server's reason. */
@@ -105,11 +106,13 @@ export const deleteProvider = async (id: string): Promise<void> => {
   await fetchRouting() // the pairs on it are gone with it
 }
 export const listModels = (id: string): Promise<string[]> => checked(call(`${base}/providers/${enc(id)}/models`))
-/** One minimal request through the provider: "200 · 260ms", or the error. */
+/** One minimal request through the provider: "claude-haiku-5-5 · 200 · 260ms" (the listing's without a model), or the
+ *  error under the same name. */
 export const testProvider = async (id: string, model?: string): Promise<{ ok: boolean; text: string }> => {
   const r = await call(`${base}/providers/${enc(id)}/test`, json("POST", model === undefined ? {} : { model }))
   const v = (await r.json()) as Trace & { error?: string; trace?: Trace }
-  return r.ok ? { ok: true, text: `${v.status} · ${v.ms}ms` } : { ok: false, text: v.error ?? `HTTP ${r.status}` }
+  const text = r.ok ? `${v.status} · ${v.ms}ms` : (v.error ?? `HTTP ${r.status}`)
+  return { ok: r.ok, text: model === undefined ? text : `${model} · ${text}` }
 }
 export const fetchSecrets = async (): Promise<void> => registry.set(secrets, await got(call(`${base}/secrets`)))
 export const addSecret = async (s: { name: string; type: SecretView["type"]; value: string }): Promise<SecretView> => {
@@ -121,6 +124,9 @@ export const setSecret = async (
   id: string,
   s: Pick<SecretView, "name" | "type"> & { value?: string }, // a value replaces the key in place
 ): Promise<void> => registry.set(secrets, await checked(call(`${base}/secrets/${enc(id)}`, json("PUT", s))))
+/** The one key the server answers (GET /secrets/<id>/value): read per click for the eye or copy, kept nowhere. */
+export const secretValue = async (id: string): Promise<string> =>
+  (await checked<{ value: string }>(call(`${base}/secrets/${enc(id)}/value`))).value
 export const deleteSecret = async (id: string): Promise<void> =>
   registry.set(secrets, await got(call(`${base}/secrets/${enc(id)}`, { method: "DELETE" })))
 export const fetchRouting = async (): Promise<void> => registry.set(routing, await got(call(`${base}/routing`)))

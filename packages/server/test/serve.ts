@@ -355,6 +355,9 @@ await run(false)
       { id: made.id, name: "Relay key", type: "auth_token", hint: "sk-nex****dcba" },
     ])
     assert.equal((await call("PUT", `/secrets/${made.id}`, { name: "x", type: "api_key", value: 1 })).status, 400)
+    // the reveal: the one route that answers the value, and only for a secret that exists
+    assert.deepEqual(await (await fetch(`${base}/secrets/${made.id}/value`)).json(), { value: NEXT })
+    assert.equal((await call("GET", "/secrets/none/value")).status, 404)
     assert.deepEqual((await call("DELETE", `/secrets/${made.id}`)).body, [])
   } finally {
     server.close()
