@@ -16,6 +16,8 @@ export interface Entry<S, C> {
   offer?: (s: S, ctx: C) => boolean
 }
 export const key = (d: Disclosure) => `${d.id}#${d.layer}`
+/** An entry's line in the lookup index: the first sentence of its first layer. */
+export const hook = (layer: string) => layer.split(/(?<=[.。!?！？])\s*/)[0]!
 
 export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
   const byId = new Map(entries.map((e) => [e.id, e]))
@@ -36,8 +38,7 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
     deepest,
     current,
     /** Hooks of visible entries. */
-    index: (s: S, ds: readonly Disclosure[]) =>
-      visible(s, ds).map((e) => ({ id: e.id, hook: e.layers[0].split(/(?<=[.。!?！？])\s*/)[0] })),
+    index: (s: S, ds: readonly Disclosure[]) => visible(s, ds).map((e) => ({ id: e.id, hook: hook(e.layers[0]!) })),
     /** Visible entries with a layer up to current this path hasn't seen: the enum the lookup stage picks from. Empty →
      *  no call. By unseen layers, not depth: a window fires current+1 over an unlocked layer nobody read, and that
      *  layer stays readable under it (by depth alone it was lost for good once a deeper one fired). */
