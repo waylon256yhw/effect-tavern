@@ -2,12 +2,16 @@
   "name": "@effect-tavern/runtime",
   "version": "0.0.0",
   "private": true,
+  "bin": {
+    "card": "bin/card.ts"
+  },
   "type": "module",
   "exports": {
     "./*": "./*"
   },
   "scripts": {
-    "verify": "tsc && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/assemble.ts && bun test/request.ts && bun test/polish.ts && bun test/loop.ts && bun test/card.ts && bun test/lint.ts && bun test/product.ts && bun test/tokens.ts"
+    "card": "bun bin/card.ts",
+    "verify": "tsc && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/assemble.ts && bun test/request.ts && bun test/polish.ts && bun test/loop.ts && bun test/card.ts && bun test/lint.ts && bun test/product.ts && bun test/tokens.ts && bun test/view.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",

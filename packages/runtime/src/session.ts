@@ -178,7 +178,7 @@ export const format: readonly Format[] = [
 // overridden like any ask by the fragment id `product.<id>`. The options question follows the card's input channel,
 // because a picked option is sent as the player's next input: on an act card it is their own line (the first Haiku run
 // wrote "玩家……" in the third person and the pick put that sentence in the player's mouth), on a note card a direction.
-const defaultProducts = (input: "act" | "note"): readonly Product[] =>
+export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
   decodeProducts([
     {
       id: "notes",
@@ -225,6 +225,20 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
 // ponytail: a provider's model entry stores `contextTokens` (provider providers.ts, the settings page): the future
 // consumer of this constant, unread until the fold policy is per model.
 const policy: Policy = { budget: 8000, keep: 2, block: 2 }
+
+/** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
+export const floorAt = (unlock: Cond | readonly Cond[], s: State) => {
+  const cs = Array.isArray(unlock) ? unlock : [unlock]
+  let n = 0
+  while (n < cs.length && holds(cs[n]!, s)) n++
+  return n
+}
+/** An ask's wording: the player's, then the card's, then the session's own. */
+export const wordingOf = (player: Player, card: Card, id: string) =>
+  [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
+/** A product's question: `product.<id>` from the player or the card, else the product's own text. */
+export const questionOf = (player: Player, card: Card, pr: Product) =>
+  [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
 
 /** Runs an action's stream and gives back the node it ended with. */
 export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn, E> =>
@@ -289,13 +303,6 @@ export const makeSession = ({
   const L = makeLore<Paths, readonly string[]>(
     card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.id, e.offer) })),
   )
-  /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
-  const floorAt = (unlock: Cond | readonly Cond[], s: State) => {
-    const cs = Array.isArray(unlock) ? unlock : [unlock]
-    let n = 0
-    while (n < cs.length && holds(cs[n]!, s)) n++
-    return n
-  }
   const held = Log.hold<Turn>(store)
   const chain = (id: number | null) => Log.chain(held.log, id)
   const turnOf = (id: number) => Log.get(held.log, id)
@@ -319,12 +326,10 @@ export const makeSession = ({
   const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   let seeds = 0
 
-  const wording = (id: string) =>
-    [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
+  const wording = (id: string) => wordingOf(player, card, id)
   const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
   let products = resolveProducts()
-  const question = (pr: Product) =>
-    [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
+  const question = (pr: Product) => questionOf(player, card, pr)
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[]) => {
     const feed = products.filter((p) => p.feed && p.on)
