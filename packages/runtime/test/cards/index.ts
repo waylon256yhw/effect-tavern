@@ -1,7 +1,30 @@
-// The four template cards by name, and the player layer the live scripts and the server share.
-import type { Card } from "../../src/card.ts"
-import type { Player } from "../../src/fragment.ts"
-import { full, player as wuxiaPlayer } from "./wuxia.ts"
+/// <reference types="bun" />
+// The four template cards by name, and the player layers the live scripts, the tests and the server share. A card is one
+// YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`; ri and
+// banxing are converters over third-party files (`bun test/cards/ri.ts` writes the converted card to .dev/ri.yaml).
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { decodeCard, type Card } from "../../src/card.ts"
+import { decodeFragments as frags, type Player } from "../../src/fragment.ts"
+
+// a compiled binary (server `bun run compile`) embeds this directory as cards/ beside its entry
+const dir = new URL(import.meta.url.includes("$bunfs") ? "cards/" : "./", import.meta.url)
+/** A card file: YAML, decoded through the Card schema. A missing file fails naming it (ENOENT, with the path). */
+export const readCard = (path: string | URL): Card => decodeCard(Bun.YAML.parse(readFileSync(path, "utf8")))
+/** A converter's card written as YAML to .dev/<id>.yaml at the repo root, where the toolchain reads it like any card. */
+export const emit = (card: Card) => {
+  const out = new URL(`../../../../.dev/${card.id}.yaml`, import.meta.url)
+  mkdirSync(new URL(".", out), { recursive: true })
+  writeFileSync(out, Bun.YAML.stringify(card, null, 2))
+  console.log(fileURLToPath(out))
+}
+
+// The test player: language only, options on (the card declares nothing about options).
+export const plain: Player = {
+  global: frags([{ id: "language", text: "使用自然、舒展的现代中文写作。" }]),
+  forCard: {},
+  products: { options: true },
+}
 
 // The player layer: language, and the writing switches every player sets once (fragment.ts `Writing`): the player is 你,
 // the narrator restates their line before the reaction and writes nothing they did not give. Without the last, Haiku
@@ -25,19 +48,25 @@ export const lexicon = [
 ]
 export const player: Player = {
   writing: { pov: "second", echo: true, agency: "strict", lexicon },
-  global: wuxiaPlayer.global,
+  global: plain.global,
   forCard: {},
   products: { options: true },
 }
 
-const cards: Record<string, () => Promise<Card>> = {
-  wuxia: async () => full,
+const converters: Record<string, () => Promise<Card>> = {
   banxing: async () => (await import("./banxing.ts")).load(),
   ri: async () => (await import("./ri.ts")).load(),
-  yandao: async () => (await import("./yandao.ts")).load(),
 }
-export const loadCard = (name: string): Promise<Card> => {
-  const load = cards[name]
-  if (!load) throw new Error(`unknown card ${name}`)
-  return load()
+export const loadCard = async (name: string): Promise<Card> =>
+  converters[name] ? converters[name]() : readCard(new URL(`${name}.yaml`, dir))
+
+/** 竹林, the self-check card; `chat` is the same card with everything structured switched off: no actions, lore or
+ *  director, so a turn is narrate + record only (README §2). */
+export const full = readCard(new URL("wuxia.yaml", dir))
+export const chat: Card = {
+  ...full,
+  rules: { fields: full.rules.fields, actions: [] },
+  lore: [],
+  guard: [],
+  director: false,
 }

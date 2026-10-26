@@ -6,7 +6,7 @@ import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import { prose, splitAside } from "../src/journal.ts"
 import { makeSession, outcome, type Event, type Turn } from "../src/session.ts"
-import { chat, full, player } from "./cards/wuxia.ts"
+import { chat, full, plain as player } from "./cards/index.ts"
 
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside"> = []

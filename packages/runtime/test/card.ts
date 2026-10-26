@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { Schema } from "effect"
 import { Greeting, decodeCard, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
-import { full } from "./cards/wuxia.ts"
+import { full, loadCard } from "./cards/index.ts"
 import { holds } from "../src/cond.ts"
 
 // ───────── the session's self-check card as data: fight (judged chance) / rest / talk, gold and hp with bounds ─────────
@@ -209,5 +209,7 @@ assert.deepEqual(routed.apply(routed.initial, g.do!), { s: { route: "blood", hea
 assert.throws(() => Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", go: "blood" }] }))
 
 assert.deepEqual(decodeCard({ ...full, version: "1.2", source: "hand" }).version, "1.2") // optional metadata, decoded as-is
+// a card is a YAML file by name: a missing one fails naming the file
+await assert.rejects(loadCard("nowhere"), /nowhere\.yaml/)
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")

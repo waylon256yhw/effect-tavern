@@ -1,6 +1,6 @@
 // The card page's rows and opening lines on the template cards' shapes: a variant folds away, a hidden field is not
 // a state, an unlabelled module is not named, an opening's tag prefers the route it sets.
-import { full } from "@effect-tavern/runtime/test/cards/wuxia.ts"
+import { full } from "@effect-tavern/runtime/test/cards/index.ts"
 import assert from "node:assert/strict"
 import { firstLine, openingTag, specs } from "../src/manifest.ts"
 import type { CardView } from "../src/store.ts"
