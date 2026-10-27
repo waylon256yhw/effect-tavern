@@ -86,7 +86,8 @@ The narrator never sees a number. State reaches it only as the fiction variants 
 - **Slop** → `lexicon: [{ pattern, hint? }]`, `*` is a wildcard inside a sentence (`指节*白`). Polish rewrites only the
   hit sentences. The player has their own list first.
 - **Memory and data from the scene** → `products`: patches over the defaults by id (`notes` on, `options` and `inner`
-  off; the player's toggle wins) or new ones. `{ id, text, shape, fold?, feed?, recall?, when?, on? }`. Shapes:
+  off; the player's toggle wins) or new ones. `{ id, label?, text, shape, fold?, feed?, recall?, when?, on? }`. `label`
+  is the shown name (the Writing page's toggle), the id when absent. Shapes:
   `text`, `list` (max), `record` (fixed keys, one nested list/table allowed), `table` (typed columns, `max`, `filter`
   Cond over the row). `fold`: `latest` | `append` | `{ key }` (newest row per key; list defaults to append, the rest to
   latest). `feed: true` sends the fold back (`Current:` line; notes go as `Known:` to record only). `recall` (true for a

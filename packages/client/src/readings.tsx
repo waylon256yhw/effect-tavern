@@ -1,13 +1,15 @@
 // The Record's pieces: one renderer per reading element (src/record.ts projects them; this file only draws), the
 // full-page sheet they sit in on the phone, the pin button, the sibling actions, and the Status table. The reader
 // (App.tsx) and the inspector (inspector.tsx) draw with these.
+import type { Shape, TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
+import { Menu, type Option } from "./controls.tsx"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
-import { heading, record, status, type Element } from "./record.ts"
-import { card, latest, log, pin, registry } from "./store.ts"
+import { heading, record, status, type Declared, type Element } from "./record.ts"
+import { card, dismiss, draft, error, latest, log, pin, registry, stage } from "./store.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
@@ -26,6 +28,94 @@ export const PinButton = (props: { id: string }) => {
         <PinFill />
       </Show>
     </button>
+  )
+}
+
+/** A structured answer as key → value rows; nested values as JSON. */
+export const KeyValues = (props: { of: Record<string, unknown> }) => (
+  <dl class="kv">
+    <For each={Object.entries(props.of)} keyed={([k]) => k}>
+      {(e) => (
+        <>
+          <dt>{e()[0]}</dt>
+          <dd>{typeof e()[1] === "string" ? (e()[1] as string) : JSON.stringify(e()[1], null, 2)}</dd>
+        </>
+      )}
+    </For>
+  </dl>
+)
+/** A product's value by its declared shape (src/product.ts): a list as items, a table as rows, a record as key →
+ *  value with its nested shapes, text as a line. The Record and the Inspector draw with it. */
+export const Shaped = (props: { shape: Shape; value: unknown }) => {
+  const table = () => (props.shape.kind === "table" ? (props.shape as TableShape) : undefined)
+  const rec = () => (props.shape.kind === "record" ? (props.shape as Extract<Shape, { kind: "record" }>) : undefined)
+  const cell = (v: unknown) =>
+    v === undefined || v === null
+      ? ""
+      : typeof v === "object"
+        ? JSON.stringify(v)
+        : String(v as string | number | boolean)
+  return (
+    <Switch fallback={<p class="val">{cell(props.value)}</p>}>
+      <Match when={props.shape.kind === "list"}>
+        <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
+          <ul class="items">
+            <For each={props.value as unknown[]} keyed={false}>
+              {(v) => <li>{cell(v())}</li>}
+            </For>
+          </ul>
+        </Show>
+      </Match>
+      <Match when={table()}>
+        {(t) => (
+          <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
+            <table class="rows">
+              <thead>
+                <tr>
+                  <For each={t().columns} keyed={(c) => c.key}>
+                    {(c) => <th>{c().key}</th>}
+                  </For>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={(props.value as Record<string, unknown>[] | undefined) ?? []} keyed={false}>
+                  {(r) => (
+                    <tr>
+                      <For each={t().columns} keyed={(c) => c.key}>
+                        {(c) => <td>{cell(r()[c().key])}</td>}
+                      </For>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+        )}
+      </Match>
+      <Match when={rec()}>
+        {(r) => (
+          <dl class="kv">
+            <For each={r().keys} keyed={(k) => k.key}>
+              {(k) => (
+                <>
+                  <dt>{k().key}</dt>
+                  <dd>
+                    <Show
+                      when={"shape" in k() ? (k() as { shape: Shape }).shape : undefined}
+                      fallback={cell((props.value as Record<string, unknown> | undefined)?.[k().key])}
+                    >
+                      {(sh) => (
+                        <Shaped shape={sh()} value={(props.value as Record<string, unknown> | undefined)?.[k().key]} />
+                      )}
+                    </Show>
+                  </dd>
+                </>
+              )}
+            </For>
+          </dl>
+        )}
+      </Match>
+    </Switch>
   )
 }
 
@@ -152,8 +242,21 @@ export const Reading = (props: { el: Element }) => (
         </div>
       )}
     </Match>
+    <Match when={is(props.el, "product")}>
+      {(el) => (
+        <div class="product">
+          <span class="plabel">{el().label}</span>
+          <Shaped shape={el().shape} value={el().value} />
+        </div>
+      )}
+    </Match>
   </Switch>
 )
+
+/** The products a node can still be asked for (the `demand` action): declared, and not on the node (off by the
+ *  player, or not produced this turn); one asked for leaves the list as it lands. */
+export const demandable = (products: readonly Declared[], node: Node): Option<string>[] =>
+  products.filter((p) => node.turn.products[p.id] === undefined).map((p) => ({ value: p.id, label: p.label ?? p.id }))
 
 /** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
  *  with a close, the body, an optional footer. Scrim click and Escape close it (closedby). Record and Status share it;
@@ -180,10 +283,15 @@ export const Sheet = (props: {
 /** A turn's readings: what it changed and produced (src/record.ts). */
 export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   const view = read(card)
-  const els = createMemo(() => {
-    const r = view()?.rules
-    return r ? record(r, props.node, props.prev) : []
-  })
+  // equal by content: the projection is fresh each run (the log or the card view changed), and an unchanged Record
+  // must not re-run its rows ([UNSTABLE_MEMO_OUTPUT] under the diagnostics when the card view is read again)
+  const els = createMemo(
+    () => {
+      const r = view()?.rules
+      return r ? record(r, props.node, props.prev, view()?.products) : []
+    },
+    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+  )
   return (
     <div class="record">
       {/* by index: the memo yields fresh, equal elements whenever the log changes; rows update in place */}
@@ -197,19 +305,29 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
 /** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn, new prose: the wand
  *  opens a box for a word to the narrator, which rides as that sibling's note; Enter sends, empty or not, and so does
  *  the wand again) and Edit (the prose as a textarea in place, App.tsx `Editor`). Three icons with hints; the box
- *  exists only while the wand is asking. The Record sheet's footer on the phone, the right card's on the desktop. */
+ *  exists only while the wand is asking. Then 索取: a menu of the products this node can still be asked for (the
+ *  `demand` action: one record call over this node's scene, the answer kept on the node, no turn), named by the card;
+ *  nothing to ask for, the button is off. The Record sheet's footer on the phone, the right card's on the desktop. */
 export const Rewrite = (props: {
   for: number // the node: the wand's box belongs to one node (the desktop's card is not rebuilt per turn)
   rerun: boolean // the turn has an input to run the narrator from again; an opening has not, only Edit shows
   busy: boolean
+  demands: readonly Option<string>[]
   onSwipe: () => void
   onReword: (note?: string) => void
   onEdit: () => void
+  onDemand: (product: string) => void
 }) => {
   // the box is open for one node: another node under the same card (the desktop's) means it is closed
   const [askingFor, setAskingFor] = createSignal<number | null>(null)
   const asking = () => askingFor() === props.for
   const setAsking = (on: boolean) => setAskingFor(on ? props.for : null)
+  // a demand runs a stage without a draft: while any stage runs, the actions wait (a turn's draft already holds them)
+  const phase = read(stage)
+  const busy = () => props.busy || phase() !== null
+  // a failed demand has no draft to carry its ghost: the reason shows here until the next action
+  const d = read(draft)
+  const failed = read(error)
   let direction: HTMLInputElement | undefined
   const reword = () => {
     const note = direction?.value.trim()
@@ -222,7 +340,7 @@ export const Rewrite = (props: {
         <input
           class="direction"
           placeholder="A word for the rewrite…"
-          disabled={props.busy}
+          disabled={busy()}
           ref={(el) => {
             direction = el
             requestAnimationFrame(() => el.focus())
@@ -242,7 +360,7 @@ export const Rewrite = (props: {
           class="icon"
           aria-label="Swipe"
           data-hint="Swipe: the turn again, dice and all"
-          disabled={props.busy}
+          disabled={busy()}
           onClick={() => props.onSwipe()}
         >
           <Swipe />
@@ -252,7 +370,7 @@ export const Rewrite = (props: {
           aria-label="Reword"
           data-hint="Reword: new prose, same turn"
           aria-expanded={asking() ? "true" : "false"}
-          disabled={props.busy}
+          disabled={busy()}
           onPointerDown={(e) => e.preventDefault()}
           onClick={() => (asking() ? reword() : setAsking(true))}
         >
@@ -263,11 +381,20 @@ export const Rewrite = (props: {
         class="icon"
         aria-label="Edit"
         data-hint="Edit: write it yourself"
-        disabled={props.busy}
+        disabled={busy()}
         onClick={() => props.onEdit()}
       >
         <Edit />
       </button>
+      <span class="spacer" />
+      <Show when={!d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
+      <Menu
+        action="索取"
+        label="索取一项记录"
+        value={undefined}
+        options={busy() ? [] : props.demands}
+        onPick={(id) => (dismiss(), props.onDemand(id))}
+      />
     </footer>
   )
 }
@@ -279,15 +406,17 @@ export const RecordSheet = (props: {
   onSwipe: () => void
   onReword: (note?: string) => void
   onEdit: () => void
+  onDemand: (product: string) => void
 }) => {
   const all = read(log)
   const view = read(card)
   let dlg!: HTMLDialogElement
   const prev = () => (props.node.parent === null ? undefined : all().nodes.get(props.node.parent))
-  // the pill's dot: this turn changed a field, judged a beat or told a clue (notes alone light nothing: every turn has them)
+  // the pill's dot: this turn changed a field, judged a beat, told a clue or holds a product (notes alone light
+  // nothing: every turn has them)
   const marked = () => {
     const r = view()?.rules
-    return r !== undefined && record(r, props.node, prev()).some((e) => e.kind !== "notes")
+    return r !== undefined && record(r, props.node, prev(), view()?.products).some((e) => e.kind !== "notes")
   }
   return (
     <>
@@ -306,9 +435,11 @@ export const RecordSheet = (props: {
             for={props.node.id}
             rerun={!!(props.node.turn.input.text || props.node.turn.input.note)}
             busy={props.busy}
+            demands={demandable(view()?.products ?? [], props.node)}
             onSwipe={() => (dlg.close(), props.onSwipe())}
             onReword={(note) => (dlg.close(), props.onReword(note))}
             onEdit={() => (dlg.close(), props.onEdit())}
+            onDemand={(id) => (dlg.close(), props.onDemand(id))}
           />
         }
       >
@@ -322,11 +453,15 @@ export const RecordSheet = (props: {
 export const StatusTable = () => {
   const view = read(card)
   const last = read(latest)
-  const groups = createMemo(() => {
-    const r = view()?.rules
-    const l = last()
-    return r && l ? status(r, l.node.state) : []
-  })
+  // equal by content, like the Record's: the card view read again must not re-run unchanged rows
+  const groups = createMemo(
+    () => {
+      const r = view()?.rules
+      const l = last()
+      return r && l ? status(r, l.node.state) : []
+    },
+    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+  )
   return (
     <div class="record">
       <For each={groups()} keyed={(g) => g.group ?? ""}>

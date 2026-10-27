@@ -1,6 +1,6 @@
 // One screen: the reading line as sections, the draft growing at its end, a composer at the bottom, a slim bar on top
 // whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
-// stories, the writing switches, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
+// stories, the persona, the Writing page's chips, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
 // turn's readings (src/record.ts projects them; this file only draws); the last section carries the Options container,
 // whose rows fill the composer and never send. From 64rem the same pieces sit on three cards: the session on the
 // left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
@@ -36,7 +36,8 @@ import {
 import { Inspect } from "./inspector.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
-import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
+import { WritingPage } from "./writing.tsx"
+import { demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record } from "./record.ts"
 import { Session, Side } from "./side.tsx"
 import {
@@ -439,6 +440,7 @@ const Section = (props: {
   onReword: (note?: string) => void
   onEdit: (text?: string) => void // without text: open the editor; with it: send the edit; `undefined` from the editor: cancel
   onRevise: (field: "text" | "note") => void // the player's line back into the composer
+  onDemand: (product: string) => void
 }) => {
   const all = read(log)
   const edited = read(editing)
@@ -469,6 +471,7 @@ const Section = (props: {
           onSwipe={props.onSwipe}
           onReword={props.onReword}
           onEdit={() => props.onEdit()}
+          onDemand={props.onDemand}
         />
         <Show when={siblings().length > 1}>
           <span class="siblings">
@@ -547,10 +550,15 @@ const Reader = () => {
   const err = read(error)
   const busy = read(working)
   // the draft hangs under its parent: a sibling of a past turn cuts the line there while it is written
-  const shown = createMemo(() => {
-    const dr = d()
-    return dr ? line().slice(0, line().findIndex((n) => n.id === dr.parent) + 1) : line() // a root's draft: nothing above
-  })
+  // equal by its nodes: the draft changes every frame while prose streams, and a fresh but same slice must not
+  // re-run every section ([UNSTABLE_MEMO_OUTPUT] under the diagnostics)
+  const shown = createMemo(
+    () => {
+      const dr = d()
+      return dr ? line().slice(0, line().findIndex((n) => n.id === dr.parent) + 1) : line() // a root's draft: nothing above
+    },
+    { equals: (a, b) => a.length === b.length && a.every((n, i) => n === b[i]) },
+  )
   let stop: (() => void) | null = null
   onSettled(() => {
     // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
@@ -624,6 +632,9 @@ const Reader = () => {
       { ...n.turn.input, note: [n.turn.input.note, note].filter(Boolean).join("\n") || undefined }, // joined as the session joins it
       { kind: "reword", node: n.turn.id, ...(note !== undefined && { note }) },
     )
+  // Demand: one product asked for over a node's scene (session `demand`): a record call, the answer kept on the node,
+  // no turn and no draft; the change lands through the stream like any other.
+  const onDemand = (n: Node, product: string) => void send({ kind: "demand", node: n.turn.id, product })
   // Edit: the first call opens the editor on the node, the editor's call closes it, with the text to send or none.
   const onEdit = (n: Node, text?: string) => {
     const open = registry.get(editing) !== n.turn.id
@@ -668,6 +679,7 @@ const Reader = () => {
                   onReword={(note) => onReword(n(), note)}
                   onEdit={(text) => onEdit(n(), text)}
                   onRevise={(field) => onRevise(n(), field)}
+                  onDemand={(id) => onDemand(n(), id)}
                 />
               )}
             </For>
@@ -684,7 +696,7 @@ const Reader = () => {
         />
         <Latest />
       </div>
-      <Glance busy={busy()} onSwipe={onSwipe} onReword={onReword} onEdit={onEdit} />
+      <Glance busy={busy()} onSwipe={onSwipe} onReword={onReword} onEdit={onEdit} onDemand={onDemand} />
     </>
   )
 }
@@ -697,8 +709,10 @@ const Glance = (props: {
   onSwipe: (n: Node) => void
   onReword: (n: Node, note?: string) => void
   onEdit: (n: Node) => void
+  onDemand: (n: Node, product: string) => void
 }) => {
   const last = read(latest)
+  const view = read(card)
   return (
     <aside class="side glance">
       <div class="scrolls">
@@ -721,9 +735,11 @@ const Glance = (props: {
             for={l().node.id}
             rerun={!!(l().node.turn.input.text || l().node.turn.input.note)}
             busy={props.busy}
+            demands={demandable(view()?.products ?? [], l().node)}
             onSwipe={() => props.onSwipe(l().node)}
             onReword={(note) => props.onReword(l().node, note)}
             onEdit={() => props.onEdit(l().node)}
+            onDemand={(id) => props.onDemand(l().node, id)}
           />
         )}
       </Show>
@@ -748,6 +764,9 @@ export const App = () => {
       </Show>
       <Show when={pg() === "settings"}>
         <Settings />
+      </Show>
+      <Show when={pg() === "writing"}>
+        <WritingPage />
       </Show>
       <Show when={typeof pg() === "object"}>
         <Inspect id={(pg() as { inspect: Id }).inspect} />

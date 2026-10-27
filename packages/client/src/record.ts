@@ -4,6 +4,7 @@
 // is a step track, an int with both bounds a meter, anything else (an int bounded on one side, a number, a boolean) a
 // value row, so no field is lost: that row is where a missing display declaration shows itself concretely.
 import type { Check, Field, Rules, State } from "@effect-tavern/runtime/src/card.ts"
+import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 
 export type Element =
@@ -14,6 +15,7 @@ export type Element =
   | { kind: "clue"; id: string; text: string; pinnable: boolean } // pinnable: a deeper layer is still untold
   | { kind: "pin"; id: string; hook: string; told: boolean } // the entry this act pinned, by its hook (the parent's readable list; told, it has left this node's); untold: check never saw it fire, it can be pinned again
   | { kind: "notes"; items: readonly string[] }
+  | { kind: "product"; id: string; label: string; shape: Shape; value: unknown } // any other product on the node (a card's, or one demanded), drawn by its shape; options are the Options container's
 
 export const reading = (f: Field, was: State[string], now: State[string]): Element => {
   const label = f.label ?? f.path
@@ -31,7 +33,14 @@ export const reading = (f: Field, was: State[string], now: State[string]): Eleme
   return { kind: "value", path: f.path, label, was, now }
 }
 
-export const record = (rules: Rules, node: Node, prev: Node | undefined): Element[] => {
+/** What the card view says of a product: its id, shown name and shape (store.ts CardView). */
+export type Declared = { id: string; label?: string; shape: Shape }
+export const record = (
+  rules: Rules,
+  node: Node,
+  prev: Node | undefined,
+  products: readonly Declared[] = [],
+): Element[] => {
   const before: State = prev?.state ?? Object.fromEntries(rules.fields.map((f) => [f.path, f.initial]))
   const out: Element[] = []
   for (const f of rules.fields) {
@@ -53,6 +62,11 @@ export const record = (rules: Rules, node: Node, prev: Node | undefined): Elemen
     })
   const notes = node.turn.products.notes as readonly string[] | undefined
   if (notes?.length) out.push({ kind: "notes", items: notes })
+  for (const p of products) {
+    if (p.id === "notes" || p.id === "options") continue
+    const value = node.turn.products[p.id]
+    if (value !== undefined) out.push({ kind: "product", id: p.id, label: p.label ?? p.id, shape: p.shape, value })
+  }
   return out
 }
 

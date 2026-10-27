@@ -1,10 +1,9 @@
 // The session beside the reading: what holds for the whole story and is byte-stable in the request head: the card,
-// this card's stories (which one is open), the persona the player is on this card, the writing switches, the armed
-// pin, the two pages that look at the story (Timeline, Inspector) and the settings. The left card on desktop; on a phone, the sheet
+// this card's stories (which one is open), the persona the player is on this card, the writing in force (chips that
+// open the Writing page, writing.tsx), the armed pin, the two pages that look at the story (Timeline, Inspector) and the settings. The left card on desktop; on a phone, the sheet
 // the title opens. Both can be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a
 // story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
 // `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one.
-import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
@@ -12,8 +11,10 @@ import { Edit, Pin, Probe, Settings, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, working } from "./store.ts"
+import { chosen } from "./switches.ts"
 import { openTimeline } from "./timeline.tsx"
 import { deleteStory, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
+import { openWriting } from "./writing.tsx"
 
 const units: [Intl.RelativeTimeFormatUnit, number][] = [
   ["day", 864e5],
@@ -26,70 +27,6 @@ const ago = (at: number): string => {
   const d = at - Date.now()
   const u = units.find(([, ms]) => Math.abs(d) >= ms)
   return u ? rel.format(Math.round(d / u[1]), u[0]) : "now"
-}
-
-// The switches named in the language of the sentences they compile to (fragment.ts); a value not set leaves the
-// card's own text in force, and pressing the set one again unsets it. A switch with a `default` (what the runtime does
-// when unset) shows it pressed while unset; pressing the default unsets, pressing another sets it.
-interface Switch {
-  key: keyof Writing
-  label: string
-  values: [string | boolean, string][]
-  default?: string | boolean
-}
-const SWITCHES: Switch[] = [
-  {
-    key: "pov",
-    label: "视角",
-    values: [
-      ["second", "第二人称"],
-      ["third", "第三人称"],
-      ["none", "无主角"],
-    ],
-  },
-  {
-    key: "echo",
-    label: "引言",
-    values: [
-      [true, "转述言行"],
-      [false, "直接反应"],
-    ],
-  },
-  {
-    key: "agency",
-    label: "主导",
-    values: [
-      ["strict", "仅限输入"],
-      ["free", "允许续写"],
-    ],
-  },
-  {
-    key: "verbosity",
-    label: "篇幅",
-    values: [
-      ["concise", "简短"],
-      ["medium", "适中"],
-      ["detailed", "详尽"],
-    ],
-  },
-  {
-    // not head text: whether lexicon hits in the prose get the polish call after check (on unless off)
-    key: "polish",
-    label: "润色",
-    values: [
-      [true, "润色"],
-      [false, "不润色"],
-    ],
-    default: true,
-  },
-]
-const pressed = (s: Switch, w: Writing | undefined) => w?.[s.key] ?? s.default
-const pressing = (s: Switch, w: Writing | undefined, v: string | boolean) =>
-  v === (s.default ?? w?.[s.key]) ? undefined : v
-/** The switches in force, by name; none set, the card's. */
-const chosen = (w: Writing | undefined): string[] => {
-  const on = SWITCHES.flatMap((s) => s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => l))
-  return on.length ? on : ["跟随卡片"]
 }
 
 /** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
@@ -132,10 +69,6 @@ export const Session = (props: { at: string }) => {
   }
   const [renaming, setRenaming] = createSignal(false) // the open story's row is a name field (the header's pencil)
   let confirm!: HTMLDialogElement
-  const set = (key: keyof Writing, value: string | boolean | undefined) => {
-    const p = me()
-    if (p) void putPlayer({ ...p, writing: { ...p.writing, [key]: value } }) // an undefined value leaves the JSON: unset
-  }
   return (
     <div class="session">
       <button type="button" class="cardhead" onClick={openCard} aria-label="The card">
@@ -284,37 +217,20 @@ export const Session = (props: { at: string }) => {
           </button>
         </div>
       </section>
-      {/* the switches are head text: a change rewrites the cached prefix, so they read as a preference, not a dial */}
+      {/* the writing in force, as chips: the switches set (the card's own text holds for the rest) and a per-card
+          supplement; one button, the Writing page (a change there is a head rewrite, so it reads as a preference) */}
       <section class="writing" aria-label="Writing">
         <h2>Writing</h2>
-        {/* the switches in force as a stack of chips, one each: nothing to wrap, nothing to cut */}
-        <button type="button" class="chosen" popovertarget={id("writing")} disabled={!me()}>
-          <For each={chosen(me()?.writing)} keyed={(l) => l}>
+        <button
+          type="button"
+          class="chosen"
+          disabled={!me()}
+          onClick={(e) => (closeUp(e.currentTarget), openWriting())}
+        >
+          <For each={chosen(me()?.writing, !!me()?.forCard[cardId()]?.some((f) => f.text?.trim()))} keyed={(l) => l}>
             {(l) => <span class="chip">{l()}</span>}
           </For>
         </button>
-        <div id={id("writing")} class="snippets" popover>
-          <For each={SWITCHES} keyed={(s) => s.key}>
-            {(s) => (
-              <fieldset>
-                <legend>{s().label}</legend>
-                <div class="seg">
-                  <For each={s().values} keyed={(v) => String(v[0])}>
-                    {(v) => (
-                      <button
-                        type="button"
-                        aria-pressed={pressed(s(), me()?.writing) === v()[0] ? "true" : "false"}
-                        onClick={() => set(s().key, pressing(s(), me()?.writing, v()[0]))}
-                      >
-                        {v()[1]}
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </fieldset>
-            )}
-          </For>
-        </div>
       </section>
       <Show when={pinned()}>
         {(p) => (

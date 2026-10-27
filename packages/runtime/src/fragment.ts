@@ -93,6 +93,13 @@ const VERBOSITY = {
   medium: "每轮三四段，写到对方的反应落定为止。",
   detailed: "每轮篇幅从容，把动作、神态与周遭风物写足。",
 }
+/** The sentence each switch value compiles to, by key: what a client shows as the value's title (the Writing page). */
+export const SENTENCES: Record<keyof Omit<Writing, "polish" | "lexicon">, Readonly<Record<string, string>>> = {
+  pov: POV,
+  echo: ECHO,
+  agency: AGENCY,
+  verbosity: VERBOSITY,
+}
 /** The switches as slot fragments: `pov` (pov, echo, agency; the last two drop when there is no player in the fiction) and `verbosity`. */
 export const writing = (w: Writing = {}): Fragment[] => {
   const pov = [

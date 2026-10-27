@@ -507,13 +507,12 @@ const program = Effect.gen(function* () {
   yield* go(S.act(t13.id, { text: "⦅wait⦆" }))
   assert.ok(thought.test(str(prompts("decide").at(-1)!)) && thought.test(str(lastNarr())))
 
-  // pick: an option recorded on c0 becomes the player's next act, a child of c0 with that text as the input.
-  const t11 = yield* go(C.pick(c0.id, 1))
+  // an option is sent as any typed input is (the client fills the box): a child of c0 with that text as its line; on
+  // a note card the same send is a direction, never a line in the story
+  const t11 = yield* go(C.act(c0.id, { text: "O2" }))
   assert.deepEqual([t11.parent, t11.input], [c0.id, { text: "O2" }])
-  assert.throws(() => C.pick(c0.id, 9), /no option/)
-  // On a note card the pick is a direction, never a line in the story.
   const n0 = yield* go(N.act(null, { text: "", note: "开场" }))
-  const n1 = yield* go(N.pick(n0.id, 1))
+  const n1 = yield* go(N.act(n0.id, { text: "", note: "O2" }))
   assert.deepEqual(n1.input, { text: "", note: "O2" })
   i = calls().length
   const q0 = yield* go(Q.act(null, { text: "hello" }))

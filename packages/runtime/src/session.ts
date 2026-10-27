@@ -15,8 +15,8 @@
 // nodes are untouched, and lore dedupe keeps working because deliveries live on the nodes, not in the view.
 // Player actions on a node, each with its landing in the log tree (docs/card-reading-2.md §8 item 8): `swipe` and
 // `reword` (a sibling, from lookup / from narrate), `edit` (a sibling carrying the player's prose, check and record
-// rerun), `setField` (effects on the node, folded last), `demand` (a product on the node), `pick` (an option as the
-// next act). A pin is not an action on a node: it rides on an act's input (`Input.pin`), the entry is forced open as a
+// rerun), `setField` (effects on the node, folded last), `demand` (a product on the node). An option is not an action
+// either: the client fills the box with it and the player sends it as an act. A pin is not an action on a node: it rides on an act's input (`Input.pin`), the entry is forced open as a
 // MUST for that turn, check verifies it, and what the path could still be told is the node's `readable` list. "Continue" is not a kind: with no output cap the model ends where
 // it ends, and "go on" is an note turn. Stop has two meanings by stage: before the prose starts, the action is
 // interrupted and leaves nothing; once it streams, `stop` halts the prose where it is, check is skipped (the player cut
@@ -176,18 +176,20 @@ export const format: readonly Format[] = [
 // The default products (src/product.ts): what record asks for on every card unless the card patches or the player
 // toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
 // overridden like any ask by the fragment id `product.<id>`. The options question follows the card's input channel,
-// because a picked option is sent as the player's next input: on an act card it is their own line (the first Haiku run
-// wrote "玩家……" in the third person and the pick put that sentence in the player's mouth), on a note card a direction.
+// because an option goes into the box as the player's next input: on an act card it is their own line (the first Haiku
+// run wrote "玩家……" in the third person, which put that sentence in the player's mouth), on a note card a direction.
 export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
   decodeProducts([
     {
       id: "notes",
+      label: "事件摘要",
       text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence in the third person. Name characters by their names in the frame, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never comment on the writing.",
       shape: { kind: "list" },
       feed: true,
     },
     {
       id: "options",
+      label: "行动选项",
       text:
         input === "note"
           ? "Four directions the player could give the narrator for what happens next, each one line, distinct in kind."
@@ -197,6 +199,7 @@ export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
     },
     {
       id: "inner",
+      label: "人物心声",
       text: "What the character thought this scene but did not say, one short paragraph.",
       shape: { kind: "text" },
       on: false,
@@ -326,6 +329,9 @@ export const makeSession = ({
   const wording = (id: string) => wordingOf(player, card, id)
   const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
   let products = resolveProducts()
+  /** The products as the card and the harness declare them, before the player's toggles: `on` is the default a toggle
+   *  overrides (the client shows the default while the player has not toggled one, and the card view is read once). */
+  const declared = resolve(defaultProducts(card.input ?? "act"), card.products)
   const question = (pr: Product) => questionOf(player, card, pr)
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[]) => {
@@ -877,8 +883,9 @@ export const makeSession = ({
     drop: (id: number): Change => change(held.commit(Log.drop(held.log, id))),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
-    /** The record products by id and shape, for a client that draws a node's products by their declared shape. */
-    products: products.map((p) => ({ id: p.id, shape: p.shape })),
+    /** The record products by id, shown name, shape and default state: how a client draws a node's products by their
+     *  declared shape, and the Writing page's toggles (the player's toggle wins over `on`, on the player layer). */
+    products: declared.map((p) => ({ id: p.id, label: p.label, shape: p.shape, on: p.on })),
     /** What the client shows about the card: its name and one line, the turn-heading reference, and its size as numbers.
      *  Not the card: fragment bodies, guard lines and lore stay on the server (a ban is a prompt, to a player too). */
     // `input` is the card's default channel, the one client-facing coordinate of participant vs author mode: on `act`
@@ -961,14 +968,6 @@ export const makeSession = ({
       settleTurn(stateAt(chain(t.parent)), { ...t, adjust })
       return change(held.commit(Log.amend(held.log, nodeId, { adjust })))
     },
-    /** The player picks one of a node's `options`: their next input, a child turn like any typed one, on the card's
-     *  default channel (a direction on a note card; the player's own line on an act card). */
-    pick: (nodeId: number, i: number, stop?: Stop): Events => {
-      const text = (turnOf(nodeId).products.options as readonly string[] | undefined)?.[i]
-      if (text === undefined) throw new Error(`no option ${i} on node ${nodeId}`)
-      const input: Input = card.input === "note" ? { text: "", note: text } : { text }
-      return emitting((emit) => turn(emit, nodeId, input, "lookup", undefined, stop))
-    },
     /** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
      *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner
      *  forum" kind of card (docs/card-reading-2.md §2). */
@@ -1012,7 +1011,6 @@ export const Action = Schema.Union([
     input: Schema.optionalKey(InputSchema), // the player's line revised, the prose kept
   }),
   Schema.Struct({ kind: Schema.Literal("setField"), node: Id, effects: Schema.Array(Effect_) }),
-  Schema.Struct({ kind: Schema.Literal("pick"), node: Id, option: Id }),
   Schema.Struct({ kind: Schema.Literal("demand"), node: Id, product: Schema.String }),
 ])
 export type Action = typeof Action.Type
@@ -1038,8 +1036,6 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
         return s.edit(a.node, a)
       case "setField":
         return Stream.succeed<Event>({ kind: "change", ...s.setField(a.node, a.effects) })
-      case "pick":
-        return s.pick(a.node, a.option, stop)
       case "demand":
         return s.demand(a.node, a.product)
     }

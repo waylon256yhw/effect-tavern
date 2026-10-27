@@ -251,6 +251,88 @@
   margin: 0;
   padding-left: 1.2em;
 }
+/* a product on the node (a card's, or one demanded): its name over its value by shape (readings.tsx `Shaped`) */
+.product {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  overflow-wrap: anywhere;
+}
+.product .plabel {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.product p,
+.product .items,
+.product .kv {
+  margin: 0;
+}
+.product .dim {
+  color: var(--ink-3);
+}
+.product .items {
+  padding-left: 1.2em;
+}
+.product .kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px var(--space-2);
+}
+.product .kv dt {
+  color: var(--ink-3);
+}
+.product .kv dd {
+  margin: 0;
+  min-width: 0;
+}
+.product .rows {
+  border-collapse: collapse;
+  font-size: var(--text-footnote);
+}
+.product .rows th {
+  padding: 0 var(--space-2) 2px 0;
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.product .rows td {
+  padding: 1px var(--space-2) 1px 0;
+  vertical-align: top;
+}
+/* the demand menu in the actions bar: a button that ends the bar, its menu above it with right edges aligned (the
+   composer's menu rules anchor to the composer; this one anchors to its invoker) */
+.actions .btn {
+  height: var(--control-sm);
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-caption);
+}
+.actions .snippets {
+  position-anchor: auto;
+  position-area: top span-left;
+  position-try-fallbacks: flip-block;
+  width: max-content;
+  min-width: 8rem;
+  max-width: min(20rem, calc(100vw - 2 * var(--space-4)));
+  margin: 0 0 var(--space-1);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.actions .snippets .item svg {
+  color: var(--ink);
+}
+.actions .failed {
+  min-width: 0;
+  font-size: var(--text-footnote);
+  color: var(--danger);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* the Options container: the only raised thing in the flow; a row fills the box */
 .options {
@@ -460,7 +542,7 @@
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 
-/* the session (side.tsx): the card, this card's stories, the writing switches, the pin, the pages; the left card on
+/* the session (side.tsx): the card, this card's stories, the persona, the writing chips, the pin, the pages; the left card on
    desktop, the sheet the title opens on a phone. Nothing here wraps but a persona's text in its form. */
 .session {
   display: flex;
@@ -584,9 +666,9 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-/* the session's menus (persona, writing) hang under the chips that open them (the invoker is the implicit anchor),
-   exactly as wide as the content column (the chips button bleeds a gutter each side): never past the card's edge, never
-   over what they set */
+/* the session's menu (persona) hangs under the chip that opens it (the invoker is the implicit anchor), exactly as
+   wide as the content column (the chip button bleeds a gutter each side): never past the card's edge, never over what
+   it sets */
 .session .snippets {
   position-anchor: auto;
   position-area: bottom;
@@ -599,17 +681,7 @@
 .snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
-/* the writing switches: one line of what is set; the menu is four rows of chips, the set one outlined */
-.writing fieldset {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin: 0;
-  padding: var(--space-1) 2px; /* the menu is the content column's width: 192px holds three four-character chips only with the padding this thin */
-  border: 0;
-}
-/* the setting in force (persona, writing): one chip per thing set, stacked, the menu's anchor */
+/* the setting in force (persona, writing): one chip per thing set, stacked; the persona's menu anchor, the Writing page's button */
 .session .chosen {
   display: flex;
   flex-direction: column;
@@ -622,34 +694,6 @@
 }
 .session .chosen:hover:not(:disabled) {
   background: var(--ghost-hover);
-}
-.writing legend {
-  padding: 0;
-  font-size: var(--text-caption);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.writing .seg {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: var(--space-1);
-}
-.writing .seg button {
-  height: var(--control-sm);
-  padding: 0 2px;
-  border-radius: var(--radius-pill);
-  background: var(--alpha-1);
-  color: var(--ink-2);
-  font-size: var(--text-footnote);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.writing .seg button[aria-pressed="true"] {
-  background: var(--primary);
-  color: var(--primary-ink);
 }
 .pinned p {
   display: flex;
