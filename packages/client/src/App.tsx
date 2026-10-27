@@ -1,6 +1,6 @@
 // One screen: the reading line as sections, the draft growing at its end, a composer at the bottom, a slim bar on top
 // whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
-// stories, the writing switches, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
+// stories, the persona, the Writing page's chips, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
 // turn's readings (src/record.ts projects them; this file only draws); the last section carries the Options container,
 // whose rows fill the composer and never send. From 64rem the same pieces sit on three cards: the session on the
 // left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
@@ -36,6 +36,7 @@ import {
 import { Inspect } from "./inspector.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
+import { WritingPage } from "./writing.tsx"
 import { RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record } from "./record.ts"
 import { Session, Side } from "./side.tsx"
@@ -748,6 +749,9 @@ export const App = () => {
       </Show>
       <Show when={pg() === "settings"}>
         <Settings />
+      </Show>
+      <Show when={pg() === "writing"}>
+        <WritingPage />
       </Show>
       <Show when={typeof pg() === "object"}>
         <Inspect id={(pg() as { inspect: Id }).inspect} />

@@ -44,7 +44,9 @@ export interface CardView {
   tokens: { head: number } // what the card's own text costs each turn, estimated
   fiction: readonly { id: string; label?: string; when?: Cond }[] // the fiction's modules without their text
   rules: Rules
-  products: readonly { id: string; shape: Shape }[] // record products by declared shape: how the inspector draws them
+  /** The record products as declared (card over harness): the shown name, the shape the inspector draws by, and the
+   *  default state the player's toggle (`Player.products`) overrides on the Writing page. */
+  products: readonly { id: string; label?: string; shape: Shape; on: boolean }[]
   snippets: readonly Snippet[]
   format: readonly Format[]
 }
@@ -104,9 +106,9 @@ export const revising = Atom.make<{
 export const error = Atom.make<Failure | null>(null)
 /** A turn in flight: a draft that is not the ghost of a failed one. What holds the composer, the story and a new root. */
 export const working = Atom.make((get) => get(draft) !== null && get(error) === null)
-/** The page over the reader: none, the card page, the Timeline, the settings, or the Inspect page on one node. The reader stays
- *  mounted under it, so a turn in flight keeps streaming. */
-export type Page = "reader" | "card" | "timeline" | "settings" | { inspect: Id }
+/** The page over the reader: none, the card page, the Timeline, the settings, the Writing page (writing.tsx) or the
+ *  Inspect page on one node. The reader stays mounted under it, so a turn in flight keeps streaming. */
+export type Page = "reader" | "card" | "timeline" | "settings" | "writing" | { inspect: Id }
 export const page = Atom.make<Page>("reader")
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())

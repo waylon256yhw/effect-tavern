@@ -48,6 +48,7 @@ export type Fold = typeof Fold.Type
 
 export const Product = Schema.Struct({
   id: Schema.String,
+  label: Schema.optionalKey(Schema.String), // the shown name (the Writing page's toggle, a drawn product); the id when absent
   text: Schema.String, // the question; overridden per id by the player's / card's `asks` (fragment id `product.<id>`)
   shape: Shape,
   fold: Schema.optionalKey(Fold),

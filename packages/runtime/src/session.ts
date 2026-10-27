@@ -182,12 +182,14 @@ export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
   decodeProducts([
     {
       id: "notes",
+      label: "事件摘要",
       text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence in the third person. Name characters by their names in the frame, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never comment on the writing.",
       shape: { kind: "list" },
       feed: true,
     },
     {
       id: "options",
+      label: "行动选项",
       text:
         input === "note"
           ? "Four directions the player could give the narrator for what happens next, each one line, distinct in kind."
@@ -197,6 +199,7 @@ export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
     },
     {
       id: "inner",
+      label: "人物心声",
       text: "What the character thought this scene but did not say, one short paragraph.",
       shape: { kind: "text" },
       on: false,
@@ -326,6 +329,9 @@ export const makeSession = ({
   const wording = (id: string) => wordingOf(player, card, id)
   const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
   let products = resolveProducts()
+  /** The products as the card and the harness declare them, before the player's toggles: `on` is the default a toggle
+   *  overrides (the client shows the default while the player has not toggled one, and the card view is read once). */
+  const declared = resolve(defaultProducts(card.input ?? "act"), card.products)
   const question = (pr: Product) => questionOf(player, card, pr)
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[]) => {
@@ -877,8 +883,9 @@ export const makeSession = ({
     drop: (id: number): Change => change(held.commit(Log.drop(held.log, id))),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
-    /** The record products by id and shape, for a client that draws a node's products by their declared shape. */
-    products: products.map((p) => ({ id: p.id, shape: p.shape })),
+    /** The record products by id, shown name, shape and default state: how a client draws a node's products by their
+     *  declared shape, and the Writing page's toggles (the player's toggle wins over `on`, on the player layer). */
+    products: declared.map((p) => ({ id: p.id, label: p.label, shape: p.shape, on: p.on })),
     /** What the client shows about the card: its name and one line, the turn-heading reference, and its size as numbers.
      *  Not the card: fragment bodies, guard lines and lore stay on the server (a ban is a prompt, to a player too). */
     // `input` is the card's default channel, the one client-facing coordinate of participant vs author mode: on `act`

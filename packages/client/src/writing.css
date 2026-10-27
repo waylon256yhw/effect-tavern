@@ -1,0 +1,309 @@
+/* ───────── Writing: the player's writing workbench over the reader (writing.tsx, issue #69) ─────────
+   page === "writing": the fields of the player layer that are not the persona pick, in tabs. Desktop: one bounded
+   sheet centred on the canvas, a fixed head (back, title, the card, the tabs) over one body; each tab is a column that
+   fills the sheet and scrolls inside itself, so a tab change never moves the sheet's edges. A phone: the sheet is the
+   viewport, the tabs a second row under the head. The shared controls (.btn, .switch, .tag, .field, .block-title,
+   .inline-search, .scroller, .empty-card) are settings.css's; .inspect (inspector.css) is the fixed page shell. */
+.wpage {
+  display: flex;
+  font-size: var(--text-body);
+}
+.wpage .mono {
+  font-family: var(--font-mono);
+}
+.wpage .icon.sm {
+  flex: none;
+  width: var(--control-sm);
+  height: var(--control-sm);
+}
+.wpage .icon.sm svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.wsheet {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.whead {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: calc(var(--space-2) + var(--safe-top)) var(--space-3) var(--space-2) var(--space-2);
+  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+}
+.whead h1 {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 650;
+}
+.whead .spacer {
+  flex: 1;
+}
+/* the tabs: a pill row, the open one lifted; on a phone the head's second row, each tab an equal share */
+.wtabs {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+}
+.wtabs button {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wtabs button:hover {
+  color: var(--ink);
+}
+.wtabs button[aria-selected="true"] {
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+.wbody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.wpanel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+.wsec {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.wsec.grow {
+  flex: 1;
+}
+/* a scroller whose ends fade into the panel, like the reader's column: its padding is the fade */
+.wpage .fade {
+  padding-top: var(--fade);
+  padding-bottom: var(--fade);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+}
+.wpage .none {
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+}
+
+/* the switches: a card per switch, its name over a row of pills, the set one solid; a moot one (no player in the
+   fiction: echo and agency) is a disabled fieldset, dimmed with its buttons */
+.sw-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.sw-card {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  transition: opacity var(--dur-3) var(--ease);
+}
+.sw-card:disabled {
+  opacity: 0.45;
+}
+.sw-card legend {
+  padding: 0;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sw-card .seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.sw-card .seg button {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+.sw-card .seg button:hover:not(:disabled) {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.sw-card .seg button[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+/* the record products: a row each, the shown name and its switch; one without a name shows its id in mono */
+.prod-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.prod-item {
+  flex: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+}
+.prod-item .pname {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prod-item .pid {
+  font-family: var(--font-mono);
+  color: var(--ink-2);
+}
+
+/* the lexicon: the title row holds the count, the search, the file buttons, add, and the polish switch (it wraps on
+   a phone); the list is a card with a fixed column head over its own scroller, dimmed while polish is off */
+.lex-title {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+.polish-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: var(--space-1);
+  font-size: var(--text-footnote);
+  color: var(--ink-2);
+}
+.lex-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  overflow: hidden;
+  transition: opacity var(--dur-3) var(--ease);
+}
+.lex-wrap[data-off="true"] {
+  opacity: 0.5;
+}
+.lex-head,
+.lex-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) var(--control-sm);
+  align-items: center;
+  gap: var(--space-2);
+}
+.lex-head {
+  flex: none;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+}
+.lex-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-inline: var(--space-3);
+}
+.lex-row {
+  flex: none;
+}
+.lex-row .field {
+  box-sizing: border-box;
+  height: var(--control);
+  padding: 0 var(--space-3);
+  font-size: var(--text-field);
+}
+.lex-empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+.lex-empty .empty-card p {
+  margin: 0;
+}
+
+/* desktop: the sheet is a card on the canvas, the head one row, the switches two across */
+@media (min-width: 52rem) {
+  .wpage {
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-5);
+    background: var(--surface-0);
+  }
+  .wsheet {
+    flex: none;
+    width: 100%;
+    max-width: 56rem;
+    height: min(42rem, 100%);
+    border-radius: var(--radius-dialog);
+    box-shadow: var(--shadow-2);
+  }
+  .whead {
+    flex-wrap: nowrap;
+    min-height: 56px;
+    box-sizing: border-box;
+    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  }
+  .wtabs {
+    width: auto;
+  }
+  .wtabs button {
+    flex: none;
+    padding: 0 14px;
+  }
+  .wpanel {
+    gap: var(--space-5);
+    padding: var(--space-5);
+  }
+  .sw-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

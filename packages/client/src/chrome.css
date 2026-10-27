@@ -460,7 +460,7 @@
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 
-/* the session (side.tsx): the card, this card's stories, the writing switches, the pin, the pages; the left card on
+/* the session (side.tsx): the card, this card's stories, the persona, the writing chips, the pin, the pages; the left card on
    desktop, the sheet the title opens on a phone. Nothing here wraps but a persona's text in its form. */
 .session {
   display: flex;
@@ -584,9 +584,9 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-/* the session's menus (persona, writing) hang under the chips that open them (the invoker is the implicit anchor),
-   exactly as wide as the content column (the chips button bleeds a gutter each side): never past the card's edge, never
-   over what they set */
+/* the session's menu (persona) hangs under the chip that opens it (the invoker is the implicit anchor), exactly as
+   wide as the content column (the chip button bleeds a gutter each side): never past the card's edge, never over what
+   it sets */
 .session .snippets {
   position-anchor: auto;
   position-area: bottom;
@@ -599,17 +599,7 @@
 .snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
-/* the writing switches: one line of what is set; the menu is four rows of chips, the set one outlined */
-.writing fieldset {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin: 0;
-  padding: var(--space-1) 2px; /* the menu is the content column's width: 192px holds three four-character chips only with the padding this thin */
-  border: 0;
-}
-/* the setting in force (persona, writing): one chip per thing set, stacked, the menu's anchor */
+/* the setting in force (persona, writing): one chip per thing set, stacked; the persona's menu anchor, the Writing page's button */
 .session .chosen {
   display: flex;
   flex-direction: column;
@@ -622,34 +612,6 @@
 }
 .session .chosen:hover:not(:disabled) {
   background: var(--ghost-hover);
-}
-.writing legend {
-  padding: 0;
-  font-size: var(--text-caption);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.writing .seg {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: var(--space-1);
-}
-.writing .seg button {
-  height: var(--control-sm);
-  padding: 0 2px;
-  border-radius: var(--radius-pill);
-  background: var(--alpha-1);
-  color: var(--ink-2);
-  font-size: var(--text-footnote);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.writing .seg button[aria-pressed="true"] {
-  background: var(--primary);
-  color: var(--primary-ink);
 }
 .pinned p {
   display: flex;

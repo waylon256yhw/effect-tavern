@@ -1,7 +1,7 @@
 /* Four cascade layers, lowest first: the tokens, the components (which may only use tokens), the card's CSS, the
    reader's own. A later layer wins unconditionally, so nobody needs !important. The components layer is three files in
    source order: reader.css (the frame, the flow, the composer), chrome.css (the Record pill and sheet, the readings,
-   the session, Options, the snippets menu, the desktop cards), inspector.css (the Inspect page), timeline.css (the Timeline page), card.css (the card page), settings.css (the settings page). Structure names
+   the session, Options, the snippets menu, the desktop cards), inspector.css (the Inspect page), timeline.css (the Timeline page), card.css (the card page), settings.css (the settings page), writing.css (the Writing page). Structure names
    (.said, .prose, .actions, .composer, .send, .topbar, .canvas, .panel, .scroll, .side, .status, .pinned, .session,
    .snippets) are the public surface a card or a reader styles against: rename with care.
    Shapes follow docs/client-design-brief-3.md and the canvas in docs/client-canvas/. */
@@ -13,3 +13,4 @@
 @import "./timeline.css" layer(components);
 @import "./card.css" layer(components);
 @import "./settings.css" layer(components);
+@import "./writing.css" layer(components);
