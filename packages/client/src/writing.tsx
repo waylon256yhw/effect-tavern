@@ -4,29 +4,40 @@
 // document, so they get this page, over the reader like the card page (`page === "writing"`: the reader stays mounted,
 // a turn in flight keeps streaming, Escape or Back returns to the line being read). The side panel's Writing chips
 // open it. Tabs: the switches and the record products, the prose requirements (the per-card supplement and the
-// global ones), the lexicon the polish stage scans; the quick inputs follow. Every edit is one `PUT /player` on
-// change (blur or Enter), as the settings commit; nothing is optimistic. switches.ts, requirements.ts and lexicon.ts
-// hold the pure parts (tested).
-import type { Player, Writing } from "@effect-tavern/runtime/src/fragment.ts"
+// global ones), the lexicon the polish stage scans, the quick inputs (the format keys and the snippets, each edited
+// in a modal). Every edit is one `PUT /player` on change (blur or Enter), as the settings commit; nothing is
+// optimistic. switches.ts, requirements.ts, lexicon.ts and inserts.ts hold the pure parts (tested).
+import type { Format, Player, Snippet, Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
 import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { newId, Switch } from "./controls.tsx"
+import { Modal, newId, Switch } from "./controls.tsx"
 import { Back, Clue, Close, Export, Import, Snippets as Plus } from "./icons.tsx"
+import {
+  caretOf,
+  defaultsOf,
+  draftOfFormat,
+  draftOfSnippet,
+  emptyDraft,
+  formatOf,
+  snippetOf,
+  type InsertDraft,
+} from "./inserts.ts"
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
 import { card, page, player, registry } from "./store.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
-import { putPlayer } from "./wire.ts"
+import { fetchCard, putPlayer } from "./wire.ts"
 
 export const openWriting = () => registry.set(page, "writing")
 const close = () => registry.set(page, "reader")
 
-type Tab = "switches" | "prose" | "polish"
+type Tab = "switches" | "prose" | "polish" | "inputs"
 const TABS: [Tab, string][] = [
   ["switches", "开关与记录"],
   ["prose", "文风与要求"],
   ["polish", "润色与禁词"],
+  ["inputs", "快捷输入"],
 ]
 
 export const WritingPage = () => {
@@ -76,6 +87,9 @@ export const WritingPage = () => {
           </Show>
           <Show when={tab() === "polish"}>
             <Polish />
+          </Show>
+          <Show when={tab() === "inputs"}>
+            <Inputs />
           </Show>
         </div>
       </article>
@@ -517,6 +531,281 @@ const Polish = () => {
           </div>
         </div>
       </Show>
+    </section>
+  )
+}
+
+// ───────── 快捷输入: the format keys and the snippets, the player's own before the harness defaults ─────────
+const placed = <T,>(l: readonly T[], x: T, at: number): T[] =>
+  at < 0 ? [x, ...l] : l.map((y, i) => (i === at ? x : y))
+/** What is being edited: which list, which row (-1 a new one), and the editor's draft. */
+interface Editing {
+  snippet: boolean
+  at: number
+  draft: InsertDraft
+}
+const Inputs = () => {
+  const me = read(player)
+  const view = read(card)
+  const keys = () => me()?.format ?? []
+  const snips = () => me()?.snippets ?? []
+  // the harness defaults, as the composer shows them after the player's: listed, not edited
+  const keyDefaults = () => defaultsOf(view()?.format ?? [], keys(), (k) => `${k.label}\0${k.text}`)
+  const snipDefaults = () => defaultsOf(view()?.snippets ?? [], snips(), (s) => s.name)
+  // the composer reads the card view's merged lists: a write to the player's is followed by a read of the view
+  const put = async (p: Player) => {
+    await putPlayer(p)
+    await fetchCard()
+  }
+  const setKeys = (list: readonly Format[]) => {
+    const { format: _format, ...p } = me() ?? { global: [], forCard: {} }
+    if (me()) void put(list.length ? { ...p, format: list } : p)
+  }
+  const setSnips = (list: readonly Snippet[]) => {
+    const { snippets: _snippets, ...p } = me() ?? { global: [], forCard: {} }
+    if (me()) void put(list.length ? { ...p, snippets: list } : p)
+  }
+  // the editor: one modal for both kinds, over the page
+  const [editing, setEditing] = createSignal<Editing | null>(null)
+  let dlg!: HTMLDialogElement
+  const open = (e: Editing) => (setEditing(e), dlg.showModal())
+  const patch = (f: Partial<InsertDraft>) => setEditing((e) => (e ? { ...e, draft: { ...e.draft, ...f } } : e))
+  const made = () => {
+    const e = editing()
+    return e ? (e.snippet ? snippetOf(e.draft) : formatOf(e.draft)) : undefined
+  }
+  const save = () => {
+    const e = editing()
+    const v = made()
+    if (!e || !v) return
+    // a new one goes first, at hand in the menu; an edit replaces its row
+    if (e.snippet) setSnips(placed(snips(), v as Snippet, e.at))
+    else setKeys(placed(keys(), v as Format, e.at))
+    dlg.close()
+  }
+  const remove = () => {
+    const e = editing()
+    if (!e || e.at < 0) return
+    if (e.snippet) setSnips(snips().filter((_, i) => i !== e.at))
+    else setKeys(keys().filter((_, i) => i !== e.at))
+    dlg.close()
+  }
+  const preview = () => {
+    const v = made()
+    return v ? caretOf(v) : ""
+  }
+  return (
+    <section class="wpanel" role="tabpanel" aria-label="快捷输入">
+      {/* the keys: a row of glyphs over the box; the player's are buttons into the editor, the defaults after them */}
+      <div class="input-card">
+        <div class="block-title">
+          <h3>标点与格式键</h3>
+          <span class="tag mono">{keys().length} 键</span>
+          <div class="right">
+            <button
+              type="button"
+              class="btn sm"
+              disabled={!me()}
+              onClick={() => open({ snippet: false, at: -1, draft: emptyDraft(false) })}
+            >
+              <Plus /> <span>添加符号</span>
+            </button>
+          </div>
+        </div>
+        <div class="fmt-chips">
+          <For each={keys()} keyed={false}>
+            {(k, i) => (
+              <button
+                type="button"
+                class="fmt-btn"
+                title={caretOf(k())}
+                onClick={() => open({ snippet: false, at: i, draft: draftOfFormat(k()) })}
+              >
+                <span class="glyph">{k().label}</span>
+                <span class="mode">{k().after !== undefined ? "居中" : "末尾"}</span>
+              </button>
+            )}
+          </For>
+          <For each={keyDefaults()} keyed={(k) => k.label}>
+            {(k) => (
+              <span class="fmt-btn builtin" title={`内置：${caretOf(k())}`}>
+                <span class="glyph">{k().label}</span>
+                <span class="mode">内置</span>
+              </span>
+            )}
+          </For>
+        </div>
+      </div>
+      {/* the snippets: the + menu's rows; a note one is a word to the narrator, the rest stay in the story */}
+      <div class="input-card grow">
+        <div class="block-title">
+          <h3>快捷片段</h3>
+          <span class="tag mono">{snips().length} 条</span>
+          <div class="right">
+            <button
+              type="button"
+              class="btn sm"
+              disabled={!me()}
+              onClick={() => open({ snippet: true, at: -1, draft: emptyDraft(true) })}
+            >
+              <Plus /> <span>添加片段</span>
+            </button>
+          </div>
+        </div>
+        <div class="snip-list scroller fade">
+          <For each={snips()} keyed={false}>
+            {(s, i) => (
+              <button
+                type="button"
+                class="snip-row"
+                onClick={() => open({ snippet: true, at: i, draft: draftOfSnippet(s()) })}
+              >
+                <span class="sname">{s().name}</span>
+                <span class="stext mono">{caretOf(s())}</span>
+                <span class="shint">{s().hint}</span>
+                <span class="tag">{s().note ? "给叙事者" : "故事里"}</span>
+              </button>
+            )}
+          </For>
+          <For each={snipDefaults()} keyed={(s) => s.name}>
+            {(s) => (
+              <div class="snip-row builtin">
+                <span class="sname">{s().name}</span>
+                <span class="stext mono">{caretOf(s())}</span>
+                <span class="shint">{s().hint}</span>
+                <span class="tag">内置</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+      <Modal
+        title={
+          editing()?.at === -1
+            ? editing()?.snippet
+              ? "新片段"
+              : "新符号"
+            : editing()?.snippet
+              ? "编辑片段"
+              : "编辑符号"
+        }
+        narrow
+        dialog={(el) => (dlg = el)}
+        onClose={() => setEditing(null)}
+      >
+        <Show when={editing()}>
+          {(e) => (
+            <>
+              <div class="modal-body">
+                <label class="mfield">
+                  <span>{e().snippet ? "名称" : "显示名称"}</span>
+                  <input
+                    class="field"
+                    placeholder={e().snippet ? "菜单里的名字" : "留空则显示插入的符号"}
+                    value={e().draft.label}
+                    onInput={(ev) => patch({ label: ev.currentTarget.value })}
+                  />
+                </label>
+                <Show when={e().snippet}>
+                  <label class="mfield">
+                    <span>说明</span>
+                    <input
+                      class="field"
+                      placeholder="菜单里名字下的一行（选填）"
+                      value={e().draft.hint}
+                      onInput={(ev) => patch({ hint: ev.currentTarget.value })}
+                    />
+                  </label>
+                  <div class="mfield">
+                    <span>发给谁</span>
+                    <div class="at-toggle" role="group" aria-label="通道">
+                      <button
+                        type="button"
+                        aria-pressed={!e().draft.note ? "true" : "false"}
+                        onClick={() => patch({ note: false })}
+                      >
+                        故事里
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={e().draft.note ? "true" : "false"}
+                        onClick={() => patch({ note: true })}
+                      >
+                        给叙事者
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+                <div class="mfield">
+                  <span>插入后光标</span>
+                  <div class="at-toggle" role="group" aria-label="光标位置">
+                    <button
+                      type="button"
+                      aria-pressed={e().draft.between ? "true" : "false"}
+                      onClick={() => patch({ between: true })}
+                    >
+                      内容中间
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!e().draft.between ? "true" : "false"}
+                      onClick={() => patch({ between: false })}
+                    >
+                      内容末尾
+                    </button>
+                  </div>
+                </div>
+                <div class="mpair">
+                  <label class="mfield">
+                    <span>{e().draft.between ? "光标前" : "插入内容"}</span>
+                    <input
+                      class="field mono"
+                      placeholder={e().draft.between ? "如 「" : "如 ……"}
+                      value={e().draft.text}
+                      onInput={(ev) => patch({ text: ev.currentTarget.value })}
+                    />
+                  </label>
+                  <Show when={e().draft.between}>
+                    <label class="mfield">
+                      <span>光标后</span>
+                      <input
+                        class="field mono"
+                        placeholder="如 」"
+                        value={e().draft.after}
+                        onInput={(ev) => patch({ after: ev.currentTarget.value })}
+                      />
+                    </label>
+                  </Show>
+                </div>
+                <p class="caret-preview">
+                  <Show when={preview()} fallback={<span class="none">还没有可插入的内容</span>}>
+                    {(p) => (
+                      <>
+                        <span>插入</span>
+                        <code>{p()}</code>
+                      </>
+                    )}
+                  </Show>
+                </p>
+              </div>
+              <div class="modal-foot">
+                <Show when={e().at >= 0}>
+                  <button type="button" class="btn sm ghost danger" onClick={remove}>
+                    删除
+                  </button>
+                </Show>
+                <span class="spacer" />
+                <button type="button" class="btn sm ghost" onClick={() => dlg.close()}>
+                  取消
+                </button>
+                <button type="button" class="btn sm primary" disabled={!made()} onClick={save}>
+                  保存
+                </button>
+              </div>
+            </>
+          )}
+        </Show>
+      </Modal>
     </section>
   )
 }

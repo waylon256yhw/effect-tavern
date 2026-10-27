@@ -394,6 +394,158 @@
   margin: 0;
 }
 
+/* the quick inputs: the keys as a row of glyphs, the snippets as rows that fill the rest; the player's own open the
+   editor, the harness defaults sit after them, dimmed and labelled */
+.input-card {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.input-card.grow {
+  flex: 1;
+}
+.fmt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.fmt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: var(--ink);
+  font-size: var(--text-body);
+}
+.fmt-btn:hover:not(.builtin) {
+  background: var(--alpha-2);
+}
+.fmt-btn .glyph {
+  font-family: var(--font-mono);
+}
+.fmt-btn .mode {
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.snip-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.snip-row {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: var(--ink);
+  text-align: left;
+}
+.snip-row:hover:not(.builtin) {
+  background: var(--alpha-2);
+}
+.snip-row .sname {
+  font-weight: 550;
+}
+.snip-row .stext,
+.snip-row .shint {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+}
+.snip-row .shint {
+  color: var(--ink-3);
+}
+.builtin {
+  opacity: 0.6;
+}
+/* the editor: the settings' modal (controls.tsx) over this page: its dialog rules, then labelled fields in a column */
+.wpage .modal {
+  box-sizing: border-box;
+  width: min(29rem, calc(100% - 2 * var(--space-4)));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-dialog);
+  background: var(--surface-3);
+  color: inherit;
+  box-shadow: var(--shadow-pop);
+  outline: none;
+  overflow: hidden;
+}
+.wpage .modal.narrow {
+  width: min(24rem, calc(100% - 2 * var(--space-4)));
+}
+.wpage .modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+.wpage .modal::backdrop {
+  background: var(--scrim);
+}
+.wpage .modal-body {
+  overflow-y: auto;
+}
+.wpage .modal-foot .spacer {
+  flex: 1;
+}
+.mfield {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.mfield > span {
+  font-size: var(--text-caption);
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.mpair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--space-3);
+}
+.caret-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-footnote);
+  color: var(--ink-2);
+}
+.caret-preview code {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  color: var(--ink);
+}
+.wpage .btn.danger {
+  color: var(--danger);
+}
+
 /* desktop: the sheet is a card on the canvas, the head one row, the switches two across */
 @media (min-width: 52rem) {
   .wpage {

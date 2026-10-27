@@ -283,10 +283,15 @@ export const Sheet = (props: {
 /** A turn's readings: what it changed and produced (src/record.ts). */
 export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   const view = read(card)
-  const els = createMemo(() => {
-    const r = view()?.rules
-    return r ? record(r, props.node, props.prev, view()?.products) : []
-  })
+  // equal by content: the projection is fresh each run (the log or the card view changed), and an unchanged Record
+  // must not re-run its rows ([UNSTABLE_MEMO_OUTPUT] under the diagnostics when the card view is read again)
+  const els = createMemo(
+    () => {
+      const r = view()?.rules
+      return r ? record(r, props.node, props.prev, view()?.products) : []
+    },
+    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+  )
   return (
     <div class="record">
       {/* by index: the memo yields fresh, equal elements whenever the log changes; rows update in place */}
@@ -448,11 +453,15 @@ export const RecordSheet = (props: {
 export const StatusTable = () => {
   const view = read(card)
   const last = read(latest)
-  const groups = createMemo(() => {
-    const r = view()?.rules
-    const l = last()
-    return r && l ? status(r, l.node.state) : []
-  })
+  // equal by content, like the Record's: the card view read again must not re-run unchanged rows
+  const groups = createMemo(
+    () => {
+      const r = view()?.rules
+      const l = last()
+      return r && l ? status(r, l.node.state) : []
+    },
+    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+  )
   return (
     <div class="record">
       <For each={groups()} keyed={(g) => g.group ?? ""}>

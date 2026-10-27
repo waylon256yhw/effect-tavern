@@ -2,6 +2,7 @@
 // the prose requirements over the player layer.
 import { frame, type Player, writing } from "@effect-tavern/runtime/src/fragment.ts"
 import assert from "node:assert/strict"
+import { caretOf, defaultsOf, draftOfFormat, draftOfSnippet, emptyDraft, formatOf, snippetOf } from "../src/inserts.ts"
 import { mergeLexicon, parseLexicon, serializeLexicon } from "../src/lexicon.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "../src/requirements.ts"
 import { chosen, moot, pressing, sentence, SWITCHES } from "../src/switches.ts"
@@ -83,4 +84,35 @@ assert.deepEqual(setGlobalAt(g1, 0, "head").global[0], { id: "req-1", text: "白
 assert.deepEqual(setGlobalAt(g1, 1, "tail").global[1]!.at, "tail")
 assert.deepEqual([atOf(g1.global[0]!), atOf(g1.global[1]!)], ["tail", "head"])
 assert.deepEqual(removeGlobal(g1, 0).global, g0.global)
+// the quick inputs: a key or a snippet round-trips through the editor's draft; the caret between the halves keeps
+// `after`, at the end drops it; a blank label falls back to the glyph; a snippet needs a name and keeps only set keys
+assert.deepEqual(formatOf(draftOfFormat({ label: "「」", text: "「", after: "」" })), {
+  label: "「」",
+  text: "「",
+  after: "」",
+})
+assert.deepEqual(formatOf({ ...emptyDraft(false), text: "……" }), { label: "……", text: "……" })
+assert.deepEqual(formatOf({ ...emptyDraft(false), text: "「", after: "」", between: false }), {
+  label: "「",
+  text: "「",
+})
+assert.equal(formatOf(emptyDraft(false)), undefined)
+assert.deepEqual(snippetOf(draftOfSnippet({ name: "心声", text: "⦅", after: "⦆", hint: "h" })), {
+  name: "心声",
+  text: "⦅",
+  after: "⦆",
+  hint: "h",
+})
+assert.deepEqual(snippetOf({ ...emptyDraft(true), label: " 场外 " }), { name: "场外", text: "", note: true })
+assert.deepEqual(snippetOf({ ...emptyDraft(true), label: "x", text: "a", after: "b", between: false, note: false }), {
+  name: "x",
+  text: "a",
+})
+assert.equal(snippetOf(emptyDraft(true)), undefined)
+assert.deepEqual(
+  defaultsOf(["m1", "d1", "d2"], ["m1", "m2"], (x) => x),
+  ["d1", "d2"],
+)
+assert.equal(caretOf({ text: "「", after: "」" }), "「⎸」")
+assert.equal(caretOf({ text: "继续。" }), "继续。⎸")
 console.log("writing ok")
