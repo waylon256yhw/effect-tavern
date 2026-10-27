@@ -1,0 +1,2966 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Writing · 写作与偏好工作台 (Issue #69 Prototype)</title>
+  <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+    WRITING WORKBENCH (ISSUE #69): IN-PLAY PAGE OVER THE READER (page === "writing")
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    1. ARCHITECTURAL SEAM: "FIELDS IN WRITING, ENTITIES IN SETTINGS"
+       - `Settings` (settings.tsx) is a 3-column entity library (Provider, Hat, Persona).
+       - `Player` is a single document: `writing`, `lexicon`, `global`, `forCard`,
+         `products`, `snippets`, `format` are all fields on that one row.
+       - All non-persona fields of `Player` live here in `page === "writing"`.
+       - The left sidebar's `WRITING` section collapses to active summary chips as the
+         entry trigger (just as `.cardhead` opens `CardPage`), freeing `.session .snippets`
+         back to a simple downward-anchored radio menu for `Persona`.
+
+    2. CONTAINER & RESPONSIVE SHAPE:
+       - Mounted over `.canvas` via `page === "writing"` (reader stays mounted underneath;
+         scroll position, streaming draft, and composer state are 100% preserved).
+       - Desktop (>= 52rem): Bounded centered card (`.writing-card`, max-width 56rem)
+         on `--surface-0`, fixed header + single `.scroller` (`scrollbar-gutter: stable`).
+       - Mobile (390px): Full-viewport page; tapping `WRITING` in the phone's Session
+         sheet calls `closeUp` then sets `page = "writing"` (never stacking `<dialog>`).
+
+    3. FOUR TABS IN HEADER (FLUSH TOP-TO-BOTTOM PANELS, NO LONG PAGE SCROLL):
+       - Tab 1 `开关与记录`: 4 narrative switches (`pov`, `echo`, `agency`, `verbosity`) in a
+         2×2 grid at top + `products` card (`flex: 1`) flush to the bottom edge.
+       - Tab 2 `文风与要求`: Equal-height 2-column split (`align-items: stretch; flex: 1`) —
+         Left `forCard[card.id]` full-height textarea, Right `global` scrollable list.
+       - Tab 3 `润色与禁词`: `writing.polish` master switch + full-height bounded `.lex-card`
+         with fixed column header and internal `.scroller` for `{ pattern, hint }` rows.
+       - Tab 4 `快捷输入`: Top `format` bracket keys card + bottom full-height `snippets`
+         (`/`) card with internal `.scroller`, flush to the bottom edge.
+    ═══════════════════════════════════════════════════════════════════════════════
+  -->
+  <style>
+    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f9f9f7, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151515);
+      --surface-2: light-dark(#ffffff, #1a1a19);
+      --surface-3: light-dark(#ffffff, #20201f);
+
+      --ink: light-dark(#151515, #f5f5f5);
+      --ink-2: light-dark(#525252, #a3a3a3);
+      --ink-3: light-dark(#8a8a8a, #6f6f6f);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.05), rgb(255 255 255 / 0.05));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.2), rgb(255 255 255 / 0.18));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --fill: var(--alpha-2);
+      --fill-hover: light-dark(rgb(20 20 20 / 0.14), rgb(255 255 255 / 0.14));
+      --ghost-hover: var(--alpha-1);
+      --ghost-active: var(--alpha-2);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --danger: light-dark(#dc2626, #f87171);
+      --ok: light-dark(#1f7a3f, #4ade80);
+      --ok-soft: light-dark(rgb(31 122 63 / 0.22), rgb(74 222 128 / 0.25));
+      --ok-wash: light-dark(rgb(34 197 94 / 0.12), rgb(187 247 208 / 0.09));
+      --warn: light-dark(#b45309, #fbbf24);
+      --warn-soft: light-dark(rgb(217 119 6 / 0.12), rgb(251 191 36 / 0.14));
+      --scrim: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.5));
+      --ring: var(--alpha-4);
+
+      --hairline: 1px;
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-2:
+        0 2px 4px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 6px 16px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4)),
+        inset 0 0 0 var(--hairline) var(--line);
+      --shadow-pop:
+        inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)),
+        0 0 0 1px light-dark(var(--line), transparent),
+        0 8px 24px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.65)),
+        0 2px 6px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+      --shadow-composer:
+        0 4px 20px light-dark(rgb(0 0 0 / 0.035), rgb(0 0 0 / 0.4)),
+        inset 0 0 0 1px var(--line);
+
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-card: 12px;
+      --radius-composer: 14px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control: 32px;
+      --control-sm: 24px;
+      --icon: 20px;
+      --icon-sm: 16px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --text-caption: 0.6875rem;
+      --text-footnote: 0.75rem;
+      --text-body: 0.875rem;
+      --text-heading: 0.9375rem;
+      --text-prose: 1rem;
+      --text-field: var(--text-body);
+      --text-title: 1.25rem;
+      --leading-tight: 1.25;
+      --leading-body: 1.45;
+      --leading-prose: 1.75;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+
+      --dur-1: 60ms;
+      --dur-2: 120ms;
+      --dur-3: 200ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    @media (resolution >= 2x) {
+      :root { --hairline: 0.5px; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+    }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+    }
+    button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    h1, h2, h3, p, ul, fieldset, legend {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      list-style: none;
+    }
+
+    /* ───────── 2. Prototype Switcher Dock (Bottom-Left Floating Pill) ───────── */
+    .demo-dock {
+      position: fixed;
+      bottom: 14px;
+      left: 14px;
+      z-index: 100;
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-caption);
+    }
+    .demo-dock button {
+      height: 24px;
+      padding: 0 9px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .demo-dock button:hover {
+      color: var(--ink);
+      background: var(--ghost-hover);
+    }
+    .demo-dock button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+    .demo-dock .sep {
+      width: 1px;
+      height: 12px;
+      background: var(--line);
+      margin: 0 2px;
+    }
+
+    /* ───────── 3. Viewport Stage (Desktop vs 390px Mobile Simulation) ───────── */
+    .stage-wrap {
+      width: 100vw;
+      height: 100dvh;
+      display: flex;
+      overflow: hidden;
+      background: var(--surface-0);
+    }
+    .stage-wrap[data-vp="mobile"] {
+      background: light-dark(#e4e4e0, #050505);
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-3);
+    }
+    .viewport {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--surface-0);
+    }
+    .stage-wrap[data-vp="mobile"] .viewport {
+      flex: none;
+      width: 390px;
+      height: min(844px, calc(100dvh - 24px));
+      border-radius: 34px;
+      background: var(--surface-1);
+      box-shadow:
+        0 0 0 6px light-dark(#d4d4d0, #222),
+        0 24px 60px rgb(0 0 0 / 0.35);
+    }
+
+    /* Shared thin hover-only scroller with stable gutter & soft top/bottom edge fade */
+    .scroller {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+    }
+    .scroller:hover,
+    .scroller:focus-within {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+    .fade-y {
+      mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        #000 10px,
+        #000 calc(100% - 10px),
+        transparent
+      );
+    }
+
+    /* Shared small icon button & pills */
+    .icon {
+      width: var(--control);
+      height: var(--control);
+      border-radius: var(--radius);
+      display: inline-grid;
+      place-items: center;
+      color: var(--ink-2);
+      flex: none;
+    }
+    .icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .icon.sm {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      border-radius: var(--radius-sm);
+    }
+    .icon svg {
+      width: var(--icon);
+      height: var(--icon);
+    }
+    .icon.sm svg {
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      height: var(--control-sm);
+      padding: 0 9px;
+      border-radius: var(--radius-pill);
+      background: var(--fill);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      white-space: nowrap;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 7px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      color: var(--ink-3);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+    }
+    .tag.mono {
+      font-family: var(--font-mono);
+    }
+    .tag.accent {
+      background: var(--alpha-2);
+      color: var(--ink-2);
+      font-weight: 550;
+    }
+    .btn {
+      height: var(--control);
+      padding: 0 12px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--alpha-1);
+    }
+    .btn.sm {
+      height: var(--control-sm);
+      padding: 0 9px;
+      border-radius: var(--radius-sm);
+      font-size: var(--text-caption);
+    }
+    .btn.ghost {
+      background: none;
+      box-shadow: none;
+      color: var(--ink-2);
+    }
+    .btn.ghost:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Toggle Switch */
+    .switch {
+      flex: none;
+      width: 38px;
+      height: 22px;
+      padding: 2px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-3);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .switch[aria-checked="true"] {
+      background: var(--ink);
+    }
+    .switch .thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+      transition: translate var(--dur-2) var(--ease);
+    }
+    .switch[aria-checked="true"] .thumb {
+      translate: 16px 0;
+    }
+
+    /* ───────── 4. Reader Canvas (Mounted Underneath `page === "writing"`) ───────── */
+    .canvas {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr) 19rem;
+      grid-template-rows: minmax(0, 1fr);
+      gap: var(--space-5);
+      padding: var(--space-5);
+    }
+    .stage-wrap[data-vp="mobile"] .canvas {
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      gap: 0;
+      background: var(--surface-1);
+    }
+    .topbar {
+      display: none;
+      height: 48px;
+      padding: 0 var(--space-3);
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+    }
+    .stage-wrap[data-vp="mobile"] .topbar {
+      display: flex;
+    }
+    .topbar .title-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      padding: var(--space-5);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      overflow-y: auto;
+    }
+    .stage-wrap[data-vp="mobile"] .side {
+      display: none;
+    }
+    .session {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      flex: 1;
+    }
+    .cardhead {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: left;
+      padding: var(--space-1) var(--space-2);
+      margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+      border-radius: var(--radius);
+    }
+    .cardhead:hover { background: var(--ghost-hover); }
+    .cardhead h1 {
+      font-size: var(--text-title);
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .cardhead p {
+      color: var(--ink-3);
+      font-size: var(--text-footnote);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .session section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .session h2 {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      font-size: var(--text-caption);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .story-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: var(--space-2);
+      margin: 0 calc(-1 * var(--space-2));
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      text-align: left;
+    }
+    .story-row .first {
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .story-row .meta {
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* Persona & Writing triggers in the left sidebar */
+    .chosen {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-1);
+      width: 100%;
+      margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius);
+      box-sizing: content-box;
+      text-align: left;
+      transition: background var(--dur-2) var(--ease);
+    }
+    .chosen:hover {
+      background: var(--ghost-hover);
+    }
+    /* Persona dropdown: stays cleanly under its chip inside the 192px column! */
+    .persona-pop {
+      margin-top: var(--space-1);
+      padding: var(--space-1);
+      border-radius: var(--radius-card);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .persona-pop[data-open="true"] {
+      display: flex;
+    }
+    .persona-pop button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-radius: var(--radius);
+      font-size: var(--text-footnote);
+      text-align: left;
+    }
+    .persona-pop button:hover {
+      background: var(--ghost-hover);
+    }
+    .persona-pop button[aria-checked="true"] {
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .tools {
+      margin-top: auto;
+      display: flex;
+      gap: var(--space-1);
+    }
+
+    /* Center Reader Panel */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      overflow: hidden;
+    }
+    .stage-wrap[data-vp="mobile"] .panel {
+      flex: 1;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .reader-scroll {
+      flex: 1;
+      padding: var(--space-6);
+      max-width: 42rem;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+    .stage-wrap[data-vp="mobile"] .reader-scroll {
+      padding: var(--space-4);
+    }
+    .said-bubble {
+      align-self: flex-end;
+      max-width: 82%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: var(--alpha-1);
+      font-size: var(--text-prose);
+    }
+    .prose-block p {
+      font-size: var(--text-prose);
+      line-height: var(--leading-prose);
+      margin-bottom: var(--space-3);
+    }
+    .slop-hit {
+      background: var(--warn-soft);
+      color: var(--warn);
+      padding: 1px 4px;
+      border-radius: var(--radius-sm);
+      border-bottom: 1px dashed currentColor;
+      cursor: pointer;
+    }
+    .options-box {
+      padding: var(--space-3);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .options-box header {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      padding: 0 var(--space-1) 4px;
+    }
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      font-size: var(--text-body);
+      text-align: left;
+    }
+    .option-row:hover { background: var(--ghost-hover); }
+    .option-row .n {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .composer-mock {
+      margin: 0 var(--space-6) var(--space-5);
+      padding: var(--space-3);
+      border-radius: var(--radius-composer);
+      background: var(--surface-2);
+      box-shadow: var(--shadow-composer);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .stage-wrap[data-vp="mobile"] .composer-mock {
+      margin: 0 var(--space-3) var(--space-3);
+    }
+    .format-bar {
+      display: flex;
+      gap: var(--space-1);
+      flex-wrap: wrap;
+    }
+
+    /* Right Glance Card (Status & Record + node demand) */
+    .glance {
+      justify-content: space-between;
+    }
+    .meter {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .meter .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: var(--text-footnote);
+    }
+    .meter .track {
+      height: 5px;
+      border-radius: 99px;
+      background: var(--alpha-2);
+      overflow: hidden;
+    }
+    .meter .fill {
+      height: 100%;
+      background: var(--ink);
+    }
+    .notes-card {
+      padding: var(--space-3);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .inner-card {
+      padding: var(--space-3);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .inner-card .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      font-weight: 600;
+    }
+    .rewrite-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding-top: var(--space-3);
+      border-top: var(--hairline) solid var(--line);
+    }
+
+    /* Phone Session Sheet (to demonstrate closeUp -> page === "writing") */
+    .phone-sheet-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      background: var(--scrim);
+      display: none;
+      align-items: flex-end;
+    }
+    .phone-sheet-scrim[data-open="true"] {
+      display: flex;
+    }
+    .phone-sheet {
+      width: 100%;
+      max-height: 82%;
+      border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+      background: var(--surface-1);
+      box-shadow: var(--shadow-pop);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      overflow-y: auto;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       5. WRITING PAGE (`page === "writing"`): THE CORE PROTOTYPE
+       ═══════════════════════════════════════════════════════════════════════════ */
+    .writing-page {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-5);
+      background: var(--surface-0);
+      transition: opacity var(--dur-3) var(--ease);
+    }
+    .writing-page[hidden] {
+      display: none;
+    }
+    .writing-card {
+      width: min(56rem, 100%);
+      height: min(44rem, 100%);
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      overflow: hidden;
+    }
+    /* Mobile (< 52rem or mobile mode): full page, no outer padding or card radius */
+    @media (max-width: 52rem) {
+      .writing-page {
+        padding: 0;
+        background: var(--surface-1);
+      }
+      .writing-card {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+    .stage-wrap[data-vp="mobile"] .writing-page {
+      padding: 0;
+      background: var(--surface-1);
+    }
+    .stage-wrap[data-vp="mobile"] .writing-card {
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    /* Fixed Header of the Writing Card */
+    .writing-header {
+      flex: none;
+      min-height: 58px;
+      padding: var(--space-2) var(--space-5);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+    }
+    .stage-wrap[data-vp="mobile"] .writing-header {
+      padding: var(--space-2) var(--space-3);
+      min-height: 52px;
+    }
+    .writing-header h1 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .writing-header .spacer {
+      flex: 1;
+    }
+    /* Top 4-Tab Bar inside Header */
+    .writing-tabs {
+      display: inline-grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      align-items: center;
+      gap: 3px;
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .stage-wrap[data-vp="mobile"] .writing-tabs {
+      order: 3;
+      width: 100%;
+    }
+    .writing-tabs button {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: var(--radius-pill);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .stage-wrap[data-vp="mobile"] .writing-tabs button {
+      padding: 0 6px;
+      font-size: var(--text-caption);
+    }
+    .writing-tabs button:hover:not([aria-selected="true"]) {
+      color: var(--ink);
+      background: var(--ghost-hover);
+    }
+    .writing-tabs button[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+
+    /* Main Tabbed Body: Fixed Viewport Height, Flush Top & Bottom */
+    .writing-body {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-5) var(--space-6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .stage-wrap[data-vp="mobile"] .writing-body {
+      padding: var(--space-4);
+      overflow-y: auto;
+    }
+
+    .w-panel {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .w-panel[hidden] {
+      display: none !important;
+    }
+
+    .sec-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 28px;
+      flex-wrap: wrap;
+    }
+    .sec-head h2 {
+      font-size: var(--text-body);
+      font-weight: 650;
+      color: var(--ink);
+    }
+    .sec-head .right {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    /* ── Tab 1: 开关与记录 (Switches at Top + Products Card Flush to Bottom) ── */
+    .switches-grid {
+      flex: none;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    @media (max-width: 44rem) {
+      .switches-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    .stage-wrap[data-vp="mobile"] .switches-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-2);
+    }
+    .sw-card {
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .sw-card[data-disabled="true"] {
+      opacity: 0.42;
+      pointer-events: none;
+    }
+    .sw-card legend {
+      font-size: var(--text-footnote);
+      font-weight: 600;
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .seg {
+      display: inline-grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 3px;
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .seg button {
+      height: 26px;
+      padding: 0 11px;
+      border-radius: var(--radius-pill);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      white-space: nowrap;
+      transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .seg button:hover:not([aria-pressed="true"]) {
+      color: var(--ink);
+      background: var(--ghost-hover);
+    }
+    .seg button[aria-pressed="true"] {
+      background: var(--primary);
+      color: var(--primary-ink);
+      font-weight: 550;
+      box-shadow: var(--shadow-1);
+    }
+
+    /* Compiled Prompt Preview Bar under Switches (Programmability seam) */
+    .compiled-bar {
+      flex: none;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+    }
+    .compiled-bar .preview-text {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--ink-2);
+    }
+    .compiled-bar .preview-text b {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    /* Record Products Card: stretches `flex: 1` so bottom edge is flush */
+    .products-bar {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .products-bar .sub-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: var(--text-footnote);
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .prod-list {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+      align-content: start;
+      gap: var(--space-2);
+    }
+    .stage-wrap[data-vp="mobile"] .prod-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .prod-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      padding: 9px 12px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      text-align: left;
+      transition: background var(--dur-2) var(--ease);
+    }
+    .prod-item:hover {
+      background: var(--alpha-2);
+    }
+    .prod-item .info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .prod-item .pname {
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Tab 2: 文风与要求 (2 Equal-Height Columns Flush Top & Bottom) ── */
+    .prose-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-4);
+      align-items: stretch;
+    }
+    @media (max-width: 48rem) {
+      .prose-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    .stage-wrap[data-vp="mobile"] .prose-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .prose-card {
+      height: 100%;
+      min-height: 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .prose-card-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 26px;
+      flex-wrap: wrap;
+    }
+    .prose-card-head h3 {
+      font-size: var(--text-footnote);
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .prose-card-head .right {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    /* Standardized Textarea Box (`reader.css` `.composer .box` + `textarea` pattern):
+       Outer `.field-well` holds background & focus ring; inner `textarea` has trackless thin
+       scrollbar and top/bottom `mask-image` fade so scrolling text never clips hard or shows a fat bar. */
+    .field-well {
+      flex: 1;
+      min-height: 8rem;
+      display: flex;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      overflow: hidden;
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+    }
+    .field-well:focus-within {
+      background: var(--surface-3);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+    .field {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      padding: 12px 14px;
+      background: none;
+      color: var(--ink);
+      font-size: var(--text-field);
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+      mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        #000 12px,
+        #000 calc(100% - 12px),
+        transparent
+      );
+    }
+    .field:hover,
+    .field:focus {
+      outline: none;
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+    .field::placeholder {
+      color: var(--ink-3);
+    }
+    .frag-list {
+      flex: 1;
+      min-height: 0;
+      padding-block: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .frag-row {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+    }
+    .frag-row:focus-within {
+      background: var(--surface-3);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+    .frag-row-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .at-toggle {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+    }
+    .at-toggle button {
+      height: 20px;
+      padding: 0 7px;
+      border-radius: 3px;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .at-toggle button[aria-pressed="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .frag-row textarea {
+      width: 100%;
+      max-height: 8.5rem;
+      padding: 6px 4px;
+      background: none;
+      font-size: var(--text-field);
+      line-height: 1.55;
+      resize: none;
+      min-height: 3.2rem;
+      field-sizing: content;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        #000 6px,
+        #000 calc(100% - 6px),
+        transparent
+      );
+    }
+    .frag-row textarea:hover,
+    .frag-row textarea:focus {
+      outline: none;
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    /* ── Tab 3: 润色与禁词 (Split Independent Capsules per Row) ── */
+    .inline-search {
+      display: inline-flex;
+      align-items: center;
+      width: var(--control-sm);
+      height: var(--control-sm);
+      padding: 0 5px;
+      border-radius: var(--radius-sm);
+      color: var(--ink-2);
+      overflow: hidden;
+      cursor: pointer;
+      transition: width var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+    }
+    .inline-search:hover { background: var(--ghost-hover); }
+    .inline-search svg {
+      flex: none;
+      width: 14px;
+      height: 14px;
+    }
+    .inline-search input {
+      width: 0;
+      min-width: 0;
+      opacity: 0;
+      font-size: var(--text-footnote);
+      outline: none;
+    }
+    .inline-search[data-open="true"] {
+      width: 11rem;
+      gap: 6px;
+      padding: 0 8px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      cursor: text;
+    }
+    .inline-search[data-open="true"] input {
+      flex: 1;
+      opacity: 1;
+    }
+
+    .lex-wrap {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      transition: opacity var(--dur-2) var(--ease);
+    }
+    .lex-wrap[data-off="true"] {
+      opacity: 0.45;
+    }
+    .lex-head {
+      flex: none;
+      display: grid;
+      grid-template-columns: minmax(9.5rem, 2fr) minmax(0, 3fr) 26px;
+      gap: var(--space-2);
+      padding: 0 var(--space-1) var(--space-2);
+      border-bottom: var(--hairline) solid var(--line);
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-3);
+    }
+    .stage-wrap[data-vp="mobile"] .lex-head {
+      grid-template-columns: minmax(6.5rem, 4fr) minmax(0, 5fr) 24px;
+    }
+    .lex-list-scroll {
+      flex: 1;
+      min-height: 0;
+      padding-block: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    /* Each row is a grid of two independent capsules + action icon */
+    .lex-row {
+      flex: none;
+      display: grid;
+      grid-template-columns: minmax(9.5rem, 2fr) minmax(0, 3fr) 26px;
+      gap: var(--space-2);
+      align-items: center;
+    }
+    .stage-wrap[data-vp="mobile"] .lex-row {
+      grid-template-columns: minmax(6.5rem, 4fr) minmax(0, 5fr) 24px;
+    }
+    .capsule {
+      height: 34px;
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+    }
+    .capsule:hover {
+      background: var(--alpha-2);
+    }
+    .capsule:focus-within {
+      background: var(--surface-3);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+    .capsule input {
+      width: 100%;
+      min-width: 0;
+      height: 100%;
+      font-size: var(--text-footnote);
+      outline: none;
+    }
+    .capsule input.pattern {
+      font-family: var(--font-mono);
+      font-weight: 550;
+      color: var(--ink);
+    }
+    .capsule input.hint {
+      color: var(--ink-2);
+    }
+    .capsule input::placeholder {
+      color: var(--ink-3);
+      font-weight: 400;
+    }
+    .empty-well {
+      padding: var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      color: var(--ink-3);
+      font-size: var(--text-footnote);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    /* ── Tab 4: 快捷输入 (Custom Format Adder + Split-Capsule Snippets) ── */
+    .input-card {
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .input-card.snip-card {
+      flex: 1;
+      min-height: 0;
+    }
+    .snip-list-scroll {
+      flex: 1;
+      min-height: 0;
+      padding-block: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .fmt-chips {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    [hidden] {
+      display: none !important;
+    }
+    /* Each format key is a clickable button that pops up the centered Format Modal */
+    .fmt-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 12px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+      color: var(--ink);
+      font-size: var(--text-footnote);
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+    }
+    .fmt-btn:hover {
+      background: var(--alpha-2);
+    }
+    .fmt-btn[aria-expanded="true"] {
+      background: var(--surface-3);
+      box-shadow: inset 0 0 0 1.5px var(--ink);
+      font-weight: 600;
+    }
+    .fmt-btn .glyph {
+      font-family: var(--font-mono);
+      letter-spacing: 0.08em;
+    }
+    .fmt-btn .mode-dot {
+      font-size: 10px;
+      color: var(--ink-3);
+      font-family: var(--font-sans);
+    }
+    /* Centered Modal layered over the Writing page (ST 输入助手「编辑按钮」 dialog style — zero skeleton shift) */
+    .fmt-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
+      background: var(--scrim);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-4);
+      animation: fade-in var(--dur-2) var(--ease);
+    }
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .fmt-modal {
+      width: min(26rem, 100%);
+      padding: var(--space-5);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop), inset 0 0 0 var(--hairline) var(--line-strong);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+    .fmt-editor-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .fmt-editor-head h4 {
+      margin: 0;
+      font-size: var(--text-heading);
+      font-weight: 650;
+      color: var(--ink);
+    }
+    .fmt-modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .fmt-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .fmt-field label {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .fmt-field .seg {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
+    .fmt-field .seg > button {
+      justify-content: center;
+      width: 100%;
+    }
+    .fmt-split-pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+    .caret-mark {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: var(--radius-sm);
+      background: var(--ok-wash);
+      color: var(--ok);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .caret-preview {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+    }
+    .caret-preview code {
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-3);
+      font-family: var(--font-mono);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+    }
+    .fmt-editor-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      padding-top: var(--space-2);
+      border-top: var(--hairline) solid var(--line);
+    }
+    .snip-row {
+      flex: none;
+      display: grid;
+      grid-template-columns: 6.5rem minmax(0, 1fr) minmax(0, 1.1fr) auto 26px;
+      gap: var(--space-2);
+      align-items: center;
+      font-size: var(--text-footnote);
+    }
+    .stage-wrap[data-vp="mobile"] .snip-row {
+      grid-template-columns: 5rem minmax(0, 1fr) auto 24px;
+    }
+    .stage-wrap[data-vp="mobile"] .snip-row .snip-hint-cap {
+      display: none;
+    }
+    .snip-row input.sname {
+      font-weight: 600;
+    }
+    .snip-row input.stext {
+      font-family: var(--font-mono);
+      color: var(--ink-2);
+    }
+    .snip-row input.snip-hint {
+      color: var(--ink-3);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ───────── Bottom-Left Floating Prototype Switcher ───────── -->
+  <nav class="demo-dock" aria-label="Prototype Controls">
+    <button type="button" id="btn-page-writing" aria-pressed="true" onclick="setPage('writing')">写作面板 (Writing)</button>
+    <button type="button" id="btn-page-reader" aria-pressed="false" onclick="setPage('reader')">阅读器与侧栏 (Reader)</button>
+    <span class="sep"></span>
+    <button type="button" id="btn-vp-desktop" aria-pressed="true" onclick="setVp('desktop')">桌面端</button>
+    <button type="button" id="btn-vp-mobile" aria-pressed="false" onclick="setVp('mobile')">390px 手机</button>
+    <span class="sep"></span>
+    <button type="button" id="btn-card-wuxia" aria-pressed="true" onclick="setCard('wuxia')">卡：竹林</button>
+    <button type="button" id="btn-card-yandao" aria-pressed="false" onclick="setCard('yandao')">卡：盐道 (无主角)</button>
+    <span class="sep"></span>
+    <button type="button" id="btn-theme" onclick="toggleTheme()">深色 / 浅色</button>
+  </nav>
+
+  <div class="stage-wrap" id="stage" data-vp="desktop">
+    <div class="viewport">
+
+      <!-- ═════════════════════════════════════════════════════════════════════
+           LAYER 1: THE READER CANVAS (Always mounted underneath `page`)
+           ═════════════════════════════════════════════════════════════════════ -->
+      <div class="canvas">
+        <!-- Phone Topbar -->
+        <header class="topbar">
+          <button type="button" class="title-btn" onclick="togglePhoneSheet(true)">
+            <span id="top-card-title">竹林</span>
+            <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+          </button>
+          <button type="button" class="chip" onclick="setPage('writing')" id="top-writing-pill">
+            写作 · 润色 12
+          </button>
+        </header>
+
+        <!-- Left Card: Session (Card, Stories, Persona Menu, Writing Entry Chips, Tools) -->
+        <aside class="side">
+          <div class="session" id="desktop-session"></div>
+        </aside>
+
+        <!-- Center Card: Reading Flow & Composer -->
+        <div class="panel">
+          <div class="reader-scroll scroller">
+            <div class="said-bubble">「这把剑，是他临走前托我带给你的。」我将旧布再掀开些，让剑柄也露出来。</div>
+            <div class="prose-block" id="reader-prose">
+              <p>亭中光线昏暗，雨后的天色从亭檐外斜斜地照进来，恰好落在那圈银箍上，映出一线极淡的光。</p>
+              <p>裴青舟的目光猛地一凝。他原本靠着亭柱的身子不知何时已直了起来，搭在剑柄上方的手也缓缓收回，停在身侧。他没有立刻开口，只是盯着那道鹤纹看了许久，<span class="slop-hit" title="命中禁词表「指节*白」· 点击直达「润色与禁词」标签页" onclick="openWritingTab('polish')">按在石桌边缘的指节攥得发白</span>，才低声道：「……这纹路，是他幼时在师门后山亲手刻的。那年他才十三岁，刻坏了三把刀，才刻出这一只。」</p>
+              <p>他的语气里有一种极力压住的涩意，却仍旧不肯失了分寸。「把布再掀开些，我要看剑柄。」</p>
+            </div>
+            <div class="options-box" id="reader-options">
+              <header>Options</header>
+              <button type="button" class="option-row">
+                <span class="n">1</span>
+                <span>我将包裹短剑的旧布彻底解开，推到他面前。</span>
+              </button>
+              <button type="button" class="option-row">
+                <span class="n">2</span>
+                <span>「那年师门后山的事，他还跟我提过一桩。」</span>
+              </button>
+            </div>
+          </div>
+          <div class="composer-mock">
+            <div class="format-bar" id="composer-format-bar"></div>
+            <textarea
+              id="reader-composer-input"
+              style="width:100%;min-height:2.4rem;resize:none;outline:none;font-size:var(--text-prose);line-height:1.5;color:var(--ink);"
+              placeholder="点击上方符号按钮试试光标落点（或框选文字后点符号包裹）…"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Right Card: Status & Record (with `demand` for inner monologue) -->
+        <aside class="side glance">
+          <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+            <section style="display:flex;flex-direction:column;gap:var(--space-2);">
+              <h2 style="font-size:var(--text-caption);letter-spacing:0.1em;color:var(--ink-3);">STATUS</h2>
+              <div class="meter">
+                <div class="row"><span>体力</span><span class="mono">40 / 100</span></div>
+                <div class="track"><div class="fill" style="width:40%"></div></div>
+              </div>
+              <div class="meter">
+                <div class="row"><span>交情</span><span class="mono">4 / 100</span></div>
+                <div class="track"><div class="fill" style="width:4%"></div></div>
+              </div>
+            </section>
+            <section style="display:flex;flex-direction:column;gap:var(--space-2);">
+              <h2 style="font-size:var(--text-caption);letter-spacing:0.1em;color:var(--ink-3);">RECORD</h2>
+              <div class="notes-card">
+                <div>• 玩家将旧布一角掀开，露出乌褐色鞘身与暗银箍上的鹤纹。</div>
+                <div>• 裴青舟认出鹤纹为李鹤幼时在师门后山所刻，要求玩家再掀开布看剑柄。</div>
+              </div>
+              <div id="demanded-inner-box"></div>
+            </section>
+          </div>
+          <!-- Node actions: Swipe, Reword, Edit, and Demand (for inner product) -->
+          <footer class="rewrite-bar">
+            <button type="button" class="icon" title="Swipe: 重新生成本轮">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></svg>
+            </button>
+            <button type="button" class="icon" title="Reword: 按最新写作与禁词配置重写正文" onclick="triggerRewordDemo()">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M248,152a8,8,0,0,1-8,8H224v16a8,8,0,0,1-16,0V160H192a8,8,0,0,1,0-16h16V128a8,8,0,0,1,16,0v16h16A8,8,0,0,1,248,152ZM56,72H72V88a8,8,0,0,0,16,0V72h16a8,8,0,0,0,0-16H88V40a8,8,0,0,0-16,0V56H56a8,8,0,0,0,0,16ZM184,192h-8v-8a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM219.31,80,80,219.31a16,16,0,0,1-22.62,0L36.68,198.63a16,16,0,0,1,0-22.63L176,36.69a16,16,0,0,1,22.63,0l20.68,20.68A16,16,0,0,1,219.31,80Zm-54.63-12L144,47.31,48,143.31,68.69,164Zm32,32L176,79.31,155.31,100,176,120.69Z"/></svg>
+            </button>
+            <button type="button" class="icon" title="Edit: 原位编辑正文">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z"/></svg>
+            </button>
+            <span style="flex:1"></span>
+            <!-- Node action `demand`: on-demand product extraction when `inner` is off by default -->
+            <button type="button" class="btn sm ghost" id="btn-demand-inner" onclick="triggerDemandInner()" title="按需索取本轮人物内心独白 (Action: demand)">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-6.54-.67L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z"/></svg>
+              <span>窥探心声</span>
+            </button>
+          </footer>
+        </aside>
+
+        <!-- Phone Session Sheet Modal (`closeUp` closes this before entering `page === "writing"`) -->
+        <div class="phone-sheet-scrim" id="phone-sheet" onclick="if(event.target===this)togglePhoneSheet(false)">
+          <div class="phone-sheet">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <strong style="font-size:var(--text-heading);">Session</strong>
+              <button type="button" class="icon sm" onclick="togglePhoneSheet(false)">✕</button>
+            </div>
+            <div class="session" id="mobile-session"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═════════════════════════════════════════════════════════════════════
+           LAYER 2: WRITING PAGE (`page === "writing"`)
+           Desktop: Centered bounded `.writing-card` over `--surface-0`
+           Phone: Full-screen sheet with Back button
+           ═════════════════════════════════════════════════════════════════════ -->
+      <div class="writing-page" id="writing-page">
+        <article class="writing-card" aria-label="写作">
+          <!-- Fixed Header with 4 View-Switching Tabs -->
+          <header class="writing-header">
+            <button type="button" class="icon" aria-label="返回故事 (Esc)" title="返回故事 (Esc)" onclick="setPage('reader')">
+              <svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>
+            </button>
+            <h1>写作</h1>
+            <span class="tag accent" id="header-card-badge">竹林</span>
+            <span class="spacer"></span>
+            <nav class="writing-tabs" role="tablist" aria-label="写作分区">
+              <button type="button" role="tab" id="tab-switches" aria-selected="true" aria-controls="panel-switches" onclick="setTab('switches')">开关与记录</button>
+              <button type="button" role="tab" id="tab-prose" aria-selected="false" aria-controls="panel-prose" onclick="setTab('prose')">文风与要求</button>
+              <button type="button" role="tab" id="tab-polish" aria-selected="false" aria-controls="panel-polish" onclick="setTab('polish')">润色与禁词</button>
+              <button type="button" role="tab" id="tab-inputs" aria-selected="false" aria-controls="panel-inputs" onclick="setTab('inputs')">快捷输入</button>
+            </nav>
+          </header>
+
+          <!-- Tabbed Body: Each Tab Screen Fills Viewport & Aligns Flush Top-to-Bottom -->
+          <div class="writing-body">
+
+            <!-- ───────── Tab 1: 开关与记录 (writing.{pov,echo,agency,verbosity} + products) ───────── -->
+            <section class="w-panel" role="tabpanel" id="panel-switches" aria-labelledby="tab-switches">
+              <div class="sec-head">
+                <h2>叙事开关</h2>
+                <div class="right">
+                  <button type="button" class="btn sm ghost" id="btn-reset-switches" onclick="resetSwitches()">全部跟随卡片</button>
+                </div>
+              </div>
+
+              <!-- 4 Writing Switches in 2x2 Grid -->
+              <div class="switches-grid" id="switches-grid"></div>
+
+              <!-- Live Compiled Prompt Preview (shows what `writing(player.writing)` compiles to, and links to Settings Tab 5 for raw prompt editing) -->
+              <div class="compiled-bar" id="compiled-bar"></div>
+
+              <!-- Record Products Toggles (`flex: 1` so bottom edge aligns flush with card bottom) -->
+              <div class="products-bar">
+                <div class="sub-head">
+                  <span>每轮记录产物</span>
+                  <span class="tag mono" id="products-summary-tag">开启 3 / 5</span>
+                </div>
+                <div class="prod-list scroller fade-y" id="products-list"></div>
+              </div>
+            </section>
+
+            <!-- ───────── Tab 2: 文风与要求 (forCard[card.id] + global, equal-height 2 columns) ───────── -->
+            <section class="w-panel" role="tabpanel" id="panel-prose" aria-labelledby="tab-prose" hidden>
+              <div class="prose-grid">
+                <!-- Left: Per-Card Supplement (forCard[card.id], fixed tail & both, stretches full height) -->
+                <div class="prose-card">
+                  <div class="prose-card-head">
+                    <h3>当前卡片附加要求</h3>
+                    <span class="tag accent" id="forcard-badge">仅「竹林」生效</span>
+                    <span class="tag">正文尾区注入</span>
+                    <div class="right">
+                      <span class="tag mono" id="forcard-count">0 字</span>
+                    </div>
+                  </div>
+                  <div class="field-well">
+                    <textarea
+                      id="forcard-input"
+                      class="field"
+                      placeholder="针对当前卡片的笔法、角色语气或场景氛围要求（保存在你的玩家偏好中，不改动原卡，每轮生成正文前注入尾区）…"
+                      oninput="updateForCard(this.value)"
+                    ></textarea>
+                  </div>
+                </div>
+
+                <!-- Right: Global Writing Requirements (global[], stretches exact same height) -->
+                <div class="prose-card">
+                  <div class="prose-card-head">
+                    <h3>跨卡通用要求</h3>
+                    <span class="tag">所有卡片生效</span>
+                    <div class="right">
+                      <button type="button" class="btn sm" onclick="addGlobalFrag()">
+                        <svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></svg>
+                        <span>添加要求</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="frag-list scroller fade-y" id="global-frag-list"></div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ───────── Tab 3: 润色与禁词 (writing.polish + writing.lexicon, split independent capsules) ───────── -->
+            <section class="w-panel" role="tabpanel" id="panel-polish" aria-labelledby="tab-polish" hidden>
+              <div class="sec-head">
+                <h2>禁词与套路扫描</h2>
+                <span class="tag mono" id="lex-count-tag">12 条</span>
+                <!-- Inline Expanding Search -->
+                <div class="inline-search" id="lex-search-wrap" data-open="false" onclick="openLexSearch()">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>
+                  <input
+                    type="search"
+                    id="lex-search"
+                    placeholder="搜索禁词或提示…"
+                    oninput="renderLexicon()"
+                    onblur="if(!this.value.trim())closeLexSearch()"
+                    onkeydown="if(event.key==='Escape'){this.value='';renderLexicon();closeLexSearch();event.stopPropagation();}"
+                  />
+                </div>
+                <div class="right">
+                  <button type="button" class="btn sm ghost" id="btn-import-slop" onclick="importSlopPack()" hidden>恢复默认词表</button>
+                  <button type="button" class="btn sm ghost" title="支持通过 JSON 文件或 CLI 批量导入词表" onclick="importSlopPack()">导入</button>
+                  <button type="button" class="btn sm ghost" title="导出当前词表为 JSON（亦可由 CLI 维护）" onclick="exportLexiconDemo()">导出</button>
+                  <button type="button" class="btn sm" onclick="addLexEntry()">
+                    <svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></svg>
+                    <span>添加禁词</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="switch"
+                    role="switch"
+                    id="polish-switch"
+                    aria-checked="true"
+                    aria-label="润色开关"
+                    onclick="togglePolish()"
+                  >
+                    <span class="thumb"></span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="lex-wrap" id="lex-wrap" data-off="false">
+                <div class="lex-head" id="lex-head">
+                  <span>匹配词条（支持 * 通配符）</span>
+                  <span>替代方向 / 批注</span>
+                  <span></span>
+                </div>
+                <div class="lex-list-scroll scroller fade-y" id="lex-list"></div>
+              </div>
+            </section>
+
+            <!-- ───────── Tab 4: 快捷输入 (ST 输入助手 style format button modal + top-inserted split-capsule snippets) ───────── -->
+            <section class="w-panel" role="tabpanel" id="panel-inputs" aria-labelledby="tab-inputs" hidden>
+              <!-- Top Card: Format Keys (strictly compact strip — clicking any button pops up the centered Modal) -->
+              <div class="input-card">
+                <div class="prose-card-head">
+                  <h3>标点与格式键</h3>
+                  <span class="tag mono" id="format-count-tag">5 键</span>
+                  <span class="tag">点击任意按钮弹出详情设置</span>
+                  <div class="right">
+                    <button type="button" class="btn sm ghost" onclick="resetFormats()">恢复默认</button>
+                    <button type="button" class="btn sm" id="btn-open-fmt-adder" onclick="openFormatEditor(-1)">+ 添加符号</button>
+                  </div>
+                </div>
+                <div class="fmt-chips" id="format-list"></div>
+              </div>
+
+              <!-- Bottom Card: Snippets (`/`), stretches `flex: 1` flush to bottom without ever shifting -->
+              <div class="input-card snip-card">
+                <div class="prose-card-head">
+                  <h3>快捷片段（输入框 / 菜单）</h3>
+                  <span class="tag mono" id="snippets-count-tag">6 片段</span>
+                  <div class="right">
+                    <button type="button" class="btn sm ghost" onclick="resetSnippets()">恢复默认</button>
+                    <button type="button" class="btn sm" onclick="addSnippet()">+ 添加片段</button>
+                  </div>
+                </div>
+                <div class="snip-list-scroll scroller fade-y" id="snippets-list"></div>
+              </div>
+            </section>
+
+          </div>
+        </article>
+
+        <!-- Centered Modal layered over the Writing page for editing / creating a Format button (ST 输入助手「编辑按钮」) -->
+        <div
+          class="fmt-modal-backdrop"
+          id="fmt-editor"
+          hidden
+          onclick="if (event.target === this) closeFormatEditor()"
+        >
+          <form class="fmt-modal" onsubmit="saveFormatEditor(event)">
+            <div class="fmt-editor-head">
+              <h4 id="fmt-editor-title">编辑按钮</h4>
+              <button type="button" class="icon sm" onclick="closeFormatEditor()" aria-label="关闭">✕</button>
+            </div>
+
+            <div class="fmt-modal-body">
+              <!-- 1. 显示名称 (Format.label) -->
+              <div class="fmt-field">
+                <label for="fmt-ed-label">显示名称（按钮文本）</label>
+                <div class="capsule">
+                  <input
+                    type="text"
+                    id="fmt-ed-label"
+                    placeholder="如 「」 或 ** 或 省略号"
+                    oninput="onFmtEditorLabelInput(this.value)"
+                  />
+                </div>
+              </div>
+
+              <!-- 2. 插入后光标位置 (between = text + after; end = text only) -->
+              <div class="fmt-field">
+                <label>插入后光标位置</label>
+                <div class="seg">
+                  <button type="button" id="fmt-mode-between" aria-pressed="true" onclick="setFmtEditorMode('between')">内容中间（成对包裹）</button>
+                  <button type="button" id="fmt-mode-end" aria-pressed="false" onclick="setFmtEditorMode('end')">内容末尾（单侧追加）</button>
+                </div>
+              </div>
+
+              <!-- 3. 实际插入内容 (Format.text + Format.after) -->
+              <div class="fmt-field">
+                <label id="fmt-ed-content-label">实际插入内容（左半 + 右半）</label>
+                <!-- Mode A: cursor in the middle (`text` | `after`) -->
+                <div class="fmt-split-pair" id="fmt-pair-box">
+                  <div class="capsule">
+                    <input
+                      type="text"
+                      id="fmt-ed-text"
+                      class="pattern"
+                      placeholder="光标前，如 「"
+                      oninput="fmtAutoSyncContent = false; updateFmtPreview()"
+                    />
+                  </div>
+                  <span class="caret-mark">光标</span>
+                  <div class="capsule">
+                    <input
+                      type="text"
+                      id="fmt-ed-after"
+                      class="pattern"
+                      placeholder="光标后，如 」"
+                      oninput="fmtAutoSyncContent = false; updateFmtPreview()"
+                    />
+                  </div>
+                </div>
+                <!-- Mode B: cursor at the end (`text` |) -->
+                <div class="capsule" id="fmt-single-box" hidden>
+                  <input
+                    type="text"
+                    id="fmt-ed-single"
+                    class="pattern"
+                    placeholder="插入文本，如 …… 或 ——"
+                    oninput="fmtAutoSyncContent = false; updateFmtPreview()"
+                  />
+                </div>
+              </div>
+
+              <!-- Live cursor preview -->
+              <div class="caret-preview" id="fmt-caret-preview"></div>
+            </div>
+
+            <div class="fmt-editor-foot">
+              <div>
+                <button type="button" class="btn sm ghost" id="btn-delete-fmt" style="color:var(--danger);" onclick="deleteEditingFormat()">删除此按钮</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:var(--space-2);">
+                <button type="button" class="btn sm ghost" onclick="closeFormatEditor()">取消</button>
+                <button type="submit" class="btn sm" style="background:var(--primary);color:var(--primary-ink);box-shadow:none;">保存</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ───────── 1. Real Protocol Data (packages/runtime/src/fragment.ts & session.ts) ─────────
+    const CARDS = {
+      wuxia: {
+        id: "wuxia",
+        title: "竹林",
+        summary: "暮春雨后的越州苦竹岭，你携故人遗物寻访李鹤下落，在竹林荒亭中与守坟的剑客裴青舟相对。",
+        input: "act",
+        products: [
+          { id: "scene", name: "场景状态", card: true, defaultOn: true },
+          { id: "people", name: "新出场人物", card: true, defaultOn: true },
+        ],
+      },
+      yandao: {
+        id: "yandao",
+        title: "盐道",
+        summary: "大世界群像：无固定玩家主角，你的每次输入都是给叙事者的场外导演指示。",
+        input: "note",
+        products: [
+          { id: "factions", name: "各方动向", card: true, defaultOn: true },
+        ],
+      },
+    };
+
+    const BASE_PRODUCTS = [
+      { id: "notes", name: "事件摘要", card: false, defaultOn: true },
+      { id: "options", name: "行动建议", card: false, defaultOn: false },
+      { id: "inner", name: "人物心声", card: false, defaultOn: false },
+    ];
+
+    const SWITCHES = [
+      {
+        key: "pov",
+        label: "视角",
+        values: [
+          ["second", "第二人称"],
+          ["third", "第三人称"],
+          ["none", "无主角"],
+        ],
+      },
+      {
+        key: "echo",
+        label: "引言",
+        values: [
+          [true, "转述言行"],
+          [false, "直接反应"],
+        ],
+      },
+      {
+        key: "agency",
+        label: "主导",
+        values: [
+          ["strict", "仅限输入"],
+          ["free", "允许续写"],
+        ],
+      },
+      {
+        key: "verbosity",
+        label: "篇幅",
+        values: [
+          ["concise", "简短"],
+          ["medium", "适中"],
+          ["detailed", "详尽"],
+        ],
+      },
+    ];
+
+    const DEFAULT_LEXICON = [
+      { pattern: "指节*白", hint: "套路微表情，改写为具体动作" },
+      { pattern: "喉结*滚动", hint: "套路微表情" },
+      { pattern: "嘴角*勾起", hint: "套路微表情" },
+      { pattern: "眼底*闪过一丝", hint: "套路微表情" },
+      { pattern: "不易察觉", hint: "叙述者替读者察觉" },
+      { pattern: "深吸一口气", hint: "填充动作" },
+      { pattern: "绷紧的弦", hint: "陈词比喻" },
+      { pattern: "石子*湖", hint: "陈词比喻" },
+      { pattern: "空气*凝固", hint: "陈词比喻" },
+      { pattern: "漏了一拍", hint: "陈词比喻" },
+      { pattern: "仿佛*静止", hint: "陈词比喻" },
+      { pattern: "不是*而是", hint: "先否定再肯定的八股句式" },
+    ];
+
+    const DEFAULT_FORMATS = [
+      { label: "「」", text: "「", after: "」" },
+      { label: "『』", text: "『", after: "』" },
+      { label: "“”", text: "“", after: "”" },
+      { label: "（）", text: "（", after: "）" },
+      { label: "《》", text: "《", after: "》" },
+    ];
+
+    const DEFAULT_SNIPPETS = [
+      { name: "心声", text: "⦅", after: "⦆", hint: "角色心里的话，不说出口", note: false },
+      { name: "场外", text: "", hint: "给叙事者的话，不计入正文", note: true },
+      { name: "继续", text: "继续。", hint: "顺着写下去", note: true },
+      { name: "推进剧情", text: "推进剧情到下一个场景。", hint: "引入新事件，或切到下一幕", note: true },
+      { name: "时间流逝", text: "时间流逝，跳到下一件有事发生的时刻。", hint: "略过平淡，直达下一件事", note: true },
+      { name: "详细描写", text: "把这一段写得更细。", hint: "放慢镜头，写细这一段", note: true },
+    ];
+
+    const PERSONAS = [
+      { id: "p1", name: "沈青（关外刀客）" },
+      { id: "p2", name: "顾行舟（江南旧友）" },
+    ];
+
+    // Live State
+    let currentCardId = "wuxia";
+    let currentPage = "writing"; // "writing" | "reader"
+    let personaMenuOpen = false;
+    let demandedInner = false;
+
+    const player = {
+      persona: {},
+      writing: {
+        pov: "second",
+        echo: true,
+        agency: "strict",
+        verbosity: undefined,
+        polish: true,
+        lexicon: structuredClone(DEFAULT_LEXICON),
+      },
+      global: [
+        { id: "language", at: "head", text: "使用自然、舒展的现代中文写作。" },
+        { id: "style-tail", at: "tail", text: "多用白描交代人物动作与风物光影，不在段末做拔高抒情或心理总结。" },
+      ],
+      forCard: {
+        wuxia: "裴青舟说话宜短促冷峻，竹林雨后的湿冷气息贯穿始终。",
+        yandao: "",
+      },
+      products: {
+        notes: true,
+        options: true,
+        inner: false,
+      },
+      format: structuredClone(DEFAULT_FORMATS),
+      snippets: structuredClone(DEFAULT_SNIPPETS),
+    };
+
+    // ───────── 2. Pure Helpers & Chosen Chips Summary ─────────
+    function activeCard() {
+      return CARDS[currentCardId];
+    }
+
+    function allProductsForCard() {
+      const c = activeCard();
+      return [...BASE_PRODUCTS, ...c.products];
+    }
+
+    function isProductOn(id, defaultOn) {
+      return player.products[id] ?? defaultOn;
+    }
+
+    /** Chosen chips shown in the left sidebar's WRITING section (the entry button to `page === "writing"`). */
+    function chosenWritingChips() {
+      const w = player.writing;
+      const chips = [];
+      for (const s of SWITCHES) {
+        if ((s.key === "echo" || s.key === "agency") && w.pov === "none") continue;
+        const found = s.values.find(([v]) => w[s.key] === v);
+        if (found) chips.push(found[1]);
+      }
+      if (!chips.length) chips.push("跟随卡片");
+      if (w.polish !== false && w.lexicon.length > 0) {
+        chips.push(`润色 · ${w.lexicon.length}`);
+      } else if (w.polish === false) {
+        chips.push("不润色");
+      }
+      const extraText = (player.forCard[currentCardId] || "").trim();
+      if (extraText) chips.push("含本卡补充");
+      return chips;
+    }
+
+    // Exact compiled sentences from `packages/runtime/src/fragment.ts` lines 78-107
+    const COMPILED_POV = {
+      second: "用第二人称「你」写玩家。",
+      third: "用玩家角色的名字、以第三人称写玩家。",
+      none: "故事里没有玩家角色；输入是给叙述者的指示，不是任何人物的话，不要把它写进故事。",
+    };
+    const COMPILED_ECHO = {
+      true: "开头可先用一句转述玩家本轮的言行，再写对方的反应。",
+      false: "不要转述或扩写玩家本轮已输入的话，直接从对方或周遭的反应写起。",
+    };
+    const COMPILED_AGENCY = {
+      strict: "只承接玩家已给出的言行，不要替玩家扩写未说出口的话、未声明的动作或下一步决定。",
+      free: "可以替玩家续写言行与决定，像合写一部小说那样推进。",
+    };
+    const COMPILED_VERBOSITY = {
+      concise: "每轮篇幅简短，一两段，点到即止。",
+      medium: "每轮三四段，写到对方的反应落定为止。",
+      detailed: "每轮篇幅从容，把动作、神态与周遭风物写足。",
+    };
+
+    // ───────── 3. Render Functions ─────────
+    function renderAll() {
+      const c = activeCard();
+      document.getElementById("top-card-title").textContent = c.title;
+      document.getElementById("header-card-badge").textContent = c.title;
+      document.getElementById("forcard-badge").textContent = `仅「${c.title}」生效`;
+
+      const chips = chosenWritingChips();
+      document.getElementById("top-writing-pill").textContent = `写作 · ${chips.slice(0, 2).join(" / ")}`;
+
+      renderSidebarSession("desktop-session");
+      renderSidebarSession("mobile-session");
+      renderSwitches();
+      renderProducts();
+      renderProseSection();
+      renderLexicon();
+      renderLowFreqInputs();
+      renderReaderSync();
+    }
+
+    function renderSidebarSession(containerId) {
+      const c = activeCard();
+      const pickedPersona = PERSONAS.find((p) => p.id === player.persona[c.id]);
+      const chips = chosenWritingChips();
+      const el = document.getElementById(containerId);
+      el.innerHTML = `
+        <button type="button" class="cardhead">
+          <h1>${c.title}</h1>
+          <p>${c.summary}</p>
+        </button>
+
+        <section aria-label="Stories">
+          <h2>Stories</h2>
+          <div class="story-row">
+            <span class="first">暮春的雨刚歇，苦竹岭上雾气未散</span>
+            <span class="meta">我将旧布再掀开些 · just now</span>
+          </div>
+        </section>
+
+        <section aria-label="Persona" style="position:relative;">
+          <h2>Persona</h2>
+          <button type="button" class="chosen" onclick="togglePersonaMenu(event)">
+            <span class="chip">${pickedPersona ? pickedPersona.name : "跟随卡片"}</span>
+          </button>
+          <div class="persona-pop" data-open="${personaMenuOpen}">
+            ${PERSONAS.map(
+              (p) => `
+              <button type="button" aria-checked="${pickedPersona?.id === p.id}" onclick="pickPersona('${p.id}')">
+                <span>${p.name}</span>
+                ${pickedPersona?.id === p.id ? "<span>✓</span>" : ""}
+              </button>
+            `
+            ).join("")}
+            <hr style="border:0;border-top:var(--hairline) solid var(--line);margin:2px 0;" />
+            <button type="button" aria-checked="${!pickedPersona}" onclick="pickPersona(undefined)">
+              <span>跟随卡片</span>
+              ${!pickedPersona ? "<span>✓</span>" : ""}
+            </button>
+          </div>
+        </section>
+
+        <section aria-label="Writing">
+          <h2>Writing</h2>
+          <button type="button" class="chosen" onclick="openWritingFromSession()" title="点击打开写作面板 (page = 'writing')">
+            ${chips.map((l) => `<span class="chip">${l}</span>`).join("")}
+          </button>
+        </section>
+
+        <nav class="tools" aria-label="Pages">
+          <button type="button" class="icon" title="Timeline">
+            <svg viewBox="0 0 256 256" fill="currentColor"><path d="M200,168a32.06,32.06,0,0,0-31,24H72a32,32,0,0,1-32-32V135a32,32,0,1,0-16,0v25a48.05,48.05,0,0,0,48,48h97a32,32,0,1,0,31-40Zm-168-64a16,16,0,1,1,16,16A16,16,0,0,1,32,104ZM200,216a16,16,0,1,1,16-16A16,16,0,0,1,200,216ZM168,88a32.06,32.06,0,0,0,31-24,32,32,0,1,0-31,24Zm32-48a16,16,0,1,1-16,16A16,16,0,0,1,200,40Z"/></svg>
+          </button>
+          <button type="button" class="icon" title="Inspector">
+            <svg viewBox="0 0 256 256" fill="currentColor"><path d="M117.31,134l-72,64a8,8,0,1,1-10.63-12L100,128,34.69,70a8,8,0,1,1,10.63-12l72,64a8,8,0,0,1,0,12ZM216,184H120a8,8,0,0,0,0,16h96a8,8,0,0,0,0-16Z"/></svg>
+          </button>
+          <button type="button" class="icon" title="Settings">
+            <svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.9,123.66Z"/></svg>
+          </button>
+        </nav>
+      `;
+    }
+
+    function renderSwitches() {
+      const w = player.writing;
+      const grid = document.getElementById("switches-grid");
+      grid.innerHTML = SWITCHES.map((s) => {
+        // In fragment.ts: echo and agency drop when pov === "none"
+        const disabled = (s.key === "echo" || s.key === "agency") && w.pov === "none";
+        return `
+          <fieldset class="sw-card" data-disabled="${disabled}">
+            <legend>${s.label}</legend>
+            <div class="seg">
+              ${s.values
+                .map(([val, label]) => {
+                  const pressed = w[s.key] === val;
+                  const encoded = typeof val === "boolean" ? String(val) : `'${val}'`;
+                  return `<button type="button" aria-pressed="${pressed}" onclick="toggleSwitch('${s.key}', ${encoded})">${label}</button>`;
+                })
+                .join("")}
+            </div>
+          </fieldset>
+        `;
+      }).join("");
+
+      // Live compiled prompt preview (`fragment.ts` `writing(w)`)
+      const povParts = [
+        w.pov && COMPILED_POV[w.pov],
+        w.pov !== "none" && w.echo !== undefined && COMPILED_ECHO[String(w.echo)],
+        w.pov !== "none" && w.agency && COMPILED_AGENCY[w.agency],
+      ].filter(Boolean);
+      const verbPart = w.verbosity ? COMPILED_VERBOSITY[w.verbosity] : "";
+      const compiledSentences = [...povParts, verbPart].filter(Boolean).join(" ");
+
+      const bar = document.getElementById("compiled-bar");
+      bar.innerHTML = `
+        <span class="preview-text" title="${escapeAttr(compiledSentences || '当前开关全部跟随卡片默认设定')}">
+          <b>编译指令：</b>${escapeHtml(compiledSentences || "当前未覆盖任何开关，全部跟随卡片原始设定")}
+        </span>
+        <span class="tag" title="开关背后的底层提示词模板与 Enhancer 包归属「设置」第 5 分区">底层模板 → 设置 · 创作预设</span>
+      `;
+    }
+
+    function renderProducts() {
+      const list = allProductsForCard();
+      const onCount = list.filter((p) => isProductOn(p.id, p.defaultOn)).length;
+      document.getElementById("products-summary-tag").textContent = `开启 ${onCount} / ${list.length}`;
+
+      const container = document.getElementById("products-list");
+      container.innerHTML = list
+        .map((p) => {
+          const on = isProductOn(p.id, p.defaultOn);
+          return `
+            <div class="prod-item" onclick="toggleProduct('${p.id}', ${p.defaultOn})" role="button" tabindex="0">
+              <div class="info">
+                <span class="pname">${p.name}</span>
+                ${p.card ? `<span class="tag">${activeCard().title}</span>` : ""}
+              </div>
+              <button type="button" class="switch" role="switch" aria-checked="${on}" aria-label="${p.name}" tabindex="-1">
+                <span class="thumb"></span>
+              </button>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function renderProseSection() {
+      const cText = player.forCard[currentCardId] || "";
+      const fcInput = document.getElementById("forcard-input");
+      if (document.activeElement !== fcInput) {
+        fcInput.value = cText;
+      }
+      document.getElementById("forcard-count").textContent = `${cText.length} 字`;
+
+      const listEl = document.getElementById("global-frag-list");
+      if (!player.global.length) {
+        listEl.innerHTML = `<div class="empty-well"><span>尚未添加跨卡通用要求</span></div>`;
+        return;
+      }
+      listEl.innerHTML = player.global
+        .map(
+          (f, i) => `
+          <div class="frag-row">
+            <div class="frag-row-bar">
+              <div class="at-toggle" role="group" aria-label="注入位置">
+                <button type="button" title="紧贴本轮发言之后、模型动笔前注入，对本轮文风约束力最强" aria-pressed="${(f.at ?? 'head') === 'tail'}" onclick="setGlobalAt(${i}, 'tail')">正文尾区</button>
+                <button type="button" title="置于请求开头的系统设定区（卡片世界观之前），可命中缓存" aria-pressed="${(f.at ?? 'head') === 'head'}" onclick="setGlobalAt(${i}, 'head')">系统首部</button>
+              </div>
+              <div style="display:inline-flex;align-items:center;gap:6px;">
+                <span class="tag mono" id="global-count-${i}">${f.text.length} 字</span>
+                <button type="button" class="icon sm" aria-label="移除要求" onclick="removeGlobalFrag(${i})">✕</button>
+              </div>
+            </div>
+            <textarea
+              placeholder="输入跨卡生效的文风、笔法或叙事要求…"
+              oninput="updateGlobalText(${i}, this.value)"
+            >${escapeHtml(f.text)}</textarea>
+          </div>
+        `
+        )
+        .join("");
+    }
+
+    function renderLexicon() {
+      const polishOn = player.writing.polish !== false;
+      const sw = document.getElementById("polish-switch");
+      sw.setAttribute("aria-checked", String(polishOn));
+      document.getElementById("lex-wrap").setAttribute("data-off", String(!polishOn));
+
+      const lex = player.writing.lexicon;
+      document.getElementById("lex-count-tag").textContent = `${lex.length} 条`;
+      document.getElementById("btn-import-slop").hidden = lex.length >= DEFAULT_LEXICON.length;
+
+      const q = (document.getElementById("lex-search").value || "").trim().toLowerCase();
+      const filtered = lex
+        .map((entry, idx) => ({ entry, idx }))
+        .filter(({ entry }) => !q || entry.pattern.toLowerCase().includes(q) || (entry.hint || "").toLowerCase().includes(q));
+
+      const headEl = document.getElementById("lex-head");
+      const listEl = document.getElementById("lex-list");
+
+      if (!lex.length) {
+        headEl.style.display = "none";
+        listEl.innerHTML = `
+          <div class="empty-well">
+            <span>禁词表为空，润色阶段不会扫描任何句子</span>
+            <button type="button" class="btn sm" onclick="importSlopPack()">导入默认反八股词表 (12 条)</button>
+          </div>
+        `;
+        return;
+      }
+      headEl.style.display = "grid";
+
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="empty-well"><span>无匹配「${escapeHtml(q)}」的词条</span></div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered
+        .map(
+          ({ entry, idx }) => `
+          <div class="lex-row">
+            <div class="capsule">
+              <input
+                type="text"
+                class="pattern"
+                value="${escapeAttr(entry.pattern)}"
+                placeholder="禁词或 * 通配句式"
+                aria-label="匹配词条"
+                oninput="updateLexPattern(${idx}, this.value)"
+              />
+            </div>
+            <div class="capsule">
+              <input
+                type="text"
+                class="hint"
+                value="${escapeAttr(entry.hint || "")}"
+                placeholder="替代写法提示（选填）"
+                aria-label="替代方向"
+                oninput="updateLexHint(${idx}, this.value)"
+              />
+            </div>
+            <button type="button" class="icon sm" aria-label="删除词条" onclick="removeLexEntry(${idx})">✕</button>
+          </div>
+        `
+        )
+        .join("");
+    }
+
+    let editingFmtIdx = null; // Closed until user clicks a format button or "+ 添加符号"
+    let fmtEditorMode = "between"; // "between" (内容中间) | "end" (内容末尾)
+    let fmtAutoSyncContent = false; // When creating a new button, auto-fill content from label until user edits content directly
+
+    function renderLowFreqInputs() {
+      document.getElementById("format-count-tag").textContent = `${player.format.length} 键`;
+      document.getElementById("snippets-count-tag").textContent = `${player.snippets.length} 片段`;
+
+      const fmtEl = document.getElementById("format-list");
+      fmtEl.innerHTML = player.format
+        .map(
+          (k, i) => `
+          <button
+            type="button"
+            class="fmt-btn"
+            aria-expanded="${editingFmtIdx === i}"
+            title="点击展开「${escapeAttr(k.label)}」详情设置（显示名称 / 实际内容 / 插入后光标位置）"
+            onclick="openFormatEditor(${i})"
+          >
+            <span class="glyph">${escapeHtml(k.label)}</span>
+            <span class="mode-dot">${k.after ? "居中" : "末尾"}</span>
+          </button>
+        `
+        )
+        .join("");
+
+      const addBtn = document.getElementById("btn-add-fmt");
+      if (addBtn) {
+        addBtn.setAttribute("aria-pressed", String(editingFmtIdx === -1));
+      }
+
+      syncFormatEditorUI();
+
+      const snipEl = document.getElementById("snippets-list");
+      snipEl.innerHTML = player.snippets
+        .map(
+          (s, i) => `
+          <div class="snip-row">
+            <div class="capsule">
+              <input
+                type="text"
+                class="sname"
+                value="${escapeAttr(s.name)}"
+                placeholder="片段名称"
+                oninput="player.snippets[${i}].name = this.value"
+              />
+            </div>
+            <div class="capsule">
+              <input
+                type="text"
+                class="stext"
+                value="${escapeAttr(s.text + (s.after ? '…' + s.after : ''))}"
+                placeholder="插入模板（如 ⦅…⦆ 或句子）"
+                oninput="player.snippets[${i}].text = this.value"
+              />
+            </div>
+            <div class="capsule snip-hint-cap">
+              <input
+                type="text"
+                class="snip-hint"
+                value="${escapeAttr(s.hint || '')}"
+                placeholder="菜单说明（选填）"
+                oninput="player.snippets[${i}].hint = this.value"
+              />
+            </div>
+            <div class="at-toggle">
+              <button type="button" aria-pressed="${!s.note}" onclick="setSnippetNote(${i}, false)">场内</button>
+              <button type="button" aria-pressed="${!!s.note}" onclick="setSnippetNote(${i}, true)">场外</button>
+            </div>
+            <button type="button" class="icon sm" onclick="removeSnippet(${i})">✕</button>
+          </div>
+        `
+        )
+        .join("");
+    }
+
+    function renderReaderSync() {
+      // Sync Options visibility with `products.options`
+      const optBox = document.getElementById("reader-options");
+      optBox.style.display = isProductOn("options", false) ? "flex" : "none";
+
+      // Sync Format keys bar in Composer (clicking inserts into #reader-composer-input just like composer.tsx)
+      const fmtBar = document.getElementById("composer-format-bar");
+      fmtBar.innerHTML = player.format
+        .map(
+          (k, i) =>
+            `<button type="button" class="chip" style="font-family:var(--font-mono);cursor:pointer;" title="点击插入：${escapeAttr(k.text)}${k.after ? '｜' + escapeAttr(k.after) + '（光标居中）' : '｜（光标末尾）'}" onclick="insertFormatIntoComposer(${i})">${escapeHtml(k.label)}</button>`
+        )
+        .join("");
+
+      // Sync Inner monologue (`inner` product or on-demand `demand`)
+      const innerOn = isProductOn("inner", false);
+      const innerBox = document.getElementById("demanded-inner-box");
+      const demandBtn = document.getElementById("btn-demand-inner");
+      if (innerOn || demandedInner) {
+        innerBox.innerHTML = `
+          <div class="inner-card">
+            <div class="head">
+              <span>INNER · 裴青舟心声</span>
+              <span class="tag">${innerOn ? "常驻开启" : "按需索取 (demand)"}</span>
+            </div>
+            <div>「这剑鞘上的刀痕确是阿鹤的手笔……可当年江南围剿，我明明亲眼见他将此剑沉入太湖，眼前这人究竟是谁？」</div>
+          </div>
+        `;
+        demandBtn.style.display = innerOn ? "none" : "inline-flex";
+      } else {
+        innerBox.innerHTML = "";
+        demandBtn.style.display = "inline-flex";
+      }
+    }
+
+    // ───────── 4. Interactive Actions ─────────
+    function toggleSwitch(key, val) {
+      player.writing[key] = player.writing[key] === val ? undefined : val;
+      renderAll();
+    }
+
+    function resetSwitches() {
+      player.writing.pov = undefined;
+      player.writing.echo = undefined;
+      player.writing.agency = undefined;
+      player.writing.verbosity = undefined;
+      renderAll();
+    }
+
+    function toggleProduct(id, defaultOn) {
+      const current = isProductOn(id, defaultOn);
+      player.products[id] = !current;
+      renderAll();
+    }
+
+    function updateForCard(val) {
+      player.forCard[currentCardId] = val;
+      document.getElementById("forcard-count").textContent = `${val.length} 字`;
+      renderSidebarSession("desktop-session");
+      renderSidebarSession("mobile-session");
+    }
+
+    function addGlobalFrag() {
+      // Prepend at the top so the user can immediately type without scrolling
+      player.global.unshift({ id: `g-${Date.now()}`, at: "tail", text: "" });
+      renderProseSection();
+      const listEl = document.getElementById("global-frag-list");
+      listEl.scrollTop = 0;
+      const firstArea = listEl.querySelector("textarea");
+      if (firstArea) firstArea.focus();
+    }
+
+    function setGlobalAt(idx, at) {
+      player.global[idx].at = at;
+      renderProseSection();
+    }
+
+    function updateGlobalText(idx, val) {
+      player.global[idx].text = val;
+      const badge = document.getElementById(`global-count-${idx}`);
+      if (badge) badge.textContent = `${val.length} 字`;
+    }
+
+    function removeGlobalFrag(idx) {
+      player.global.splice(idx, 1);
+      renderProseSection();
+    }
+
+    function togglePolish() {
+      player.writing.polish = player.writing.polish === false ? true : false;
+      renderAll();
+    }
+
+    function openLexSearch() {
+      const wrap = document.getElementById("lex-search-wrap");
+      wrap.setAttribute("data-open", "true");
+      document.getElementById("lex-search").focus();
+    }
+
+    function closeLexSearch() {
+      document.getElementById("lex-search-wrap").setAttribute("data-open", "false");
+    }
+
+    function addLexEntry() {
+      player.writing.lexicon.unshift({ pattern: "", hint: "" });
+      renderAll();
+      const listEl = document.getElementById("lex-list");
+      listEl.scrollTop = 0;
+      const firstInput = listEl.querySelector(".lex-row input.pattern");
+      if (firstInput) firstInput.focus();
+    }
+
+    function updateLexPattern(idx, val) {
+      player.writing.lexicon[idx].pattern = val;
+    }
+
+    function updateLexHint(idx, val) {
+      player.writing.lexicon[idx].hint = val;
+    }
+
+    function removeLexEntry(idx) {
+      player.writing.lexicon.splice(idx, 1);
+      renderAll();
+    }
+
+    function importSlopPack() {
+      const existing = new Set(player.writing.lexicon.map((e) => e.pattern));
+      for (const item of DEFAULT_LEXICON) {
+        if (!existing.has(item.pattern)) {
+          player.writing.lexicon.push(structuredClone(item));
+        }
+      }
+      renderAll();
+    }
+
+    function exportLexiconDemo() {
+      const json = JSON.stringify(player.writing.lexicon, null, 2);
+      navigator.clipboard?.writeText(json);
+    }
+
+    // ─── ST 输入助手-style Format Button Detail Editor (`Format = { label, text, after }`) ───
+    function syncFormatEditorUI() {
+      const card = document.getElementById("fmt-editor");
+      if (!card) return;
+      if (editingFmtIdx === null) {
+        card.hidden = true;
+        return;
+      }
+      card.hidden = false;
+
+      const titleEl = document.getElementById("fmt-editor-title");
+      const delBtn = document.getElementById("btn-delete-fmt");
+
+      if (editingFmtIdx === -1) {
+        titleEl.textContent = "新建符号按钮 · 添加至栏首";
+        if (delBtn) delBtn.hidden = true;
+      } else {
+        const item = player.format[editingFmtIdx];
+        if (!item) {
+          editingFmtIdx = null;
+          card.hidden = true;
+          return;
+        }
+        titleEl.textContent = `编辑按钮：「${item.label}」（第 ${editingFmtIdx + 1} 键）`;
+        if (delBtn) delBtn.hidden = false;
+      }
+    }
+
+    function loadFormatIntoEditor(idx, shouldFocus = true) {
+      const labelInput = document.getElementById("fmt-ed-label");
+      const textInput = document.getElementById("fmt-ed-text");
+      const afterInput = document.getElementById("fmt-ed-after");
+      const singleInput = document.getElementById("fmt-ed-single");
+
+      if (idx === -1) {
+        fmtAutoSyncContent = true;
+        labelInput.value = "";
+        textInput.value = "";
+        afterInput.value = "";
+        singleInput.value = "";
+        setFmtEditorMode("between");
+        if (shouldFocus) labelInput.focus();
+      } else {
+        fmtAutoSyncContent = false;
+        const item = player.format[idx];
+        if (!item) return;
+        labelInput.value = item.label;
+        if (item.after !== undefined && item.after !== "") {
+          textInput.value = item.text;
+          afterInput.value = item.after;
+          singleInput.value = item.text + item.after;
+          setFmtEditorMode("between");
+        } else {
+          singleInput.value = item.text;
+          const chars = Array.from(item.text);
+          const mid = Math.ceil(chars.length / 2);
+          textInput.value = chars.slice(0, mid).join("");
+          afterInput.value = chars.slice(mid).join("");
+          setFmtEditorMode("end");
+        }
+        if (shouldFocus) labelInput.focus();
+      }
+      updateFmtPreview();
+    }
+
+    function openFormatEditor(idx) {
+      // Toggle off if clicking the same button that's already open
+      if (editingFmtIdx === idx) {
+        closeFormatEditor();
+        return;
+      }
+      editingFmtIdx = idx;
+      renderLowFreqInputs();
+      loadFormatIntoEditor(idx, true);
+    }
+
+    function closeFormatEditor() {
+      editingFmtIdx = null;
+      renderLowFreqInputs();
+    }
+
+    function setFmtEditorMode(mode) {
+      fmtEditorMode = mode;
+      const betweenBtn = document.getElementById("fmt-mode-between");
+      const endBtn = document.getElementById("fmt-mode-end");
+      const pairWrap = document.getElementById("fmt-pair-box");
+      const singleWrap = document.getElementById("fmt-single-box");
+      const contentLabel = document.getElementById("fmt-ed-content-label");
+      const textInput = document.getElementById("fmt-ed-text");
+      const afterInput = document.getElementById("fmt-ed-after");
+      const singleInput = document.getElementById("fmt-ed-single");
+
+      if (mode === "between") {
+        betweenBtn.setAttribute("aria-pressed", "true");
+        endBtn.setAttribute("aria-pressed", "false");
+        pairWrap.hidden = false;
+        singleWrap.hidden = true;
+        if (contentLabel) contentLabel.textContent = "实际插入内容（左半 + 右半）";
+        // If switching from single to pair and pair is empty, split singleInput
+        if (!textInput.value && !afterInput.value && singleInput.value) {
+          const chars = Array.from(singleInput.value);
+          const mid = Math.ceil(chars.length / 2);
+          textInput.value = chars.slice(0, mid).join("");
+          afterInput.value = chars.slice(mid).join("");
+        }
+      } else {
+        betweenBtn.setAttribute("aria-pressed", "false");
+        endBtn.setAttribute("aria-pressed", "true");
+        pairWrap.hidden = true;
+        singleWrap.hidden = false;
+        if (contentLabel) contentLabel.textContent = "实际插入内容（单侧文本）";
+        // If switching from pair to single, join them
+        if (!singleInput.value && (textInput.value || afterInput.value)) {
+          singleInput.value = textInput.value + afterInput.value;
+        }
+      }
+      updateFmtPreview();
+    }
+
+    function onFmtEditorLabelInput(val) {
+      if (fmtAutoSyncContent) {
+        const chars = Array.from(val);
+        const textInput = document.getElementById("fmt-ed-text");
+        const afterInput = document.getElementById("fmt-ed-after");
+        const singleInput = document.getElementById("fmt-ed-single");
+        singleInput.value = val;
+        if (chars.length >= 2) {
+          const mid = Math.ceil(chars.length / 2);
+          textInput.value = chars.slice(0, mid).join("");
+          afterInput.value = chars.slice(mid).join("");
+        } else {
+          textInput.value = val;
+          afterInput.value = "";
+        }
+      }
+      updateFmtPreview();
+    }
+
+    function updateFmtPreview() {
+      const labelVal = document.getElementById("fmt-ed-label").value;
+      const textVal = document.getElementById("fmt-ed-text").value;
+      const afterVal = document.getElementById("fmt-ed-after").value;
+      const singleVal = document.getElementById("fmt-ed-single").value;
+      const previewEl = document.getElementById("fmt-caret-preview");
+      if (!previewEl) return;
+
+      if (fmtEditorMode === "between") {
+        const left = textVal || "「";
+        const right = afterVal || "」";
+        const disp = labelVal || left + right;
+        previewEl.innerHTML = `按钮显示 <code>${escapeHtml(disp)}</code> → 插入 <code>${escapeHtml(left)}</code><span class="caret-mark" title="插入后光标停留处"></span><code>${escapeHtml(right)}</code>（若选中文本则自动包裹在中间）`;
+      } else {
+        const full = singleVal || labelVal || "——";
+        const disp = labelVal || full;
+        previewEl.innerHTML = `按钮显示 <code>${escapeHtml(disp)}</code> → 插入 <code>${escapeHtml(full)}</code><span class="caret-mark" title="插入后光标停留处"></span>（光标停在插入内容末尾）`;
+      }
+    }
+
+    function saveFormatEditor(e) {
+      e.preventDefault();
+      const rawLabel = document.getElementById("fmt-ed-label").value.trim();
+      const rawText = document.getElementById("fmt-ed-text").value;
+      const rawAfter = document.getElementById("fmt-ed-after").value;
+      const rawSingle = document.getElementById("fmt-ed-single").value;
+
+      let nextItem;
+      if (fmtEditorMode === "between") {
+        const text = rawText || (rawLabel ? Array.from(rawLabel).slice(0, Math.ceil(Array.from(rawLabel).length / 2)).join("") : "「");
+        const after = rawAfter || (rawLabel ? Array.from(rawLabel).slice(Math.ceil(Array.from(rawLabel).length / 2)).join("") : "」");
+        const label = rawLabel || text + after;
+        nextItem = { label, text, after: after || undefined };
+      } else {
+        const text = rawSingle || rawLabel;
+        if (!text) {
+          closeFormatEditor();
+          return;
+        }
+        const label = rawLabel || text;
+        nextItem = { label, text };
+      }
+
+      if (editingFmtIdx === -1) {
+        // Prepend at the front of the toolbar so the newly created button is immediately first
+        player.format.unshift(nextItem);
+      } else if (editingFmtIdx !== null && player.format[editingFmtIdx]) {
+        player.format[editingFmtIdx] = nextItem;
+      }
+      editingFmtIdx = null;
+      renderAll();
+    }
+
+    function deleteEditingFormat() {
+      if (editingFmtIdx !== null && editingFmtIdx >= 0) {
+        player.format.splice(editingFmtIdx, 1);
+      }
+      editingFmtIdx = null;
+      renderAll();
+    }
+
+    function resetFormats() {
+      player.format = structuredClone(DEFAULT_FORMATS);
+      editingFmtIdx = null;
+      renderAll();
+    }
+
+    // Exact port of `insert(s: Insert)` from `packages/client/src/composer.tsx` lines 63–81
+    function insertFormatIntoComposer(idx) {
+      const s = player.format[idx];
+      const box = document.getElementById("reader-composer-input");
+      if (!s || !box) return;
+      const a = box.selectionStart ?? box.value.length;
+      const b = box.selectionEnd ?? a;
+      const v = box.value;
+      const inner = v.slice(a, b);
+      const after = s.after ?? "";
+      box.value = v.slice(0, a) + s.text + inner + after + v.slice(b);
+      const caret = a + s.text.length + inner.length;
+      box.focus();
+      box.setSelectionRange(caret, caret);
+    }
+
+    function addSnippet() {
+      // Prepend at the top (`unshift`) so it lands right under the user's cursor, ready to edit
+      player.snippets.unshift({ name: "", text: "", hint: "", note: true });
+      renderAll();
+      const listEl = document.getElementById("snippets-list");
+      listEl.scrollTop = 0;
+      const firstNameInput = listEl.querySelector(".snip-row input.sname");
+      if (firstNameInput) firstNameInput.focus();
+    }
+
+    function setSnippetNote(idx, note) {
+      player.snippets[idx].note = note;
+      renderLowFreqInputs();
+    }
+
+    function removeSnippet(idx) {
+      player.snippets.splice(idx, 1);
+      renderAll();
+    }
+
+    function resetSnippets() {
+      player.snippets = structuredClone(DEFAULT_SNIPPETS);
+      renderAll();
+    }
+
+    // ───────── 5. Navigation, Persona Menu & Demo Controls ─────────
+    function setPage(pg) {
+      currentPage = pg;
+      document.getElementById("writing-page").hidden = pg !== "writing";
+      document.getElementById("btn-page-writing").setAttribute("aria-pressed", String(pg === "writing"));
+      document.getElementById("btn-page-reader").setAttribute("aria-pressed", String(pg === "reader"));
+    }
+
+    function openWritingFromSession() {
+      // Mirrors side.tsx `closeUp(el)` + `registry.set(page, "writing")`
+      togglePhoneSheet(false);
+      personaMenuOpen = false;
+      setPage("writing");
+    }
+
+    function togglePhoneSheet(open) {
+      document.getElementById("phone-sheet").setAttribute("data-open", String(open));
+    }
+
+    function togglePersonaMenu(e) {
+      e.stopPropagation();
+      personaMenuOpen = !personaMenuOpen;
+      renderSidebarSession("desktop-session");
+      renderSidebarSession("mobile-session");
+    }
+
+    function pickPersona(id) {
+      if (id === undefined) delete player.persona[currentCardId];
+      else player.persona[currentCardId] = id;
+      personaMenuOpen = false;
+      renderAll();
+    }
+
+    function triggerDemandInner() {
+      demandedInner = !demandedInner;
+      renderReaderSync();
+    }
+
+    function triggerRewordDemo() {
+      const proseEl = document.getElementById("reader-prose");
+      proseEl.innerHTML = `
+        <p>亭中光线昏暗，雨后的天色从亭檐外斜斜地照进来，恰好落在那圈银箍上，映出一线极淡的光。</p>
+        <p>裴青舟的目光猛地一凝。他原本靠着亭柱的身子不知何时已直了起来，搭在剑柄上方的手也缓缓收回，停在身侧。他没有立刻开口，只是盯着那道鹤纹看了许久，<span style="background:var(--ok-wash);color:var(--ok);padding:1px 4px;border-radius:4px;" title="已由 polish 阶段根据禁词表重写">右手拇指无声地摩挲过粗糙的青石桌面</span>，才低声道：「……这纹路，是他幼时在师门后山亲手刻的。那年他才十三岁，刻坏了三把刀，才刻出这一只。」</p>
+        <p>他的语气里有一种极力压住的涩意，却仍旧不肯失了分寸。「把布再掀开些，我要看剑柄。」</p>
+      `;
+    }
+
+    const TABS = ["switches", "prose", "polish", "inputs"];
+    let currentTab = "switches";
+
+    function setTab(tabId) {
+      if (editingFmtIdx !== null && tabId !== "inputs") {
+        closeFormatEditor();
+      }
+      currentTab = tabId;
+      for (const id of TABS) {
+        const active = id === tabId;
+        const btn = document.getElementById(`tab-${id}`);
+        const panel = document.getElementById(`panel-${id}`);
+        if (btn) btn.setAttribute("aria-selected", String(active));
+        if (panel) panel.hidden = !active;
+      }
+    }
+
+    function openWritingTab(tabId) {
+      setTab(tabId);
+      setPage("writing");
+    }
+
+    function setVp(vp) {
+      document.getElementById("stage").setAttribute("data-vp", vp);
+      document.getElementById("btn-vp-desktop").setAttribute("aria-pressed", String(vp === "desktop"));
+      document.getElementById("btn-vp-mobile").setAttribute("aria-pressed", String(vp === "mobile"));
+    }
+
+    function setCard(cardId) {
+      currentCardId = cardId;
+      if (cardId === "yandao") {
+        player.writing.pov = "none";
+      } else if (player.writing.pov === "none") {
+        player.writing.pov = "second";
+      }
+      document.getElementById("btn-card-wuxia").setAttribute("aria-pressed", String(cardId === "wuxia"));
+      document.getElementById("btn-card-yandao").setAttribute("aria-pressed", String(cardId === "yandao"));
+      renderAll();
+    }
+
+    function toggleTheme() {
+      const root = document.documentElement;
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/"/g, "&quot;");
+    }
+
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (editingFmtIdx !== null) {
+          closeFormatEditor();
+        } else if (currentPage === "writing") {
+          setPage("reader");
+        }
+      }
+    });
+    addEventListener("click", (e) => {
+      if (personaMenuOpen && !e.target.closest("[aria-label='Persona']")) {
+        personaMenuOpen = false;
+        renderSidebarSession("desktop-session");
+        renderSidebarSession("mobile-session");
+      }
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
