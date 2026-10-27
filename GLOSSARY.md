@@ -100,7 +100,7 @@ _不用_："导演"来指作者视角（director 是 harness 的阶段）、"小
 
 **Session**：一局：一张卡、一个玩家层、一条连接、一棵日志树。它的接口就是过线协议：动作进，事件流出，节点投影。
 
-**动作（action）**：act、greet、checkout、swipe、reword、edit、setField、pick、demand。每个返回它引起的事件流，以 change 收尾；act 不带 parent 就挂在 head 下。
+**动作（action）**：act、greet、checkout、swipe、reword、edit、setField、demand。每个返回它引起的事件流，以 change 收尾；act 不带 parent 就挂在 head 下。
 
 **事件（event）**：四种：阶段开始、narrate 逐 part 的增量、每次调用的记录、变化（change）。
 

@@ -109,7 +109,8 @@ const run = async (inspect: boolean) => {
       [true, true],
     )
 
-    const picked = sse(await (await post({ kind: "pick", node: node.turn.id, option: 1 })).text())
+    // an option sent as the next act under its node (the client fills the box; there is no pick action)
+    const picked = sse(await (await post({ kind: "act", parent: node.turn.id, input: { text: "B" } })).text())
     assert.equal((picked.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn.input.text, "B")
 
     // stop: the client closes the response once the prose streams; the turn finishes into a `stopped` node it reads back.
@@ -151,7 +152,7 @@ const run = async (inspect: boolean) => {
     const tree = [...lib.session().log.nodes.keys()]
     // checkout: head to a version's newest leaf (its follow-up comes back); act without a parent lands under head
     const back = sse(await (await post({ kind: "checkout", node: node.id })).text())
-    assert.deepEqual(back.at(-1)!.data, { kind: "change", head: node.id + 1 }) // "hi" → its pick "B"
+    assert.deepEqual(back.at(-1)!.data, { kind: "change", head: node.id + 1 }) // "hi" → its child "B"
     const under = sse(await (await post({ kind: "act", input: { text: "under head" } })).text())
     const u = (under.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
     assert.deepEqual([u.parent, lib.session().log.head], [node.id + 1, u.id])
