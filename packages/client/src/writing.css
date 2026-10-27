@@ -143,13 +143,13 @@
   text-transform: uppercase;
   color: var(--ink-3);
 }
-.sw-card .seg {
+.sw-card .sw-pills {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
   margin-top: var(--space-2);
 }
-.sw-card .seg button {
+.sw-card .sw-pills button {
   height: 28px;
   padding: 0 12px;
   border-radius: var(--radius-pill);
@@ -161,33 +161,34 @@
     background var(--dur-2) var(--ease),
     color var(--dur-2) var(--ease);
 }
-.sw-card .seg button:hover:not(:disabled) {
+.sw-card .sw-pills button:hover:not(:disabled) {
   background: var(--alpha-2);
   color: var(--ink);
 }
-.sw-card .seg button[aria-pressed="true"] {
+.sw-card .sw-pills button[aria-pressed="true"] {
   background: var(--primary);
   color: var(--primary-ink);
 }
 
-/* the record products: a row each, the shown name and its switch; one without a name shows its id in mono */
-.prod-list {
+/* the record products: a 2-column grid of compact cards (matching .sw-grid above), not full-width bars */
+.prod-grid {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-2);
 }
 .prod-item {
-  flex: none;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 var(--space-3);
-  border-radius: var(--radius);
-  background: var(--alpha-1);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
 .prod-item .pname {
   flex: 1;
@@ -448,17 +449,31 @@
   box-sizing: border-box;
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: 7rem minmax(0, 1fr) minmax(0, 1.3fr);
   align-items: center;
-  gap: var(--space-3);
-  min-height: 40px;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius);
-  background: var(--alpha-1);
+  gap: var(--space-2);
+  padding: 0;
+  border-radius: 0;
+  background: none;
   color: var(--ink);
   text-align: left;
 }
-.snip-row:hover:not(.builtin) {
+.snip-cell {
+  box-sizing: border-box;
+  height: var(--control);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background var(--dur-2) var(--ease);
+}
+.snip-row:hover:not(.builtin) .snip-cell {
   background: var(--alpha-2);
 }
 .snip-row .sname {
@@ -466,15 +481,17 @@
 }
 .snip-row .stext,
 .snip-row .shint {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--ink-2);
   font-size: var(--text-footnote);
 }
 .snip-row .shint {
+  justify-content: space-between;
   color: var(--ink-3);
+}
+.snip-row .shint > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .builtin {
   opacity: 0.6;
@@ -521,32 +538,19 @@
   letter-spacing: 0.08em;
   color: var(--ink-3);
 }
+.mfield .at-toggle {
+  align-self: flex-start;
+}
 .mpair {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   gap: var(--space-3);
 }
-.caret-preview {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--text-footnote);
-  color: var(--ink-2);
-}
-.caret-preview code {
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--alpha-1);
-  font-family: var(--font-mono);
-  font-size: var(--text-body);
-  color: var(--ink);
-}
 .wpage .btn.danger {
   color: var(--danger);
 }
 
-/* desktop: the sheet is a card on the canvas, the head one row, the switches two across */
+/* desktop: the sheet is a card on the canvas, the head one row, the switches and products two across */
 @media (min-width: 52rem) {
   .wpage {
     align-items: center;
@@ -579,7 +583,8 @@
     gap: var(--space-5);
     padding: var(--space-5);
   }
-  .sw-grid {
+  .sw-grid,
+  .prod-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .prose-grid {

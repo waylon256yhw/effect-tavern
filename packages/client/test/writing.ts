@@ -113,6 +113,6 @@ assert.deepEqual(
   defaultsOf(["m1", "d1", "d2"], ["m1", "m2"], (x) => x),
   ["d1", "d2"],
 )
-assert.equal(caretOf({ text: "「", after: "」" }), "「⎸」")
-assert.equal(caretOf({ text: "继续。" }), "继续。⎸")
+assert.equal(caretOf({ text: "「", after: "」" }), "「」")
+assert.equal(caretOf({ text: "继续。" }), "继续。")
 console.log("writing ok")

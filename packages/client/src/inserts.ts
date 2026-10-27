@@ -64,5 +64,5 @@ export const defaultsOf = <T>(merged: readonly T[], mine: readonly T[], key: (x:
   const own = new Set(mine.map(key))
   return merged.filter((x) => !own.has(key(x)))
 }
-/** An insert as the caret sees it: `text⎸after`, or `text⎸`. */
-export const caretOf = (i: { text: string; after?: string }): string => `${i.text}⎸${i.after ?? ""}`
+/** What an insert puts into the box (`text` + `after`), without a synthetic caret mark. */
+export const caretOf = (i: { text: string; after?: string }): string => `${i.text}${i.after ?? ""}`

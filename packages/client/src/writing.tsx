@@ -108,6 +108,7 @@ const useWriting = () => {
 }
 
 // ───────── 开关与记录: the four switches, then the record products ─────────
+const BUILTIN_PRODUCTS = new Set(["notes", "options", "inner"])
 const Switches = () => {
   const { me, write } = useWriting()
   const view = read(card)
@@ -143,7 +144,7 @@ const Switches = () => {
             {(s) => (
               <fieldset class="sw-card" disabled={moot(s().key, w())}>
                 <legend>{s().label}</legend>
-                <div class="seg">
+                <div class="sw-pills">
                   <For each={s().values} keyed={(v) => String(v[0])}>
                     {(v) => (
                       <button
@@ -174,11 +175,14 @@ const Switches = () => {
             </span>
           </div>
         </div>
-        <div class="prod-list scroller fade">
+        <div class="prod-grid scroller fade">
           <For each={products()} keyed={(p) => p.id}>
             {(p) => (
               <div class="prod-item">
                 <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
+                <Show when={!BUILTIN_PRODUCTS.has(p().id) && view()?.title}>
+                  {(t) => <span class="tag">{t()}</span>}
+                </Show>
                 <Show when={p().id !== "notes"} fallback={<span class="tag">常开</span>}>
                   <Switch on={onOf(p())} label={p().label ?? p().id} onFlip={() => flip(p())} />
                 </Show>
@@ -590,10 +594,6 @@ const Inputs = () => {
     else setKeys(keys().filter((_, i) => i !== e.at))
     dlg.close()
   }
-  const preview = () => {
-    const v = made()
-    return v ? caretOf(v) : ""
-  }
   return (
     <section class="wpanel" role="tabpanel" aria-label="快捷输入">
       {/* the keys: a row of glyphs over the box; the player's are buttons into the editor, the defaults after them */}
@@ -660,20 +660,24 @@ const Inputs = () => {
                 class="snip-row"
                 onClick={() => open({ snippet: true, at: i, draft: draftOfSnippet(s()) })}
               >
-                <span class="sname">{s().name}</span>
-                <span class="stext mono">{caretOf(s())}</span>
-                <span class="shint">{s().hint}</span>
-                <span class="tag">{s().note ? "给叙事者" : "故事里"}</span>
+                <span class="snip-cell sname">{s().name}</span>
+                <span class="snip-cell stext mono">{caretOf(s()) || "—"}</span>
+                <span class="snip-cell shint">
+                  <span>{s().hint}</span>
+                  <span class="tag">{s().note ? "给叙事者" : "故事里"}</span>
+                </span>
               </button>
             )}
           </For>
           <For each={snipDefaults()} keyed={(s) => s.name}>
             {(s) => (
               <div class="snip-row builtin">
-                <span class="sname">{s().name}</span>
-                <span class="stext mono">{caretOf(s())}</span>
-                <span class="shint">{s().hint}</span>
-                <span class="tag">内置</span>
+                <span class="snip-cell sname">{s().name}</span>
+                <span class="snip-cell stext mono">{caretOf(s()) || "—"}</span>
+                <span class="snip-cell shint">
+                  <span>{s().hint}</span>
+                  <span class="tag">内置</span>
+                </span>
               </div>
             )}
           </For>
@@ -777,16 +781,6 @@ const Inputs = () => {
                     </label>
                   </Show>
                 </div>
-                <p class="caret-preview">
-                  <Show when={preview()} fallback={<span class="none">还没有可插入的内容</span>}>
-                    {(p) => (
-                      <>
-                        <span>插入</span>
-                        <code>{p()}</code>
-                      </>
-                    )}
-                  </Show>
-                </p>
               </div>
               <div class="modal-foot">
                 <Show when={e().at >= 0}>
