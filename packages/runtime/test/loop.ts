@@ -11,6 +11,7 @@ import { chat, full, plain as player } from "./cards/index.ts"
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
+const onCheck: Array<() => void> = [] // run inside the next check call, on the session's own path
 let n = 0
 function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean; delay?: number } {
   const text = o.prompt.map(fakeText).join("\n")
@@ -49,6 +50,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
       out = JSON.stringify({ must: [], may: open, tone: `TONE#${n}` })
       break
     case "check": {
+      onCheck.shift()?.()
       out = JSON.stringify({
         fired: /tattoo/.test(want) ? open : [],
         violated: /KILL/.test(want) ? [full.guard[0]!] : [],
@@ -297,12 +299,11 @@ const program = Effect.gen(function* () {
   // first character, the first draft stands as the stopped reply with its verdict, and no second check runs.
   i = calls().length
   narrations.push("kill")
-  const late = yield* Deferred.make<void>()
-  const t5s = yield* go(
-    S.act(t3.id, { text: "finish him" }, Deferred.await(late)).pipe(
-      Stream.tap((e) => (e.kind === "stage" && e.phase === "check" ? Deferred.succeed(late, undefined) : Effect.void)),
-    ),
-  )
+  // Fired from inside the check call, not from the consumer: the body runs on its own fiber, and a stop taken off the
+  // `stage` event can land after the rewrite has already streamed.
+  const late = Deferred.makeUnsafe<void>()
+  onCheck.push(() => void Deferred.doneUnsafe(late, Effect.void))
+  const t5s = yield* go(S.act(t3.id, { text: "finish him" }, Deferred.await(late)))
   assert.deepEqual(since(i), ["decide", "narrate", "check", "narrate", "record"])
   assert.deepEqual([t5s.end, t5s.violated, prose(t5s).endsWith("KILL")], ["stopped", [full.guard[0]!], true])
   // nothing to run from: an act of nothing, an edit of nothing
