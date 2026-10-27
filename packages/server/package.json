@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "tsc && bun test/data.ts && bun test/serve.ts",
+    "verify": "bun check && bun test/data.ts && bun test/serve.ts",
     "start": "bun src/main.ts",
     "names": "bun src/names.ts",
     "compile": "bun build --compile src/main.ts --asset ../client/dist --asset ../runtime/test/cards --outfile dist/tavern && rm -f .*.bun-build",
