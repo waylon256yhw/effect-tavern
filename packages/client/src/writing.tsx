@@ -3,16 +3,18 @@
 // list and detail; `Player.writing`, `products`, `global`, `forCard`, `snippets` and `format` are fields of one
 // document, so they get this page, over the reader like the card page (`page === "writing"`: the reader stays mounted,
 // a turn in flight keeps streaming, Escape or Back returns to the line being read). The side panel's Writing chips
-// open it. Tabs: the switches and the record products (this file), the lexicon the polish stage scans (this file);
-// the prose requirements and the quick inputs follow. Every edit is one `PUT /player` on change (blur or Enter), as
-// the settings commit; nothing is optimistic. switches.ts and lexicon.ts hold the pure parts (tested).
-import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
+// open it. Tabs: the switches and the record products, the prose requirements (the per-card supplement and the
+// global ones), the lexicon the polish stage scans; the quick inputs follow. Every edit is one `PUT /player` on
+// change (blur or Enter), as the settings commit; nothing is optimistic. switches.ts, requirements.ts and lexicon.ts
+// hold the pure parts (tested).
+import type { Player, Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
 import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Switch } from "./controls.tsx"
+import { newId, Switch } from "./controls.tsx"
 import { Back, Clue, Close, Export, Import, Snippets as Plus } from "./icons.tsx"
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
+import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
 import { card, page, player, registry } from "./store.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
 import { putPlayer } from "./wire.ts"
@@ -20,9 +22,10 @@ import { putPlayer } from "./wire.ts"
 export const openWriting = () => registry.set(page, "writing")
 const close = () => registry.set(page, "reader")
 
-type Tab = "switches" | "polish"
+type Tab = "switches" | "prose" | "polish"
 const TABS: [Tab, string][] = [
   ["switches", "开关与记录"],
+  ["prose", "文风与要求"],
   ["polish", "润色与禁词"],
 ]
 
@@ -67,6 +70,9 @@ export const WritingPage = () => {
         <div class="wbody">
           <Show when={tab() === "switches"}>
             <Switches />
+          </Show>
+          <Show when={tab() === "prose"}>
+            <Prose />
           </Show>
           <Show when={tab() === "polish"}>
             <Polish />
@@ -165,6 +171,153 @@ const Switches = () => {
               </div>
             )}
           </For>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ───────── 文风与要求: the per-card supplement and the global requirements ─────────
+/** Escape leaves a textarea and keeps the page (the change fires on blur); Enter is a line break. */
+const leaveArea = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
+  if (e.key !== "Escape") return
+  e.preventDefault()
+  e.currentTarget.blur()
+}
+const Prose = () => {
+  const me = read(player)
+  const view = read(card)
+  const cardId = () => view()?.id ?? ""
+  const title = () => view()?.title ?? ""
+  const extra = () => (me() ? extraOf(me()!, cardId()) : "")
+  const globals = () => me()?.global ?? []
+  const put = (f: (p: Player) => Player) => {
+    const p = me()
+    if (p) void putPlayer(f(p))
+  }
+  // a new requirement: a row at the top of the list, kept here until it is left with text (then it is the player's)
+  const [draft, setDraft] = createSignal<string | null>(null)
+  const commitDraft = () => {
+    const d = draft()
+    if (d === null) return
+    setDraft(null)
+    put((p) => addGlobal(p, newId("req"), d, "tail"))
+  }
+  return (
+    <section class="wpanel" role="tabpanel" aria-label="文风与要求">
+      <div class="prose-grid">
+        {/* this card's supplement: one text, in the tail of every narrate request on this card and no other */}
+        <div class="prose-card mine">
+          <div class="block-title">
+            <h3>本卡补充</h3>
+            <Show when={title()}>{(t) => <span class="tag">{t()}</span>}</Show>
+            <div class="right">
+              <span class="tag mono">{extra().length} 字</span>
+            </div>
+          </div>
+          <div class="field-well grow">
+            <textarea
+              aria-label="本卡补充"
+              placeholder={`只对「${title()}」生效的要求：笔法、人物语气、场景气氛……接在每轮的末尾`}
+              disabled={!me()}
+              value={extra()}
+              onChange={(e) => put((p) => withExtra(p, cardId(), e.currentTarget.value))}
+              onKeyDown={leaveArea}
+            />
+          </div>
+        </div>
+        {/* the global requirements: every card, each at the head (before the card's frame) or the tail */}
+        <div class="prose-card">
+          <div class="block-title">
+            <h3>跨卡通用要求</h3>
+            <span class="tag">所有卡片</span>
+            <div class="right">
+              <button type="button" class="btn sm" disabled={!me() || draft() !== null} onClick={() => setDraft("")}>
+                <Plus /> <span>添加要求</span>
+              </button>
+            </div>
+          </div>
+          <div class="frag-list">
+            <Show when={draft() !== null}>
+              <div
+                class="frag-row"
+                onFocusOut={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commitDraft()
+                }}
+              >
+                <div class="frag-bar">
+                  <div class="at-toggle" role="group" aria-label="位置">
+                    <button type="button" aria-pressed="true" tabindex="-1">
+                      每轮末尾
+                    </button>
+                    <button type="button" aria-pressed="false" disabled>
+                      开头
+                    </button>
+                  </div>
+                  <span class="spacer" />
+                  <button type="button" class="icon sm" aria-label="放弃" onClick={() => setDraft(null)}>
+                    <Close />
+                  </button>
+                </div>
+                <div class="field-well">
+                  <textarea
+                    aria-label="要求"
+                    placeholder="对每张卡都成立的要求：文风、笔法、叙事习惯……"
+                    value={draft() ?? ""}
+                    ref={(el) => requestAnimationFrame(() => el.focus())}
+                    onInput={(e) => setDraft(e.currentTarget.value)}
+                    onKeyDown={leaveArea}
+                  />
+                </div>
+              </div>
+            </Show>
+            <For each={globals()} keyed={false}>
+              {(f, i) => (
+                <div class="frag-row">
+                  <div class="frag-bar">
+                    <div class="at-toggle" role="group" aria-label="位置">
+                      <button
+                        type="button"
+                        aria-pressed={atOf(f()) === "tail" ? "true" : "false"}
+                        onClick={() => put((p) => setGlobalAt(p, i, "tail"))}
+                      >
+                        每轮末尾
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={atOf(f()) === "head" ? "true" : "false"}
+                        onClick={() => put((p) => setGlobalAt(p, i, "head"))}
+                      >
+                        开头
+                      </button>
+                    </div>
+                    <span class="spacer" />
+                    <span class="tag mono">{(f().text ?? "").length} 字</span>
+                    <button
+                      type="button"
+                      class="icon sm"
+                      aria-label="移除要求"
+                      onClick={() => put((p) => removeGlobal(p, i))}
+                    >
+                      <Close />
+                    </button>
+                  </div>
+                  <div class="field-well">
+                    <textarea
+                      aria-label="要求"
+                      placeholder="留空即移除这条要求"
+                      value={f().text ?? ""}
+                      onChange={(e) => put((p) => setGlobalText(p, i, e.currentTarget.value))}
+                      onKeyDown={leaveArea}
+                    />
+                  </div>
+                </div>
+              )}
+            </For>
+            <Show when={!globals().length && draft() === null}>
+              <p class="none">还没有通用要求：加一条，它对每张卡都生效</p>
+            </Show>
+          </div>
         </div>
       </div>
     </section>

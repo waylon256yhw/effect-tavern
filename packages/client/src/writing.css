@@ -201,6 +201,130 @@
   color: var(--ink-2);
 }
 
+/* the prose requirements: two cards, this card's supplement (one text that fills its card) and the global list (a bar
+   over a text each: the position, the count, the remove). A phone stacks the cards and scrolls the stack; the desktop
+   sets them side by side, each as tall as the sheet, the list scrolling inside its card behind the fade */
+.prose-grid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color var(--dur-3) var(--ease);
+}
+.prose-grid:hover {
+  scrollbar-color: var(--alpha-2) transparent;
+}
+.prose-card {
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.prose-card .spacer {
+  flex: 1;
+}
+.prose-card.mine .field-well {
+  height: 12rem;
+}
+/* a text in a well: the well draws the fill, the radius and the focus hairline; the textarea inside is bare, its thin
+   thumb shown under the pointer, its ends fading into the well's padding (the composer's box, reader.css) */
+.field-well {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+.field-well:focus-within {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+}
+.field-well textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: var(--space-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-field);
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color var(--dur-3) var(--ease);
+  mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+.field-well textarea:hover,
+.field-well textarea:focus {
+  scrollbar-color: var(--alpha-2) transparent;
+}
+.field-well textarea:disabled {
+  opacity: 0.5;
+}
+.frag-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.frag-row {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.frag-row .field-well {
+  height: 6.5rem;
+}
+.frag-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+}
+/* the position: two pills, the one in force solid */
+.at-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+}
+.at-toggle button {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  font-size: var(--text-caption);
+  font-weight: 550;
+  white-space: nowrap;
+}
+.at-toggle button:hover:not(:disabled) {
+  color: var(--ink);
+}
+.at-toggle button[aria-pressed="true"] {
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+.at-toggle button:disabled {
+  opacity: 0.5;
+}
+
 /* the lexicon: the title row holds the count, the search, the file buttons, add, and the polish switch (it wraps on
    a phone); the list is a card with a fixed column head over its own scroller, dimmed while polish is off */
 .lex-title {
@@ -305,5 +429,27 @@
   }
   .sw-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .prose-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .prose-card.mine .field-well {
+    flex: 1;
+    height: auto;
+  }
+  .frag-list {
+    flex: 1;
+    min-height: 0;
+    padding-block: var(--fade);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--dur-3) var(--ease);
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  }
+  .frag-list:hover {
+    scrollbar-color: var(--alpha-2) transparent;
   }
 }
