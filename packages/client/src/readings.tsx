@@ -305,7 +305,7 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
 /** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn, new prose: the wand
  *  opens a box for a word to the narrator, which rides as that sibling's note; Enter sends, empty or not, and so does
  *  the wand again) and Edit (the prose as a textarea in place, App.tsx `Editor`). Three icons with hints; the box
- *  exists only while the wand is asking. Then 索取: a menu of the products this node can still be asked for (the
+ *  exists only while the wand is asking. Then 小剧场: a menu of the products this node can still be asked for (the
  *  `demand` action: one record call over this node's scene, the answer kept on the node, no turn), named by the card;
  *  nothing to ask for, the button is off. The Record sheet's footer on the phone, the right card's on the desktop. */
 export const Rewrite = (props: {
@@ -389,8 +389,8 @@ export const Rewrite = (props: {
       <span class="spacer" />
       <Show when={!d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
       <Menu
-        action="索取"
-        label="索取一项记录"
+        action="小剧场"
+        label="小剧场"
         value={undefined}
         options={busy() ? [] : props.demands}
         onPick={(id) => (dismiss(), props.onDemand(id))}

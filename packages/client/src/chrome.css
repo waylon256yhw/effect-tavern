@@ -804,6 +804,7 @@
   }
   .glance {
     overflow: hidden;
+    padding-inline: 0;
   }
   .glance .scrolls {
     flex: 1;
@@ -812,9 +813,15 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
+    padding-inline: var(--space-5);
+    padding-bottom: var(--fade);
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
     transition: scrollbar-color var(--dur-3) var(--ease);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
+  }
+  .glance > .actions {
+    padding-inline: var(--space-5);
   }
   .panel {
     align-self: stretch;
