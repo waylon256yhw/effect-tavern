@@ -49,6 +49,35 @@ assert.deepEqual(
   ),
   [{ kind: "pin", id: "li", hook: "li", told: true }], // no parent to name it: the id
 )
+// Products: every declared one on the node but notes (its own kind) and options (the Options container), by shown
+// name, in the card's order; one not on the node (off, or not yet demanded) draws nothing
+const declared = [
+  { id: "notes", label: "事件摘要", shape: { kind: "list" } },
+  { id: "options", shape: { kind: "list" } },
+  { id: "inner", label: "人物心声", shape: { kind: "text" } },
+  { id: "scene", shape: { kind: "record", keys: [{ key: "place", type: "text" }] } },
+] as const
+assert.deepEqual(
+  record(
+    rules,
+    node(
+      { hp: 40, foe: 30, mood: "low" },
+      { turn: { input: {}, fired: [], products: { notes: ["n"], options: ["o"], scene: { place: "亭" } } } },
+    ),
+    undefined,
+    declared,
+  ),
+  [
+    { kind: "notes", items: ["n"] },
+    {
+      kind: "product",
+      id: "scene",
+      label: "scene",
+      shape: { kind: "record", keys: [{ key: "place", type: "text" }] },
+      value: { place: "亭" },
+    },
+  ],
+)
 // Status: the card's order inside a group, groups by first appearance, the ungrouped first and unnamed
 assert.deepEqual(
   status(rules, { hp: 30, foe: 20, mood: "high" }).map((g) => [

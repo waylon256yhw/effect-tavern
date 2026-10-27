@@ -1,10 +1,9 @@
-import type { Shape, TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Clue, Next, Prev, Record } from "./icons.tsx"
 import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type Tray } from "./inspect.ts"
-import { PinButton, Reading } from "./readings.tsx"
+import { KeyValues, PinButton, Reading, Shaped } from "./readings.tsx"
 import { record } from "./record.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import { calls, card, log, page, path, pin, registry, turnOf, type Id } from "./store.ts"
@@ -46,94 +45,6 @@ const Marked = (props: { text: string; q: string }) => {
     </For>
   )
 }
-/** A structured answer as key → value rows; nested values as JSON. */
-const KeyValues = (props: { of: Record<string, unknown> }) => (
-  <dl class="kv">
-    <For each={Object.entries(props.of)} keyed={([k]) => k}>
-      {(e) => (
-        <>
-          <dt>{e()[0]}</dt>
-          <dd>{typeof e()[1] === "string" ? (e()[1] as string) : JSON.stringify(e()[1], null, 2)}</dd>
-        </>
-      )}
-    </For>
-  </dl>
-)
-/** A product's value by its declared shape (src/product.ts): a list as items, a table as rows, a record as key →
- *  value with its nested shapes, text as a line. */
-const Shaped = (props: { shape: Shape; value: unknown }) => {
-  const table = () => (props.shape.kind === "table" ? (props.shape as TableShape) : undefined)
-  const rec = () => (props.shape.kind === "record" ? (props.shape as Extract<Shape, { kind: "record" }>) : undefined)
-  const cell = (v: unknown) =>
-    v === undefined || v === null
-      ? ""
-      : typeof v === "object"
-        ? JSON.stringify(v)
-        : String(v as string | number | boolean)
-  return (
-    <Switch fallback={<p class="val">{cell(props.value)}</p>}>
-      <Match when={props.shape.kind === "list"}>
-        <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
-          <ul class="items">
-            <For each={props.value as unknown[]} keyed={false}>
-              {(v) => <li>{cell(v())}</li>}
-            </For>
-          </ul>
-        </Show>
-      </Match>
-      <Match when={table()}>
-        {(t) => (
-          <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
-            <table class="rows">
-              <thead>
-                <tr>
-                  <For each={t().columns} keyed={(c) => c.key}>
-                    {(c) => <th>{c().key}</th>}
-                  </For>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={(props.value as Record<string, unknown>[] | undefined) ?? []} keyed={false}>
-                  {(r) => (
-                    <tr>
-                      <For each={t().columns} keyed={(c) => c.key}>
-                        {(c) => <td>{cell(r()[c().key])}</td>}
-                      </For>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </Show>
-        )}
-      </Match>
-      <Match when={rec()}>
-        {(r) => (
-          <dl class="kv">
-            <For each={r().keys} keyed={(k) => k.key}>
-              {(k) => (
-                <>
-                  <dt>{k().key}</dt>
-                  <dd>
-                    <Show
-                      when={"shape" in k() ? (k() as { shape: Shape }).shape : undefined}
-                      fallback={cell((props.value as Record<string, unknown> | undefined)?.[k().key])}
-                    >
-                      {(sh) => (
-                        <Shaped shape={sh()} value={(props.value as Record<string, unknown> | undefined)?.[k().key]} />
-                      )}
-                    </Show>
-                  </dd>
-                </>
-              )}
-            </For>
-          </dl>
-        )}
-      </Match>
-    </Switch>
-  )
-}
-
 /** A row's head: what the stage decided, from the call's answer and the node's facts (never a written summary). */
 const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
   const out = () => props.row.call.out as Record<string, unknown>
