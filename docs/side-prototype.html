@@ -1,0 +1,2618 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Session 左栏重构 · 三态静态与交互原型 (Issue #77)</title>
+  <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+    SESSION CARD REFACTOR PROTOTYPE (ISSUE #77, WITH #75 STEP 1, #67, #70)
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    1. CARD GEOMETRY & ELASTIC ALLOCATION (`.side` = 15rem / 240px, net 192px):
+       - Only `section.stories` takes elastic height (`flex: 1`).
+       - The other 4 zones (`.cardhead`, `.persona`, `.writing`, `nav.tools`, plus
+         optional `.pinned`) stay compact at their natural 1-2 line height, anchored
+         cleanly below `Stories` instead of leaving a dead void at the bottom of the card.
+
+    2. FIVE ZONES:
+       - Zone 1 (卡头 `.cardhead` vs Mobile `.topbar .title`):
+         * Desktop `.cardhead`: Title + persistent entry icon on the right (button
+           affordance at rest, not hover-only) + 2-line clamped summary
+           (`-webkit-line-clamp: 2`, ~26 CJK chars, fits the opening clause).
+         * Mobile separation of roles: `.topbar .title` pulls up the Session sheet
+           (styled with a down/sheet chevron and current story subtitle), whereas
+           inside the sheet `.cardhead` is a framed card banner that enters `CardPage`.
+       - Zone 2 (Stories `section.stories`):
+         * Fixed 3–5 recent/starred rows, NO nested `overflow-y: auto` scrollbar.
+         * Row shape (#75 Step 1): `grid-template-columns: minmax(0, 1fr)` (fixes #40/#75
+           horizontal overflow); main line `title ?? "New story"`, sub line
+           `N turns · 16 minutes ago` (when `turns === 0`, only time is shown).
+         * Rename via `<dialog class="confirm">` + `.field` input (pencil button or
+           double-click row).
+         * Final row: `"全部 N 个故事 ›"` opens the #75 Stories management page.
+       - Zone 3 (Persona `section.persona` + `Persona Modal`):
+         * Sidebar row: unified `.chosen` row with `<span class="chip">卡片默认</span>`
+           (or picked persona name) + right chevron `›`. Never disabled when
+           `people().length === 0`.
+         * Replaces narrow popover with `<dialog class="modal">`:
+           - Top pinned card: `"卡片默认"` (selectable, with expandable/readable
+             original `frame.persona` text from the card).
+           - Search input + global player personas (`starred` pinned first, each 2 lines:
+             name + bio first line, inline star toggle).
+           - Footer: `"管理人设"` jumps to `openSettings("personas")`.
+       - Zone 4 (Writing `section.writing`):
+         * Unified `.chosen` row: `.chips` with `flex-flow: row wrap` (192px fits two
+           4-char chips per line) + right chevron `›`. Uses concrete default items
+           (`第二人称` · `转述言行` · `仅限输入`) instead of colliding on `"跟随卡片"`.
+       - Zone 5 (底部页面导航 `nav.tools`):
+         * Replaces coding icons (`git-branch`, `terminal-window`) with narrative/inspection
+           icons (`ph/tree-structure` or `ph/path`, `ph/list-magnifying-glass` or
+           `ph/magnifying-glass`).
+         * Compares two layouts with text labels:
+           - `紧凑同行` (Inline: left two with text `时间线` / `检查器`, right `⚙` Settings gear)
+           - `竖排三行` (Stack: `时间线` / `检查器` / `设置` as 3 full-width rows)
+    ═══════════════════════════════════════════════════════════════════════════════
+  -->
+  <style>
+    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f9f9f7, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151515);
+      --surface-2: light-dark(#ffffff, #1a1a19);
+      --surface-3: light-dark(#ffffff, #20201f);
+
+      --ink: light-dark(#151515, #f5f5f5);
+      --ink-2: light-dark(#525252, #a3a3a3);
+      --ink-3: light-dark(#8a8a8a, #6f6f6f);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.05), rgb(255 255 255 / 0.05));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.2), rgb(255 255 255 / 0.18));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --fill: var(--alpha-2);
+      --fill-hover: light-dark(rgb(20 20 20 / 0.14), rgb(255 255 255 / 0.14));
+      --ghost-hover: var(--alpha-1);
+      --ghost-active: var(--alpha-2);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --danger: light-dark(#dc2626, #f87171);
+      --ok: light-dark(#1f7a3f, #4ade80);
+      --ok-soft: light-dark(rgb(31 122 63 / 0.22), rgb(74 222 128 / 0.25));
+      --ok-wash: light-dark(rgb(34 197 94 / 0.12), rgb(187 247 208 / 0.09));
+      --warn: light-dark(#b45309, #fbbf24);
+      --warn-soft: light-dark(rgb(217 119 6 / 0.12), rgb(251 191 36 / 0.14));
+      --scrim: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.5));
+      --ring: var(--alpha-4);
+
+      --hairline: 1px;
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-2:
+        0 2px 4px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 6px 16px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-pop:
+        inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)),
+        0 0 0 1px light-dark(var(--line), transparent),
+        0 8px 24px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.65)),
+        0 2px 6px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+      --shadow-composer:
+        0 4px 20px light-dark(rgb(0 0 0 / 0.035), rgb(0 0 0 / 0.4)),
+        inset 0 0 0 1px var(--line);
+
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-card: 12px;
+      --radius-composer: 14px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control: 32px;
+      --control-sm: 24px;
+      --icon: 20px;
+      --icon-sm: 16px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --text-caption: 0.6875rem;   /* 11px */
+      --text-footnote: 0.75rem;    /* 12px */
+      --text-body: 0.875rem;       /* 14px */
+      --text-heading: 0.9375rem;    /* 15px */
+      --text-prose: 1rem;          /* 16px */
+      --text-field: var(--text-body);
+      --text-title: 1.25rem;       /* 20px */
+      --leading-tight: 1.25;
+      --leading-body: 1.45;
+      --leading-prose: 1.75;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --fade: 24px;
+
+      --dur-1: 60ms;
+      --dur-2: 120ms;
+      --dur-3: 200ms;
+      --dur-4: 300ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    @media (resolution >= 2x) {
+      :root { --hairline: 0.5px; }
+    }
+
+    * { box-sizing: border-box; }
+    html {
+      height: 100%;
+      font-size: 16px; /* 1rem = 16px so 15rem .side = 240px (net 192px) as in reader.css */
+    }
+    body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+    }
+    button {
+      cursor: pointer;
+      border-radius: var(--radius);
+      transition: background var(--dur-3) var(--ease), color var(--dur-3) var(--ease);
+    }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+    }
+    button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    h1, h2, h3, p, ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* ───────── 2. Shared Primitives (.icon, .chip, .tag, .btn, .scroller, [data-hint]) ───────── */
+    .scroller {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+    }
+    .scroller:hover,
+    .scroller:focus-within {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    .icon {
+      width: var(--control);
+      height: var(--control);
+      display: inline-grid;
+      place-items: center;
+      color: var(--ink-2);
+      flex: none;
+    }
+    .icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .icon svg {
+      width: var(--icon);
+      height: var(--icon);
+    }
+    .icon.sm {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      border-radius: var(--radius-sm);
+    }
+    .icon.sm svg {
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+    }
+
+    .chip {
+      height: var(--control-sm);
+      padding: 0 9px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .chip.state {
+      background: none;
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink);
+    }
+    .chip.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .tag {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 7px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      color: var(--ink-3);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+    }
+    .tag.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-weight: 600;
+    }
+    .tag.mono {
+      font-family: var(--font-mono);
+    }
+
+    .btn {
+      height: var(--control);
+      padding: 0 12px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--alpha-1);
+    }
+    .btn.sm {
+      height: var(--control-sm);
+      padding: 0 9px;
+      border-radius: var(--radius-sm);
+      font-size: var(--text-caption);
+    }
+    .btn.ghost {
+      background: none;
+      box-shadow: none;
+      color: var(--ink-2);
+    }
+    .btn.ghost:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .field {
+      box-sizing: border-box;
+      width: 100%;
+      padding: var(--space-2) var(--space-3);
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      color: inherit;
+      font: inherit;
+      font-size: var(--text-field);
+      outline: none;
+    }
+    .field:focus,
+    .input-box:focus-within {
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+    }
+
+    @media (hover: hover) {
+      [data-hint] {
+        position: relative;
+      }
+      [data-hint]::after {
+        content: attr(data-hint);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        translate: -50% 0;
+        padding: 3px 8px;
+        border-radius: var(--radius-sm);
+        background: var(--ink);
+        color: var(--surface-1);
+        font-size: var(--text-caption);
+        line-height: 1.4;
+        white-space: nowrap;
+        pointer-events: none;
+        display: none;
+        z-index: 20;
+      }
+      [data-hint]:is(:hover, :focus-visible)::after {
+        display: block;
+      }
+    }
+
+    /* ───────── 3. Refactored Session Card Styles (Issue #77) ───────── */
+    .side {
+      box-sizing: border-box;
+      width: 15rem; /* 240px outer, 200px inner column */
+      max-height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: var(--space-5);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+    }
+    .side:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    .session {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      flex: 1;
+      min-height: 0;
+    }
+    .session section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    /* Section headers: natural Chinese caption by default (no rigid all-caps spacing);
+       compact 22px height with tight 22×22 action icon cluster on the right */
+    .session h2 {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin: 0;
+      min-height: 22px;
+      font-size: var(--text-caption);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--ink-3);
+    }
+    .session[data-lang="en"] h2 {
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .session h2 .icon {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 5px;
+      color: var(--ink-3);
+    }
+    .session h2 .icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .session h2 .icon.danger-hover:hover:not(:disabled) {
+      color: var(--danger);
+    }
+    .session h2 .icon svg {
+      width: 13px;
+      height: 13px;
+    }
+    .session h2 .icon:first-of-type {
+      margin-left: auto;
+    }
+    .session h2 .icon:last-of-type {
+      margin-right: -3px;
+    }
+
+    /* ── Zone 1: 卡头 (.cardhead) ──
+       Desktop: persistent entry icon beside title (button feel at rest, not hover-only),
+       summary kept with -webkit-line-clamp: 2 (~26 CJK chars). */
+    .cardhead {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: calc(-1 * var(--space-2));
+      padding: var(--space-2);
+      border-radius: var(--radius-card);
+      text-align: left;
+      transition: background var(--dur-2) var(--ease);
+    }
+    .cardhead:hover {
+      background: var(--ghost-hover);
+    }
+    .cardhead-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .cardhead h1 {
+      margin: 0;
+      font-size: var(--text-title);
+      font-weight: 650;
+      line-height: var(--leading-tight);
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* Persistent entry icon badge beside the title: compact 20×20 on desktop, pill with label in mobile sheet */
+    .cardhead .enter-badge {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 4px;
+      border-radius: 5px;
+      background: var(--alpha-1);
+      color: var(--ink-3);
+      font-size: var(--text-caption);
+      font-weight: 500;
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), translate var(--dur-2) var(--ease);
+    }
+    .cardhead .enter-badge svg {
+      width: 11px;
+      height: 11px;
+    }
+    .cardhead:hover .enter-badge {
+      background: var(--alpha-2);
+      color: var(--ink);
+      translate: 1px 0;
+    }
+    .cardhead p {
+      margin: 0;
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      line-height: 1.48;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Mobile Sheet's .cardhead: sits directly at the top of the sheet (no redundant "SESSION" header bar) */
+    .phone-sheet .cardhead {
+      margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2)) 0;
+      padding: var(--space-2);
+    }
+    .phone-sheet .cardhead .enter-badge {
+      height: 22px;
+      padding: 0 7px;
+    }
+
+    /* ── Zone 2: Stories (section.stories) ──
+       4 stories with balanced breathing room above and below:
+       margin-block: auto centers the Stories block between .cardhead and the bottom preference group,
+       eliminating the single large void underneath while giving comfortable air above and below. */
+    .session section.stories {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: auto;
+      margin-bottom: auto;
+      padding-block: 4px;
+    }
+    .phone-sheet .session section.stories {
+      padding-block: 2px;
+    }
+    .stories ul {
+      margin: 0 calc(-1 * var(--space-2));
+      padding: 0;
+      list-style: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 4px;
+      /* No max-height: 11rem, no overflow-y: auto */
+    }
+    .story {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr); /* #75 Defect 1 fix: prevents long text from widening ul */
+      gap: 2px;
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px var(--space-2);
+      border-radius: var(--radius);
+      text-align: left;
+    }
+    .story:hover:not(:disabled) {
+      background: var(--ghost-hover);
+    }
+    .story[aria-current="true"] {
+      background: var(--alpha-1);
+    }
+    .story .first-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+    .story .first {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--text-body);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .story[aria-current="true"] .first {
+      font-weight: 600;
+    }
+    .story .first.unnamed {
+      color: var(--ink-2);
+    }
+    .story .star-mark {
+      flex: none;
+      width: 11px;
+      height: 11px;
+      color: var(--ink-3);
+      opacity: 0.75;
+    }
+    .story .meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* "全部 N 个故事" entry row at the end of Stories */
+    .stories-all {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      align-self: stretch;
+      margin: 2px calc(-1 * var(--space-2)) 0;
+      padding: 5px var(--space-2);
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      text-align: left;
+    }
+    .stories-all:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .stories-all svg {
+      flex: none;
+      width: 12px;
+      height: 12px;
+      color: var(--ink-3);
+      opacity: 0.75;
+      transition: translate var(--dur-2) var(--ease), color var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
+    }
+    .stories-all:hover svg {
+      color: var(--ink);
+      opacity: 1;
+      translate: 1px 0;
+    }
+
+    /* ── Zone 3 & Zone 4: Unified Single-Line Row for Persona & Writing (.session .chosen) ──
+       Single-line chips on the left (3 four-char chips fit on 1 line; 4–5 chips use +N or 2-char short tags), right chevron › */
+    .session .chosen {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      align-self: stretch;
+      margin: -2px calc(-1 * var(--space-2));
+      padding: 4px var(--space-2);
+      box-sizing: border-box;
+      border-radius: var(--radius);
+      text-align: left;
+    }
+    .session .chosen:hover:not(:disabled) {
+      background: var(--ghost-hover);
+    }
+    .session .chosen .chips {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-flow: row nowrap;
+      align-items: center;
+      gap: 3.5px;
+      overflow: hidden;
+    }
+    .session .chosen .chip {
+      height: 22px;
+      padding: 0 5.5px;
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      flex: none;
+    }
+    .session .chosen .chip.more {
+      padding: 0 5.5px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--ink-3);
+      background: var(--alpha-2);
+    }
+    .session .chosen .chev {
+      flex: none;
+      width: 12px;
+      height: 12px;
+      color: var(--ink-3);
+      opacity: 0.75;
+      transition: translate var(--dur-2) var(--ease), color var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
+    }
+    .session .chosen:hover:not(:disabled) .chev {
+      color: var(--ink);
+      opacity: 1;
+      translate: 1px 0;
+    }
+
+    /* Armed Pin section (when present) */
+    .pinned p {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin: 0;
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      text-align: left;
+    }
+    .pinned svg {
+      flex: none;
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+    }
+    .pinned span {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Zone 5: 底部页面导航 (nav.tools) ──
+       Default: data-nav="icons" (紧凑同行 · 3个纯图标，不带文字解释)
+       Also keeps inline (带字) & stack (竖排) in dock for reference */
+    .tools {
+      padding-top: var(--space-2);
+      box-shadow: inset 0 var(--hairline) 0 var(--line);
+    }
+    .tools[data-nav="icons"] {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-inline: -4px;
+    }
+    .tools[data-nav="icons"] .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: var(--ink-3);
+    }
+    .tools[data-nav="icons"] .icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .tools[data-nav="icons"] .icon svg {
+      width: 15px;
+      height: 15px;
+    }
+    .tools[data-nav="icons"] .nav-right {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tools[data-nav="inline"] {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-inline: calc(-1 * var(--space-2));
+    }
+    .tools[data-nav="inline"] .nav-btn {
+      height: 28px;
+      padding: 0 7px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .tools[data-nav="inline"] .nav-btn:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .tools[data-nav="inline"] .nav-btn svg {
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+      flex: none;
+    }
+    .tools[data-nav="inline"] .nav-btn:hover:not(:disabled) svg {
+      color: var(--ink);
+    }
+    .tools[data-nav="inline"] .nav-right {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .tools[data-nav="inline"] .icon {
+      width: 28px;
+      height: 28px;
+    }
+    .tools[data-nav="inline"] .icon svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* Variant B: 竖排三行 (Stack) */
+    .tools[data-nav="stack"] {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-inline: calc(-1 * var(--space-2));
+    }
+    .tools[data-nav="stack"] .nav-btn {
+      width: 100%;
+      height: 32px;
+      padding: 0 var(--space-2);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      text-align: left;
+    }
+    .tools[data-nav="stack"] .nav-btn:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .tools[data-nav="stack"] .nav-btn svg {
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+      color: var(--ink-3);
+      flex: none;
+    }
+    .tools[data-nav="stack"] .nav-btn:hover:not(:disabled) svg {
+      color: var(--ink);
+    }
+    .tools[data-nav="stack"] .nav-btn .sub {
+      margin-left: auto;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .tools[data-nav="stack"] .stack-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .tools[data-nav="stack"] .stack-row .nav-btn {
+      flex: 1;
+    }
+
+    /* ───────── 4. Persona Modal (<dialog class="modal persona-modal">) ─────────
+       - No top/bottom white dead zones (.modal-foot removed; "管理人设 ↗" lives in the compact top bar)
+       - No redundant divider lines (no full-width hairline borders on header, columns, or preview head)
+       - Unified persona list ("卡片默认" is the pinned 1st row) + soft rounded full-text reader well */
+    .persona-modal-shell {
+      width: min(31.5rem, calc(100vw - 2 * var(--space-4)));
+      height: min(33.5rem, calc(100dvh - 2 * var(--space-5)));
+      padding: var(--space-4);
+      gap: var(--space-3);
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+    }
+    dialog.persona-modal .persona-modal-shell {
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+    }
+    .persona-modal-shell[data-layout="single"] {
+      width: min(25.5rem, calc(100vw - 2 * var(--space-4)));
+    }
+    .modal-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0;
+    }
+    .modal-head h3 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .modal-head .spacer {
+      flex: 1;
+    }
+    .modal-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: 0;
+    }
+
+    /* Split Layout: Left list (224px) + Right soft rounded full-text reader well (no border lines) */
+    .modal-body.split {
+      flex-direction: row;
+      gap: var(--space-3);
+    }
+    .p-left-col {
+      width: 224px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      min-height: 0;
+    }
+    .p-right-preview {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      min-height: 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+    }
+    .p-preview-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .p-preview-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .p-preview-title b {
+      font-size: var(--text-body);
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .p-preview-scroll {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .p-preview-scroll p {
+      margin: 0;
+      font-size: var(--text-footnote);
+      line-height: 1.65;
+      color: var(--ink-2);
+      white-space: pre-wrap;
+    }
+
+    /* Global Personas Search + Unified 2-Line List ("卡片默认" is the pinned 1st row, same shape) */
+    .p-search-bar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .input-box {
+      flex: 1;
+      min-width: 0;
+      height: 30px;
+      padding: 0 var(--space-2) 0 10px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .input-box svg {
+      flex: none;
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+    }
+    .input-box input {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      font-size: var(--text-caption);
+      outline: none;
+    }
+    .persona-list {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: 0 -2px;
+      padding: 2px;
+    }
+    .persona-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+    }
+    .persona-item:hover {
+      background: var(--alpha-1);
+    }
+    .persona-item[aria-checked="true"] {
+      background: var(--surface-2);
+      box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--line-strong);
+    }
+    .persona-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      text-align: left;
+    }
+    .avatar {
+      flex: none;
+      width: 26px;
+      height: 26px;
+      margin-top: 2px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--alpha-2);
+      color: var(--ink-2);
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .avatar.card-av {
+      border-radius: 7px;
+      background: var(--alpha-1);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+      color: var(--ink);
+    }
+    .persona-lines {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .persona-line1 {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+    .persona-name {
+      font-weight: 600;
+      font-size: var(--text-body);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .persona-bio {
+      color: var(--ink-3);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row-acts {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .read-btn {
+      height: 22px;
+      padding: 0 6px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      color: var(--ink-3);
+      background: var(--alpha-1);
+    }
+    .read-btn:hover {
+      color: var(--ink);
+      background: var(--alpha-2);
+    }
+    .star-btn {
+      flex: none;
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      color: var(--ink-3);
+    }
+    .star-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .star-btn[aria-pressed="true"] {
+      color: var(--warn);
+    }
+    .star-btn svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    /* Full-height detail subview in Single-Column mode (also borderless soft well) */
+    .p-detail-view {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .p-detail-bar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .p-detail-well {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .p-detail-well p {
+      margin: 0;
+      font-size: var(--text-footnote);
+      line-height: 1.68;
+      color: var(--ink-2);
+      white-space: pre-wrap;
+    }
+
+    .empty-personas {
+      padding: var(--space-5) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      text-align: center;
+      color: var(--ink-3);
+      font-size: var(--text-footnote);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    /* ───────── 5. Mobile Frame & Sheet (.topbar + .sheet) ───────── */
+    .phone-frame {
+      width: 390px;
+      height: 688px;
+      border-radius: 30px;
+      background: var(--surface-1);
+      box-shadow:
+        0 0 0 5px light-dark(#dcdcd6, #242423),
+        0 16px 40px rgb(0 0 0 / 0.22);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      flex: none;
+    }
+    /* Mobile .topbar: role is pulling up the Session sheet (distinct from .cardhead) */
+    .topbar {
+      height: 52px;
+      padding: 0 var(--space-2) 0 var(--space-4);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      background: var(--surface-1);
+      box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+      flex: none;
+    }
+    .topbar .title-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 4px 8px;
+      margin-left: -8px;
+      border-radius: var(--radius);
+      text-align: left;
+    }
+    .topbar .title-trigger:hover {
+      background: var(--ghost-hover);
+    }
+    .topbar .title-trigger h1 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .topbar .title-trigger .story-sub {
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 9rem;
+    }
+    .topbar .title-trigger svg {
+      flex: none;
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+    }
+    .phone-scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--scrim);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      z-index: 10;
+      transition: opacity var(--dur-3) var(--ease);
+    }
+    .phone-scrim[data-open="false"] {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .phone-sheet {
+      position: absolute;
+      inset: 52px 0 0;
+      background: var(--surface-3);
+      border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+      box-shadow: var(--shadow-pop);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform var(--dur-4) var(--ease);
+    }
+    .phone-scrim[data-open="false"] .phone-sheet {
+      transform: translateY(100%);
+    }
+    .phone-sheet .session {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: var(--space-4) var(--space-4) var(--space-3);
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+    }
+    .phone-sheet .session:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    /* ───────── 6. Stage Modes: 三态同屏 (Overview) vs 桌面画布 (Desktop) vs 手机视口 (Mobile) ───────── */
+    .stage {
+      width: 100vw;
+      height: 100dvh;
+      overflow: auto;
+      background: var(--surface-0);
+    }
+
+    /* Mode 1: 三态同屏 (Overview: Desktop Left Card + Mobile Sheet + Persona Modal side by side) */
+    .overview-grid {
+      min-height: 100dvh;
+      padding: 14px 20px 58px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .state-col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .state-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 4px;
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .state-label .spec-pill {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--ink-3);
+      background: var(--alpha-1);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+    }
+    .overview-side-host {
+      height: 688px;
+      display: flex;
+    }
+
+    /* Mode 2: 桌面三栏画布 (Desktop Full Reader Canvas) */
+    .desktop-canvas {
+      width: 100%;
+      height: 100dvh;
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr) 19rem;
+      grid-template-rows: minmax(0, 1fr);
+      gap: var(--space-5);
+      padding: var(--space-5);
+    }
+    .reader-panel {
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      overflow: hidden;
+    }
+    .reader-flow {
+      flex: 1;
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: var(--space-6);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      overflow-y: auto;
+    }
+    .said-bubble {
+      align-self: flex-start;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .prose-turn p {
+      font-size: var(--text-prose);
+      line-height: var(--leading-prose);
+      margin-bottom: var(--space-3);
+    }
+    .composer-mock {
+      max-width: 42rem;
+      width: calc(100% - 2 * var(--space-6));
+      margin: 0 auto var(--space-5);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-composer);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-composer);
+      color: var(--ink-3);
+      font-size: var(--text-body);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .glance-card {
+      width: 19rem;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      overflow-y: auto;
+    }
+    .glance-card h2 {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: var(--space-2);
+    }
+    .meter-mock {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: var(--space-3);
+    }
+    .meter-mock .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: var(--text-body);
+    }
+    .meter-mock .track {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--alpha-2);
+      overflow: hidden;
+    }
+    .meter-mock .fill {
+      height: 100%;
+      background: var(--ink);
+    }
+
+    /* Native Dialogs: Rename / Delete Confirm & Live Persona Modal Overlay */
+    dialog.confirm {
+      width: min(22rem, calc(100% - 2 * var(--space-4)));
+      margin: auto;
+      padding: var(--space-4);
+      border: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      outline: none;
+    }
+    dialog.confirm::backdrop,
+    dialog.live-modal::backdrop {
+      background: var(--scrim);
+    }
+    dialog.confirm p {
+      margin: 0 0 var(--space-3);
+      font-weight: 600;
+    }
+    dialog.confirm .sub-hint {
+      margin: -4px 0 var(--space-3);
+      font-size: var(--text-footnote);
+      font-weight: 400;
+      color: var(--ink-3);
+    }
+    dialog.confirm .row {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      margin-top: var(--space-3);
+    }
+    dialog.confirm .chip {
+      height: var(--control);
+      padding: 0 var(--space-4);
+      font-size: var(--text-body);
+    }
+    dialog.live-modal {
+      margin: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      outline: none;
+    }
+
+    /* Toast feedback for navigation actions */
+    .toast {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      translate: -50% 0;
+      z-index: 200;
+      padding: 8px 14px;
+      border-radius: var(--radius-pill);
+      background: var(--ink);
+      color: var(--surface-1);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      box-shadow: var(--shadow-pop);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--dur-2) var(--ease);
+    }
+    .toast[data-show="true"] {
+      opacity: 1;
+    }
+
+    /* ───────── 7. Bottom Floating Prototype Switcher Dock ───────── */
+    .demo-dock {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      translate: -50% 0;
+      z-index: 100;
+      max-width: calc(100vw - 16px);
+      display: inline-flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      align-items: center;
+      gap: 3px;
+      padding: 4px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-caption);
+    }
+    .demo-dock::-webkit-scrollbar {
+      display: none;
+    }
+    .demo-dock .group-label {
+      color: var(--ink-3);
+      padding: 0 2px 0 4px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .demo-dock button {
+      height: 22px;
+      padding: 0 7px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-weight: 500;
+      white-space: nowrap;
+      flex: none;
+    }
+    .demo-dock button:hover {
+      color: var(--ink);
+      background: var(--ghost-hover);
+    }
+    .demo-dock button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+    .demo-dock .sep {
+      width: 1px;
+      height: 14px;
+      background: var(--line);
+      margin: 0 3px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast notification for page jumps (CardPage, StoriesPage, WritingPage, Settings, Timeline, Inspector) -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Main Stage -->
+  <div id="stage" class="stage"></div>
+
+  <!-- Shared Rename Story Dialog (#75 Step 1: reuses .confirm + .field input) -->
+  <dialog id="rename-dialog" class="confirm" closedby="any">
+    <form method="dialog" onsubmit="commitRename(event)">
+      <p>重命名故事</p>
+      <p class="sub-hint">留空保存将恢复默认名「New story」</p>
+      <input
+        id="rename-input"
+        type="text"
+        class="field"
+        placeholder="New story"
+        aria-label="Story name"
+      />
+      <div class="row">
+        <button type="button" class="chip state" onclick="document.getElementById('rename-dialog').close()">
+          取消
+        </button>
+        <button type="submit" class="chip" style="background: var(--primary); color: var(--primary-ink);">
+          保存
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Shared Delete Story Confirm Dialog -->
+  <dialog id="delete-dialog" class="confirm" closedby="any">
+    <p>删除当前故事？其中的所有回合都将永久移除。</p>
+    <div class="row">
+      <button type="button" class="chip state" onclick="document.getElementById('delete-dialog').close()">
+        取消
+      </button>
+      <button type="button" class="chip danger" onclick="commitDeleteStory()">
+        删除
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Live Persona Modal (<dialog> used in Desktop Canvas / Mobile Sheet modes) -->
+  <dialog id="live-persona-dialog" class="live-modal" closedby="any">
+    <div id="live-persona-mount"></div>
+  </dialog>
+
+  <!-- Prototype Control Dock -->
+  <nav class="demo-dock" aria-label="原型状态与方案切换">
+    <span class="group-label">视图</span>
+    <button type="button" id="btn-mode-overview" aria-pressed="true" onclick="setStageMode('overview')">
+      三态同屏
+    </button>
+    <button type="button" id="btn-mode-desktop" aria-pressed="false" onclick="setStageMode('desktop')">
+      桌面画布
+    </button>
+    <button type="button" id="btn-mode-mobile" aria-pressed="false" onclick="setStageMode('mobile')">
+      手机Sheet
+    </button>
+    <button type="button" id="btn-mode-modal" aria-pressed="false" onclick="setStageMode('modal')">
+      Persona弹窗
+    </button>
+
+    <span class="sep"></span>
+    <span class="group-label">导航</span>
+    <button type="button" id="btn-nav-icons" aria-pressed="true" onclick="setNavStyle('icons')">
+      纯图标同行
+    </button>
+    <button type="button" id="btn-nav-inline" aria-pressed="false" onclick="setNavStyle('inline')">
+      带字同行
+    </button>
+    <button type="button" id="btn-nav-stack" aria-pressed="false" onclick="setNavStyle('stack')">
+      竖排三行
+    </button>
+
+    <span class="sep"></span>
+    <span class="group-label">写作胶囊</span>
+    <button type="button" id="btn-wc-3" aria-pressed="true" onclick="setWritingCount(3)" title="3个四字胶囊单行排下">
+      3项同行
+    </button>
+    <button type="button" id="btn-wc-4" aria-pressed="false" onclick="setWritingCount(4)" title="4个胶囊时单行 +1 收纳或双字短签">
+      4项
+    </button>
+    <button type="button" id="btn-wc-5" aria-pressed="false" onclick="setWritingCount(5)" title="满配5个胶囊(4开关+含本卡补充)">
+      5项(满)
+    </button>
+    <button type="button" id="btn-wmode-toggle" aria-pressed="false" onclick="toggleWritingShortMode()" title="切换超3项时的单行策略：+N 收纳 vs 双字短签">
+      策略:+N
+    </button>
+
+    <span class="sep"></span>
+    <span class="group-label">故事</span>
+    <button type="button" id="btn-sc-4" aria-pressed="true" onclick="setStorySlice(4)">
+      4条
+    </button>
+    <button type="button" id="btn-sc-5" aria-pressed="false" onclick="setStorySlice(5)">
+      5条
+    </button>
+    <button type="button" id="btn-sc-2" aria-pressed="false" onclick="setStorySlice(2)">
+      2条
+    </button>
+
+    <span class="sep"></span>
+    <button type="button" id="btn-modal-layout" aria-pressed="true" onclick="toggleModalLayout()" title="切换人设弹窗布局：左右分栏常驻全文 vs 单栏列表+全文层">
+      弹窗:分栏全文
+    </button>
+    <button type="button" id="btn-lang-toggle" aria-pressed="true" onclick="toggleLangMode()">
+      中文小标
+    </button>
+    <button type="button" id="btn-personas-empty" aria-pressed="false" onclick="toggleEmptyPersonas()">
+      0人设
+    </button>
+    <button type="button" id="btn-pin-toggle" aria-pressed="false" onclick="togglePinned()">
+      Pinned
+    </button>
+    <button type="button" id="btn-card-toggle" aria-pressed="false" onclick="toggleCard()">
+      卡:竹林
+    </button>
+    <button type="button" id="btn-theme-in-nav" aria-pressed="false" onclick="toggleThemeInNav()">
+      #70 主题键
+    </button>
+    <button type="button" onclick="toggleTheme()">
+      浅/深
+    </button>
+  </nav>
+
+  <script>
+    // ───────── 1. Phosphor Icons (Regular & Fill SVGs) ─────────
+    const ICONS = {
+      caretRight: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`,
+      caretDown: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>`,
+      plus: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,128a8,8,0,0,1-8,8H136v64a8,8,0,0,1-16,0V136H56a8,8,0,0,1,0-16h64V56a8,8,0,0,1,16,0v64h64A8,8,0,0,1,208,128Z"/></svg>`,
+      pencil: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z"/></svg>`,
+      trash: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg>`,
+      pin: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M235.33,104,152,20.69a16,16,0,0,0-22.63,0L98.39,51.67c-18-3.34-44.62-.67-69.07,23.78a8,8,0,0,0,0,11.31L84,141.43,42.34,183a8,8,0,0,0,11.32,11.32L95.31,152.7l54.69,54.68a8,8,0,0,0,11.31,0c24.44-24.44,27.12-51,23.78-69.06l30.98-30.98A16,16,0,0,0,235.33,104ZM156,189.84,46.16,80c19.47-14.54,39.77-13.5,51.67-9.82a8,8,0,0,0,8.06-2L140.69,33.37,222.63,115.3l-34.8,34.8a8,8,0,0,0-2,8.06C189.5,170.07,170.54,190.37,156,189.84Z"/></svg>`,
+      gear: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.9,123.66Z"/></svg>`,
+      /* New Timeline Icons (#77 §5): ph/tree-structure vs ph/path */
+      treeStructure: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M160,112h48a16,16,0,0,0,16-16V48a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16V64H128a24,24,0,0,0-24,24v32H72V104a16,16,0,0,0-16-16H24A16,16,0,0,0,8,104v48a16,16,0,0,0,16,16H56a16,16,0,0,0,16-16V136h32v32a24,24,0,0,0,24,24h16v16a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V160a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16v16H128a8,8,0,0,1-8-8V88a8,8,0,0,1,8-8h16V96A16,16,0,0,0,160,112ZM56,152H24V104H56Zm104,8h48v48H160Zm0-112h48V96H160Z"/></svg>`,
+      path: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M200,168a32.06,32.06,0,0,0-31,24H72a32,32,0,0,1,0-64h96a40,40,0,0,0,0-80H72a8,8,0,0,0,0,16h96a24,24,0,0,1,0,48H72a48,48,0,0,0,0,96h97a32,32,0,1,0,31-40Zm0,48a16,16,0,1,1,16-16A16,16,0,0,1,200,216Z"/></svg>`,
+      /* New Inspector Icons (#77 §5): ph/list-magnifying-glass vs ph/magnifying-glass */
+      listMag: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M237.66,226.34l-32.07-32.06a48,48,0,1,0-11.31,11.31l32.06,32.07a8,8,0,0,0,11.32-11.32ZM160,192a32,32,0,1,1,32-32A32,32,0,0,1,160,192ZM40,64a8,8,0,0,1,8-8H208a8,8,0,0,1,0,16H48A8,8,0,0,1,40,64Zm0,64a8,8,0,0,1,8-8h56a8,8,0,0,1,0,16H48A8,8,0,0,1,40,128Zm0,64a8,8,0,0,1,8-8H88a8,8,0,0,1,0,16H48A8,8,0,0,1,40,192Z"/></svg>`,
+      magGlass: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
+      close: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>`,
+      check: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>`,
+      star: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M239.18,97.26A16.38,16.38,0,0,0,224.92,86l-59-4.76L143.14,26.15a16.36,16.36,0,0,0-30.27,0L90.11,81.23,31.08,86a16.46,16.46,0,0,0-9.37,28.86l45,38.83L53,211.75a16.38,16.38,0,0,0,24.5,17.82L128,198.49l50.53,31.08A16.4,16.4,0,0,0,203,211.75l-13.76-58.07,45-38.83A16.43,16.43,0,0,0,239.18,97.26Zm-15.34,5.47-48.7,42a8,8,0,0,0-2.56,7.91l14.88,62.8a.37.37,0,0,1-.17.48.35.35,0,0,1-.48,0l-54.72-33.65a8,8,0,0,0-8.38,0L69.09,215.94a.37.37,0,0,1-.49,0,.32.32,0,0,1-.16-.48l14.88-62.8a8,8,0,0,0-2.56-7.91l-48.7-42a.36.36,0,0,1-.13-.48.39.39,0,0,1,.4-.29l63.92-5.16a8,8,0,0,0,6.75-4.92L127.66,32.5a.37.37,0,0,1,.68,0l24.66,59.35a8,8,0,0,0,6.75,4.92l63.92,5.16a.39.39,0,0,1,.4.29A.36.36,0,0,1,223.84,102.73Z"/></svg>`,
+      starFill: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>`,
+      sunMoon: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216.7,152.6A91.92,91.92,0,0,1,103.4,39.3a8,8,0,0,0-10-10A96,96,0,1,0,226.7,162.6a8,8,0,0,0-10-10ZM128,208A80,80,0,0,1,85.47,60.15,107.93,107.93,0,0,0,195.85,170.53,80.06,80.06,0,0,1,128,208Z"/></svg>`,
+      chartBar: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg>`,
+      arrowUpRight: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg>`,
+    };
+
+    const SHORT_SWITCH_MAP = {
+      "第二人称": "二称",
+      "第三人称": "三称",
+      "无主角": "无主",
+      "转述言行": "转述",
+      "直接反应": "直应",
+      "仅限输入": "仅输",
+      "允许续写": "续写",
+      "简短": "简短",
+      "适中": "适中",
+      "详尽": "详尽",
+      "含本卡补充": "+补充",
+      "跟随卡片": "默认",
+    };
+
+    // ───────── 2. Mock Data (Matching wuxia.yaml & yandao.yaml) ─────────
+    const CARDS = {
+      wuxia: {
+        id: "wuxia",
+        title: "竹林",
+        summary: "暮春雨后的越州苦竹岭，你携故人遗物寻访李鹤下落，在竹林荒亭中与守坟的剑客裴青舟相对。",
+        defaultPersona:
+          "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。\n\n你并不知道当年江南那桩旧案的内情，也不识得越州剑派的武功路数。此番冒雨入山，只为践行昔年关外酒肆中的诺言，将短剑交还故人同门，并弄清李鹤究竟因何身死。\n\n随身之物：油布包裹的牛皮鞘旧短剑（剑柄末端有一道浅刻的鹤纹）、半壶关外烧刀子、李鹤留下的半枚铜钱。",
+        writingSets: {
+          3: ["第二人称", "转述言行", "仅限输入"],
+          4: ["第二人称", "转述言行", "仅限输入", "详尽"],
+          5: ["第二人称", "转述言行", "仅限输入", "详尽", "含本卡补充"],
+        },
+        pinnedHook: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫",
+      },
+      yandao: {
+        id: "yandao",
+        title: "盐道",
+        summary: "大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；没有玩家角色，输入是给叙述者的指示。",
+        defaultPersona: null, // World card with no protagonist
+        writingSets: {
+          3: ["无主角", "详尽", "含本卡补充"],
+          4: ["无主角", "详尽", "含本卡补充"],
+          5: ["无主角", "详尽", "含本卡补充"],
+        },
+        pinnedHook: "三天前货栈门口打伤差役的驼夫已被沈二藏在十里渡口",
+      },
+    };
+
+    let stories = [
+      { id: 101, title: "雨亭试探 · 亮出故人短剑", turns: 14, agoEn: "16 minutes ago", agoZh: "16 分钟前", starred: true },
+      { id: 102, title: null, turns: 0, agoEn: "just now", agoZh: "刚刚", starred: false }, // turns = 0 -> only time shown (#75)
+      { id: 103, title: "关外旧诺与师门追索", turns: 28, agoEn: "3 hours ago", agoZh: "3 小时前", starred: true },
+      { id: 104, title: null, turns: 5, agoEn: "yesterday", agoZh: "昨天", starred: false },
+      { id: 105, title: "夜探孤坟 · 破庙避雨支线", turns: 9, agoEn: "3 days ago", agoZh: "3 天前", starred: false },
+    ];
+    let currentStoryId = 101;
+    const totalStoriesCount = 12;
+
+    let personas = [
+      {
+        id: "p-shen",
+        name: "沈砚",
+        text: "关外行脚医者，背一只旧药箱，性情温和沉静，曾替李鹤医治过剑伤，不通武艺但极重然诺。\n\n两年前在朔州风雪夜救下重伤濒死的李鹤，为其取出肩胛下的一枚柳叶镖。李鹤伤愈离去前将随身短剑相托，言明若三年不归，便请沈砚南下越州走一趟。\n\n言谈举止带着医者的审慎，善于从伤口形制、气息脉象与旧痕中推知实情。",
+        starred: true,
+        otherCards: ["伴星"],
+      },
+      {
+        id: "p-gu",
+        name: "顾长风",
+        text: "江南六扇门解职捕头，行事老辣果决，名为送还故人遗物，实则暗查三年前苏州库银失窃一案。\n\n当年经办李鹤一案时察觉卷宗另有隐情，遂辞官独自追查至塞外，虽赶上李鹤临终托剑，却仍缺最关键的一环人证。",
+        starred: true,
+        otherCards: [],
+      },
+      {
+        id: "p-lin",
+        name: "林晚音",
+        text: "李鹤同乡义妹，携一把油纸伞自吴中北上，说话轻声细语，却在伞骨中藏有一卷当年的书信。",
+        starred: false,
+        otherCards: ["理"],
+      },
+      {
+        id: "p-xie",
+        name: "谢无咎",
+        text: "落魄刀客，嗜酒少言，曾在雁门关外与李鹤同饮三日，受人之托忠人之事，拔刀从不留情。",
+        starred: false,
+        otherCards: [],
+      },
+      {
+        id: "p-su",
+        name: "苏知微",
+        text: "越州地方志书生，为采写旧闻误入苦竹岭，好奇心重，随身带着炭笔与记事册。",
+        starred: false,
+        otherCards: [],
+      },
+      {
+        id: "p-chen",
+        name: "陈敬之",
+        text: "太湖漕帮旧部，镖局出身，熟悉江南水陆暗桩，寡言稳重。",
+        starred: false,
+        otherCards: [],
+      },
+    ];
+
+    // State
+    let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "modal"
+    let navStyle = "icons";     // "icons" (紧凑纯图标) | "inline" (带字同行) | "stack" (竖排三行)
+    let iconSet = "a";          // "a" (treeStructure + listMag) | "b" (path + magGlass)
+    let storySlice = 4;         // 4 | 5 | 2
+    let writingCount = 3;       // 3 | 4 | 5 (switches.ts max is 4 switches + 1 含本卡补充 = 5)
+    let writingShortMode = false; // false = 3 full chips + "+N" overflow; true = 2-char short tags (all 5 fit on 1 line)
+    let emptyPersonas = false;
+    let showPinned = false;
+    let currentCardKey = "wuxia";
+    let themeInNav = false;
+    let langZh = true; // default Chinese section headers (故事 / 人设 / 写作)
+    let pickedPersonaByCard = { wuxia: undefined, yandao: undefined }; // undefined = 卡片默认
+    let modalLayout = "split";  // "split" (左右分栏常驻全文) | "single" (单栏列表 + 独立全文阅读层)
+    let singleDetailId = null;  // null (列表态) | "__default__" | persona.id (单栏模式下的独立全文层)
+    let personaSearch = "";
+    let phoneSheetOpen = true;
+    let renamingStoryId = null;
+
+    // ───────── 3. Renderers ─────────
+    function activeCard() {
+      return CARDS[currentCardKey];
+    }
+    function activePersona() {
+      if (emptyPersonas) return undefined;
+      const pid = pickedPersonaByCard[currentCardKey];
+      return personas.find((p) => p.id === pid);
+    }
+
+    function renderWritingChips(chips, context) {
+      if (context === "sheet") {
+        // Mobile sheet is 390px wide, so all chips fit on one line without truncation
+        return chips.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join("");
+      }
+      if (writingShortMode) {
+        return chips
+          .map((c) => `<span class="chip" title="${escapeAttr(c)}">${escapeHtml(SHORT_SWITCH_MAP[c] ?? c)}</span>`)
+          .join("");
+      }
+      // Single-line full labels: 3 four-char chips fit in 190px; if 4 or 5 chips, show first 2 + "+N" badge
+      if (chips.length <= 3) {
+        return chips.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join("");
+      }
+      const visible = chips.slice(0, 2);
+      const rest = chips.slice(2);
+      return (
+        visible.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join("") +
+        `<span class="chip more" title="${escapeAttr(rest.join(" · "))}">+${rest.length}</span>`
+      );
+    }
+
+    function renderSessionHTML(context) {
+      const c = activeCard();
+      const curP = activePersona();
+      const shownStories = stories.slice(0, storySlice);
+      const timelineIcon = iconSet === "a" ? ICONS.treeStructure : ICONS.path;
+      const inspectorIcon = iconSet === "a" ? ICONS.listMag : ICONS.magGlass;
+      const rawChips = c.writingSets[writingCount] ?? c.writingSets[3];
+
+      const storiesHTML = shownStories
+        .map((s) => {
+          const isCurrent = s.id === currentStoryId;
+          const isUnnamed = s.title === null;
+          const displayTitle = s.title ?? "New story";
+          const agoStr = s.agoEn;
+          // #75 Step 1: turns === 0 shows only time; otherwise "N turns · time"
+          const metaText = s.turns === 0 ? agoStr : `${s.turns} turns · ${agoStr}`;
+          return `
+            <li>
+              <button
+                type="button"
+                class="story"
+                aria-current="${isCurrent ? "true" : "false"}"
+                onclick="selectStory(${s.id}, '${context}')"
+                ondblclick="openRenameDialog(${s.id})"
+                title="单击切换故事，双击改名"
+              >
+                <span class="first-row">
+                  <span class="first ${isUnnamed ? "unnamed" : ""}">${escapeHtml(displayTitle)}</span>
+                  ${s.starred ? `<span class="star-mark" title="已标星">${ICONS.starFill}</span>` : ""}
+                </span>
+                <span class="meta">
+                  <span>${escapeHtml(metaText)}</span>
+                </span>
+              </button>
+            </li>
+          `;
+        })
+        .join("");
+
+      const allStoriesRow =
+        storySlice >= 4
+          ? `
+            <button type="button" class="stories-all" onclick="showToast('打开 Stories 管理页 (#75 第二步：标星筛选 / 批量清理废档 / 导出)')">
+              <span>全部 ${totalStoriesCount} 个故事</span>
+              ${ICONS.caretRight}
+            </button>
+          `
+          : "";
+
+      const writingChipsHTML = renderWritingChips(rawChips, context);
+
+      const pinnedHTML = showPinned
+        ? `
+          <section class="pinned" aria-label="Pinned">
+            <h2>${langZh ? "线索" : "Pinned"}</h2>
+            <p>
+              ${ICONS.pin}
+              <span>${escapeHtml(c.pinnedHook)}</span>
+            </p>
+          </section>
+        `
+        : "";
+
+      const navHTML =
+        navStyle === "icons"
+          ? `
+            <nav class="tools" data-nav="icons" aria-label="Pages">
+              <button type="button" class="icon" aria-label="时间线" data-hint="时间线" onclick="showToast('进入 Timeline 时间线页')">
+                ${timelineIcon}
+              </button>
+              <button type="button" class="icon" aria-label="检查器" data-hint="检查器" onclick="showToast('进入 Inspector 检查器页')">
+                ${inspectorIcon}
+              </button>
+              <div class="nav-right">
+                ${
+                  themeInNav
+                    ? `<button type="button" class="icon" aria-label="切换深浅色" data-hint="主题 (#70)" onclick="toggleTheme()">
+                        ${ICONS.sunMoon}
+                      </button>`
+                    : ""
+                }
+                <button type="button" class="icon" aria-label="设置" data-hint="设置" onclick="showToast('进入 Settings 设置页')">
+                  ${ICONS.gear}
+                </button>
+              </div>
+            </nav>
+          `
+          : navStyle === "inline"
+            ? `
+              <nav class="tools" data-nav="inline" aria-label="Pages">
+                <button type="button" class="nav-btn" onclick="showToast('进入 Timeline 时间线页')">
+                  ${timelineIcon}
+                  <span>时间线</span>
+                </button>
+                <button type="button" class="nav-btn" onclick="showToast('进入 Inspector 检查器页')">
+                  ${inspectorIcon}
+                  <span>检查器</span>
+                </button>
+                <div class="nav-right">
+                  ${
+                    themeInNav
+                      ? `<button type="button" class="icon" aria-label="切换深浅色" data-hint="主题 (#70)" onclick="toggleTheme()">
+                          ${ICONS.sunMoon}
+                        </button>`
+                      : ""
+                  }
+                  <button type="button" class="icon" aria-label="设置" data-hint="设置" onclick="showToast('进入 Settings 设置页')">
+                    ${ICONS.gear}
+                  </button>
+                </div>
+              </nav>
+            `
+            : `
+              <nav class="tools" data-nav="stack" aria-label="Pages">
+                <button type="button" class="nav-btn" onclick="showToast('进入 Timeline 时间线页')">
+                  ${timelineIcon}
+                  <span>时间线</span>
+                </button>
+                <button type="button" class="nav-btn" onclick="showToast('进入 Inspector 检查器页')">
+                  ${inspectorIcon}
+                  <span>检查器</span>
+                </button>
+                <div class="stack-row">
+                  <button type="button" class="nav-btn" onclick="showToast('进入 Settings 设置页')">
+                    ${ICONS.gear}
+                    <span>设置</span>
+                  </button>
+                  ${
+                    themeInNav
+                      ? `<button type="button" class="icon sm" aria-label="切换深浅色" data-hint="主题 (#70)" onclick="toggleTheme()">
+                          ${ICONS.sunMoon}
+                        </button>`
+                      : ""
+                  }
+                </div>
+              </nav>
+            `;
+
+      return `
+        <div class="session" data-lang="${langZh ? "zh" : "en"}">
+          <!-- 1. 卡头: 常驻进入卡页图标，不靠 hover；简介两行截断 (-webkit-line-clamp: 2) -->
+          <button type="button" class="cardhead" aria-label="进入角色卡页" onclick="showToast('进入 CardPage 角色卡详情页')">
+            <div class="cardhead-top">
+              <h1>${escapeHtml(c.title)}</h1>
+              <span class="enter-badge" aria-hidden="true">
+                ${context === "sheet" ? `<span>卡片页</span>` : ""}
+                ${ICONS.caretRight}
+              </span>
+            </div>
+            <p>${escapeHtml(c.summary)}</p>
+          </button>
+
+          <!-- 2. Stories: 4条定长不内滚，整模块下移留出上下呼吸感，末行进管理页 -->
+          <section class="stories" aria-label="Stories">
+            <h2>
+              ${langZh ? "故事" : "Stories"}
+              <button type="button" class="icon" aria-label="New story" data-hint="新建故事" onclick="createNewStory()">
+                ${ICONS.plus}
+              </button>
+              <button type="button" class="icon" aria-label="Rename story" data-hint="重命名" onclick="openRenameDialog(${currentStoryId})">
+                ${ICONS.pencil}
+              </button>
+              <button type="button" class="icon danger-hover" aria-label="Delete story" data-hint="删除故事" onclick="openDeleteDialog()">
+                ${ICONS.trash}
+              </button>
+            </h2>
+            <ul>
+              ${storiesHTML}
+            </ul>
+            ${allStoriesRow}
+          </section>
+
+          <!-- 3. Persona: 默认叫「卡片默认」(不再与 Writing 撞车)；空人设时也不 disable，点击打开 Modal -->
+          <section class="persona" aria-label="Persona">
+            <h2>${langZh ? "人设" : "Persona"}</h2>
+            <button type="button" class="chosen" onclick="openPersonaModal()">
+              <span class="chips">
+                <span class="chip">${escapeHtml(curP ? curP.name : "卡片默认")}</span>
+              </span>
+              <span class="chev" aria-hidden="true">${ICONS.caretRight}</span>
+            </button>
+          </section>
+
+          <!-- 4. Writing: 胶囊同行不折行 (3项直接同行，4-5项支持 +N 收纳或双字短签) + 右侧 chevron -->
+          <section class="writing" aria-label="Writing">
+            <h2>${langZh ? "写作" : "Writing"}</h2>
+            <button
+              type="button"
+              class="chosen"
+              title="${escapeAttr(rawChips.join(" · "))}"
+              onclick="showToast('打开 Writing 写作工作台 (#69)')"
+            >
+              <span class="chips">
+                ${writingChipsHTML}
+              </span>
+              <span class="chev" aria-hidden="true">${ICONS.caretRight}</span>
+            </button>
+          </section>
+
+          <!-- 5. Pinned (可选) -->
+          ${pinnedHTML}
+
+          <!-- 6. 底部页面导航: 紧凑同行 3个纯图标 -->
+          ${navHTML}
+        </div>
+      `;
+    }
+
+    function renderPersonaModalHTML(inOverview = false) {
+      const c = activeCard();
+      const curP = activePersona();
+      const isDefaultPicked = !curP;
+      const defaultBio = c.defaultPersona
+        ? c.defaultPersona
+        : "本卡为大世界无主角卡（frame 未声明 persona 槽），默认不设玩家角色。";
+      const defaultFirstLine = defaultBio.split("\n")[0];
+
+      const sortedPersonas = emptyPersonas
+        ? []
+        : [...personas]
+            .sort((a, b) => Number(b.starred) - Number(a.starred))
+            .filter((p) => {
+              if (!personaSearch.trim()) return true;
+              const q = personaSearch.trim().toLowerCase();
+              return p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q);
+            });
+
+      // Pinned 1st row: "卡片默认" (same compact 2-line card structure as player personas, no bloated nested box)
+      const defaultRowHTML = `
+        <div class="persona-item" role="menuitemradio" aria-checked="${isDefaultPicked ? "true" : "false"}">
+          <button type="button" class="persona-main" onclick="pickPersona(undefined)">
+            <span class="avatar card-av" title="卡片默认设定">卡</span>
+            <span class="persona-lines">
+              <span class="persona-line1">
+                <span class="persona-name">卡片默认</span>
+                <span class="tag">随卡</span>
+                ${isDefaultPicked ? `<span class="tag" style="color: var(--ink); font-weight: 600;">当前</span>` : ""}
+              </span>
+              <span class="persona-bio">${escapeHtml(defaultFirstLine)}</span>
+            </span>
+          </button>
+          ${
+            modalLayout === "single"
+              ? `<div class="row-acts">
+                  <button type="button" class="read-btn" onclick="openSingleDetail(event, '__default__')" title="查看完整设定文本">全文</button>
+                </div>`
+              : ""
+          }
+        </div>
+      `;
+
+      const playerRowsHTML = emptyPersonas
+        ? `
+          <div class="empty-personas">
+            <span>尚未创建自定义人设，当前使用「卡片默认」设定。</span>
+            <button type="button" class="btn sm" onclick="showToast('跳转 Settings → 玩家人设 新建')">
+              ${ICONS.plus} <span>去设置页新建人设</span>
+            </button>
+          </div>
+        `
+        : sortedPersonas.length === 0
+          ? `<div class="empty-personas"><span>无匹配「${escapeHtml(personaSearch)}」的人设</span></div>`
+          : sortedPersonas
+              .map((p) => {
+                const picked = curP && curP.id === p.id;
+                const firstLine = p.text.split("\n")[0];
+                const tags = p.otherCards
+                  .map((t) => `<span class="tag" title="已在卡片「${escapeHtml(t)}」上选用">${escapeHtml(t)}</span>`)
+                  .join("");
+                return `
+                  <div class="persona-item" role="menuitemradio" aria-checked="${picked ? "true" : "false"}">
+                    <button type="button" class="persona-main" onclick="pickPersona('${p.id}')">
+                      <span class="avatar">${escapeHtml(p.name.slice(0, 1))}</span>
+                      <span class="persona-lines">
+                        <span class="persona-line1">
+                          <span class="persona-name">${escapeHtml(p.name)}</span>
+                          ${picked ? `<span class="tag" style="color: var(--ink); font-weight: 600;">当前</span>` : ""}
+                          ${tags}
+                        </span>
+                        <span class="persona-bio">${escapeHtml(firstLine)}</span>
+                      </span>
+                    </button>
+                    <div class="row-acts">
+                      ${
+                        modalLayout === "single"
+                          ? `<button type="button" class="read-btn" onclick="openSingleDetail(event, '${p.id}')" title="查看完整设定文本">全文</button>`
+                          : ""
+                      }
+                      <button
+                        type="button"
+                        class="star-btn"
+                        aria-label="标星人设"
+                        aria-pressed="${p.starred ? "true" : "false"}"
+                        onclick="togglePersonaStar(event, '${p.id}')"
+                        title="${p.starred ? "取消星标" : "标星置顶"}"
+                      >
+                        ${p.starred ? ICONS.starFill : ICONS.star}
+                      </button>
+                    </div>
+                  </div>
+                `;
+              })
+              .join("");
+
+      const searchAndListHTML = `
+        <div class="p-search-bar">
+          <div class="input-box">
+            ${ICONS.magGlass}
+            <input
+              type="search"
+              placeholder="搜索人设..."
+              value="${escapeAttr(personaSearch)}"
+              oninput="onPersonaSearch(this.value)"
+              aria-label="搜索人设"
+            />
+          </div>
+          <span class="tag mono">${emptyPersonas ? 0 : personas.length}</span>
+        </div>
+        <div class="persona-list scroller">
+          ${defaultRowHTML}
+          ${playerRowsHTML}
+        </div>
+      `;
+
+      // Right full-text pane in Split mode (or Full-height detail subview in Single mode)
+      const focusedPersona =
+        modalLayout === "single" && singleDetailId && singleDetailId !== "__default__"
+          ? personas.find((p) => p.id === singleDetailId)
+          : curP;
+      const previewIsDefault = modalLayout === "single" ? singleDetailId === "__default__" : !curP;
+      const previewTitle = previewIsDefault ? "卡片默认" : focusedPersona ? focusedPersona.name : "卡片默认";
+      const previewTag = previewIsDefault ? "随卡设定" : "全局人设";
+      const previewText = previewIsDefault ? defaultBio : focusedPersona ? focusedPersona.text : defaultBio;
+      const previewParagraphs = previewText
+        .split(/\n{2,}/)
+        .map((para) => `<p>${escapeHtml(para)}</p>`)
+        .join("");
+
+      let bodyContentHTML = "";
+      if (modalLayout === "split") {
+        bodyContentHTML = `
+          <div class="modal-body split">
+            <div class="p-left-col">
+              ${searchAndListHTML}
+            </div>
+            <div class="p-right-preview">
+              <div class="p-preview-head">
+                <div class="p-preview-title">
+                  <b>${escapeHtml(previewTitle)}</b>
+                  <span class="tag">${previewTag}</span>
+                </div>
+                <span class="tag mono">${previewText.length} 字</span>
+              </div>
+              <div class="p-preview-scroll scroller">
+                ${previewParagraphs}
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (singleDetailId) {
+        const isCurrentPicked =
+          (singleDetailId === "__default__" && isDefaultPicked) ||
+          (curP && curP.id === singleDetailId);
+        bodyContentHTML = `
+          <div class="modal-body">
+            <div class="p-detail-view">
+              <div class="p-detail-bar">
+                <button type="button" class="btn sm ghost" onclick="closeSingleDetail()">
+                  ← 返回人设列表
+                </button>
+                <div class="p-preview-title">
+                  <b>${escapeHtml(previewTitle)}</b>
+                  <span class="tag mono">${previewText.length} 字</span>
+                </div>
+                <button
+                  type="button"
+                  class="btn sm"
+                  onclick="pickPersona(${singleDetailId === "__default__" ? "undefined" : `'${singleDetailId}'`}); closeSingleDetail();"
+                >
+                  ${isCurrentPicked ? "当前正在使用" : "选用此人设"}
+                </button>
+              </div>
+              <div class="p-detail-well scroller">
+                ${previewParagraphs}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        bodyContentHTML = `
+          <div class="modal-body">
+            ${searchAndListHTML}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="persona-modal-shell" data-layout="${modalLayout}" role="dialog" aria-label="选择本卡人设">
+          <header class="modal-head">
+            <h3>选择人设</h3>
+            <span class="tag">${escapeHtml(c.title)}</span>
+            <span class="spacer"></span>
+            <button
+              type="button"
+              class="btn sm ghost"
+              onclick="showToast('跳转 openSettings(\\"personas\\") 管理与新建人设')"
+              title="前往设置页管理与新建全局人设"
+            >
+              <span>管理人设</span>
+              ${ICONS.arrowUpRight}
+            </button>
+            <button type="button" class="icon sm" aria-label="关闭" onclick="closePersonaModal()">
+              ${ICONS.close}
+            </button>
+          </header>
+
+          ${bodyContentHTML}
+        </div>
+      `;
+    }
+
+    function renderPhoneFrameHTML() {
+      const c = activeCard();
+      const curStory = stories.find((s) => s.id === currentStoryId) ?? stories[0];
+      const curStoryLabel = curStory.title ?? "New story";
+      return `
+        <div class="phone-frame">
+          <!-- 手机顶部栏：点击标题拉起 Session Sheet（与进卡页的 .cardhead 角色分开） -->
+          <header class="topbar">
+            <button
+              type="button"
+              class="title-trigger"
+              onclick="togglePhoneSheet()"
+              title="手机标题栏：点击拉起/收起 Session Sheet"
+            >
+              <h1>${escapeHtml(c.title)}</h1>
+              <span class="story-sub">· ${escapeHtml(curStoryLabel)}</span>
+              ${ICONS.caretDown}
+            </button>
+            <button type="button" class="icon" aria-label="Status" onclick="showToast('打开手机 Status 弹层')">
+              ${ICONS.chartBar}
+            </button>
+          </header>
+
+          <!-- 底层阅读器示意 -->
+          <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; overflow: hidden;">
+            <div class="said-bubble">我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的。」</div>
+            <div class="prose-turn">
+              <p>雨后的苦竹林里雾气未散，竹叶上的水珠顺着亭檐一滴滴落在青石板上。</p>
+              <p>裴青舟按着乌木剑鞘站在三步开外，目光静静地落在你腰间的旧短剑上。</p>
+            </div>
+            <div style="margin-top: auto; padding: 12px; border-radius: 12px; background: var(--alpha-1); font-size: 12px; color: var(--ink-3); text-align: center;">
+              ↑ 点击顶部「${escapeHtml(c.title)} · ${escapeHtml(curStoryLabel)} ▾」拉起 Session Sheet
+            </div>
+          </div>
+
+          <!-- 手机 Session Sheet (直接以 .cardhead 顶置，去掉冗余的 SESSION 标题栏) -->
+          <div class="phone-scrim" data-open="${phoneSheetOpen ? "true" : "false"}" onclick="if(event.target===this) togglePhoneSheet(false)">
+            <div class="phone-sheet">
+              ${renderSessionHTML("sheet")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      const stage = document.getElementById("stage");
+      const c = activeCard();
+
+      if (stageMode === "overview") {
+        stage.innerHTML = `
+          <div class="overview-grid">
+            <!-- State 1: 桌面左栏 (15rem / 192px 净宽) -->
+            <div class="state-col">
+              <div class="state-label">
+                <span>1. 桌面左栏 (aside.side)</span>
+                <span class="spec-pill">15rem (净宽 192px)</span>
+              </div>
+              <div class="overview-side-host">
+                <aside class="side" aria-label="Desktop Session Card">
+                  ${renderSessionHTML("side")}
+                </aside>
+              </div>
+            </div>
+
+            <!-- State 2: 手机 Sheet (390×812) -->
+            <div class="state-col">
+              <div class="state-label">
+                <span>2. 手机标题栏 + Session Sheet</span>
+                <span class="spec-pill">390px · ${storySlice}条故事 + ${navStyle === "icons" ? "纯图标同行" : navStyle === "inline" ? "带字同行" : "竖排三行"}</span>
+              </div>
+              ${renderPhoneFrameHTML()}
+            </div>
+
+            <!-- State 3: Persona Modal 打开 -->
+            <div class="state-col">
+              <div class="state-label">
+                <span>3. Persona Modal 打开</span>
+                <span class="spec-pill">置顶卡片默认 + 独立全文阅读</span>
+              </div>
+              ${renderPersonaModalHTML(true)}
+            </div>
+          </div>
+        `;
+      } else if (stageMode === "desktop" || stageMode === "modal") {
+        stage.innerHTML = `
+          <div class="desktop-canvas">
+            <aside class="side" aria-label="Session">
+              ${renderSessionHTML("side")}
+            </aside>
+            <div class="reader-panel">
+              <div class="reader-flow">
+                <div class="said-bubble">我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的。」</div>
+                <div class="prose-turn">
+                  <p>暮春的雨刚歇，苦竹岭上雾气未散，竹叶间积着的水珠顺着破败的亭檐一滴一滴砸在青石阶上。</p>
+                  <p>立在亭柱旁的青衫剑客原本只拿冷淡的余光打量你，待看清剑柄末端那道熟悉的刻痕时，他按在腰间乌木剑鞘上的手指蓦地一紧，呼吸也跟着滞了一瞬。</p>
+                  <p>亭外竹叶沙沙作响，过了好半晌，裴青舟才缓缓收回按剑的手，抬起那双布满血丝的眼看向你，声音比刚才哑了几分：「这把剑，他从不离身……你是从何处得来的？」</p>
+                </div>
+              </div>
+              <div class="composer-mock">
+                <span>输入角色言行，或切换场外指导...</span>
+                <span class="tag mono">⌘↵</span>
+              </div>
+            </div>
+            <aside class="glance-card" aria-label="Status and Record">
+              <div>
+                <h2>Status</h2>
+                <div class="meter-mock">
+                  <div class="row"><span>体力</span><span>40 / 100</span></div>
+                  <div class="track"><div class="fill" style="width: 40%"></div></div>
+                </div>
+                <div class="meter-mock">
+                  <div class="row"><span>交情</span><span>+4</span></div>
+                  <div class="track"><div class="fill" style="width: 34%"></div></div>
+                </div>
+              </div>
+              <div>
+                <h2>Record</h2>
+                <p style="font-size: var(--text-footnote); color: var(--ink-2); background: var(--alpha-1); padding: 10px 12px; border-radius: 8px;">
+                  第 14 幕：你亮出李鹤托付的牛皮鞘旧短剑，裴青舟认出剑柄刻痕，戒备初解。
+                </p>
+              </div>
+            </aside>
+          </div>
+        `;
+      } else if (stageMode === "mobile") {
+        stage.innerHTML = `
+          <div class="overview-grid" style="align-items: center; padding-top: 20px;">
+            <div class="state-col">
+              <div class="state-label">
+                <span>手机视图 (点击顶部标题可收起/拉起 Sheet)</span>
+                <span class="spec-pill">390 × 812</span>
+              </div>
+              ${renderPhoneFrameHTML()}
+            </div>
+          </div>
+        `;
+      }
+
+      // Sync live Persona dialog if open
+      const liveDialog = document.getElementById("live-persona-dialog");
+      const liveMount = document.getElementById("live-persona-mount");
+      if (liveMount) {
+        liveMount.innerHTML = renderPersonaModalHTML(false);
+      }
+      if (stageMode === "modal" && liveDialog && !liveDialog.open) {
+        liveDialog.showModal();
+      }
+    }
+
+    // ───────── 4. Interactive Handlers ─────────
+    function setStageMode(mode) {
+      stageMode = mode;
+      const liveDialog = document.getElementById("live-persona-dialog");
+      if (mode !== "modal" && liveDialog && liveDialog.open) {
+        liveDialog.close();
+      }
+      if (mode === "mobile") {
+        phoneSheetOpen = true;
+      }
+      for (const m of ["overview", "desktop", "mobile", "modal"]) {
+        const btn = document.getElementById(`btn-mode-${m}`);
+        if (btn) btn.setAttribute("aria-pressed", String(m === mode));
+      }
+      renderAll();
+    }
+
+    function setNavStyle(style) {
+      navStyle = style;
+      for (const k of ["icons", "inline", "stack"]) {
+        const el = document.getElementById(`btn-nav-${k}`);
+        if (el) el.setAttribute("aria-pressed", String(style === k));
+      }
+      renderAll();
+    }
+
+    function setWritingCount(n) {
+      writingCount = n;
+      for (const k of [3, 4, 5]) {
+        const el = document.getElementById(`btn-wc-${k}`);
+        if (el) el.setAttribute("aria-pressed", String(k === n));
+      }
+      renderAll();
+    }
+
+    function toggleWritingShortMode() {
+      writingShortMode = !writingShortMode;
+      const btn = document.getElementById("btn-wmode-toggle");
+      if (btn) {
+        btn.setAttribute("aria-pressed", String(writingShortMode));
+        btn.textContent = writingShortMode ? "策略:双字短签" : "策略:+N";
+      }
+      renderAll();
+    }
+
+    function setIconSet(set) {
+      iconSet = set;
+      const a = document.getElementById("btn-icon-a");
+      const b = document.getElementById("btn-icon-b");
+      if (a) a.setAttribute("aria-pressed", String(set === "a"));
+      if (b) b.setAttribute("aria-pressed", String(set === "b"));
+      renderAll();
+    }
+
+    function setStorySlice(n) {
+      storySlice = n;
+      for (const k of [4, 5, 2]) {
+        document.getElementById(`btn-sc-${k}`).setAttribute("aria-pressed", String(k === n));
+      }
+      renderAll();
+    }
+
+    function toggleEmptyPersonas() {
+      emptyPersonas = !emptyPersonas;
+      document.getElementById("btn-personas-empty").setAttribute("aria-pressed", String(emptyPersonas));
+      renderAll();
+    }
+
+    function togglePinned() {
+      showPinned = !showPinned;
+      document.getElementById("btn-pin-toggle").setAttribute("aria-pressed", String(showPinned));
+      renderAll();
+    }
+
+    function toggleCard() {
+      currentCardKey = currentCardKey === "wuxia" ? "yandao" : "wuxia";
+      const btn = document.getElementById("btn-card-toggle");
+      btn.textContent = `切卡片: ${CARDS[currentCardKey].title}`;
+      btn.setAttribute("aria-pressed", String(currentCardKey === "yandao"));
+      renderAll();
+    }
+
+    function toggleThemeInNav() {
+      themeInNav = !themeInNav;
+      document.getElementById("btn-theme-in-nav").setAttribute("aria-pressed", String(themeInNav));
+      renderAll();
+    }
+
+    function toggleLangMode() {
+      langZh = !langZh;
+      document.getElementById("btn-lang-toggle").setAttribute("aria-pressed", String(langZh));
+      renderAll();
+    }
+
+    function toggleTheme() {
+      const root = document.documentElement;
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+    }
+
+    function togglePhoneSheet(force) {
+      phoneSheetOpen = typeof force === "boolean" ? force : !phoneSheetOpen;
+      renderAll();
+    }
+
+    function selectStory(id, context) {
+      currentStoryId = id;
+      if (context === "sheet" && stageMode === "mobile") {
+        // #60: tapping a story on a phone closes the sheet back to the reader
+        phoneSheetOpen = false;
+        showToast("已切换故事并收起手机 Sheet (#60)");
+      }
+      renderAll();
+    }
+
+    function createNewStory() {
+      const nextId = Math.max(0, ...stories.map((s) => s.id)) + 1;
+      stories.unshift({ id: nextId, title: null, turns: 0, agoEn: "just now", agoZh: "刚刚", starred: false });
+      currentStoryId = nextId;
+      showToast("已新建故事 (默认显示 New story，0轮仅显示时间)");
+      renderAll();
+    }
+
+    function openRenameDialog(id) {
+      renamingStoryId = id;
+      const s = stories.find((x) => x.id === id);
+      if (!s) return;
+      const dlg = document.getElementById("rename-dialog");
+      const inp = document.getElementById("rename-input");
+      inp.value = s.title ?? "";
+      dlg.showModal();
+      requestAnimationFrame(() => inp.select());
+    }
+
+    function commitRename(e) {
+      e.preventDefault();
+      const s = stories.find((x) => x.id === renamingStoryId);
+      const inp = document.getElementById("rename-input");
+      if (s && inp) {
+        const trimmed = inp.value.trim();
+        s.title = trimmed ? trimmed : null;
+      }
+      document.getElementById("rename-dialog").close();
+      renderAll();
+    }
+
+    function openDeleteDialog() {
+      document.getElementById("delete-dialog").showModal();
+    }
+
+    function commitDeleteStory() {
+      if (stories.length > 1) {
+        stories = stories.filter((s) => s.id !== currentStoryId);
+        currentStoryId = stories[0].id;
+      }
+      document.getElementById("delete-dialog").close();
+      renderAll();
+    }
+
+    function openPersonaModal() {
+      const dlg = document.getElementById("live-persona-dialog");
+      renderAll();
+      if (dlg && !dlg.open) dlg.showModal();
+    }
+
+    function closePersonaModal() {
+      const dlg = document.getElementById("live-persona-dialog");
+      if (dlg && dlg.open) dlg.close();
+      if (stageMode === "modal") {
+        setStageMode("desktop");
+      }
+    }
+
+    function pickPersona(id) {
+      pickedPersonaByCard[currentCardKey] = id;
+      renderAll();
+    }
+
+    function togglePersonaStar(e, id) {
+      e.stopPropagation();
+      const p = personas.find((x) => x.id === id);
+      if (p) p.starred = !p.starred;
+      renderAll();
+    }
+
+    function toggleModalLayout() {
+      modalLayout = modalLayout === "split" ? "single" : "split";
+      singleDetailId = null;
+      const btn = document.getElementById("btn-modal-layout");
+      if (btn) {
+        btn.setAttribute("aria-pressed", String(modalLayout === "split"));
+        btn.textContent = modalLayout === "split" ? "弹窗:分栏全文" : "弹窗:单栏全文";
+      }
+      renderAll();
+    }
+
+    function openSingleDetail(e, id) {
+      e.stopPropagation();
+      singleDetailId = id;
+      renderAll();
+    }
+
+    function closeSingleDetail() {
+      singleDetailId = null;
+      renderAll();
+    }
+
+    function onPersonaSearch(val) {
+      personaSearch = val;
+      renderAll();
+      // Restore focus & caret in search input
+      const inputs = document.querySelectorAll('.input-box input[type="search"]');
+      inputs.forEach((inp) => {
+        if (document.activeElement !== inp && stageMode === "overview") {
+          inp.focus();
+          inp.setSelectionRange(val.length, val.length);
+        }
+      });
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      if (!el) return;
+      el.textContent = msg;
+      el.setAttribute("data-show", "true");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.setAttribute("data-show", "false"), 2200);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/"/g, "&quot;");
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>
