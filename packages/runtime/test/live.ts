@@ -108,7 +108,7 @@ const msgText = (m: Message) =>
 const show = (s: unknown) => (typeof s === "string" ? s : JSON.stringify(s))
 const clip = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s).replaceAll("\n", "⏎")
 
-const greeting = card.greetings[Number(process.argv[3] ?? 0)]
+const greeting = card.greetings[Number(process.argv[3] ?? (which === "ri" ? 2 : 0))]
 if (greeting) {
   const g = S.greet(greeting).node!
   console.log(`━━ node ${g.turn.id}: greeting (${greeting.text.length} chars), state=${show(g.state)}`)
