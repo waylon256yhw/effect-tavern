@@ -18,13 +18,18 @@
     2. FIVE ZONES:
        - Zone 1 (卡头 `.cardhead` vs Mobile `.topbar .title`):
          * Desktop `.cardhead`: Title + persistent entry icon on the right (button
-           affordance at rest, not hover-only) + 2-line clamped summary
-           (`-webkit-line-clamp: 2`, ~26 CJK chars, fits the opening clause).
+           affordance at rest, not hover-only) + clamped summary. DECIDED: 3 lines
+           (`-webkit-line-clamp: 3`, ~39 CJK chars: the opening sentence whole), paid for
+           by Stories showing 4 rows instead of 5; the dock's 卡头 toggle shows 2 lines for
+           comparison.
          * Mobile separation of roles: `.topbar .title` pulls up the Session sheet
            (styled with a down/sheet chevron and current story subtitle), whereas
            inside the sheet `.cardhead` is a framed card banner that enters `CardPage`.
        - Zone 2 (Stories `section.stories`):
-         * Fixed 3–5 recent/starred rows, NO nested `overflow-y: auto` scrollbar.
+         * DECIDED: 4 recent rows, NO nested `overflow-y: auto` scrollbar. 5 rows fit a
+           688px card only when nothing else grows: at a 700px viewport (652px card) 5 rows
+           leave 10px of air and overflow by 55px once a pin is armed; 4 rows keep ~30px of
+           air there and absorb the pin. 4 is also what buys the 3-line summary above.
          * Row shape (#75 Step 1): `grid-template-columns: minmax(0, 1fr)` (fixes #40/#75
            horizontal overflow); main line `title ?? "New story"`, sub line
            `N turns · 16 minutes ago` (when `turns === 0`, only time is shown).
@@ -42,15 +47,26 @@
              name + bio first line, inline star toggle).
            - Footer: `"管理人设"` jumps to `openSettings("personas")`.
        - Zone 4 (Writing `section.writing`):
-         * Unified `.chosen` row: `.chips` with `flex-flow: row wrap` (192px fits two
-           4-char chips per line) + right chevron `›`. Uses concrete default items
-           (`第二人称` · `转述言行` · `仅限输入`) instead of colliding on `"跟随卡片"`.
+         * Unified `.chosen` row: `.chips` on ONE line (`flex-flow: row nowrap`) + right
+           chevron `›`. DECIDED: up to 3 chips show whole, 4 or 5 collapse to the first 2
+           + `+N` (the order is switches.ts's: pov, echo, agency, verbosity, supplement, so
+           the two that set the voice stay visible; the row's `title` lists all). The chip
+           budget is 176px (192 - 12 chevron - 4 gap); a 4-char chip is 55px, so three of
+           them are 172px. The supplement chip is therefore `本卡补充` (4 chars), the name
+           the Writing page already uses: `含本卡补充` (66px) beside two 4-char chips is
+           183px and spills. 2-char short tags stay in the dock for comparison only: all 5
+           still spill (186px) and `仅输` / `二称` read as nothing.
+           Uses concrete default items (`第二人称` · `转述言行` · `仅限输入`) instead of
+           colliding on `"跟随卡片"`.
        - Zone 5 (底部页面导航 `nav.tools`):
          * Replaces coding icons (`git-branch`, `terminal-window`) with narrative/inspection
            icons (`ph/tree-structure` or `ph/path`, `ph/list-magnifying-glass` or
            `ph/magnifying-glass`).
-         * Compares two layouts with text labels:
-           - `紧凑同行` (Inline: left two with text `时间线` / `检查器`, right `⚙` Settings gear)
+         * DECIDED: icons only, one row, no labels: 时间线 · 检查器 on the left, #70's
+           theme toggle · 设置 on the right, four 28px icons in 192px. The client dropped
+           `data-hint` tooltips in #78, so the icons carry the meaning alone (`aria-label`
+           names them for readers). The two labelled layouts stay in the dock for reference:
+           - `带字同行` (Inline: left two with text `时间线` / `检查器`, right `⚙` Settings gear)
            - `竖排三行` (Stack: `时间线` / `检查器` / `设置` as 3 full-width rows)
     ═══════════════════════════════════════════════════════════════════════════════
   -->
@@ -443,7 +459,7 @@
     .cardhead {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
       margin: calc(-1 * var(--space-2));
       padding: var(--space-2);
       border-radius: var(--radius-card);
@@ -500,11 +516,14 @@
       margin: 0;
       color: var(--ink-2);
       font-size: var(--text-footnote);
-      line-height: 1.48;
+      line-height: 1.5;
       display: -webkit-box;
-      -webkit-line-clamp: 2;
+      -webkit-line-clamp: 3; /* decided: the opening sentence whole (~39 CJK chars); 4 story rows pay for the third line */
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    .session[data-head-lines="2"] .cardhead p {
+      -webkit-line-clamp: 2;
     }
 
     /* Mobile Sheet's .cardhead: sits directly at the top of the sheet (no redundant "SESSION" header bar) */
@@ -1586,10 +1605,10 @@
     <button type="button" id="btn-wc-4" aria-pressed="false" onclick="setWritingCount(4)" title="4个胶囊时单行 +1 收纳或双字短签">
       4项
     </button>
-    <button type="button" id="btn-wc-5" aria-pressed="false" onclick="setWritingCount(5)" title="满配5个胶囊(4开关+含本卡补充)">
+    <button type="button" id="btn-wc-5" aria-pressed="false" onclick="setWritingCount(5)" title="满配5个胶囊(4开关+本卡补充)">
       5项(满)
     </button>
-    <button type="button" id="btn-wmode-toggle" aria-pressed="false" onclick="toggleWritingShortMode()" title="切换超3项时的单行策略：+N 收纳 vs 双字短签">
+    <button type="button" id="btn-wmode-toggle" aria-pressed="false" onclick="toggleWritingShortMode()" title="超过3项时的单行策略：+N 收纳（定）vs 双字短签（对照：5项仍溢出，且短签不可读）">
       策略:+N
     </button>
 
@@ -1621,8 +1640,11 @@
     <button type="button" id="btn-card-toggle" aria-pressed="false" onclick="toggleCard()">
       卡:竹林
     </button>
-    <button type="button" id="btn-theme-in-nav" aria-pressed="false" onclick="toggleThemeInNav()">
+    <button type="button" id="btn-theme-in-nav" aria-pressed="true" onclick="toggleThemeInNav()">
       #70 主题键
+    </button>
+    <button type="button" id="btn-head-lines" aria-pressed="true" onclick="toggleHeadLines()" title="卡头简介的行数：3 行放下开篇整句，2 行对照">
+      卡头:3行
     </button>
     <button type="button" onclick="toggleTheme()">
       浅/深
@@ -1665,7 +1687,7 @@
       "简短": "简短",
       "适中": "适中",
       "详尽": "详尽",
-      "含本卡补充": "+补充",
+      "本卡补充": "+补充",
       "跟随卡片": "默认",
     };
 
@@ -1680,7 +1702,7 @@
         writingSets: {
           3: ["第二人称", "转述言行", "仅限输入"],
           4: ["第二人称", "转述言行", "仅限输入", "详尽"],
-          5: ["第二人称", "转述言行", "仅限输入", "详尽", "含本卡补充"],
+          5: ["第二人称", "转述言行", "仅限输入", "详尽", "本卡补充"],
         },
         pinnedHook: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫",
       },
@@ -1690,9 +1712,9 @@
         summary: "大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；没有玩家角色，输入是给叙述者的指示。",
         defaultPersona: null, // World card with no protagonist
         writingSets: {
-          3: ["无主角", "详尽", "含本卡补充"],
-          4: ["无主角", "详尽", "含本卡补充"],
-          5: ["无主角", "详尽", "含本卡补充"],
+          3: ["无主角", "详尽", "本卡补充"],
+          4: ["无主角", "详尽", "本卡补充"],
+          5: ["无主角", "详尽", "本卡补充"],
         },
         pinnedHook: "三天前货栈门口打伤差役的驼夫已被沈二藏在十里渡口",
       },
@@ -1755,15 +1777,16 @@
 
     // State
     let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "modal"
-    let navStyle = "icons";     // "icons" (紧凑纯图标) | "inline" (带字同行) | "stack" (竖排三行)
+    let navStyle = "icons";     // "icons" (decided: 纯图标同行) | "inline" (带字同行) | "stack" (竖排三行)
     let iconSet = "a";          // "a" (treeStructure + listMag) | "b" (path + magGlass)
-    let storySlice = 4;         // 4 | 5 | 2
-    let writingCount = 3;       // 3 | 4 | 5 (switches.ts max is 4 switches + 1 含本卡补充 = 5)
-    let writingShortMode = false; // false = 3 full chips + "+N" overflow; true = 2-char short tags (all 5 fit on 1 line)
+    let storySlice = 4;         // 4 (decided) | 5 | 2
+    let writingCount = 3;       // 3 | 4 | 5 (switches.ts max is 4 switches + 1 本卡补充 = 5)
+    let writingShortMode = false; // false (decided) = up to 3 full chips, then "+N"; true = 2-char short tags (comparison only)
     let emptyPersonas = false;
     let showPinned = false;
     let currentCardKey = "wuxia";
-    let themeInNav = false;
+    let themeInNav = true;      // decided: #70's toggle sits in nav.tools, the fourth icon
+    let headLines = 3;          // 3 (decided) | 2 (for comparison)
     let langZh = true; // default Chinese section headers (故事 / 人设 / 写作)
     let pickedPersonaByCard = { wuxia: undefined, yandao: undefined }; // undefined = 卡片默认
     let modalLayout = "split";  // "split" (左右分栏常驻全文) | "single" (单栏列表 + 独立全文阅读层)
@@ -1792,7 +1815,7 @@
           .map((c) => `<span class="chip" title="${escapeAttr(c)}">${escapeHtml(SHORT_SWITCH_MAP[c] ?? c)}</span>`)
           .join("");
       }
-      // Single-line full labels: 3 four-char chips fit in 190px; if 4 or 5 chips, show first 2 + "+N" badge
+      // Single line: up to 3 chips (3 × 55px + 2 × 3.5px = 172px of the 176px budget); 4 or 5 show the first 2 + "+N" 
       if (chips.length <= 3) {
         return chips.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join("");
       }
@@ -1943,8 +1966,8 @@
             `;
 
       return `
-        <div class="session" data-lang="${langZh ? "zh" : "en"}">
-          <!-- 1. 卡头: 常驻进入卡页图标，不靠 hover；简介两行截断 (-webkit-line-clamp: 2) -->
+        <div class="session" data-lang="${langZh ? "zh" : "en"}" data-head-lines="${headLines}">
+          <!-- 1. 卡头: 常驻进入卡页图标，不靠 hover；简介三行截断 (-webkit-line-clamp: 3)，放下开篇整句 -->
           <button type="button" class="cardhead" aria-label="进入角色卡页" onclick="showToast('进入 CardPage 角色卡详情页')">
             <div class="cardhead-top">
               <h1>${escapeHtml(c.title)}</h1>
@@ -2454,6 +2477,16 @@
       const btn = document.getElementById("btn-card-toggle");
       btn.textContent = `切卡片: ${CARDS[currentCardKey].title}`;
       btn.setAttribute("aria-pressed", String(currentCardKey === "yandao"));
+      renderAll();
+    }
+
+    function toggleHeadLines() {
+      headLines = headLines === 3 ? 2 : 3;
+      const btn = document.getElementById("btn-head-lines");
+      if (btn) {
+        btn.setAttribute("aria-pressed", String(headLines === 3));
+        btn.textContent = `卡头:${headLines}行`;
+      }
       renderAll();
     }
 
