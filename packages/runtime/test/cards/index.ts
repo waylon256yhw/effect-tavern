@@ -1,9 +1,7 @@
 /// <reference types="bun" />
 // The four template cards by name, and the player layers the live scripts, the tests and the server share. A card is one
-// YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`; ri is a
-// converter over third-party files (`bun test/cards/ri.ts` writes the converted card to .dev/ri.yaml).
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+// YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`.
+import { readFileSync } from "node:fs"
 import { decodeCard, type Card } from "../../src/card.ts"
 import { decodeFragments as frags, type Player } from "../../src/fragment.ts"
 
@@ -11,13 +9,6 @@ import { decodeFragments as frags, type Player } from "../../src/fragment.ts"
 const dir = new URL(import.meta.url.includes("$bunfs") ? "cards/" : "./", import.meta.url)
 /** A card file: YAML, decoded through the Card schema. A missing file fails naming it (ENOENT, with the path). */
 export const readCard = (path: string | URL): Card => decodeCard(Bun.YAML.parse(readFileSync(path, "utf8")))
-/** A converter's card written as YAML to .dev/<id>.yaml at the repo root, where the toolchain reads it like any card. */
-export const emit = (card: Card) => {
-  const out = new URL(`../../../../.dev/${card.id}.yaml`, import.meta.url)
-  mkdirSync(new URL(".", out), { recursive: true })
-  writeFileSync(out, Bun.YAML.stringify(card, null, 2))
-  console.log(fileURLToPath(out))
-}
 
 // The test player: language only, options on (the card declares nothing about options).
 export const plain: Player = {
@@ -53,12 +44,8 @@ export const player: Player = {
   products: { options: true },
 }
 
-const converters: Record<string, () => Promise<Card>> = {
-  ri: async () => (await import("./ri.ts")).load(),
-}
-export const cardNames = ["wuxia", "yandao", "banxing", ...Object.keys(converters)]
-export const loadCard = async (name: string): Promise<Card> =>
-  converters[name] ? converters[name]() : readCard(new URL(`${name}.yaml`, dir))
+export const cardNames = ["wuxia", "yandao", "banxing", "ri"]
+export const loadCard = async (name: string): Promise<Card> => readCard(new URL(`${name}.yaml`, dir))
 
 /** 竹林, the self-check card; `chat` is the same card with everything structured switched off: no actions, lore or
  *  director, so a turn is narrate + record only (README §2). */

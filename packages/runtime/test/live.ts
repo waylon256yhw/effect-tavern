@@ -11,7 +11,7 @@ import { makeSession, type Event } from "../src/session.ts"
 import { loadCard, player } from "./cards/index.ts"
 
 const which = process.argv[2] ?? "wuxia"
-// Scripted lines for the YAML cards; ri's live beside its converter in cards/ri.ts.
+// Scripted lines for the linear cards (yandao, banxing, ri); wuxia branches off node 0.
 const lines: Record<string, string[]> = {
   // 盐道: direction, not dialogue, each line is what a novelist tells the narrator to write next
   yandao: [
@@ -25,6 +25,12 @@ const lines: Record<string, string[]> = {
     "“你刚才说，和我在一起也很自由。”我顿了顿，“这话是认真的吗？”",
     "我伸手把被子往她那边拉了拉，没说话，只是看着手机微光里她的手指。",
     "“那就别睡了。你想打几局，我在旁边看着。”我把可乐罐拿远了一点。",
+  ],
+  ri: [
+    "我放下手里的圣经，看着她。“理，你今天好像有话想说。不急，慢慢说。”",
+    "我沉默了片刻，然后轻轻握住她绞着吊坠的手。“我听到了。我也一样。”",
+    "“罗伦斯大人要是知道了，会怎么说？”我笑着问她，顺手替她理了理头纱。",
+    "“今天的礼拜，我们一起主持吧。你选诗篇。”",
   ],
 }
 type Script = { card: Card; turns: Array<{ parent: number | null; input: { text: string; note?: string } }> }
@@ -57,13 +63,14 @@ const script = async (): Promise<Script> => {
         ],
       }
     default: {
-      const m = lines[which] ? { turns: lines[which] } : ((await import(`./cards/${which}.ts`)) as { turns: string[] })
+      const turns = lines[which]
+      if (!turns) throw new Error(`unknown card ${which}`)
       // Linear: each turn follows the previous node; node 0 is the greeting when the card has one. The card's default
       // channel decides which box the typed text lands in: the client reads `input`, the session takes both.
       const first = card.greetings.length ? 1 : 0
       return {
         card,
-        turns: m.turns.map((text: string, i: number) => ({
+        turns: turns.map((text: string, i: number) => ({
           parent: i === 0 ? (first ? 0 : null) : i - 1 + first,
           input: card.input === "note" ? { text: "", note: text } : { text },
         })),

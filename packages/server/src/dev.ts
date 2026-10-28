@@ -151,10 +151,8 @@ if (key && !data.providers.list().length && !data.secrets.list().length) {
   data.routing.write({ default: { provider: "anthropic", model: "claude-haiku-5-5" } })
 }
 const card = await loadCard(name)
-// the templates that load here (ri reads files outside the checkout), listed by GET /cards
-const cards = (await Promise.allSettled(cardNames.map(loadCard))).flatMap((r) =>
-  r.status === "fulfilled" ? [{ id: r.value.id, title: r.value.title }] : [],
-)
+// the template cards, listed by GET /cards
+const cards = (await Promise.all(cardNames.map(loadCard))).map((c) => ({ id: c.id, title: c.title }))
 const lib = library({ data, card, cards, player, model, pinned: scripted }) // MODEL=fake scripts every stage, whatever the routing says
 if (lib.session().log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
   const greeting = card.greetings[Number(process.env["GREETING"])]
