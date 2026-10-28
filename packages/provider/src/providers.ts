@@ -5,7 +5,7 @@
 // the server. No ai-sdk here: the client imports these types, and url.ts is all this file runs.
 import { Schema } from "effect"
 import type { Connection } from "./connection.ts"
-import { normalize } from "./url.ts"
+import { normalize, type Format } from "./url.ts"
 
 const Format = Schema.Literals(["anthropic", "openai-compatible", "gemini"])
 const Endpoint = Schema.Struct({ url: Schema.String, exactPrefix: Schema.optionalKey(Schema.Boolean) })
@@ -52,6 +52,25 @@ export const Secret = Schema.Struct({
   value: Schema.String,
 })
 export type Secret = typeof Secret.Type
+/** The type a key is, read off the key itself when nobody said: an Anthropic OAuth token (`sk-ant-oat…`) rides as a
+ *  bearer, everything else is an API key. Not "anything but `sk-ant-` is a bearer": a gateway's `user_…` key is an
+ *  API key too. The vault's own setting overrides this. */
+export const secretType = (value: string): Secret["type"] => (value.startsWith("sk-ant-oat") ? "auth_token" : "api_key")
+/** One probe of a provider (`POST /providers/<id>/test`): the request actually sent, through the connection's proxy, and
+ *  how it went. `status` 0 is nothing answered (no route, a closed proxy, a timeout); any other status reached the
+ *  address. `ok` is the probe getting what it asked for (a listing parsed, a token back); `error` says what it got
+ *  instead, `code` the socket error's code when there was one. `formats` are the protocols the request stands for:
+ *  the listing probe sends one request per distinct listing URL, so two endpoints on one address share a probe. */
+export interface Probe {
+  formats: Format[]
+  url: string
+  method: string
+  status: number
+  ms: number
+  ok: boolean
+  code?: string
+  error?: string
+}
 /** What the wire shows of a secret: never the value. */
 export type SecretView = Omit<Secret, "value"> & { hint: string }
 /** The first six and last four characters; a key too short to keep most of it hidden shows none. */

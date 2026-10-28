@@ -23,16 +23,20 @@
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
-//                 {name, type, value} adds one and answers it the same way; PUT /secrets/<id> {name, type, value?} renames,
+//                 {name, type?, value} adds one and answers it the same way; PUT /secrets/<id> {name, type?, value?} renames,
 //                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
+//                 A write with a value and no type reads the type off the key (provider `secretType`: `sk-ant-oat…` is a bearer).
 //                 GET /secrets/<id>/value {value} is the one route that answers a key: the owner's deliberate reveal or
 //                 copy, one request per click (404 when there is none); no listing ever carries it.
 //   GET  /providers  the player's model providers (provider providers.ts `Provider`), a key only as a secret id.
 //                 PUT /providers/<id> writes one (decoded as `Provider` without id), DELETE /providers/<id> removes it
 //                 and the routing pairs on it. Both answer the list. GET /providers/<id>/models lists the service's
-//                 models (string[]; a failure is a 502 {error}). POST /providers/<id>/test {model?} makes one minimal
-//                 request, a one-token answer with a model, the listing without: the Trace {url, method, status, ms},
-//                 or a 502 {error, trace?}.
+//                 models ({id, format?}[], the format where the listing puts the model off the default protocol and
+//                 onto an endpoint the provider has; a failure is a 502 {error}). POST /providers/<id>/test {model?}
+//                 probes: with a model one request for a one-token answer, without one the listing from every endpoint
+//                 the provider has (one request per distinct listing URL). The answer is the probes, 200 whatever they
+//                 found (provider `Probe`: {formats, url, method, status, ms, ok, code?, error?}, status 0 = nothing
+//                 answered); a 400 {error} is the provider's configuration (no key, no endpoint, a bad URL).
 //   GET  /models/names  the model-name table (provider names.ts `Names`): {[owner/model]: {name, family}}, what the
 //                 settings lists name and group a model id by, without the network.
 //   GET  /routing which (provider, model) runs each stage: {default?, stages?}; PUT /routing replaces it (in force
@@ -85,9 +89,15 @@ export type Call = Extract<Event, { kind: "call" }>
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
 const ProviderBody = Schema.decodeUnknownSync(Provider.mapFields(Struct.omit(["id"])))
-const SecretBody = Schema.decodeUnknownSync(Secret.mapFields(Struct.omit(["id"])))
+const SecretBody = Schema.decodeUnknownSync(
+  Schema.Struct({ name: Secret.fields.name, type: Schema.optionalKey(Secret.fields.type), value: Secret.fields.value }),
+)
 const SecretMeta = Schema.decodeUnknownSync(
-  Schema.Struct({ name: Secret.fields.name, type: Secret.fields.type, value: Schema.optionalKey(Secret.fields.value) }),
+  Schema.Struct({
+    name: Secret.fields.name,
+    type: Schema.optionalKey(Secret.fields.type),
+    value: Schema.optionalKey(Secret.fields.value),
+  }),
 )
 const TestBody = Schema.decodeUnknownSync(Schema.Struct({ model: Schema.optionalKey(Schema.String) }))
 const RoutingBody = Schema.decodeUnknownSync(Routing)
@@ -202,8 +212,11 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         } catch (e) {
           return bad(e)
         }
-        const r = await lib.providers.test(id, model)
-        return r.error === undefined ? json(200, r.trace) : json(502, r)
+        try {
+          return json(200, await lib.providers.test(id, model))
+        } catch (e) {
+          return bad(e) // the provider's configuration, not a probe's finding
+        }
       }
     }
     if (req.method === "GET" && req.url === "/models/names") return json(200, lib.names())

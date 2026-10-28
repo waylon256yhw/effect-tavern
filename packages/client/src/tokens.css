@@ -76,6 +76,7 @@
   /* controls */
   --control: 32px;
   --control-sm: 24px;
+  --control-lg: 38px; /* a field with its icons inside, and the square button beside it: one height or the row is ragged */
   --icon: 20px;
   --icon-sm: 16px;
 

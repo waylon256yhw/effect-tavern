@@ -3,8 +3,8 @@
 // answers the listing with the story to be on (`current`): the client adopts it, names it on every request after, and starts over on it (nodes, calls, the draft and the pin gone).
 // `DELETE /nodes/<id>` drops a node and everything under it (the reply is the Change): the Timeline's branch delete.
 // Closing the response is the stop (before the first delta it withdraws the turn, after it the prose halts).
-import type { Trace } from "@effect-tavern/provider/src/connection.ts"
-import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
+import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
+import type { Format } from "@effect-tavern/provider/src/url.ts"
 import type { Hat, Player } from "@effect-tavern/runtime/src/fragment.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
@@ -112,24 +112,29 @@ export const deleteProvider = async (id: string): Promise<void> => {
   registry.set(providers, await got(call(`${base}/providers/${enc(id)}`, { method: "DELETE" })))
   await fetchRouting() // the pairs on it are gone with it
 }
-export const listModels = (id: string): Promise<string[]> => checked(call(`${base}/providers/${enc(id)}/models`))
-/** One minimal request through the provider: "claude-haiku-5-5 · 200 · 260ms" (the listing's without a model), or the
- *  error under the same name. */
-export const testProvider = async (id: string, model?: string): Promise<{ ok: boolean; text: string }> => {
-  const r = await call(`${base}/providers/${enc(id)}/test`, json("POST", model === undefined ? {} : { model }))
-  const v = (await r.json()) as Trace & { error?: string; trace?: Trace }
-  const text = r.ok ? `${v.status} · ${v.ms}ms` : (v.error ?? `HTTP ${r.status}`)
-  return { ok: r.ok, text: model === undefined ? text : `${model} · ${text}` }
+/** A model as the service lists it (`GET /providers/<id>/models`): the format where the listing puts it off the
+ *  provider's default protocol and onto an endpoint the provider has. */
+export interface Listed {
+  id: string
+  format?: Format
 }
+/** The service's own model list, each with the format it goes under when that is not the provider's default. */
+export const listModels = (id: string): Promise<Listed[]> => checked(call(`${base}/providers/${enc(id)}/models`))
+/** The probes (provider `Probe`): with a model one request for a one-token answer, without one the listing from
+ *  every endpoint the provider has, one per distinct listing URL. A completed probe is one whatever it found; what
+ *  throws is the provider's configuration (no key, no endpoint, a bad URL), the server's message. */
+export const testProvider = (id: string, model?: string): Promise<Probe[]> =>
+  checked(call(`${base}/providers/${enc(id)}/test`, json("POST", model === undefined ? {} : { model })))
 export const fetchSecrets = async (): Promise<void> => registry.set(secrets, await got(call(`${base}/secrets`)))
-export const addSecret = async (s: { name: string; type: SecretView["type"]; value: string }): Promise<SecretView> => {
+/** Without a type, the server reads it off the key (`sk-ant-oat…` is a bearer). */
+export const addSecret = async (s: { name: string; type?: SecretView["type"]; value: string }): Promise<SecretView> => {
   const made = await checked<SecretView>(call(`${base}/secrets`, json("POST", s)))
   await fetchSecrets()
   return made
 }
 export const setSecret = async (
   id: string,
-  s: Pick<SecretView, "name" | "type"> & { value?: string }, // a value replaces the key in place
+  s: { name: string; type?: SecretView["type"]; value?: string }, // a value replaces the key in place, and retypes it when no type is given
 ): Promise<void> => registry.set(secrets, await checked(call(`${base}/secrets/${enc(id)}`, json("PUT", s))))
 /** The one key the server answers (GET /secrets/<id>/value): read per click for the eye or copy, kept nowhere. */
 export const secretValue = async (id: string): Promise<string> =>

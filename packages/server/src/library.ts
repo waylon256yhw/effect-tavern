@@ -18,9 +18,14 @@ import {
   compile,
   connection,
   listModels,
+  plan,
   text,
+  secretType,
   secretView,
+  type Connection,
+  type Format,
   type ModelEntry,
+  type Probe,
   type Provider,
   type Secret,
   type Trace,
@@ -136,6 +141,47 @@ export const library = ({
     const p = providerOf(id)
     return connection({ ...p, enabled: true }, m, secretOf(p))
   }
+  /** One request through `c` as a Probe: the fetch's trace (the last one, when ai-sdk retried; status 0 when nothing
+   *  answered), or `url` with status 0 when it never got to a fetch. `code` is the first socket error code down the
+   *  cause chain (ai-sdk wraps the fetch error, call.ts wraps that). */
+  const probed = async (
+    formats: Format[],
+    c: Connection,
+    url: string,
+    go: (onTrace: (t: Trace) => void) => Promise<unknown>,
+  ): Promise<Probe> => {
+    let trace: Trace | undefined
+    const onTrace = (t: Trace) => void (trace = t)
+    let error: string | undefined
+    let code: string | undefined
+    try {
+      await go(onTrace)
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e)
+      for (let x: unknown = e, i = 0; x instanceof Error && i < 6; x = x.cause, i++) {
+        const c = (x as { code?: unknown }).code
+        if (typeof c === "string" && c) {
+          code = c
+          break
+        }
+      }
+    }
+    const { url: sent, method, status, ms } = trace ?? { url, method: "GET", status: 0, ms: 0 }
+    return {
+      formats,
+      url: sent,
+      method,
+      status,
+      ms,
+      ok: error === undefined,
+      ...(code && { code }),
+      ...(error !== undefined && { error }),
+    }
+  }
+  /** The format a listed model goes under, when the listing says it is not on the provider's default protocol and an
+   *  endpoint the provider has is on one it names; otherwise none (the default, or nothing known). */
+  const formatFor = (p: Provider, formats: Format[] | undefined): Format | undefined =>
+    formats && !formats.includes(p.defaultFormat) ? formats.find((f) => p.endpoints[f]?.url.trim()) : undefined
   const players = {
     read: () => {
       const p = data.player.read()
@@ -207,16 +253,19 @@ export const library = ({
     /** The vault as the wire lists it: never a value (that is `value`, one key on request). A provider naming a deleted secret has no key. */
     secrets: {
       list: () => data.secrets.list().map(secretView),
-      add: (s: Omit<Secret, "id">) => {
-        const made = { id: crypto.randomUUID(), ...s }
+      /** The type is the caller's (the vault's own menu), else read off the key (`secretType`). */
+      add: (s: Omit<Secret, "id" | "type"> & { type?: Secret["type"] }) => {
+        const made = { id: crypto.randomUUID(), ...s, type: s.type ?? secretType(s.value) }
         data.secrets.put(made)
         return secretView(made)
       },
-      /** A name or type changed, and the value when one is given (a retyped key); the hint follows it. */
-      set: (id: string, s: Pick<Secret, "name" | "type"> & { value?: string }) => {
+      /** A name or type changed, and the value when one is given (a retyped key); the hint follows it, and so does
+       *  the type when the caller gave none: the key says what it is. */
+      set: (id: string, s: { name: string; type?: Secret["type"]; value?: string }) => {
         const old = data.secrets.list().find((x) => x.id === id)
         if (!old) throw new Error(`no secret ${id}`)
-        data.secrets.put({ ...old, ...s })
+        const type = s.type ?? (s.value !== undefined ? secretType(s.value) : old.type)
+        data.secrets.put({ ...old, name: s.name, type, ...(s.value !== undefined && { value: s.value }) })
       },
       del: data.secrets.del,
       /** The one key that leaves: GET /secrets/<id>/value, the owner's reveal or copy. */
@@ -235,29 +284,49 @@ export const library = ({
         data.providers.del(id)
         prune((pair) => pair.provider !== id)
       },
-      /** The provider's model list, over its default format's endpoint. */
-      models: (id: string) => listModels(probe(id, { id: "" })),
-      /** One minimal request: with a model a one-token answer, without one the model listing. The trace is the fetch's
-       *  (the last one, when ai-sdk retried); an error carries the trace when the request got that far. */
-      test: async (id: string, model?: string): Promise<{ trace?: Trace; error?: string }> => {
-        let trace: Trace | undefined
-        const onTrace = (t: Trace) => void (trace = t)
-        try {
-          if (model === undefined) await listModels(probe(id, { id: "" }), { onTrace })
-          else {
-            const c = probe(id, providerOf(id).models.find((m) => m.id === model) ?? { id: model })
-            const m = { format: c.format, model: compile(c, { onTrace }), prefill: capabilities(c).prefill }
-            const failed = await Effect.runPromise(
-              text(m, [{ role: "user", content: "Hi" }], { maxOutputTokens: 1 }).pipe(
-                Effect.match({ onFailure: (e) => e.message, onSuccess: () => undefined }),
-              ),
-            )
-            if (failed !== undefined) return { trace, error: failed }
-          }
-        } catch (e) {
-          return { trace, error: e instanceof Error ? e.message : String(e) }
+      /** The provider's model list, over its default format's endpoint, each with the format it goes under when the
+       *  listing says it is not on the default and the provider has an endpoint on one it is on (`formatFor`). Read
+       *  only: the sync drawer writes the format into the entries it adds, and offers to on the ones already there. */
+      models: async (id: string): Promise<Array<{ id: string; format?: Format }>> => {
+        const p = providerOf(id)
+        return (await listModels(probe(id, { id: "" }))).map(({ id, formats }) => {
+          const format = formatFor(p, formats)
+          return { id, ...(format && { format }) }
+        })
+      },
+      /** Minimal requests, each a Probe (a completed probe is one whatever it found; what throws here is the provider's
+       *  configuration: no key, no endpoint, a bad URL). With a model, one request for a one-token answer under the
+       *  model's format. Without, the listing from every endpoint the provider has: one request per distinct listing
+       *  URL (two formats on one address share a probe, sent under the default format's auth), the default's first. */
+      test: async (id: string, model?: string): Promise<Probe[]> => {
+        const p = providerOf(id)
+        if (model !== undefined) {
+          const c = probe(id, p.models.find((m) => m.id === model) ?? { id: model })
+          return [
+            await probed([c.format], c, plan(c.format, c.endpoint, c.model).generate, async (onTrace) => {
+              const m = { format: c.format, model: compile(c, { onTrace }), prefill: capabilities(c).prefill }
+              const failed = await Effect.runPromise(
+                text(m, [{ role: "user", content: "Hi" }], { maxOutputTokens: 1 }).pipe(
+                  Effect.match({ onFailure: (e) => e, onSuccess: () => undefined }),
+                ),
+              )
+              if (failed) throw failed
+            }),
+          ]
         }
-        return { trace }
+        const formats = (Object.keys(p.endpoints) as Format[]).filter((f) => p.endpoints[f]?.url.trim())
+        const ordered = [p.defaultFormat, ...formats.filter((f) => f !== p.defaultFormat)]
+        const byUrl = new Map<string, { formats: Format[]; c: Connection }>()
+        for (const f of ordered) {
+          const c = probe(id, { id: "", format: f })
+          const url = plan(c.format, c.endpoint).models
+          const g = byUrl.get(url) ?? { formats: [], c }
+          g.formats.push(f)
+          byUrl.set(url, g)
+        }
+        return Promise.all(
+          [...byUrl].map(([url, g]) => probed(g.formats, g.c, url, (onTrace) => listModels(g.c, { onTrace }))),
+        )
       },
     },
     routing: { read: routing, write: data.routing.write },

@@ -6,7 +6,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { LanguageModel } from "ai"
 import { capabilities, type Capabilities } from "./capabilities.ts"
-import { plan, type Endpoint, type Format } from "./url.ts"
+import { formatsOf, plan, type Endpoint, type Format } from "./url.ts"
 
 export { capabilities, DEFAULTS, type Capabilities } from "./capabilities.ts"
 export type { Endpoint, Format } from "./url.ts"
@@ -71,22 +71,29 @@ const fetchFor = (c: Connection): Fetch =>
     ? globalThis.fetch
     : (input, init) => globalThis.fetch(input, { ...init, proxy: c.proxy } as RequestInit)
 
-/** Wraps fetch so the inspector can see what was actually sent: URL, status, latency, optionally the converted body. */
+/** Wraps fetch so the inspector can see what was actually sent: URL, status, latency, optionally the converted body.
+ *  A fetch that throws (no route, a closed proxy, a timeout) is traced too, as status 0 with the time it took, and the
+ *  error goes on up: the trace is how a probe tells "nothing answered" from "the answer was no". */
 const traced =
   (onTrace: (t: Trace) => void, withBody: boolean, inner: Fetch): Fetch =>
   async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
     const body = withBody && typeof init?.body === "string" ? init.body : undefined
     const t0 = performance.now()
-    const res = await inner(input, init)
-    onTrace({
-      url,
-      method: init?.method ?? "GET",
-      status: res.status,
-      ms: Math.round(performance.now() - t0),
-      ...(body !== undefined && { body }),
-    })
-    return res
+    let status = 0
+    try {
+      const res = await inner(input, init)
+      status = res.status
+      return res
+    } finally {
+      onTrace({
+        url,
+        method: init?.method ?? "GET",
+        status,
+        ms: Math.round(performance.now() - t0),
+        ...(body !== undefined && { body }),
+      })
+    }
   }
 
 export interface CompileOptions {
@@ -126,14 +133,34 @@ export const compile = (c: Connection, o: CompileOptions = {}): LanguageModel =>
   }
 }
 
-/** GET {base}/models with the format's auth. Model ids only; a 404 means the endpoint does not list, not that it is down.
- *  `onTrace` sees the one fetch, as on `compile`. */
-export const listModels = async (c: Connection, o: CompileOptions = {}): Promise<string[]> => {
+/** A listed model: its id, and the formats it is served under when the listing says (`supported_endpoints`, a
+ *  gateway's field; absent on Anthropic, OpenAI and Gemini, where every model is on the one path). */
+export interface Listed {
+  id: string
+  formats?: Format[]
+}
+/** GET {base}/models with the format's auth. Ids, each with its formats where the listing names them; a 404 means the
+ *  endpoint does not list, not that it is down, and a 2xx that is not JSON (a reverse proxy's index page) fails as
+ *  "not a listing". `onTrace` sees the one fetch, as on `compile`. */
+export const listModels = async (c: Connection, o: CompileOptions = {}): Promise<Listed[]> => {
   const inner = o.fetch ?? fetchFor(c)
   const fetch = o.onTrace ? traced(o.onTrace, false, inner) : inner
   const res = await fetch(plan(c.format, c.endpoint).models, { headers: { ...c.headers, ...authHeaders(c) } })
   if (!res.ok) throw new Error(`model listing failed: HTTP ${res.status}`)
-  const body = (await res.json()) as { data?: Array<{ id?: string }>; models?: Array<{ name?: string }> }
-  const ids = body.data?.map((m) => m.id) ?? body.models?.map((m) => m.name?.replace(/^models\//, "")) ?? []
-  return ids.filter((id): id is string => typeof id === "string" && id !== "")
+  let body: { data?: Array<{ id?: string; supported_endpoints?: unknown }>; models?: Array<{ name?: string }> }
+  try {
+    body = (await res.json()) as typeof body
+  } catch {
+    throw new Error("model listing failed: not JSON")
+  }
+  const rows: Listed[] =
+    body.data?.map((m) => ({
+      id: m.id as string,
+      ...(Array.isArray(m.supported_endpoints) && {
+        formats: formatsOf(m.supported_endpoints.filter((p): p is string => typeof p === "string")),
+      }),
+    })) ??
+    body.models?.map((m) => ({ id: m.name?.replace(/^models\//, "") as string })) ??
+    []
+  return rows.filter((m) => typeof m.id === "string" && m.id !== "")
 }

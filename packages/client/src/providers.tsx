@@ -6,9 +6,9 @@
 import type { Effort } from "@effect-tavern/provider/src/call.ts"
 import { DEFAULTS, type Capabilities } from "@effect-tavern/provider/src/capabilities.ts"
 import { lookup } from "@effect-tavern/provider/src/names.ts"
-import type { ModelEntry, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
+import type { ModelEntry, Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
-import { createSignal, For, onSettled, Show, untrack } from "solid-js"
+import { createEffect, createSignal, For, onSettled, Show, untrack } from "solid-js"
 import { read } from "./bridge.ts"
 import {
   ask,
@@ -43,7 +43,7 @@ import {
   Sync,
   Trash,
 } from "./icons.tsx"
-import { hats, names, providers, registry, routing, secrets } from "./store.ts"
+import { hats, names, providers, registry, secrets } from "./store.ts"
 import {
   addSecret,
   deleteProvider,
@@ -53,6 +53,7 @@ import {
   secretValue,
   setSecret,
   testProvider,
+  type Listed,
 } from "./wire.ts"
 
 const EFFORTS: [Effort, string][] = [
@@ -65,10 +66,16 @@ const EFFORTS: [Effort, string][] = [
 const providerOf = (id: string) => registry.get(providers).find((p) => p.id === id)
 /** For handlers and snapshots (the registry, not a tracked read); JSX reads `vault()` itself. */
 const secretOf = (p: Provider): SecretView | undefined => registry.get(secrets).find((s) => s.id === p.secret)
-const addModels = (p: Provider, ids: readonly string[]) =>
+/** Added as listed: with the format the listing put them under when that is off the provider's default. */
+const addModels = (p: Provider, models: readonly Listed[]) =>
   void putProvider({
     ...p,
-    models: [...p.models, ...ids.filter((id) => !p.models.some((m) => m.id === id)).map((id) => ({ id }))],
+    models: [
+      ...p.models,
+      ...models
+        .filter((m) => !p.models.some((x) => x.id === m.id))
+        .map(({ id, format }) => ({ id, ...(format && { format }) })),
+    ],
   })
 const removeModels = (p: Provider, ids: readonly string[]) =>
   void putProvider({ ...p, models: p.models.filter((m) => !ids.includes(m.id)) })
@@ -105,6 +112,68 @@ const copyKey = async (value: string | Promise<string>, flash: (on: boolean) => 
   await navigator.clipboard.writeText(v)
   flash(true)
   setTimeout(() => flash(false), 1200)
+}
+/** A latency for a slot of one width: `240ms`, `1.2s` past a second. */
+const took = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`)
+/** What a probe that could not be made looks like (the server refused the request: no key, no endpoint): no URL. */
+const refused = (e: unknown): Probe => ({
+  formats: [],
+  url: "",
+  method: "",
+  status: 0,
+  ms: 0,
+  ok: false,
+  error: e instanceof Error ? e.message : String(e),
+})
+/** A listing probe's verdict, by the status first (0: nothing answered, the proxy or the route), then by what the
+ *  address said: a listing, a refused key, no listing there, a page that is not an API, some other status. */
+const verdict = (p: Probe): { text: string; tone: "ok" | "bad" | "" } =>
+  !p.url
+    ? { text: "无法检测", tone: "bad" }
+    : p.status === 0
+      ? { text: "不通", tone: "bad" }
+      : p.ok
+        ? { text: `已连通 · ${took(p.ms)}`, tone: "ok" }
+        : p.status === 401 || p.status === 403
+          ? { text: "已连通 · key 被拒", tone: "bad" }
+          : p.status === 404
+            ? { text: "已连通 · 该端点不提供模型列表", tone: "" }
+            : p.status < 300
+              ? { text: "已连通 · 不是模型列表", tone: "bad" }
+              : { text: `已连通 · HTTP ${p.status}`, tone: "bad" }
+/** The request a probe made, for a hint: `GET https://… → HTTP 400`. */
+const sent = (p: Probe) => (p.url ? `${p.method} ${p.url}${p.status ? ` → HTTP ${p.status}` : ""}` : undefined)
+const ERR_CAP = 300
+/** The bar under a probe that failed: the request as sent, the socket's code, the error to ERR_CAP characters (a
+ *  gateway's error body can be a whole page; the copy carries all of it). Wraps; never on the row it explains. */
+const ProbeError = (props: { probe: Probe }) => {
+  const [copied, setCopied] = createSignal(false)
+  const error = () => props.probe.error ?? ""
+  // the code, unless the message already opens with it (Bun's fetch errors do)
+  const code = () => (props.probe.code && !error().startsWith(props.probe.code) ? `${props.probe.code}: ` : "")
+  const full = () => [sent(props.probe), `${code()}${error()}`].filter(Boolean).join("\n")
+  return (
+    <div class="probe-err">
+      <div class="probe-err-text">
+        <Show when={sent(props.probe)}>{(s) => <span class="mono">{s()}</span>}</Show>
+        <span>
+          {code()}
+          {error().length > ERR_CAP ? `${error().slice(0, ERR_CAP)}…` : error()}
+        </span>
+      </div>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label="复制报错"
+        data-hint="复制报错"
+        onClick={() => void copyKey(full(), setCopied)}
+      >
+        <Show when={copied()} fallback={<Copy />}>
+          <Check />
+        </Show>
+      </button>
+    </div>
+  )
 }
 const DRAWER_OUT = 250 // ms: past the drawer's --dur-3 slide, so its content leaves with it
 /** Opens a dialog component from its parent: the dialog hands its open function up through `opener`. */
@@ -190,7 +259,6 @@ export const Providers = (props: Pane) => {
 const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => void }) => {
   const list = read(providers)
   const vault = read(secrets)
-  const route = read(routing)
   const p = () => list().find((x) => x.id === props.id)
   const save = (f: (p: Provider) => Provider) => {
     const x = p()
@@ -201,9 +269,21 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   // the stored key while the eye is open, read on that click and dropped when it closes or the secret changes
   const [plain, setPlain] = createSignal<{ id: string; value: string } | null>(null)
   const [copied, setCopied] = createSignal(false)
-  const [probe, setProbe] = createSignal<{ ok: boolean; text: string } | null>(null)
-  // 检测's last pick: the detail remounts per provider (keyed Show), so another provider starts from its default
-  const [probedModel, setProbedModel] = createSignal<string | undefined>()
+  // the probes' results, this detail's only (it remounts per provider): the connectivity's, and one per model tested.
+  // They answer the configuration they ran on, so a change to it clears them (the effects below)
+  const [reach, setReach] = createSignal<Probe[] | "running" | null>(null)
+  const [tests, setTests] = createSignal<Record<string, Probe | "running" | undefined>>({})
+  const [batch, setBatch] = createSignal<AbortController | null>(null) // 检测全部 in flight
+  let reachRun: object | null = null // the connectivity run whose result may land; another run or a clear voids it
+  const inflight = new Map<string, number>() // per model, the test whose result may land, the same way
+  const clearResults = () => {
+    reachRun = null
+    inflight.clear()
+    batch()?.abort()
+    setBatch(null)
+    setReach(null)
+    setTests({})
+  }
   const [mq, setMq] = createSignal("")
   const [searching, setSearching] = createSignal(false)
   const [folded, setFolded] = createSignal(false)
@@ -224,22 +304,36 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   let savingKey: Promise<void> | undefined
   const keySaved = () => savingKey ?? Promise.resolve()
   const storeKey = (): Promise<void> => {
-    const run: Promise<void> = writeKey().finally(() => {
-      if (savingKey === run) savingKey = undefined
-    })
+    const run: Promise<void> = writeKey()
+      .then((how) => {
+        // a key replaced in place changes nothing the effects below watch: the results go here, and the address
+        // is tried with the new key (a new secret changes the provider, and the effect does the same)
+        if (how === "rekeyed") {
+          clearResults()
+          void runReach()
+        }
+      })
+      .finally(() => {
+        if (savingKey === run) savingKey = undefined
+      })
     savingKey = run
     return run
   }
-  const writeKey = async () => {
+  /** The key's type is the key's to say (the server reads it off the value); the vault's menu overrides it there. */
+  const writeKey = async (): Promise<"rekeyed" | "added" | undefined> => {
     const x = p()
     const value = typed().trim()
     if (!x || !value) return
     const own = secretOf(x)
     setTyped("")
     setPlain(null)
-    if (own && own.name === x.name) return setSecret(own.id, { name: own.name, type: own.type, value })
-    const s = await addSecret({ name: x.name, type: own?.type ?? "api_key", value })
+    if (own && own.name === x.name) {
+      await setSecret(own.id, { name: own.name, value })
+      return "rekeyed"
+    }
+    const s = await addSecret({ name: x.name, value })
     await putProvider({ ...x, secret: s.id })
+    return "added"
   }
   /** What the field holds: the typed text, else the stored key while the eye is open on it. */
   const shownKey = (x: Provider) => typed() || (reveal() && plain()?.id === x.secret ? plain()!.value : "")
@@ -251,20 +345,81 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
     if (x && !typed() && secretOf(x)) setPlain({ id: x.secret!, value: await secretValue(x.secret!) })
   }
   const stored = (x: Provider) => (secretOf(x) ? secretValue(x.secret!) : "")
-  /** 检测's default model: the routing's pick on this provider (the default pair, else a stage's), else the first. */
-  const testModel = (x: Provider) =>
-    [route().default, ...Object.values(route().stages ?? {})].find(
-      (q) => q?.provider === x.id && x.models.some((m) => m.id === q.model),
-    )?.model ?? x.models[0]?.id
-  const runProbe = async (model: string | undefined) => {
+  /** Connectivity: the listing from every endpoint the provider has, through its proxy with its key; no model, no
+   *  token. A key being typed goes up first, or the probe would go out without it. */
+  const runReach = async () => {
     const x = p()
     if (!x) return
-    setProbedModel(model)
     if (typed().trim()) void storeKey()
     await keySaved()
-    setProbe({ ok: true, text: model ? `${model} · …` : "…" })
-    setProbe(await testProvider(x.id, model))
+    const run = (reachRun = {})
+    setReach("running")
+    const got = await testProvider(x.id).catch((e: unknown) => [refused(e)])
+    if (reachRun === run) setReach(got)
   }
+  /** One model: a one-token request under its format. */
+  const testOne = async (id: string) => {
+    const x = p()
+    if (!x) return
+    const n = (inflight.get(id) ?? 0) + 1
+    inflight.set(id, n)
+    setTests((t) => ({ ...t, [id]: "running" }))
+    const got = await testProvider(x.id, id).then(
+      (r) => r[0] ?? refused(new Error("no probe")),
+      (e: unknown) => refused(e),
+    )
+    if (inflight.get(id) === n) setTests((t) => ({ ...t, [id]: got }))
+  }
+  /** Every model the list shows (a search narrows it), three at a time, in list order; the stop lets the three in
+   *  flight finish and starts no more. */
+  const testAll = async () => {
+    const x = p()
+    if (!x || batch()) return
+    const ac = new AbortController()
+    setBatch(ac)
+    const queue = models(x)
+    const worker = async () => {
+      for (let id = queue.shift(); id !== undefined && !ac.signal.aborted; id = queue.shift()) await testOne(id)
+    }
+    await Promise.all([worker(), worker(), worker()])
+    if (batch() === ac) setBatch(null)
+  }
+  const stopAll = () => {
+    batch()?.abort()
+    setBatch(null)
+  }
+  const done = (t: Probe | "running" | undefined): Probe | undefined => (t && t !== "running" ? t : undefined)
+  const failed = (t: Probe | "running" | undefined): Probe | undefined => (done(t)?.ok === false ? done(t) : undefined)
+  const slot = (t: Probe | "running" | undefined) =>
+    t === undefined ? "检测" : t === "running" ? "…" : t.ok ? took(t.ms) : "失败"
+  // the results answer the configuration they ran on: the address, the proxy, the headers, the key or the default
+  // protocol changed clears them all and tries the address again (it was just saved: this is the moment to know);
+  // a model's own protocol changed clears that model's
+  createEffect(
+    () => {
+      const x = p()
+      return x && JSON.stringify([x.endpoints, x.proxy, x.headers, x.secret, x.defaultFormat])
+    },
+    (fp, prev) => {
+      if (prev !== undefined && fp !== undefined && fp !== prev) {
+        clearResults()
+        void runReach()
+      }
+    },
+  )
+  createEffect(
+    () => {
+      const x = p()
+      return Object.fromEntries((x?.models ?? []).map((m) => [m.id, m.format ?? x!.defaultFormat]))
+    },
+    (now, prev) => {
+      if (!prev) return
+      const changed = Object.keys(now).filter((id) => prev[id] !== undefined && prev[id] !== now[id])
+      if (!changed.length) return
+      for (const id of changed) inflight.delete(id)
+      setTests((t) => Object.fromEntries(Object.entries(t).filter(([id]) => !changed.includes(id))))
+    },
+  )
   const endpoints = (x: Provider) => FORMATS.filter((f) => x.endpoints[f]?.url.trim()).length
   const models = (x: Provider) => x.models.map((m) => m.id).filter((id) => hit(id, mq()))
 
@@ -299,11 +454,6 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
             <div class="block">
               <div class="block-title">
                 <h3>API 密钥</h3>
-                <div class="right">
-                  <Show when={probe()}>
-                    {(t) => <span class={{ tag: true, mono: true, ok: t().ok, bad: !t().ok }}>{t().text}</span>}
-                  </Show>
-                </div>
               </div>
               <div
                 class="row keyrow"
@@ -354,23 +504,57 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                 >
                   <Key />
                 </button>
-                <Show
-                  when={x().models.length}
-                  fallback={
-                    <button type="button" class="btn" onClick={() => void runProbe(undefined)}>
-                      检测
-                    </button>
-                  }
-                >
-                  <Menu
-                    action="检测"
-                    label="检测：选择模型"
-                    value={probedModel() ?? testModel(x())}
-                    options={x().models.map((m) => ({ value: m.id, label: m.id, glyph: m.id }))}
-                    onPick={(m) => void runProbe(m)}
-                  />
-                </Show>
+                {/* connectivity: a tag per distinct listing URL, each a button that runs it again (the proxy may have
+                    changed outside this page); a verdict is one of a few fixed strings, so the tags hold their width */}
+                <div class="probes">
+                  <Show
+                    when={reach()}
+                    fallback={
+                      <button type="button" class="tag act" onClick={() => void runReach()}>
+                        检测
+                      </button>
+                    }
+                  >
+                    {(r) => (
+                      <Show
+                        when={r() !== "running" ? (r() as Probe[]) : undefined}
+                        fallback={<span class="tag">…</span>}
+                      >
+                        {(probes) => (
+                          <For each={probes()} keyed={false}>
+                            {(pr) => {
+                              const v = () => verdict(pr())
+                              return (
+                                <button
+                                  type="button"
+                                  class={{ tag: true, act: true, ok: v().tone === "ok", bad: v().tone === "bad" }}
+                                  data-hint={sent(pr())}
+                                  onClick={() => void runReach()}
+                                >
+                                  {probes().length > 1
+                                    ? `${pr()
+                                        .formats.map((f) => FORMAT[f])
+                                        .join("/")} · `
+                                    : ""}
+                                  {v().text}
+                                </button>
+                              )
+                            }}
+                          </For>
+                        )}
+                      </Show>
+                    )}
+                  </Show>
+                </div>
               </div>
+              {/* a failed probe explains itself under the row; a 404 does not: the address answered, it just lists nothing */}
+              <Show when={reach() !== "running" ? (reach() as Probe[] | null) : null}>
+                {(probes) => (
+                  <For each={probes().filter((pr) => !pr.ok && pr.status !== 404)} keyed={false}>
+                    {(pr) => <ProbeError probe={pr()} />}
+                  </For>
+                )}
+              </Show>
             </div>
 
             <div class="block">
@@ -436,6 +620,20 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   />
                 </label>
                 <div class="right">
+                  <Show when={x().models.length}>
+                    <Show
+                      when={batch()}
+                      fallback={
+                        <button type="button" class="btn sm ghost" onClick={() => void testAll()}>
+                          检测全部
+                        </button>
+                      }
+                    >
+                      <button type="button" class="btn sm ghost" onClick={stopAll}>
+                        停止
+                      </button>
+                    </Show>
+                  </Show>
                   <div class="btn-join">
                     <button type="button" class="btn sm" onClick={() => open("sync")}>
                       <Sync /> <span>同步模型</span>
@@ -480,28 +678,46 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                         </span>
                       </summary>
                       <For each={g()[1]} keyed={(id) => id}>
-                        {(id) => (
-                          <div class="m-row">
-                            <Family id={id()} />
-                            <ModelName id={id()} />
-                            <button
-                              type="button"
-                              class="icon sm"
-                              aria-label="模型设置"
-                              onClick={() => openModel(x().models.find((m) => m.id === id())!)}
-                            >
-                              <Gear />
-                            </button>
-                            <button
-                              type="button"
-                              class="icon sm"
-                              aria-label="移除模型"
-                              onClick={() => removeModels(x(), [id()])}
-                            >
-                              <Minus />
-                            </button>
-                          </div>
-                        )}
+                        {(id) => {
+                          const t = () => tests()[id()]
+                          return (
+                            <>
+                              <div class="m-row">
+                                <Family id={id()} />
+                                <ModelName id={id()} />
+                                {/* the test's slot: one width through its states, so the row never reflows; a
+                                    result shows the time or 失败, and a press tests again */}
+                                <button
+                                  type="button"
+                                  class={{ "m-probe": true, ok: !!done(t())?.ok, bad: !!failed(t()) }}
+                                  aria-label={`检测 ${id()}`}
+                                  data-hint={done(t()) && sent(done(t())!)}
+                                  disabled={t() === "running"}
+                                  onClick={() => void testOne(id())}
+                                >
+                                  {slot(t())}
+                                </button>
+                                <button
+                                  type="button"
+                                  class="icon sm"
+                                  aria-label="模型设置"
+                                  onClick={() => openModel(x().models.find((m) => m.id === id())!)}
+                                >
+                                  <Gear />
+                                </button>
+                                <button
+                                  type="button"
+                                  class="icon sm"
+                                  aria-label="移除模型"
+                                  onClick={() => removeModels(x(), [id()])}
+                                >
+                                  <Minus />
+                                </button>
+                              </div>
+                              <Show when={failed(t())}>{(pr) => <ProbeError probe={pr()} />}</Show>
+                            </>
+                          )
+                        }}
                       </For>
                     </details>
                   )}
@@ -530,7 +746,6 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
 interface Request {
   defaultFormat: Format
   endpoints: Record<Format, { url: string; exactPrefix: boolean }>
-  type: SecretView["type"]
   ttl: "5m" | "1h"
   proxy: "env" | "direct" | "custom"
   proxyUrl: string
@@ -541,7 +756,6 @@ const requestOf = (p: Provider): Request => ({
   endpoints: Object.fromEntries(
     FORMATS.map((f) => [f, { url: p.endpoints[f]?.url ?? "", exactPrefix: !!p.endpoints[f]?.exactPrefix }]),
   ) as Request["endpoints"],
-  type: secretOf(p)?.type ?? "api_key",
   ttl: p.cacheTtl ?? "5m",
   proxy: p.proxy === undefined ? "env" : p.proxy === false ? "direct" : "custom",
   proxyUrl: typeof p.proxy === "string" ? p.proxy : "",
@@ -578,8 +792,6 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
     const p = providerOf(props.id)
     const d = r()
     if (!p || !d) return
-    const s = secretOf(p)
-    if (s && s.type !== d.type) await setSecret(s.id, { name: s.name, type: d.type })
     await putProvider(applied(p, d))
     props.onClose()
   }
@@ -645,17 +857,8 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
               )}
             </For>
             <div class="drawer-more">
+              {/* no auth menu here: how a key is sent is the key's (the vault's), not the endpoint's */}
               <div class="pair">
-                <div class="field-group">
-                  <span class="label">认证方式</span>
-                  <Menu
-                    small
-                    label="认证方式"
-                    value={d().type}
-                    options={AUTH}
-                    onPick={(type) => edit((x) => ({ ...x, type }))}
-                  />
-                </div>
                 <div class="field-group">
                   <span class="label">缓存有效期</span>
                   <Menu
@@ -669,36 +872,36 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                     onPick={(ttl) => edit((x) => ({ ...x, ttl }))}
                   />
                 </div>
+                <div class="field-group">
+                  <span class="label">网络代理</span>
+                  <Menu
+                    small
+                    label="网络代理"
+                    value={d().proxy}
+                    options={[
+                      { value: "env", label: "跟随系统环境" },
+                      { value: "direct", label: "强制直连" },
+                      { value: "custom", label: "自定义代理地址" },
+                    ]}
+                    onPick={(proxy) => edit((x) => ({ ...x, proxy }))}
+                  />
+                </div>
               </div>
-              <div class="field-group">
-                <span class="label">网络代理</span>
-                <Menu
-                  small
-                  label="网络代理"
-                  value={d().proxy}
-                  options={[
-                    { value: "env", label: "跟随系统环境" },
-                    { value: "direct", label: "强制直连" },
-                    { value: "custom", label: "自定义代理地址" },
-                  ]}
-                  onPick={(proxy) => edit((x) => ({ ...x, proxy }))}
-                />
-                <Show when={d().proxy === "custom"}>
-                  <div class="input-box sm">
-                    <input
-                      type="url"
-                      class="mono"
-                      placeholder="http://127.0.0.1:7890"
-                      aria-label="代理地址"
-                      value={d().proxyUrl}
-                      onInput={(e) => {
-                        const proxyUrl = e.currentTarget.value
-                        edit((x) => ({ ...x, proxyUrl }))
-                      }}
-                    />
-                  </div>
-                </Show>
-              </div>
+              <Show when={d().proxy === "custom"}>
+                <div class="input-box sm">
+                  <input
+                    type="url"
+                    class="mono"
+                    placeholder="http://127.0.0.1:7890"
+                    aria-label="代理地址"
+                    value={d().proxyUrl}
+                    onInput={(e) => {
+                      const proxyUrl = e.currentTarget.value
+                      edit((x) => ({ ...x, proxyUrl }))
+                    }}
+                  />
+                </div>
+              </Show>
               <div class="field-group">
                 <span class="label">自定义请求头</span>
                 <For each={d().headers} keyed={false}>
@@ -935,15 +1138,28 @@ const VaultDrawer = (props: { for: string | undefined; onClose: () => void }) =>
 const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: () => void }) => {
   const list = read(providers)
   const p = () => list().find((x) => x.id === props.id)
-  const [remote, setRemote] = createSignal<{ ids?: string[]; error?: string } | null>(null)
+  const [remote, setRemote] = createSignal<{ models?: Listed[]; error?: string } | null>(null)
   const [q, setQ] = createSignal("")
-  const shown = () => (remote()?.ids ?? []).filter((id) => hit(id, q()))
+  const shown = () => (remote()?.models ?? []).map((m) => m.id).filter((id) => hit(id, q()))
+  /** Ids back to their listing rows (the groups are over ids), to add them as listed. */
+  const pick = (ids: readonly string[]) => {
+    const rows = new Map((remote()?.models ?? []).map((m) => [m.id, m]))
+    return ids.map((id) => rows.get(id) ?? { id })
+  }
+  /** Models already in the list on the provider's default protocol that the listing puts on another endpoint: their
+   *  format unset (one the player set stays), the listing's set. The only place a stored format is corrected. */
+  const stale = (x: Provider) =>
+    (remote()?.models ?? []).filter((r) => r.format && x.models.some((m) => m.id === r.id && m.format === undefined))
+  const correct = (x: Provider) => {
+    const fix = new Map(stale(x).map((r) => [r.id, r.format!]))
+    void putProvider({ ...x, models: x.models.map((m) => (fix.has(m.id) ? { ...m, format: fix.get(m.id)! } : m)) })
+  }
   onSettled(() => {
     void props
       .ready()
       .then(() => listModels(props.id))
       .then(
-        (ids) => setRemote({ ids }),
+        (models) => setRemote({ models }),
         (e: unknown) => setRemote({ error: e instanceof Error ? e.message : String(e) }),
       )
   })
@@ -953,13 +1169,13 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
         <>
           <div class="drawer-head">
             <h3>{x().name} 模型</h3>
-            <Show when={remote()?.ids}>{(ids) => <span class="tag mono">{ids().length}</span>}</Show>
+            <Show when={remote()?.models}>{(models) => <span class="tag mono">{models().length}</span>}</Show>
             <span class="spacer" />
             <button
               type="button"
               class="btn sm ghost"
-              disabled={!remote()?.ids?.length}
-              onClick={() => addModels(x(), remote()?.ids ?? [])}
+              disabled={!remote()?.models?.length}
+              onClick={() => addModels(x(), remote()?.models ?? [])}
             >
               <Plus /> <span>添加全部</span>
             </button>
@@ -979,6 +1195,16 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
               />
             </div>
           </div>
+          <Show when={stale(x()).length}>
+            {(n) => (
+              <div class="drawer-note">
+                <span>{n()} 个已添加模型的协议与服务商列表不符</span>
+                <button type="button" class="btn xs" onClick={() => correct(x())}>
+                  更正
+                </button>
+              </div>
+            )}
+          </Show>
           <div class="drawer-body scroller">
             <Show when={remote()} fallback={<p class="none">正在获取模型列表…</p>}>
               {(r) => (
@@ -996,7 +1222,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                               class="icon sm"
                               aria-label="添加分组全部模型"
                               disabled={g()[1].every((id) => x().models.some((m) => m.id === id))}
-                              onClick={quiet(() => addModels(x(), g()[1]))}
+                              onClick={quiet(() => addModels(x(), pick(g()[1])))}
                             >
                               <Plus />
                             </button>
@@ -1022,7 +1248,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                                   type="button"
                                   class="icon sm"
                                   aria-label={added() ? "移除模型" : "添加模型"}
-                                  onClick={() => (added() ? removeModels(x(), [id()]) : addModels(x(), [id()]))}
+                                  onClick={() => (added() ? removeModels(x(), [id()]) : addModels(x(), pick([id()])))}
                                 >
                                   <Show when={added()} fallback={<Plus />}>
                                     <Minus />
@@ -1256,7 +1482,7 @@ const AddModelDialog = (props: { id: string; opener: Opener<undefined> }) => {
         onSubmit={(e) => {
           e.preventDefault()
           const p = providerOf(props.id)
-          if (p && id().trim()) addModels(p, [id().trim()])
+          if (p && id().trim()) addModels(p, [{ id: id().trim() }])
           el.close()
         }}
       >

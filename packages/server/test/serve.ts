@@ -340,7 +340,9 @@ await run(false)
     `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
   const upstream = createServer((req, res) => {
     seen.push(`${req.method} ${req.url} ${req.headers.authorization}`)
-    if (req.url === "/v1/models") return void res.end(JSON.stringify({ data: [{ id: "m" }, { id: "n" }] }))
+    if (req.url === "/v1/models")
+      return void res.end(JSON.stringify({ data: [{ id: "m" }, { id: "n", supported_endpoints: ["/messages"] }] }))
+    if (req.method === "GET") return void res.end("<!doctype html><title>not an api</title>") // a reverse proxy's page
     let s = ""
     req.on("data", (c) => (s += c))
     req.on("end", () => {
@@ -384,13 +386,53 @@ await run(false)
     }
     assert.deepEqual((await call("PUT", "/providers/relay", relay)).body, [{ id: "relay", ...relay }])
     assert.equal((await call("PUT", "/providers/bad", { ...relay, key: VALUE, enabled: "yes" })).status, 400)
-    assert.deepEqual((await call("GET", "/providers/relay/models")).body, ["m", "n"])
+    // the listing: `n` is off the default protocol by the upstream's word, but the provider has no endpoint on the
+    // one it is on, so no format yet
+    assert.deepEqual((await call("GET", "/providers/relay/models")).body, [{ id: "m" }, { id: "n" }])
     assert.ok(seen.at(-1)!.endsWith(`Bearer ${VALUE}`)) // the key rode to the upstream, never back to the client
     const listed = (await call("POST", "/providers/relay/test")).body
-    assert.deepEqual([listed.url, listed.status, typeof listed.ms], [`${up}/v1/models`, 200, "number"])
+    assert.deepEqual(
+      [listed.length, listed[0].formats, listed[0].url, listed[0].status, listed[0].ok, typeof listed[0].ms],
+      [1, ["openai-compatible"], `${up}/v1/models`, 200, true, "number"],
+    )
     const asked = (await call("POST", "/providers/relay/test", { model: "m" })).body
-    assert.deepEqual([asked.url, asked.method, asked.status], [`${up}/v1/chat/completions`, "POST", 200])
+    assert.deepEqual(
+      [asked.length, asked[0].formats, asked[0].url, asked[0].method, asked[0].status, asked[0].ok],
+      [1, ["openai-compatible"], `${up}/v1/chat/completions`, "POST", 200, true],
+    )
     assert.equal((await call("POST", "/providers/none/test")).status, 404)
+    // three endpoints, two on one address: the listing probe is one request per distinct listing URL, the default's
+    // first; the dead one is a probe too, status 0 with the socket's code; and `n` now has an endpoint on its protocol
+    const dead = createServer().listen(0)
+    const deadUrl = `http://localhost:${(dead.address() as AddressInfo).port}`
+    dead.close()
+    const three = {
+      ...relay,
+      endpoints: { "openai-compatible": { url: up }, anthropic: { url: up }, gemini: { url: deadUrl } },
+    }
+    await call("PUT", "/providers/relay", three)
+    assert.deepEqual((await call("GET", "/providers/relay/models")).body, [
+      { id: "m" },
+      { id: "n", format: "anthropic" },
+    ])
+    const probes = (await call("POST", "/providers/relay/test")).body
+    assert.deepEqual(
+      probes.map((p: any) => [p.formats, p.url, p.status, p.ok, p.code]),
+      [
+        [["openai-compatible", "anthropic"], `${up}/v1/models`, 200, true, undefined],
+        [["gemini"], `${deadUrl}/v1beta/models`, 0, false, "ECONNREFUSED"],
+      ],
+    )
+    assert.ok(seen.filter((s) => s.startsWith("GET /v1/models")).length === 4) // one request for the shared address
+    assert.match(probes[1].error, /ECONNREFUSED/)
+    // a probe on an endpoint that answers but is no listing: reached (status 200), not ok, named as such
+    await call("PUT", "/providers/relay", { ...relay, endpoints: { "openai-compatible": { url: `${up}/x` } } })
+    const page = (await call("POST", "/providers/relay/test")).body
+    assert.deepEqual([page[0].status, page[0].ok, page[0].error], [200, false, "model listing failed: not JSON"])
+    // the provider's configuration is the request's fault, not a finding: a 400, not a probe
+    await call("PUT", "/providers/relay", { ...relay, secret: undefined })
+    assert.equal((await call("POST", "/providers/relay/test")).status, 400)
+    await call("PUT", "/providers/relay", relay)
 
     // routing: narrate on the relay, every other stage on the environment's model
     const act = async (text: string) =>
@@ -433,6 +475,20 @@ await run(false)
       { id: made.id, name: "Relay key", type: "auth_token", hint: "sk-nex****dcba" },
     ])
     assert.equal((await call("PUT", `/secrets/${made.id}`, { name: "x", type: "api_key", value: 1 })).status, 400)
+    // a write with a value and no type reads the type off the key: an OAuth token is a bearer, anything else a key;
+    // a rename without a value keeps the type it had
+    const typed = (await call("PUT", `/secrets/${made.id}`, { name: "Relay key", value: "sk-ant-oat01-abcdefghij" }))
+      .body
+    assert.equal(typed[0].type, "auth_token")
+    assert.equal((await call("PUT", `/secrets/${made.id}`, { name: "Renamed" })).body[0].type, "auth_token")
+    assert.equal(
+      (await call("PUT", `/secrets/${made.id}`, { name: "Relay key", value: "user_0123456789abcdef" })).body[0].type,
+      "api_key",
+    )
+    const untyped = (await call("POST", "/secrets", { name: "Oat", value: "sk-ant-oat01-0123456789" })).body
+    assert.equal(untyped.type, "auth_token")
+    await call("DELETE", `/secrets/${untyped.id}`)
+    await call("PUT", `/secrets/${made.id}`, { name: "Relay key", type: "auth_token", value: NEXT })
     // the reveal: the one route that answers the value, and only for a secret that exists
     assert.deepEqual(await (await fetch(`${base}/secrets/${made.id}/value`)).json(), { value: NEXT })
     assert.equal((await call("GET", "/secrets/none/value")).status, 404)
@@ -466,14 +522,18 @@ await run(false)
   const post = async (v: unknown) =>
     (await fetch(`${base}/providers/a/test`, { method: "POST", body: JSON.stringify(v) })).json() as Promise<any>
   try {
-    assert.deepEqual(await (await fetch(`${base}/providers/a/models`)).json(), ["claude-haiku-5-5"])
-    const listed = await post({})
+    assert.deepEqual(await (await fetch(`${base}/providers/a/models`)).json(), [{ id: "claude-haiku-5-5" }])
+    const [listed] = await post({})
     assert.deepEqual(
-      [listed.url, listed.method, listed.status, typeof listed.ms],
-      [`${mock.url}/v1/models`, "GET", 200, "number"],
+      [listed.url, listed.method, listed.status, listed.ok, typeof listed.ms],
+      [`${mock.url}/v1/models`, "GET", 200, true, "number"],
     )
-    const asked = await post({ model: "claude-haiku-5-5" })
-    assert.deepEqual([asked.url, asked.method, asked.status], [`${mock.url}/v1/messages`, "POST", 200])
+    const [asked] = await post({ model: "claude-haiku-5-5" })
+    assert.deepEqual([asked.url, asked.method, asked.status, asked.ok], [`${mock.url}/v1/messages`, "POST", 200, true])
+    // a model the mock does not know: the request went (the trace's URL and status), the answer was no
+    const [refused] = await post({ model: "claude-none" })
+    assert.deepEqual([refused.url, refused.method, refused.ok], [`${mock.url}/v1/messages`, "POST", false])
+    assert.ok(refused.status >= 400 && typeof refused.error === "string" && refused.error.length > 0)
   } finally {
     server.close()
     await mock.stop()

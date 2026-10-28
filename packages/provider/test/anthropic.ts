@@ -54,7 +54,7 @@ const user = (t: string): Message => ({ role: "user", content: t })
 
 const program = Effect.gen(function* () {
   // 1. model listing goes through the format's auth headers, not the SDK
-  const models = yield* Effect.promise(() => listModels(conn))
+  const models = (yield* Effect.promise(() => listModels(conn))).map((m) => m.id)
   assert.ok(models.includes(conn.model), `listed: ${models.join(",")}`)
   assert.deepEqual(capabilities(conn), { prefill: false, structured: "schema", reasoningBack: false })
 

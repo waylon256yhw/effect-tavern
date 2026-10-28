@@ -14,6 +14,12 @@ const RULES: Record<Format, { defaultPath: string; operationPath: string }> = {
   gemini: { defaultPath: "/v1beta", operationPath: "/models/{model}:streamGenerateContent" },
 }
 
+/** The formats whose operation path a listing names under a model's `supported_endpoints` (CommandCode's field: a
+ *  gateway that serves one model on `/chat/completions` only says so there). The gemini path carries the model and is
+ *  never listed, so gemini is never among them. */
+export const formatsOf = (paths: readonly string[]): Format[] =>
+  (Object.keys(RULES) as Format[]).filter((f) => paths.includes(RULES[f].operationPath))
+
 const operationPrefix = (format: Format, pathname: string): { prefix: string; streamQuery: boolean } | undefined => {
   if (format === "gemini") {
     const m = pathname.match(/^(.*)\/(?:models|tunedModels)\/[^/]+:(generateContent|streamGenerateContent)$/)
