@@ -1,17 +1,18 @@
 // The session beside the reading: what holds for the whole story and is byte-stable in the request head: the card,
 // this card's stories (which one is open), the persona the player is on this card, the writing in force (chips that
-// open the Writing page, writing.tsx), the armed pin, the two pages that look at the story (Timeline, Inspector) and the settings. The left card on desktop; on a phone, the sheet
+// open the Writing page, writing.tsx), the armed pin, the two pages that look at the story (Timeline, Inspector), the theme and the settings. The left card on desktop; on a phone, the sheet
 // the title opens. Both can be mounted, so the popovers and dialogs take an id prefix. Stories are the library's: a
 // story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
 // `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one.
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
-import { Edit, Pin, Probe, Settings, Snippets, Trash, Tree } from "./icons.tsx"
+import { Edit, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, working } from "./store.ts"
 import { chosen } from "./switches.ts"
+import { flip, theme } from "./theme.ts"
 import { openTimeline } from "./timeline.tsx"
 import { deleteStory, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
@@ -257,6 +258,16 @@ export const Session = (props: { at: string }) => {
           onClick={(e) => (closeUp(e.currentTarget), openInspector())}
         >
           <Probe />
+        </button>
+        {/* the theme (theme.ts): a flip, not a page, so the phone's sheet stays; pressed while the dark side holds */}
+        <button
+          type="button"
+          class="icon theme"
+          aria-label="Dark theme"
+          aria-pressed={theme() === "dark" ? "true" : "false"}
+          onClick={flip}
+        >
+          <Shade />
         </button>
         <button
           type="button"

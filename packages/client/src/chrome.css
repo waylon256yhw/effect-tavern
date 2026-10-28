@@ -714,11 +714,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the pages that look at the story, at the bottom */
+/* the pages that look at the story, at the bottom: the two that look at it on the left, the theme and the settings
+   on the right */
 .tools {
   display: flex;
   gap: var(--space-1);
   margin-top: auto;
+}
+.tools .theme {
+  margin-left: auto;
 }
 
 /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */
