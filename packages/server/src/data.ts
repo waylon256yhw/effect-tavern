@@ -223,13 +223,15 @@ export const open = (asked: string) => {
      *  `last` is its input: what the manager previews, since every story of a card opens on the same greeting. Every
      *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
-      /** The card's rows, or the one of them `only` names (none when that is another card's or no story). */
+      /** The card's rows, or the one of them `only` names (none when that is another card's or no story): the walk
+       *  starts from that story's head alone, so one row costs one line. */
       list: (card: string, only?: Id): StoryRow[] =>
         (
           q(
             `with recursive line(story, id, parent, text, note) as (
                select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
-                 from story s join node n on n.story = s.id and n.id = s.head where s.card = ?
+                 from story s join node n on n.story = s.id and n.id = s.head
+                 where s.card = ?1 and (?2 is null or s.id = ?2)
                union all
                select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
                  from node n join line l on n.story = l.story and n.id = l.parent),
@@ -239,8 +241,8 @@ export const open = (asked: string) => {
              select s.id, s.title, s.starred, s.updated, coalesce(t.turns, 0) as turns,
                (select json_extract(json, '$.input') from node where story = s.id and id = t.last) as last
              from story s left join turns t on t.story = s.id
-             where s.card = ? and (? is null or s.id = ?) order by s.updated desc, s.id desc`,
-          ).all(card, card, only ?? null, only ?? null) as Row[]
+             where s.card = ?1 and (?2 is null or s.id = ?2) order by s.updated desc, s.id desc`,
+          ).all(card, only ?? null) as Row[]
         ).map((r) => ({
           id: r["id"] as Id,
           title: (r["title"] as string | null) ?? null,

@@ -216,7 +216,7 @@ export const library = ({
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
   const sessions = new Map<Id, Session>()
-  const exists = (id: Id) => data.stories.list(card.id).some((s) => s.id === id)
+  const exists = (id: Id) => data.stories.list(card.id, id).length > 0 // one story's line, not the card's
   /** The most recently updated story, or a new one when the card has none. */
   const newest = () => data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
   /** A story's session, opened on its first request and the same one for every request that names it after. */

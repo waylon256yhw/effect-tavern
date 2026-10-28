@@ -148,6 +148,11 @@ assert.deepEqual(data.stories.search("other", "hello"), [])
     [y],
   )
   assert.deepEqual([data.stories.list("wuxia", z), data.stories.list("wuxia", 9999)], [[], []])
+  // the one row, its line walked alone, equal to its row in the whole listing
+  assert.deepEqual(
+    data.stories.list("wuxia", story)[0],
+    data.stories.list("wuxia").find((s) => s.id === story),
+  )
   assert.deepEqual(data.stories.delMany("wuxia", [x, y, z, 9999]), [x, y])
   assert.equal(data.stories.list("other").length, 1)
   data.stories.del(z)

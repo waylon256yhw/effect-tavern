@@ -46,10 +46,11 @@ export const Manager = (props: {
   let seq = 0
   const ask = (text: string) => {
     setQ(text)
+    setHits(new Map()) // the last query's hits go with it: a stale one would keep its row and its snippet under the new marks
     clearTimeout(timer)
     const n = ++seq
     const t = text.trim()
-    if (!t) return setHits(new Map())
+    if (!t) return
     timer = setTimeout(() => {
       void searchStories(t).then((found) => {
         if (n === seq) setHits(new Map(found.map((h) => [h.id, h])))
