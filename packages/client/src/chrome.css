@@ -601,23 +601,59 @@
   flex-direction: column;
   gap: var(--space-2);
 }
-/* the card: its name and its line, one button to the card page */
+/* the card: its name with the way in beside it, and its line to three rows; one button to the card page */
 .cardhead {
   display: grid;
-  gap: var(--space-1);
+  gap: 6px;
   margin: calc(-1 * var(--space-2));
   padding: var(--space-2);
+  border-radius: var(--radius-card);
   text-align: left;
 }
 .cardhead:hover {
   background: var(--ghost-hover);
 }
+.cardhead .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* the way in: a small badge at rest, so the head reads as a button without the pointer on it; it leans in on hover */
+.cardhead .enter {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--alpha-1);
+  color: var(--ink-3);
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    translate var(--dur-2) var(--ease);
+}
+.cardhead .enter svg {
+  width: 11px;
+  height: 11px;
+}
+.cardhead:hover .enter {
+  background: var(--alpha-2);
+  color: var(--ink);
+  translate: 1px 0;
+}
+/* the line: three rows at most (about 39 characters: the opening sentence whole), then clipped */
 .cardhead p {
   margin: 0;
   color: var(--ink-2);
-  white-space: nowrap;
+  font-size: var(--text-footnote);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* a story row: the player's name for it, and under it the turns and the time; the open one sits on a tint */
 .stories ul {
@@ -675,11 +711,13 @@
 .snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
-/* the setting in force (persona, writing): one chip per thing set, stacked; the persona's menu anchor, the Writing page's button */
+/* the setting in force (persona, writing): its chips on one line, the way in at the right; the persona's menu
+   anchor, the Writing page's button. The chips are a size down from the reader's: three four-character chips
+   (55px each) in the 176px the row leaves beside its chevron */
 .session .chosen {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-1);
   width: 100%;
   margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
@@ -688,6 +726,42 @@
 }
 .session .chosen:hover:not(:disabled) {
   background: var(--ghost-hover);
+}
+.session .chosen .chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3.5px;
+  overflow: hidden;
+}
+.session .chosen .chip {
+  flex: none;
+  height: 22px;
+  padding: 0 5.5px;
+  font-size: var(--text-caption);
+}
+/* the chips past the third, as a count */
+.session .chosen .chip.more {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+  background: var(--alpha-2);
+}
+.session .chosen .chev {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+  opacity: 0.75;
+  transition:
+    translate var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    opacity var(--dur-2) var(--ease);
+}
+.session .chosen:hover:not(:disabled) .chev {
+  color: var(--ink);
+  opacity: 1;
+  translate: 1px 0;
 }
 .pinned p {
   display: flex;
@@ -799,6 +873,10 @@
   }
   .side .session {
     flex: 1;
+  }
+  /* the one zone that grows sits in the card's spare height; the settings under it stay compact */
+  .side .stories {
+    margin-block: auto;
   }
   .glance {
     overflow: hidden;

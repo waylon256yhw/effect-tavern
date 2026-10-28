@@ -7,7 +7,7 @@
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
-import { Edit, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
+import { Edit, Next, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, type StoryRow, working } from "./store.ts"
@@ -61,6 +61,7 @@ export const Session = (props: { at: string }) => {
   // The persona in force on this card, and the pick: a change of the player's own layer, nothing of the story's.
   const cardId = () => view()?.id ?? ""
   const current = () => people().find((p) => p.id === me()?.persona?.[cardId()])
+  const writing = () => chosen(me()?.writing, !!me()?.forCard[cardId()]?.some((f) => f.text?.trim()))
   const pick = (id: string | undefined) => {
     const p = me()
     if (!p) return
@@ -88,8 +89,14 @@ export const Session = (props: { at: string }) => {
   }
   return (
     <div class="session">
+      {/* the card: its name with the way in beside it (a badge at rest, not a hover), its line to three rows */}
       <button type="button" class="cardhead" onClick={openCard} aria-label="The card">
-        <h1>{view()?.title}</h1>
+        <span class="top">
+          <h1>{view()?.title}</h1>
+          <span class="enter" aria-hidden="true">
+            <Next />
+          </span>
+        </span>
         <Show when={view()?.summary}>{(s) => <p>{s()}</p>}</Show>
       </button>
       <section class="stories" aria-label="Stories">
@@ -186,7 +193,10 @@ export const Session = (props: { at: string }) => {
       <section class="persona" aria-label="Persona">
         <h2>Persona</h2>
         <button type="button" class="chosen" popovertarget={id("persona")} disabled={!me() || !people().length}>
-          <span class="chip">{current()?.name ?? "跟随卡片"}</span>
+          <span class="chips">
+            <span class="chip">{current()?.name ?? "卡片默认"}</span>
+          </span>
+          <Next class="chev" aria-hidden="true" />
         </button>
         <div id={id("persona")} class="snippets" popover role="menu" onKeyDown={roam}>
           <For each={people()} keyed={(p) => p.id}>
@@ -212,23 +222,32 @@ export const Session = (props: { at: string }) => {
             aria-checked={current() ? "false" : "true"}
             onClick={(e) => (e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover(), pick(undefined))}
           >
-            <span class="name">As the card has it</span>
+            <span class="name">卡片默认</span>
           </button>
         </div>
       </section>
-      {/* the writing in force, as chips: the switches set (the card's own text holds for the rest) and a per-card
-          supplement; one button, the Writing page (a change there is a head rewrite, so it reads as a preference) */}
+      {/* the writing in force, as chips on one line: the switches set (the card's own text holds for the rest) and a
+          per-card supplement; up to three whole (the row's 176px takes three four-character chips), four or five as
+          the first two and "+N" (switches.ts's order, so the voice's two stay in view; the row's title names them
+          all). One button, the Writing page (a change there is a head rewrite, so it reads as a preference) */}
       <section class="writing" aria-label="Writing">
         <h2>Writing</h2>
         <button
           type="button"
           class="chosen"
           disabled={!me()}
+          title={writing().join(" · ")}
           onClick={(e) => (closeUp(e.currentTarget), openWriting())}
         >
-          <For each={chosen(me()?.writing, !!me()?.forCard[cardId()]?.some((f) => f.text?.trim()))} keyed={(l) => l}>
-            {(l) => <span class="chip">{l()}</span>}
-          </For>
+          <span class="chips">
+            <For each={writing().length > 3 ? writing().slice(0, 2) : writing()} keyed={(l) => l}>
+              {(l) => <span class="chip">{l()}</span>}
+            </For>
+            <Show when={writing().length > 3}>
+              <span class="chip more">+{writing().length - 2}</span>
+            </Show>
+          </span>
+          <Next class="chev" aria-hidden="true" />
         </button>
       </section>
       <Show when={pinned()}>
