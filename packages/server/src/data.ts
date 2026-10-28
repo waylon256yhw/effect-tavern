@@ -166,15 +166,21 @@ export const open = (asked: string) => {
     /** The library's cards by id and title, the Card in the json column left unread. */
     cards: (): { id: string; title: string }[] =>
       q("select id, title from card order by title").all() as { id: string; title: string }[],
-    /** One card's stories, newest first, each with its title, its size, its head node and its first root (what a list
-     *  names it by), parsed for the caller to read. */
+    /** One card's stories, newest first, each with its title (the player's, or none) and its turns: on the head's line
+     *  (head, its parent, up to the root), the nodes with a player input, a line or a note to the narrator (a note-only
+     *  turn has `text: ""`). So a greeting is not a turn, a story with only its opening has none, and a swipe (a
+     *  sibling carrying the same input) is still the one turn. The line is walked once, each node read by its key. */
     stories: {
       list: (card: string) =>
         (
           q(
-            `select s.id, s.title, s.updated, (select count(*) from node where story = s.id) as turns,
-               (select json from node where story = s.id and id = s.head) as json,
-               (select json from node where story = s.id and parent is null order by id limit 1) as root
+            `select s.id, s.title, s.updated,
+               (with recursive line(parent, json) as (
+                  select parent, json from node where story = s.id and id = s.head
+                  union all
+                  select n.parent, n.json from node n join line on n.story = s.id and n.id = line.parent)
+                select count(*) from line
+                  where json_extract(json, '$.input.text') != '' or json_extract(json, '$.input.note') is not null) as turns
              from story s where card = ? order by updated desc, id desc`,
           ).all(card) as Row[]
         ).map((r) => ({
@@ -182,8 +188,6 @@ export const open = (asked: string) => {
           title: (r["title"] as string | null) ?? null,
           updated: r["updated"] as number,
           turns: r["turns"] as number,
-          head: parse<unknown>(r) ?? null,
-          root: r["root"] == null ? null : (JSON.parse(r["root"] as string) as unknown),
         })),
       /** A name the player gave, or none; `updated` untouched, so a rename never reorders the list. */
       title: (id: Id, title: string | null) => void q("update story set title = ? where id = ?").run(title, id),

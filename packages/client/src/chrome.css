@@ -518,6 +518,14 @@
   padding: 0 var(--space-4);
   font-size: var(--text-body);
 }
+/* the rename: the question, a field, the row */
+.confirm .field {
+  margin-bottom: var(--space-4);
+}
+.chip.primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
 .chip.danger {
   background: var(--danger);
   color: #fff;
@@ -593,25 +601,61 @@
   flex-direction: column;
   gap: var(--space-2);
 }
-/* the card: its name and its line, one button to the card page */
+/* the card: its name with the way in beside it, and its line to three rows; one button to the card page */
 .cardhead {
   display: grid;
-  gap: var(--space-1);
+  gap: 6px;
   margin: calc(-1 * var(--space-2));
   padding: var(--space-2);
+  border-radius: var(--radius-card);
   text-align: left;
 }
 .cardhead:hover {
   background: var(--ghost-hover);
 }
+.cardhead .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* the way in: a small badge at rest, so the head reads as a button without the pointer on it; it leans in on hover */
+.cardhead .enter {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--alpha-1);
+  color: var(--ink-3);
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    translate var(--dur-2) var(--ease);
+}
+.cardhead .enter svg {
+  width: 11px;
+  height: 11px;
+}
+.cardhead:hover .enter {
+  background: var(--alpha-2);
+  color: var(--ink);
+  translate: 1px 0;
+}
+/* the line: three rows at most (about 39 characters: the opening sentence whole), then clipped */
 .cardhead p {
   margin: 0;
   color: var(--ink-2);
-  white-space: nowrap;
+  font-size: var(--text-footnote);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-/* a story row: the player's last line, and under it the size and the time; the open one sits on a tint */
+/* a story row: the player's name for it, and under it the turns and the time; the open one sits on a tint */
 .stories ul {
   margin: 0;
   padding: 0;
@@ -623,8 +667,10 @@
 }
 .story {
   display: grid;
+  /* the column can shrink under its text: a long line clips, never widens the list */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
-  box-sizing: border-box; /* a button's default; the renaming row is a div */
+  box-sizing: border-box;
   width: 100%;
   padding: var(--space-1) var(--space-2);
   text-align: left;
@@ -635,57 +681,144 @@
 .story[aria-current] {
   background: var(--alpha-1);
 }
-/* the open story's name being typed: the same line, the row carries the focus ring */
-.story input.first {
-  width: 100%;
-  padding: 0;
-  border: 0;
-  font: inherit;
-  color: inherit;
-  background: none;
-  outline: none;
-}
-.story:focus-within {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
-}
-.story .ago {
-  flex: none;
-}
 .story .first,
-.story .last {
+.story .meta {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the last line gives way, the time always shows */
+/* a story never named */
+.story .first.unnamed {
+  color: var(--ink-2);
+}
 .story .meta {
-  display: flex;
-  gap: var(--space-1);
   font-size: var(--text-footnote);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-/* the session's menu (persona) hangs under the chip that opens it (the invoker is the implicit anchor), exactly as
-   wide as the content column (the chip button bleeds a gutter each side): never past the card's edge, never over what
-   it sets */
-.session .snippets {
-  position-anchor: auto;
-  position-area: bottom;
-  box-sizing: border-box;
-  width: calc(anchor-size(width) - 2 * var(--space-2));
+/* the persona picker (side.tsx): a sheet (rising on a phone over the session sheet; on desktop a centred card of
+   25rem) with a search over the player's personas and two-line rows, the card's own first; the list alone scrolls */
+.picker {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-3);
+}
+.picker .search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.picker .search .input-box {
+  flex: 1;
+}
+.picker .list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+}
+/* a row: the name, under it the text's first line, the check at the right on the pick in force */
+.picker .item {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  row-gap: 1px;
+  align-items: center;
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.picker .item:hover,
+.picker .item:focus-visible {
+  background: var(--ghost-hover);
+  outline: none;
+}
+.picker .item .name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  margin: var(--space-1) 0 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker .item[aria-checked="true"] .name {
+  font-weight: 600;
+  color: var(--primary);
+}
+.picker .item .name .tag {
+  height: 18px;
+  padding: 0 5px;
+  font-weight: 500;
+}
+.picker .item .check {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 14px;
+  height: 14px;
+  color: var(--ink);
+  visibility: hidden;
+}
+.picker .item[aria-checked="true"] .check {
+  visibility: visible;
+}
+.picker .item .bio {
+  grid-column: 1;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker hr {
+  flex: none;
+  margin: 2px var(--space-2);
+  border: 0;
+  height: var(--hairline);
+  background: var(--line);
+}
+.picker .empty {
+  margin: var(--space-1) 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--alpha-1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+}
+.sheet footer .btn.ghost {
+  gap: 4px;
 }
 /* the pick in force among the menu's names */
 .snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
-/* the setting in force (persona, writing): one chip per thing set, stacked; the persona's menu anchor, the Writing page's button */
+/* the setting in force (persona, writing): its chips on one line, the way in at the right; the persona's menu
+   anchor, the Writing page's button. The chips are a size down from the reader's: three four-character chips
+   (55px each) in the 176px the row leaves beside its chevron */
 .session .chosen {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-1);
   width: 100%;
   margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
@@ -694,6 +827,42 @@
 }
 .session .chosen:hover:not(:disabled) {
   background: var(--ghost-hover);
+}
+.session .chosen .chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3.5px;
+  overflow: hidden;
+}
+.session .chosen .chip {
+  flex: none;
+  height: 22px;
+  padding: 0 5.5px;
+  font-size: var(--text-caption);
+}
+/* the chips past the third, as a count */
+.session .chosen .chip.more {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+  background: var(--alpha-2);
+}
+.session .chosen .chev {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+  opacity: 0.75;
+  transition:
+    translate var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    opacity var(--dur-2) var(--ease);
+}
+.session .chosen:hover:not(:disabled) .chev {
+  color: var(--ink);
+  opacity: 1;
+  translate: 1px 0;
 }
 .pinned p {
   display: flex;
@@ -714,11 +883,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the pages that look at the story, at the bottom */
+/* the pages that look at the story, at the bottom: the two that look at it on the left, the theme and the settings
+   on the right */
 .tools {
   display: flex;
   gap: var(--space-1);
   margin-top: auto;
+}
+.tools .theme {
+  margin-left: auto;
 }
 
 /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */
@@ -763,6 +936,9 @@
   .sheet .record {
     flex: 0 1 auto;
   }
+  .sheet:has(> .picker) {
+    width: min(25rem, calc(100% - 2 * var(--space-5)));
+  }
   .canvas {
     box-sizing: border-box;
     display: grid;
@@ -801,6 +977,10 @@
   }
   .side .session {
     flex: 1;
+  }
+  /* the one zone that grows sits in the card's spare height; the settings under it stay compact */
+  .side .stories {
+    margin-block: auto;
   }
   .glance {
     overflow: hidden;

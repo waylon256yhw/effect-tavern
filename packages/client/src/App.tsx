@@ -396,7 +396,7 @@ const Topbar = () => {
         <h1>{view()?.title}</h1>
       </button>
       <Sheet id="session" heading="Session">
-        <Session at="sheet" />
+        <Session />
       </Sheet>
       <button class="icon" aria-label="Status" commandfor="status" command="show-modal">
         <Status />

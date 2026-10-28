@@ -17,7 +17,7 @@ assert.equal(writing({ pov: "second" })[0]!.text, sentence("pov", "second"))
 assert.deepEqual(chosen(undefined), ["跟随卡片"])
 assert.deepEqual(chosen({ pov: "third", echo: false, verbosity: "concise" }), ["第三人称", "直接反应", "简短"])
 assert.deepEqual(chosen({ pov: "none", echo: true, agency: "free" }), ["无主角"])
-assert.deepEqual(chosen({ polish: false }, true), ["跟随卡片", "含本卡补充"])
+assert.deepEqual(chosen({ polish: false }, true), ["跟随卡片", "本卡补充"])
 assert.ok(moot("echo", { pov: "none" }) && !moot("echo", { pov: "third" }) && !moot("pov", { pov: "none" }))
 // a press on the set value unsets it, on another sets it
 assert.equal(pressing("pov", { pov: "second" }, "second"), undefined)

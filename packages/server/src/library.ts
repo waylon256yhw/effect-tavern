@@ -33,7 +33,6 @@ import {
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
-import { hook } from "@effect-tavern/runtime/src/lore.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import {
   makeSession,
@@ -243,24 +242,10 @@ export const library = ({
     setPlayer,
     calls: (id: Id) => data.calls(id),
     stories: {
-      /** A row: the player's title, or none; the opening (the first root's prose to its first sentence, or a root that
-       *  is the player's first input by that line); and the last line (the head's player line, or its prose's first
-       *  line), "" while the head is that root, so a story with only its opening never prints it twice. */
-      list: () =>
-        data.stories.list(card.id).map(({ head, root, ...s }) => {
-          const said = (t: Turn | null) => t?.input.text || t?.input.note
-          const told = (t: Turn | null) => t?.reply.find((p) => p.type === "text")?.text.trimStart()
-          const h = head as Turn | null
-          const r = root as Turn | null
-          const o = told(r)
-          const t = told(h)
-          return {
-            ...s,
-            opening: said(r) || (o ? hook(o) : undefined),
-            last: !h || h.id === r?.id ? "" : said(h) || (t ? t.split("\n")[0]! : ""),
-          }
-        }),
-      /** Named by the player, or the name cleared (empty or blank): the row falls back to the opening. */
+      /** A row: the player's title or none (the client prints "New story"), the turns, the time. A card's stories all
+       *  open on the same greeting, so no line of the text tells them apart: only a name the player gave does. */
+      list: () => data.stories.list(card.id),
+      /** Named by the player, or the name cleared (empty or blank): null, the state "never named". */
       title: (id: Id, title: string | null) => data.stories.title(id, title?.trim() || null),
       create: (): Id => data.stories.create(card.id),
       del: (id: Id) => {

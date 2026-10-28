@@ -55,11 +55,12 @@ export const moot = (key: SwitchKey, w: Writing | undefined): boolean =>
 export const pressing = (key: SwitchKey, w: Writing | undefined, v: string | boolean): string | boolean | undefined =>
   v === w?.[key] ? undefined : v
 /** The switches in force, by name (moot ones left out); none set, "跟随卡片". `extra` adds the chip for a per-card
- *  supplement in force (the Writing page's 本卡补充). */
+ *  supplement in force, named as the Writing page names it (本卡补充: four characters, so three chips fit the
+ *  session card's row). */
 export const chosen = (w: Writing | undefined, extra = false): string[] => {
   const on = SWITCHES.filter((s) => !moot(s.key, w)).flatMap((s) =>
     s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => l),
   )
   const chips = on.length ? on : ["跟随卡片"]
-  return extra ? [...chips, "含本卡补充"] : chips
+  return extra ? [...chips, "本卡补充"] : chips
 }

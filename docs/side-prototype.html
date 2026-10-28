@@ -7,6 +7,7 @@
   <!--
     ═══════════════════════════════════════════════════════════════════════════════
     SESSION CARD REFACTOR PROTOTYPE (ISSUE #77, WITH #75 STEP 1, #67, #70)
+    States: 1. desktop left card · 2. phone sheet · 3. the persona picker open (dialog)
     ═══════════════════════════════════════════════════════════════════════════════
 
     1. CARD GEOMETRY & ELASTIC ALLOCATION (`.side` = 15rem / 240px, net 192px):
@@ -18,39 +19,64 @@
     2. FIVE ZONES:
        - Zone 1 (卡头 `.cardhead` vs Mobile `.topbar .title`):
          * Desktop `.cardhead`: Title + persistent entry icon on the right (button
-           affordance at rest, not hover-only) + 2-line clamped summary
-           (`-webkit-line-clamp: 2`, ~26 CJK chars, fits the opening clause).
+           affordance at rest, not hover-only) + clamped summary. DECIDED: 3 lines
+           (`-webkit-line-clamp: 3`, ~39 CJK chars: the opening sentence whole), paid for
+           by Stories showing 4 rows instead of 5; the dock's 卡头 toggle shows 2 lines for
+           comparison.
          * Mobile separation of roles: `.topbar .title` pulls up the Session sheet
            (styled with a down/sheet chevron and current story subtitle), whereas
            inside the sheet `.cardhead` is a framed card banner that enters `CardPage`.
        - Zone 2 (Stories `section.stories`):
-         * Fixed 3–5 recent/starred rows, NO nested `overflow-y: auto` scrollbar.
+         * DECIDED: 4 recent rows, NO nested `overflow-y: auto` scrollbar. 5 rows fit a
+           688px card only when nothing else grows: at a 700px viewport (652px card) 5 rows
+           leave 10px of air and overflow by 55px once a pin is armed; 4 rows keep ~30px of
+           air there and absorb the pin. 4 is also what buys the 3-line summary above.
          * Row shape (#75 Step 1): `grid-template-columns: minmax(0, 1fr)` (fixes #40/#75
            horizontal overflow); main line `title ?? "New story"`, sub line
            `N turns · 16 minutes ago` (when `turns === 0`, only time is shown).
          * Rename via `<dialog class="confirm">` + `.field` input (pencil button or
            double-click row).
          * Final row: `"全部 N 个故事 ›"` opens the #75 Stories management page.
-       - Zone 3 (Persona `section.persona` + `Persona Modal`):
+       - Zone 3 (Persona `section.persona` + the picker `dialog.picker`):
          * Sidebar row: unified `.chosen` row with `<span class="chip">卡片默认</span>`
-           (or picked persona name) + right chevron `›`. Never disabled when
+           (or the picked persona's name) + right chevron `›`. Never disabled when
            `people().length === 0`.
-         * Replaces narrow popover with `<dialog class="modal">`:
-           - Top pinned card: `"卡片默认"` (selectable, with expandable/readable
-             original `frame.persona` text from the card).
-           - Search input + global player personas (`starred` pinned first, each 2 lines:
-             name + bio first line, inline star toggle).
-           - Footer: `"管理人设"` jumps to `openSettings("personas")`.
+         * DECIDED: the row opens a picker dialog, not a popover. A popover is pinned to
+           the 176px column or hangs out of the card unaligned, and a long list is a chore
+           to scan on a phone; a dialog has its own width and a search field. Desktop: a
+           centred `<dialog>` 25rem wide (the confirm dialogs' mechanism); phone: a sheet
+           rising from the bottom over the session sheet (chrome.css `.sheet`).
+         * Inside: head (选择人设 · the card's name · 管理人设 ↗ · ×), a search field
+           (name and text) with the count, then two-line rows (name, the text's first
+           line); `卡片默认` is the first row, the pick in force carries a check. With no
+           personas the list is `卡片默认` plus a hint to make one on the settings page.
+         * NOT here: reading a persona whole, stars, editing. Those are the settings
+           page's 玩家人设 (master list + detail editor, which exists); the card's own
+           persona text does not reach the client (`GET /card` leaves it out; the card
+           page is where it would belong), so `卡片默认` shows a fixed caption.
+         * `As the card has it` becomes `卡片默认`, so it no longer collides with
+           Writing's `跟随卡片`.
        - Zone 4 (Writing `section.writing`):
-         * Unified `.chosen` row: `.chips` with `flex-flow: row wrap` (192px fits two
-           4-char chips per line) + right chevron `›`. Uses concrete default items
-           (`第二人称` · `转述言行` · `仅限输入`) instead of colliding on `"跟随卡片"`.
+         * Unified `.chosen` row: `.chips` on ONE line (`flex-flow: row nowrap`) + right
+           chevron `›`. DECIDED: up to 3 chips show whole, 4 or 5 collapse to the first 2
+           + `+N` (the order is switches.ts's: pov, echo, agency, verbosity, supplement, so
+           the two that set the voice stay visible; the row's `title` lists all). The chip
+           budget is 176px (192 - 12 chevron - 4 gap); a 4-char chip is 55px, so three of
+           them are 172px. The supplement chip is therefore `本卡补充` (4 chars), the name
+           the Writing page already uses: `含本卡补充` (66px) beside two 4-char chips is
+           183px and spills. 2-char short tags stay in the dock for comparison only: all 5
+           still spill (186px) and `仅输` / `二称` read as nothing.
+           Uses concrete default items (`第二人称` · `转述言行` · `仅限输入`) instead of
+           colliding on `"跟随卡片"`.
        - Zone 5 (底部页面导航 `nav.tools`):
          * Replaces coding icons (`git-branch`, `terminal-window`) with narrative/inspection
            icons (`ph/tree-structure` or `ph/path`, `ph/list-magnifying-glass` or
            `ph/magnifying-glass`).
-         * Compares two layouts with text labels:
-           - `紧凑同行` (Inline: left two with text `时间线` / `检查器`, right `⚙` Settings gear)
+         * DECIDED: icons only, one row, no labels: 时间线 · 检查器 on the left, #70's
+           theme toggle · 设置 on the right, four 28px icons in 192px. The client dropped
+           `data-hint` tooltips in #78, so the icons carry the meaning alone (`aria-label`
+           names them for readers). The two labelled layouts stay in the dock for reference:
+           - `带字同行` (Inline: left two with text `时间线` / `检查器`, right `⚙` Settings gear)
            - `竖排三行` (Stack: `时间线` / `检查器` / `设置` as 3 full-width rows)
     ═══════════════════════════════════════════════════════════════════════════════
   -->
@@ -328,8 +354,7 @@
       font-size: var(--text-field);
       outline: none;
     }
-    .field:focus,
-    .input-box:focus-within {
+    .field:focus {
       box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
     }
 
@@ -443,7 +468,7 @@
     .cardhead {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
       margin: calc(-1 * var(--space-2));
       padding: var(--space-2);
       border-radius: var(--radius-card);
@@ -500,11 +525,14 @@
       margin: 0;
       color: var(--ink-2);
       font-size: var(--text-footnote);
-      line-height: 1.48;
+      line-height: 1.5;
       display: -webkit-box;
-      -webkit-line-clamp: 2;
+      -webkit-line-clamp: 3; /* decided: the opening sentence whole (~39 CJK chars); 4 story rows pay for the third line */
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    .session[data-head-lines="2"] .cardhead p {
+      -webkit-line-clamp: 2;
     }
 
     /* Mobile Sheet's .cardhead: sits directly at the top of the sheet (no redundant "SESSION" header bar) */
@@ -831,114 +859,64 @@
       flex: 1;
     }
 
-    /* ───────── 4. Persona Modal (<dialog class="modal persona-modal">) ─────────
-       - No top/bottom white dead zones (.modal-foot removed; "管理人设 ↗" lives in the compact top bar)
-       - No redundant divider lines (no full-width hairline borders on header, columns, or preview head)
-       - Unified persona list ("卡片默认" is the pinned 1st row) + soft rounded full-text reader well */
-    .persona-modal-shell {
-      width: min(31.5rem, calc(100vw - 2 * var(--space-4)));
-      height: min(33.5rem, calc(100dvh - 2 * var(--space-5)));
-      padding: var(--space-4);
-      gap: var(--space-3);
+    /* ───────── 4. Persona Picker (dialog.picker; the phone's .picker-sheet; the overview's .picker-static) ─────────
+       Head, search, two-line rows. The shell is a flex column; only the list scrolls. */
+    dialog.picker {
+      width: min(25rem, calc(100vw - 2 * var(--space-4)));
+      max-height: min(32rem, calc(100dvh - 2 * var(--space-5)));
+      margin: auto;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      outline: none;
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+    }
+    dialog.picker::backdrop {
+      background: var(--scrim);
+    }
+    dialog.picker[open] {
+      display: flex;
+    }
+    .picker-static {
+      width: 25rem;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      display: flex;
+    }
+    .picker-shell {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      max-height: min(32rem, calc(100dvh - 2 * var(--space-5))); /* as tall as its rows, then the list scrolls */
       display: flex;
       flex-direction: column;
-      border-radius: var(--radius-dialog);
-      background: var(--surface-1);
-      color: var(--ink);
-      box-shadow: var(--shadow-1);
-      overflow: hidden;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      text-align: left;
     }
-    dialog.persona-modal .persona-modal-shell {
-      background: var(--surface-3);
-      box-shadow: var(--shadow-pop);
+    .picker-sheet .picker-shell {
+      height: 100%;
     }
-    .persona-modal-shell[data-layout="single"] {
-      width: min(25.5rem, calc(100vw - 2 * var(--space-4)));
-    }
-    .modal-head {
+    .picker-head {
       flex: none;
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      padding: 0;
     }
-    .modal-head h3 {
+    .picker-head h3 {
       font-size: var(--text-heading);
       font-weight: 650;
     }
-    .modal-head .spacer {
+    .picker-head .spacer {
       flex: 1;
     }
-    .modal-body {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      padding: 0;
-    }
-
-    /* Split Layout: Left list (224px) + Right soft rounded full-text reader well (no border lines) */
-    .modal-body.split {
-      flex-direction: row;
-      gap: var(--space-3);
-    }
-    .p-left-col {
-      width: 224px;
-      flex: none;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      min-height: 0;
-    }
-    .p-right-preview {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-      min-height: 0;
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-card);
-      background: var(--alpha-1);
-    }
-    .p-preview-head {
-      flex: none;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-2);
-    }
-    .p-preview-title {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-    }
-    .p-preview-title b {
-      font-size: var(--text-body);
-      font-weight: 650;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .p-preview-scroll {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-    }
-    .p-preview-scroll p {
-      margin: 0;
-      font-size: var(--text-footnote);
-      line-height: 1.65;
-      color: var(--ink-2);
-      white-space: pre-wrap;
-    }
-
-    /* Global Personas Search + Unified 2-Line List ("卡片默认" is the pinned 1st row, same shape) */
-    .p-search-bar {
+    .picker-search {
       flex: none;
       display: flex;
       align-items: center;
@@ -947,7 +925,7 @@
     .input-box {
       flex: 1;
       min-width: 0;
-      height: 30px;
+      height: 32px;
       padding: 0 var(--space-2) 0 10px;
       border-radius: var(--radius);
       background: var(--alpha-1);
@@ -965,163 +943,85 @@
       flex: 1;
       min-width: 0;
       height: 100%;
-      font-size: var(--text-caption);
+      font-size: var(--text-footnote);
       outline: none;
     }
-    .persona-list {
+    .picker-list {
       flex: 1;
       min-height: 0;
+      margin: 0 calc(-1 * var(--space-2));
+      padding: 0 var(--space-2);
       display: flex;
       flex-direction: column;
-      gap: 5px;
-      margin: 0 -2px;
-      padding: 2px;
+      gap: 2px;
     }
-    .persona-item {
-      display: flex;
+    .picker-shell .item {
+      flex: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: var(--space-2);
+      row-gap: 1px;
       align-items: center;
-      gap: 6px;
-      padding: 7px 10px;
-      border-radius: var(--radius-card);
-      background: var(--surface-2);
-      box-shadow: inset 0 0 0 var(--hairline) var(--line);
-      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
-    }
-    .persona-item:hover {
-      background: var(--alpha-1);
-    }
-    .persona-item[aria-checked="true"] {
-      background: var(--surface-2);
-      box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--line-strong);
-    }
-    .persona-main {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
+      width: 100%;
+      padding: 6px var(--space-2);
+      border-radius: var(--radius);
       text-align: left;
     }
-    .avatar {
-      flex: none;
-      width: 26px;
-      height: 26px;
-      margin-top: 2px;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      background: var(--alpha-2);
-      color: var(--ink-2);
-      font-size: 11px;
-      font-weight: 650;
+    .picker-shell .item:hover,
+    .picker-shell .item:focus-visible {
+      background: var(--ghost-hover);
+      outline: none;
     }
-    .avatar.card-av {
-      border-radius: 7px;
-      background: var(--alpha-1);
-      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
-      color: var(--ink);
-    }
-    .persona-lines {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .persona-line1 {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      min-width: 0;
-    }
-    .persona-name {
-      font-weight: 600;
-      font-size: var(--text-body);
+    .picker-shell .item .name {
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .persona-bio {
+    .picker-shell .item[aria-checked="true"] .name {
+      font-weight: 600;
+      color: var(--primary);
+    }
+    .picker-shell .item .check {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      width: 14px;
+      height: 14px;
+      color: var(--ink);
+      visibility: hidden;
+    }
+    .picker-shell .item[aria-checked="true"] .check {
+      visibility: visible;
+    }
+    .picker-shell .item .bio {
+      grid-column: 1;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .picker-shell .item.default .name::after {
+      content: "随卡";
+      margin-left: 6px;
+      padding: 0 5px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
       color: var(--ink-3);
       font-size: var(--text-caption);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-weight: 500;
+      vertical-align: 1px;
     }
-    .row-acts {
+    .picker-list hr {
       flex: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
+      margin: 2px var(--space-2);
+      border: 0;
+      height: var(--hairline);
+      background: var(--line);
     }
-    .read-btn {
-      height: 22px;
-      padding: 0 6px;
-      border-radius: var(--radius-sm);
-      font-size: 11px;
-      color: var(--ink-3);
-      background: var(--alpha-1);
-    }
-    .read-btn:hover {
-      color: var(--ink);
-      background: var(--alpha-2);
-    }
-    .star-btn {
-      flex: none;
-      width: 24px;
-      height: 24px;
-      border-radius: var(--radius-sm);
-      display: grid;
-      place-items: center;
-      color: var(--ink-3);
-    }
-    .star-btn:hover {
-      background: var(--ghost-hover);
-      color: var(--ink);
-    }
-    .star-btn[aria-pressed="true"] {
-      color: var(--warn);
-    }
-    .star-btn svg {
-      width: 13px;
-      height: 13px;
-    }
-
-    /* Full-height detail subview in Single-Column mode (also borderless soft well) */
-    .p-detail-view {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-    .p-detail-bar {
-      flex: none;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-2);
-    }
-    .p-detail-well {
-      flex: 1;
-      min-height: 0;
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-card);
-      background: var(--alpha-1);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-    }
-    .p-detail-well p {
-      margin: 0;
-      font-size: var(--text-footnote);
-      line-height: 1.68;
-      color: var(--ink-2);
-      white-space: pre-wrap;
-    }
-
-    .empty-personas {
-      padding: var(--space-5) var(--space-4);
+    .picker-empty {
+      margin: var(--space-1) 0;
+      padding: var(--space-4);
       border-radius: var(--radius-card);
       background: var(--alpha-1);
       text-align: center;
@@ -1131,6 +1031,10 @@
       flex-direction: column;
       align-items: center;
       gap: var(--space-2);
+    }
+    /* the phone: the picker is a second sheet over the session sheet */
+    .phone-scrim.picker-scrim {
+      z-index: 11;
     }
 
     /* ───────── 5. Mobile Frame & Sheet (.topbar + .sheet) ───────── */
@@ -1243,7 +1147,7 @@
       background: var(--surface-0);
     }
 
-    /* Mode 1: 三态同屏 (Overview: Desktop Left Card + Mobile Sheet + Persona Modal side by side) */
+    /* Mode 1: 三态同屏 (Overview: Desktop Left Card + Mobile Sheet + the left card with its persona menu open) */
     .overview-grid {
       min-height: 100dvh;
       padding: 14px 20px 58px;
@@ -1378,7 +1282,7 @@
       background: var(--ink);
     }
 
-    /* Native Dialogs: Rename / Delete Confirm & Live Persona Modal Overlay */
+    /* Native Dialogs: Rename / Delete Confirm */
     dialog.confirm {
       width: min(22rem, calc(100% - 2 * var(--space-4)));
       margin: auto;
@@ -1392,8 +1296,7 @@
       line-height: var(--leading-body);
       outline: none;
     }
-    dialog.confirm::backdrop,
-    dialog.live-modal::backdrop {
+    dialog.confirm::backdrop {
       background: var(--scrim);
     }
     dialog.confirm p {
@@ -1416,13 +1319,6 @@
       height: var(--control);
       padding: 0 var(--space-4);
       font-size: var(--text-body);
-    }
-    dialog.live-modal {
-      margin: auto;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      outline: none;
     }
 
     /* Toast feedback for navigation actions */
@@ -1545,10 +1441,8 @@
     </div>
   </dialog>
 
-  <!-- Live Persona Modal (<dialog> used in Desktop Canvas / Mobile Sheet modes) -->
-  <dialog id="live-persona-dialog" class="live-modal" closedby="any">
-    <div id="live-persona-mount"></div>
-  </dialog>
+  <!-- Persona picker (desktop: a centred modal dialog; its content is rendered by renderAll) -->
+  <dialog id="persona-dialog" class="picker" closedby="any" onclose="onPickerClose()"></dialog>
 
   <!-- Prototype Control Dock -->
   <nav class="demo-dock" aria-label="原型状态与方案切换">
@@ -1562,8 +1456,8 @@
     <button type="button" id="btn-mode-mobile" aria-pressed="false" onclick="setStageMode('mobile')">
       手机Sheet
     </button>
-    <button type="button" id="btn-mode-modal" aria-pressed="false" onclick="setStageMode('modal')">
-      Persona弹窗
+    <button type="button" id="btn-mode-picker" aria-pressed="false" onclick="setStageMode('picker')">
+      选人设弹窗
     </button>
 
     <span class="sep"></span>
@@ -1586,10 +1480,10 @@
     <button type="button" id="btn-wc-4" aria-pressed="false" onclick="setWritingCount(4)" title="4个胶囊时单行 +1 收纳或双字短签">
       4项
     </button>
-    <button type="button" id="btn-wc-5" aria-pressed="false" onclick="setWritingCount(5)" title="满配5个胶囊(4开关+含本卡补充)">
+    <button type="button" id="btn-wc-5" aria-pressed="false" onclick="setWritingCount(5)" title="满配5个胶囊(4开关+本卡补充)">
       5项(满)
     </button>
-    <button type="button" id="btn-wmode-toggle" aria-pressed="false" onclick="toggleWritingShortMode()" title="切换超3项时的单行策略：+N 收纳 vs 双字短签">
+    <button type="button" id="btn-wmode-toggle" aria-pressed="false" onclick="toggleWritingShortMode()" title="超过3项时的单行策略：+N 收纳（定）vs 双字短签（对照：5项仍溢出，且短签不可读）">
       策略:+N
     </button>
 
@@ -1606,9 +1500,6 @@
     </button>
 
     <span class="sep"></span>
-    <button type="button" id="btn-modal-layout" aria-pressed="true" onclick="toggleModalLayout()" title="切换人设弹窗布局：左右分栏常驻全文 vs 单栏列表+全文层">
-      弹窗:分栏全文
-    </button>
     <button type="button" id="btn-lang-toggle" aria-pressed="true" onclick="toggleLangMode()">
       中文小标
     </button>
@@ -1621,8 +1512,11 @@
     <button type="button" id="btn-card-toggle" aria-pressed="false" onclick="toggleCard()">
       卡:竹林
     </button>
-    <button type="button" id="btn-theme-in-nav" aria-pressed="false" onclick="toggleThemeInNav()">
+    <button type="button" id="btn-theme-in-nav" aria-pressed="true" onclick="toggleThemeInNav()">
       #70 主题键
+    </button>
+    <button type="button" id="btn-head-lines" aria-pressed="true" onclick="toggleHeadLines()" title="卡头简介的行数：3 行放下开篇整句，2 行对照">
+      卡头:3行
     </button>
     <button type="button" onclick="toggleTheme()">
       浅/深
@@ -1665,7 +1559,7 @@
       "简短": "简短",
       "适中": "适中",
       "详尽": "详尽",
-      "含本卡补充": "+补充",
+      "本卡补充": "+补充",
       "跟随卡片": "默认",
     };
 
@@ -1680,7 +1574,7 @@
         writingSets: {
           3: ["第二人称", "转述言行", "仅限输入"],
           4: ["第二人称", "转述言行", "仅限输入", "详尽"],
-          5: ["第二人称", "转述言行", "仅限输入", "详尽", "含本卡补充"],
+          5: ["第二人称", "转述言行", "仅限输入", "详尽", "本卡补充"],
         },
         pinnedHook: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫",
       },
@@ -1690,9 +1584,9 @@
         summary: "大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；没有玩家角色，输入是给叙述者的指示。",
         defaultPersona: null, // World card with no protagonist
         writingSets: {
-          3: ["无主角", "详尽", "含本卡补充"],
-          4: ["无主角", "详尽", "含本卡补充"],
-          5: ["无主角", "详尽", "含本卡补充"],
+          3: ["无主角", "详尽", "本卡补充"],
+          4: ["无主角", "详尽", "本卡补充"],
+          5: ["无主角", "详尽", "本卡补充"],
         },
         pinnedHook: "三天前货栈门口打伤差役的驼夫已被沈二藏在十里渡口",
       },
@@ -1713,62 +1607,50 @@
         id: "p-shen",
         name: "沈砚",
         text: "关外行脚医者，背一只旧药箱，性情温和沉静，曾替李鹤医治过剑伤，不通武艺但极重然诺。\n\n两年前在朔州风雪夜救下重伤濒死的李鹤，为其取出肩胛下的一枚柳叶镖。李鹤伤愈离去前将随身短剑相托，言明若三年不归，便请沈砚南下越州走一趟。\n\n言谈举止带着医者的审慎，善于从伤口形制、气息脉象与旧痕中推知实情。",
-        starred: true,
-        otherCards: ["伴星"],
       },
       {
         id: "p-gu",
         name: "顾长风",
         text: "江南六扇门解职捕头，行事老辣果决，名为送还故人遗物，实则暗查三年前苏州库银失窃一案。\n\n当年经办李鹤一案时察觉卷宗另有隐情，遂辞官独自追查至塞外，虽赶上李鹤临终托剑，却仍缺最关键的一环人证。",
-        starred: true,
-        otherCards: [],
       },
       {
         id: "p-lin",
         name: "林晚音",
         text: "李鹤同乡义妹，携一把油纸伞自吴中北上，说话轻声细语，却在伞骨中藏有一卷当年的书信。",
-        starred: false,
-        otherCards: ["理"],
       },
       {
         id: "p-xie",
         name: "谢无咎",
         text: "落魄刀客，嗜酒少言，曾在雁门关外与李鹤同饮三日，受人之托忠人之事，拔刀从不留情。",
-        starred: false,
-        otherCards: [],
       },
       {
         id: "p-su",
         name: "苏知微",
         text: "越州地方志书生，为采写旧闻误入苦竹岭，好奇心重，随身带着炭笔与记事册。",
-        starred: false,
-        otherCards: [],
       },
       {
         id: "p-chen",
         name: "陈敬之",
         text: "太湖漕帮旧部，镖局出身，熟悉江南水陆暗桩，寡言稳重。",
-        starred: false,
-        otherCards: [],
       },
     ];
 
     // State
-    let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "modal"
-    let navStyle = "icons";     // "icons" (紧凑纯图标) | "inline" (带字同行) | "stack" (竖排三行)
+    let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "picker" (desktop with the persona picker open)
+    let personaSearch = "";     // the picker's search, name and text
+    let pickerOpen = false;     // the phone's picker sheet
+    let navStyle = "icons";     // "icons" (decided: 纯图标同行) | "inline" (带字同行) | "stack" (竖排三行)
     let iconSet = "a";          // "a" (treeStructure + listMag) | "b" (path + magGlass)
-    let storySlice = 4;         // 4 | 5 | 2
-    let writingCount = 3;       // 3 | 4 | 5 (switches.ts max is 4 switches + 1 含本卡补充 = 5)
-    let writingShortMode = false; // false = 3 full chips + "+N" overflow; true = 2-char short tags (all 5 fit on 1 line)
+    let storySlice = 4;         // 4 (decided) | 5 | 2
+    let writingCount = 3;       // 3 | 4 | 5 (switches.ts max is 4 switches + 1 本卡补充 = 5)
+    let writingShortMode = false; // false (decided) = up to 3 full chips, then "+N"; true = 2-char short tags (comparison only)
     let emptyPersonas = false;
     let showPinned = false;
     let currentCardKey = "wuxia";
-    let themeInNav = false;
+    let themeInNav = true;      // decided: #70's toggle sits in nav.tools, the fourth icon
+    let headLines = 3;          // 3 (decided) | 2 (for comparison)
     let langZh = true; // default Chinese section headers (故事 / 人设 / 写作)
     let pickedPersonaByCard = { wuxia: undefined, yandao: undefined }; // undefined = 卡片默认
-    let modalLayout = "split";  // "split" (左右分栏常驻全文) | "single" (单栏列表 + 独立全文阅读层)
-    let singleDetailId = null;  // null (列表态) | "__default__" | persona.id (单栏模式下的独立全文层)
-    let personaSearch = "";
     let phoneSheetOpen = true;
     let renamingStoryId = null;
 
@@ -1792,7 +1674,7 @@
           .map((c) => `<span class="chip" title="${escapeAttr(c)}">${escapeHtml(SHORT_SWITCH_MAP[c] ?? c)}</span>`)
           .join("");
       }
-      // Single-line full labels: 3 four-char chips fit in 190px; if 4 or 5 chips, show first 2 + "+N" badge
+      // Single line: up to 3 chips (3 × 55px + 2 × 3.5px = 172px of the 176px budget); 4 or 5 show the first 2 + "+N" 
       if (chips.length <= 3) {
         return chips.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join("");
       }
@@ -1943,8 +1825,8 @@
             `;
 
       return `
-        <div class="session" data-lang="${langZh ? "zh" : "en"}">
-          <!-- 1. 卡头: 常驻进入卡页图标，不靠 hover；简介两行截断 (-webkit-line-clamp: 2) -->
+        <div class="session" data-lang="${langZh ? "zh" : "en"}" data-head-lines="${headLines}">
+          <!-- 1. 卡头: 常驻进入卡页图标，不靠 hover；简介三行截断 (-webkit-line-clamp: 3)，放下开篇整句 -->
           <button type="button" class="cardhead" aria-label="进入角色卡页" onclick="showToast('进入 CardPage 角色卡详情页')">
             <div class="cardhead-top">
               <h1>${escapeHtml(c.title)}</h1>
@@ -1976,10 +1858,10 @@
             ${allStoriesRow}
           </section>
 
-          <!-- 3. Persona: 默认叫「卡片默认」(不再与 Writing 撞车)；空人设时也不 disable，点击打开 Modal -->
+          <!-- 3. Persona: 默认叫「卡片默认」(不再与 Writing 撞车)；空人设时也不 disable；点击打开带搜索的选人设弹窗 -->
           <section class="persona" aria-label="Persona">
             <h2>${langZh ? "人设" : "Persona"}</h2>
-            <button type="button" class="chosen" onclick="openPersonaModal()">
+            <button type="button" class="chosen" onclick="openPicker('${context}')">
               <span class="chips">
                 <span class="chip">${escapeHtml(curP ? curP.name : "卡片默认")}</span>
               </span>
@@ -2012,215 +1894,78 @@
       `;
     }
 
-    function renderPersonaModalHTML(inOverview = false) {
+    /** The picker's rows: what the client has (name, text; the card's own persona text is not served). 卡片默认 first,
+     *  then the personas whose name or text match the search; with none made, a hint to the settings page. */
+    function renderPickerRowsHTML() {
       const c = activeCard();
       const curP = activePersona();
-      const isDefaultPicked = !curP;
-      const defaultBio = c.defaultPersona
-        ? c.defaultPersona
-        : "本卡为大世界无主角卡（frame 未声明 persona 槽），默认不设玩家角色。";
-      const defaultFirstLine = defaultBio.split("\n")[0];
-
-      const sortedPersonas = emptyPersonas
-        ? []
-        : [...personas]
-            .sort((a, b) => Number(b.starred) - Number(a.starred))
-            .filter((p) => {
-              if (!personaSearch.trim()) return true;
-              const q = personaSearch.trim().toLowerCase();
-              return p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q);
-            });
-
-      // Pinned 1st row: "卡片默认" (same compact 2-line card structure as player personas, no bloated nested box)
-      const defaultRowHTML = `
-        <div class="persona-item" role="menuitemradio" aria-checked="${isDefaultPicked ? "true" : "false"}">
-          <button type="button" class="persona-main" onclick="pickPersona(undefined)">
-            <span class="avatar card-av" title="卡片默认设定">卡</span>
-            <span class="persona-lines">
-              <span class="persona-line1">
-                <span class="persona-name">卡片默认</span>
-                <span class="tag">随卡</span>
-                ${isDefaultPicked ? `<span class="tag" style="color: var(--ink); font-weight: 600;">当前</span>` : ""}
-              </span>
-              <span class="persona-bio">${escapeHtml(defaultFirstLine)}</span>
-            </span>
-          </button>
-          ${
-            modalLayout === "single"
-              ? `<div class="row-acts">
-                  <button type="button" class="read-btn" onclick="openSingleDetail(event, '__default__')" title="查看完整设定文本">全文</button>
-                </div>`
-              : ""
-          }
-        </div>
+      const list = emptyPersonas ? [] : personas;
+      const q = personaSearch.trim().toLowerCase();
+      const hits = q ? list.filter((p) => p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)) : list;
+      const defaultBio = c.defaultPersona ? "这张卡写定的玩家角色" : "无主角卡：没有玩家角色";
+      const row = (id, name, bio, checked, cls = "") => `
+        <button
+          type="button"
+          role="menuitemradio"
+          class="item ${cls}"
+          aria-checked="${checked ? "true" : "false"}"
+          onclick="pickPersona(${id === undefined ? "undefined" : `'${id}'`})"
+        >
+          <span class="name">${escapeHtml(name)}</span>
+          <span class="check" aria-hidden="true">${ICONS.check}</span>
+          <span class="bio">${escapeHtml(bio)}</span>
+        </button>
       `;
+      const defaultRow = !q || "卡片默认".includes(q) ? row(undefined, "卡片默认", defaultBio, !curP, "default") : "";
+      const rows = hits.map((p) => row(p.id, p.name, p.text.split("\n")[0], curP && curP.id === p.id)).join("");
+      const tail = !list.length
+        ? `<div class="picker-empty">
+            <span>尚未创建人设，当前用「卡片默认」。</span>
+            <button type="button" class="btn sm" onclick="goManagePersonas()">${ICONS.plus} <span>去设置页新建</span></button>
+          </div>`
+        : q && !hits.length
+          ? `<div class="picker-empty"><span>没有匹配「${escapeHtml(personaSearch.trim())}」的人设</span></div>`
+          : "";
+      return defaultRow + (defaultRow && (rows || tail) ? "<hr />" : "") + rows + tail;
+    }
 
-      const playerRowsHTML = emptyPersonas
-        ? `
-          <div class="empty-personas">
-            <span>尚未创建自定义人设，当前使用「卡片默认」设定。</span>
-            <button type="button" class="btn sm" onclick="showToast('跳转 Settings → 玩家人设 新建')">
-              ${ICONS.plus} <span>去设置页新建人设</span>
-            </button>
-          </div>
-        `
-        : sortedPersonas.length === 0
-          ? `<div class="empty-personas"><span>无匹配「${escapeHtml(personaSearch)}」的人设</span></div>`
-          : sortedPersonas
-              .map((p) => {
-                const picked = curP && curP.id === p.id;
-                const firstLine = p.text.split("\n")[0];
-                const tags = p.otherCards
-                  .map((t) => `<span class="tag" title="已在卡片「${escapeHtml(t)}」上选用">${escapeHtml(t)}</span>`)
-                  .join("");
-                return `
-                  <div class="persona-item" role="menuitemradio" aria-checked="${picked ? "true" : "false"}">
-                    <button type="button" class="persona-main" onclick="pickPersona('${p.id}')">
-                      <span class="avatar">${escapeHtml(p.name.slice(0, 1))}</span>
-                      <span class="persona-lines">
-                        <span class="persona-line1">
-                          <span class="persona-name">${escapeHtml(p.name)}</span>
-                          ${picked ? `<span class="tag" style="color: var(--ink); font-weight: 600;">当前</span>` : ""}
-                          ${tags}
-                        </span>
-                        <span class="persona-bio">${escapeHtml(firstLine)}</span>
-                      </span>
-                    </button>
-                    <div class="row-acts">
-                      ${
-                        modalLayout === "single"
-                          ? `<button type="button" class="read-btn" onclick="openSingleDetail(event, '${p.id}')" title="查看完整设定文本">全文</button>`
-                          : ""
-                      }
-                      <button
-                        type="button"
-                        class="star-btn"
-                        aria-label="标星人设"
-                        aria-pressed="${p.starred ? "true" : "false"}"
-                        onclick="togglePersonaStar(event, '${p.id}')"
-                        title="${p.starred ? "取消星标" : "标星置顶"}"
-                      >
-                        ${p.starred ? ICONS.starFill : ICONS.star}
-                      </button>
-                    </div>
-                  </div>
-                `;
-              })
-              .join("");
-
-      const searchAndListHTML = `
-        <div class="p-search-bar">
-          <div class="input-box">
-            ${ICONS.magGlass}
-            <input
-              type="search"
-              placeholder="搜索人设..."
-              value="${escapeAttr(personaSearch)}"
-              oninput="onPersonaSearch(this.value)"
-              aria-label="搜索人设"
-            />
-          </div>
-          <span class="tag mono">${emptyPersonas ? 0 : personas.length}</span>
-        </div>
-        <div class="persona-list scroller">
-          ${defaultRowHTML}
-          ${playerRowsHTML}
-        </div>
-      `;
-
-      // Right full-text pane in Split mode (or Full-height detail subview in Single mode)
-      const focusedPersona =
-        modalLayout === "single" && singleDetailId && singleDetailId !== "__default__"
-          ? personas.find((p) => p.id === singleDetailId)
-          : curP;
-      const previewIsDefault = modalLayout === "single" ? singleDetailId === "__default__" : !curP;
-      const previewTitle = previewIsDefault ? "卡片默认" : focusedPersona ? focusedPersona.name : "卡片默认";
-      const previewTag = previewIsDefault ? "随卡设定" : "全局人设";
-      const previewText = previewIsDefault ? defaultBio : focusedPersona ? focusedPersona.text : defaultBio;
-      const previewParagraphs = previewText
-        .split(/\n{2,}/)
-        .map((para) => `<p>${escapeHtml(para)}</p>`)
-        .join("");
-
-      let bodyContentHTML = "";
-      if (modalLayout === "split") {
-        bodyContentHTML = `
-          <div class="modal-body split">
-            <div class="p-left-col">
-              ${searchAndListHTML}
-            </div>
-            <div class="p-right-preview">
-              <div class="p-preview-head">
-                <div class="p-preview-title">
-                  <b>${escapeHtml(previewTitle)}</b>
-                  <span class="tag">${previewTag}</span>
-                </div>
-                <span class="tag mono">${previewText.length} 字</span>
-              </div>
-              <div class="p-preview-scroll scroller">
-                ${previewParagraphs}
-              </div>
-            </div>
-          </div>
-        `;
-      } else if (singleDetailId) {
-        const isCurrentPicked =
-          (singleDetailId === "__default__" && isDefaultPicked) ||
-          (curP && curP.id === singleDetailId);
-        bodyContentHTML = `
-          <div class="modal-body">
-            <div class="p-detail-view">
-              <div class="p-detail-bar">
-                <button type="button" class="btn sm ghost" onclick="closeSingleDetail()">
-                  ← 返回人设列表
-                </button>
-                <div class="p-preview-title">
-                  <b>${escapeHtml(previewTitle)}</b>
-                  <span class="tag mono">${previewText.length} 字</span>
-                </div>
-                <button
-                  type="button"
-                  class="btn sm"
-                  onclick="pickPersona(${singleDetailId === "__default__" ? "undefined" : `'${singleDetailId}'`}); closeSingleDetail();"
-                >
-                  ${isCurrentPicked ? "当前正在使用" : "选用此人设"}
-                </button>
-              </div>
-              <div class="p-detail-well scroller">
-                ${previewParagraphs}
-              </div>
-            </div>
-          </div>
-        `;
-      } else {
-        bodyContentHTML = `
-          <div class="modal-body">
-            ${searchAndListHTML}
-          </div>
-        `;
-      }
-
+    /** The picker: head, search, rows. Desktop: inside dialog#persona-dialog; phone: a sheet over the session sheet;
+     *  overview: drawn open in .picker-static. The search filters the rows in place (filterPicker), so the field keeps
+     *  its focus; a full render re-reads `personaSearch`. */
+    function renderPickerHTML(context) {
+      const c = activeCard();
+      const list = emptyPersonas ? [] : personas;
       return `
-        <div class="persona-modal-shell" data-layout="${modalLayout}" role="dialog" aria-label="选择本卡人设">
-          <header class="modal-head">
+        <div class="picker-shell" role="dialog" aria-label="选择人设">
+          <header class="picker-head">
             <h3>选择人设</h3>
             <span class="tag">${escapeHtml(c.title)}</span>
             <span class="spacer"></span>
-            <button
-              type="button"
-              class="btn sm ghost"
-              onclick="showToast('跳转 openSettings(\\"personas\\") 管理与新建人设')"
-              title="前往设置页管理与新建全局人设"
-            >
+            <button type="button" class="btn sm ghost" onclick="goManagePersonas()" title="设置页的玩家人设：新建、改写、删除、全文">
               <span>管理人设</span>
               ${ICONS.arrowUpRight}
             </button>
-            <button type="button" class="icon sm" aria-label="关闭" onclick="closePersonaModal()">
+            <button type="button" class="icon sm" aria-label="关闭" onclick="closePicker()">
               ${ICONS.close}
             </button>
           </header>
-
-          ${bodyContentHTML}
+          <div class="picker-search">
+            <div class="input-box">
+              ${ICONS.magGlass}
+              <input
+                type="search"
+                placeholder="搜索人设（名字或正文）"
+                value="${escapeAttr(personaSearch)}"
+                oninput="filterPicker(this)"
+                aria-label="搜索人设"
+                ${context === "static" ? "" : "autofocus"}
+              />
+            </div>
+            <span class="tag mono picker-count">${list.length}</span>
+          </div>
+          <div class="picker-list scroller" role="menu">
+            ${renderPickerRowsHTML()}
+          </div>
         </div>
       `;
     }
@@ -2266,6 +2011,13 @@
               ${renderSessionHTML("sheet")}
             </div>
           </div>
+
+          <!-- 选人设：手机上是第二层 sheet，盖在 Session Sheet 上（真机是叠放的两个 .sheet dialog） -->
+          <div class="phone-scrim picker-scrim" data-open="${pickerOpen ? "true" : "false"}" onclick="if(event.target===this) closePicker()">
+            <div class="phone-sheet picker-sheet">
+              ${pickerOpen ? renderPickerHTML("sheet") : ""}
+            </div>
+          </div>
         </div>
       `;
     }
@@ -2299,17 +2051,19 @@
               ${renderPhoneFrameHTML()}
             </div>
 
-            <!-- State 3: Persona Modal 打开 -->
+            <!-- State 3: the persona picker open (the desktop dialog, drawn in place) -->
             <div class="state-col">
               <div class="state-label">
-                <span>3. Persona Modal 打开</span>
-                <span class="spec-pill">置顶卡片默认 + 独立全文阅读</span>
+                <span>3. 选人设弹窗 (dialog)</span>
+                <span class="spec-pill">搜索 · 两行 · 卡片默认置顶 · 管理人设</span>
               </div>
-              ${renderPersonaModalHTML(true)}
+              <div class="picker-static">
+                ${renderPickerHTML("static")}
+              </div>
             </div>
           </div>
         `;
-      } else if (stageMode === "desktop" || stageMode === "modal") {
+      } else if (stageMode === "desktop" || stageMode === "picker") {
         stage.innerHTML = `
           <div class="desktop-canvas">
             <aside class="side" aria-label="Session">
@@ -2364,28 +2118,21 @@
         `;
       }
 
-      // Sync live Persona dialog if open
-      const liveDialog = document.getElementById("live-persona-dialog");
-      const liveMount = document.getElementById("live-persona-mount");
-      if (liveMount) {
-        liveMount.innerHTML = renderPersonaModalHTML(false);
-      }
-      if (stageMode === "modal" && liveDialog && !liveDialog.open) {
-        liveDialog.showModal();
+      // the desktop dialog: its content follows every render; the "picker" mode keeps it open
+      const dlg = document.getElementById("persona-dialog");
+      if (dlg) {
+        dlg.innerHTML = renderPickerHTML("dialog");
+        if (stageMode === "picker" && !dlg.open) dlg.showModal();
       }
     }
 
     // ───────── 4. Interactive Handlers ─────────
     function setStageMode(mode) {
       stageMode = mode;
-      const liveDialog = document.getElementById("live-persona-dialog");
-      if (mode !== "modal" && liveDialog && liveDialog.open) {
-        liveDialog.close();
-      }
       if (mode === "mobile") {
         phoneSheetOpen = true;
       }
-      for (const m of ["overview", "desktop", "mobile", "modal"]) {
+      for (const m of ["overview", "desktop", "mobile", "picker"]) {
         const btn = document.getElementById(`btn-mode-${m}`);
         if (btn) btn.setAttribute("aria-pressed", String(m === mode));
       }
@@ -2454,6 +2201,16 @@
       const btn = document.getElementById("btn-card-toggle");
       btn.textContent = `切卡片: ${CARDS[currentCardKey].title}`;
       btn.setAttribute("aria-pressed", String(currentCardKey === "yandao"));
+      renderAll();
+    }
+
+    function toggleHeadLines() {
+      headLines = headLines === 3 ? 2 : 3;
+      const btn = document.getElementById("btn-head-lines");
+      if (btn) {
+        btn.setAttribute("aria-pressed", String(headLines === 3));
+        btn.textContent = `卡头:${headLines}行`;
+      }
       renderAll();
     }
 
@@ -2534,65 +2291,55 @@
       renderAll();
     }
 
-    function openPersonaModal() {
-      const dlg = document.getElementById("live-persona-dialog");
+    /** The Persona row: on the phone's sheet the picker is a second sheet; elsewhere the modal dialog. */
+    function openPicker(context) {
+      personaSearch = "";
+      if (context === "sheet") {
+        pickerOpen = true;
+        renderAll();
+        return;
+      }
       renderAll();
+      const dlg = document.getElementById("persona-dialog");
       if (dlg && !dlg.open) dlg.showModal();
     }
 
-    function closePersonaModal() {
-      const dlg = document.getElementById("live-persona-dialog");
-      if (dlg && dlg.open) dlg.close();
-      if (stageMode === "modal") {
-        setStageMode("desktop");
+    function closePicker() {
+      const dlg = document.getElementById("persona-dialog");
+      if (dlg && dlg.open) dlg.close(); // onclose → onPickerClose
+      if (pickerOpen) {
+        pickerOpen = false;
+        renderAll();
       }
+    }
+
+    /** The dialog closed (×, Escape, a click outside, a pick): the "picker" mode falls back to the desktop canvas. */
+    function onPickerClose() {
+      personaSearch = "";
+      if (stageMode === "picker") setStageMode("desktop");
+    }
+
+    /** Typing filters the rows in place: the field is not re-rendered, so it keeps its focus and caret. */
+    function filterPicker(input) {
+      personaSearch = input.value;
+      const shell = input.closest(".picker-shell");
+      const list = shell?.querySelector(".picker-list");
+      if (list) list.innerHTML = renderPickerRowsHTML();
     }
 
     function pickPersona(id) {
       pickedPersonaByCard[currentCardKey] = id;
-      renderAll();
+      personaSearch = "";
+      pickerOpen = false;
+      const dlg = document.getElementById("persona-dialog");
+      if (dlg && dlg.open) dlg.close();
+      if (stageMode === "picker") setStageMode("desktop");
+      else renderAll();
     }
 
-    function togglePersonaStar(e, id) {
-      e.stopPropagation();
-      const p = personas.find((x) => x.id === id);
-      if (p) p.starred = !p.starred;
-      renderAll();
-    }
-
-    function toggleModalLayout() {
-      modalLayout = modalLayout === "split" ? "single" : "split";
-      singleDetailId = null;
-      const btn = document.getElementById("btn-modal-layout");
-      if (btn) {
-        btn.setAttribute("aria-pressed", String(modalLayout === "split"));
-        btn.textContent = modalLayout === "split" ? "弹窗:分栏全文" : "弹窗:单栏全文";
-      }
-      renderAll();
-    }
-
-    function openSingleDetail(e, id) {
-      e.stopPropagation();
-      singleDetailId = id;
-      renderAll();
-    }
-
-    function closeSingleDetail() {
-      singleDetailId = null;
-      renderAll();
-    }
-
-    function onPersonaSearch(val) {
-      personaSearch = val;
-      renderAll();
-      // Restore focus & caret in search input
-      const inputs = document.querySelectorAll('.input-box input[type="search"]');
-      inputs.forEach((inp) => {
-        if (document.activeElement !== inp && stageMode === "overview") {
-          inp.focus();
-          inp.setSelectionRange(val.length, val.length);
-        }
-      });
+    function goManagePersonas() {
+      closePicker();
+      showToast('跳转 openSettings("personas")：设置页的玩家人设（新建 / 改写 / 删除 / 全文）');
     }
 
     let toastTimer = null;

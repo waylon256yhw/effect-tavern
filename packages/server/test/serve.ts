@@ -200,8 +200,8 @@ const run = async (inspect: boolean) => {
     assert.equal((await headOf("who am i")).includes(monk.text), inspect)
     await persona("monk", { name: monk.name, text: "你是还俗的武僧。" })
     assert.equal((await headOf("and now")).includes("你是还俗的武僧。"), inspect) // the edit is in force, same story
-    const listed = (await (await fetch(`${base}/stories`)).json()) as { stories: { turns: number; last: string }[] }
-    assert.deepEqual([listed.stories[0]!.turns, listed.stories[0]!.last], [2, "and now"]) // the row is named by the player's last line
+    const listed = (await (await fetch(`${base}/stories`)).json()) as { stories: { turns: number }[] }
+    assert.equal(listed.stories[0]!.turns, 1) // two roots (parent: null): the head's line holds one turn
     // Two clients on two stories: each request is on the story its header names, and neither moves the other.
     const on = (id: number) => ({ headers: { "x-tavern-story": String(id) } })
     const sizeOn = async (id: number) =>
@@ -233,9 +233,9 @@ const run = async (inspect: boolean) => {
       ((await (await globalThis.fetch(`${base}/stories`, on(opened.current))).json()) as { current: number }).current,
       first,
     )
-    // A row is named by its opening's first sentence until the player titles it; the last line is "" while only the
-    // opening is there. A title is the player's: blank clears it, and a rename never moves `updated`.
-    type Row = { id: number; title: string | null; opening?: string; last: string; updated: number }
+    // A row has no name until the player titles it, and a greeting is not a turn: the first player line is. A title
+    // is the player's: blank clears it, and a rename never moves `updated`.
+    type Row = { id: number; title: string | null; turns: number; updated: number }
     story = ((await (await fetch(`${base}/stories`, { method: "POST" })).json()) as { current: number }).current
     const row = async (init?: RequestInit) =>
       (
@@ -243,10 +243,10 @@ const run = async (inspect: boolean) => {
       ).stories.find((s) => s.id === story)!
     await (await post({ kind: "greet" })).text()
     const fresh = await row()
-    assert.deepEqual([fresh.title, fresh.opening, fresh.last], [null, "G", ""])
+    assert.deepEqual([fresh.title, fresh.turns, "opening" in fresh, "last" in fresh], [null, 0, false, false])
     await (await post({ kind: "act", input: { text: "onward" } })).text() // the stream read to its end: the turn is saved
     const acted = await row()
-    assert.deepEqual([acted.opening, acted.last], ["G", "onward"])
+    assert.equal(acted.turns, 1)
     const named = await row({ method: "PUT", body: JSON.stringify({ title: "  竹林夜话 " }) })
     assert.deepEqual([named.title, named.updated], ["竹林夜话", acted.updated])
     assert.equal((await fetch(`${base}/stories/${story}`, { method: "PUT", body: '{"title":1}' })).status, 400)
