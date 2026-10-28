@@ -518,6 +518,14 @@
   padding: 0 var(--space-4);
   font-size: var(--text-body);
 }
+/* the rename: the question, a field, the row */
+.confirm .field {
+  margin-bottom: var(--space-4);
+}
+.chip.primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
 .chip.danger {
   background: var(--danger);
   color: #fff;
@@ -611,7 +619,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* a story row: the player's last line, and under it the size and the time; the open one sits on a tint */
+/* a story row: the player's name for it, and under it the turns and the time; the open one sits on a tint */
 .stories ul {
   margin: 0;
   padding: 0;
@@ -623,8 +631,10 @@
 }
 .story {
   display: grid;
+  /* the column can shrink under its text: a long line clips, never widens the list */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
-  box-sizing: border-box; /* a button's default; the renaming row is a div */
+  box-sizing: border-box;
   width: 100%;
   padding: var(--space-1) var(--space-2);
   text-align: left;
@@ -635,33 +645,17 @@
 .story[aria-current] {
   background: var(--alpha-1);
 }
-/* the open story's name being typed: the same line, the row carries the focus ring */
-.story input.first {
-  width: 100%;
-  padding: 0;
-  border: 0;
-  font: inherit;
-  color: inherit;
-  background: none;
-  outline: none;
-}
-.story:focus-within {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
-}
-.story .ago {
-  flex: none;
-}
 .story .first,
-.story .last {
+.story .meta {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the last line gives way, the time always shows */
+/* a story never named */
+.story .first.unnamed {
+  color: var(--ink-2);
+}
 .story .meta {
-  display: flex;
-  gap: var(--space-1);
   font-size: var(--text-footnote);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;

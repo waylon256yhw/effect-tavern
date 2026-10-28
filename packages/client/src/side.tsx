@@ -10,7 +10,7 @@ import { openCard } from "./card.tsx"
 import { Edit, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { openSettings } from "./settings.tsx"
-import { card, path, personas, pin, player, stories, working } from "./store.ts"
+import { card, path, personas, pin, player, stories, type StoryRow, working } from "./store.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
 import { openTimeline } from "./timeline.tsx"
@@ -68,8 +68,24 @@ export const Session = (props: { at: string }) => {
     const next = id === undefined ? rest : { ...rest, [cardId()]: id }
     void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
   }
-  const [renaming, setRenaming] = createSignal(false) // the open story's row is a name field (the header's pencil)
+  // the rename dialog (the header's pencil for the open story, a double-click for any row): the confirm's shape with a
+  // field; Enter or Save names it, blank clears the name back to "New story", Escape or Cancel keeps it
+  const [renaming, setRenaming] = createSignal<StoryRow | null>(null)
   let confirm!: HTMLDialogElement
+  let rename!: HTMLDialogElement
+  let name!: HTMLInputElement
+  const openRename = (s: StoryRow) => {
+    setRenaming(s)
+    name.value = s.title ?? ""
+    rename.showModal()
+    name.select()
+  }
+  const commitRename = () => {
+    const s = renaming()
+    if (!s) return
+    const t = name.value.trim()
+    if (t !== (s.title ?? "")) void nameStory(s.id, t)
+  }
   return (
     <div class="session">
       <button type="button" class="cardhead" onClick={openCard} aria-label="The card">
@@ -92,8 +108,8 @@ export const Session = (props: { at: string }) => {
             type="button"
             class="icon"
             aria-label="Rename story"
-            disabled={busy() || renaming()}
-            onClick={() => setRenaming(true)}
+            disabled={busy() || !lib()?.stories.some((s) => s.id === lib()?.current)}
+            onClick={() => openRename(lib()!.stories.find((s) => s.id === lib()!.current)!)}
           >
             <Edit />
           </button>
@@ -111,58 +127,43 @@ export const Session = (props: { at: string }) => {
           <For each={lib()?.stories ?? []} keyed={(s) => s.id}>
             {(s) => (
               <li>
-                <Show
-                  when={renaming() && s().id === lib()?.current}
-                  fallback={
-                    <button
-                      type="button"
-                      class="story"
-                      aria-current={s().id === lib()?.current ? "true" : undefined}
-                      disabled={busy()}
-                      onClick={(e) => {
-                        closeUp(e.currentTarget) // the open one too: on a phone, back to the reader
-                        if (s().id !== lib()?.current) void openStory(s().id)
-                      }}
-                    >
-                      <span class="first">{s().title ?? s().opening ?? "Empty"}</span>
-                      <span class="meta">
-                        <span class="last">{s().last}</span>
-                        <span class="ago">{ago(s().updated)}</span>
-                      </span>
-                    </button>
-                  }
+                {/* the name the player gave, or "New story" (every story of a card opens on the same greeting, so no
+                    line of the text would tell them apart); under it the turns and the time, the time alone at none */}
+                <button
+                  type="button"
+                  class="story"
+                  aria-current={s().id === lib()?.current ? "true" : undefined}
+                  disabled={busy()}
+                  onClick={(e) => {
+                    closeUp(e.currentTarget) // the open one too: on a phone, back to the reader
+                    if (s().id !== lib()?.current) void openStory(s().id)
+                  }}
+                  onDblClick={() => openRename(s())}
                 >
-                  <div class="story" aria-current="true">
-                    {/* Enter or leaving the field names it, Escape keeps the name; blank brings the opening back */}
-                    <input
-                      class="first"
-                      aria-label="Story name"
-                      value={s().title ?? ""}
-                      placeholder={s().opening ?? "Empty"}
-                      ref={(el) => queueMicrotask(() => el.select())}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.currentTarget.blur()
-                        if (e.key !== "Escape") return
-                        e.preventDefault() // the phone's sheet stays open
-                        setRenaming(false)
-                      }}
-                      onBlur={(e) => {
-                        if (!renaming()) return // Escape already closed it
-                        setRenaming(false)
-                        const t = e.currentTarget.value.trim()
-                        if (t !== (s().title ?? "")) void nameStory(s().id, t)
-                      }}
-                    />
-                    <span class="meta">
-                      <span class="last">{s().last}</span>
-                      <span class="ago">{ago(s().updated)}</span>
-                    </span>
-                  </div>
-                </Show>
+                  <span class={{ first: true, unnamed: s().title === null }}>{s().title ?? "New story"}</span>
+                  <span class="meta">
+                    {s().turns ? `${s().turns} turns · ` : ""}
+                    {ago(s().updated)}
+                  </span>
+                </button>
               </li>
             )}
           </For>
         </ul>
+        <dialog class="confirm" ref={(el) => (rename = el)} closedby="any" onClose={() => setRenaming(null)}>
+          <form method="dialog" onSubmit={commitRename}>
+            <p>Rename story</p>
+            <input class="field" ref={(el) => (name = el)} aria-label="Story name" placeholder="New story" />
+            <div class="row">
+              <button type="button" class="chip state" onClick={() => rename.close()}>
+                Cancel
+              </button>
+              <button type="submit" class="chip primary">
+                Save
+              </button>
+            </div>
+          </form>
+        </dialog>
         <dialog class="confirm" ref={(el) => (confirm = el)} closedby="any">
           <p>Delete this story? Every turn in it is gone for good.</p>
           <div class="row">

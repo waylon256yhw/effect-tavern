@@ -10,8 +10,8 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories (id, title or null, turns, the opening's first sentence, the last line, "" while
-//                 only the opening is there, updated), newest first, and `current`: the story the client is to be on
+//   GET  /stories this card's stories (id, title or null, turns: the nodes with a player line or note, so a greeting
+//                 is none, updated), newest first, and `current`: the story the client is to be on
 //                 (the one it named while that one is there, else the newest). POST /stories makes a new one and
 //                 answers it as `current`, PUT /stories/<id> answers that one (404 when there is none), with a body
 //                 {title: string | null} names it instead (blank = null, `updated` untouched), DELETE /stories/<id>

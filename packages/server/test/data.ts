@@ -11,6 +11,7 @@ import { open, traced } from "../src/data.ts"
 
 interface N extends L.Noded {
   text: string
+  input?: { text: string; note?: string } // a turn's player input, what `turns` counts
 }
 const data = open(":memory:")
 
@@ -61,13 +62,17 @@ assert.deepEqual(Object.keys(trace.list()), ["0"])
   data.stories.del(long)
 }
 
-// Stories list newest first per card, each with its size and head node; deleting one cascades to its nodes.
+// Stories list newest first per card, each with its turns: the nodes with a player line or a note to the narrator; a
+// root without input (a greeting) and a node whose input is blank are none. Deleting one cascades to its nodes.
 const second = data.stories.create("wuxia")
+back.commit(L.add(back.log, { parent: 0, text: "said", input: { text: "hello" } }))
+back.commit(L.add(back.log, { parent: 3, text: "noted", input: { text: "", note: "slower" } }))
+back.commit(L.add(back.log, { parent: 4, text: "blank", input: { text: "" } }))
 assert.deepEqual(
-  data.stories.list("wuxia").map((s) => [s.id, s.turns, s.head]),
+  data.stories.list("wuxia").map((s) => [s.id, s.turns]),
   [
-    [second, 0, null],
-    [story, 1, { id: 0, parent: null, text: "r" }], // node 2 dropped above: head fell back to the root
+    [second, 0],
+    [story, 2], // the root "r" has no input, "blank" an empty one: the line and the note count
   ],
 )
 assert.equal(data.stories.list("other").length, 0)

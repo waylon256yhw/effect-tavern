@@ -55,11 +55,9 @@ export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
  *  the player's personas, and the player layer the writing switches and the persona pick live in. Read at open. */
 export interface StoryRow {
   id: Id
-  title: string | null // the player's name for it; none, the row reads the opening
+  title: string | null // the player's name for it; none (never named), the row reads "New story"
   updated: number
-  turns: number
-  opening?: string // the first root's first sentence (or the player's first line); none on an empty story
-  last: string // the player's last line (the head's), or the head's first words; "" while only the opening is there
+  turns: number // the nodes with a player line or note: a greeting is none
 }
 export interface Persona {
   id: string
