@@ -56,8 +56,10 @@ export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
 export interface StoryRow {
   id: Id
   title: string | null // the player's name for it; none (never named), the row reads "New story"
+  starred: boolean // the player's star: first on the card and in the manager
   updated: number
   turns: number // the nodes with a player line or note: a greeting is none
+  last: { text: string; note?: string } | null // the last turn's input: the manager's preview; none with only the opening
 }
 export interface Persona {
   id: string

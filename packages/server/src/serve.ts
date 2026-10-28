@@ -10,13 +10,19 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories (id, title or null, turns: the nodes with a player line or note, so a greeting
-//                 is none, updated), newest first, and `current`: the story the client is to be on
-//                 (the one it named while that one is there, else the newest). POST /stories makes a new one and
-//                 answers it as `current`, PUT /stories/<id> answers that one (404 when there is none), with a body
-//                 {title: string | null} names it instead (blank = null, `updated` untouched), DELETE /stories/<id>
-//                 removes it. The server opens nothing: the client adopts
-//                 `current`, sends it from then on, re-reads /nodes, and the trace starts over.
+//   GET  /stories this card's stories (id, title or null, starred, turns: the nodes with a player line or note, so a
+//                 greeting is none, last: the last turn's input or null, updated), newest first, and `current`: the
+//                 story the client is to be on (the one it named while that one is there, else the newest).
+//                 POST /stories makes a new one and answers it as `current`, PUT /stories/<id> answers that one (404
+//                 when there is none), with a body {title?: string | null, starred?: boolean} names or stars it
+//                 instead (blank = null, `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
+//                 {ids: number[]} removes those of this card's among them in one go. Every one answers the listing.
+//                 The server opens nothing: the client adopts `current`, sends it from then on, re-reads /nodes, and
+//                 the trace starts over. GET /stories/search?q=… is the manager's search: the stories whose head's
+//                 line holds q in a player line, a note or the prose, each as {id, turn, kind, text, count} (data.ts
+//                 `Hit`; the title is the client's to match). GET /stories/<id>/export.md is the head's line as a
+//                 reading copy, GET /stories/<id>/export.json the tree whole as a backup (export.ts), both as
+//                 attachments named by the title.
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
 //                 where it is picked), DELETE /personas/<id> removes it and its picks (the client re-reads /player).
 //                 Both answer the list. Which persona is in force on a card is the player's (`Player.persona`).
@@ -61,6 +67,7 @@ import { Cause, Deferred, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { extname, join, resolve, sep } from "node:path"
+import { backup, disposition, markdown } from "./export.ts"
 import { NoModel, Routing, type Library } from "./library.ts"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
@@ -102,7 +109,13 @@ const SecretMeta = Schema.decodeUnknownSync(
 )
 const TestBody = Schema.decodeUnknownSync(Schema.Struct({ model: Schema.optionalKey(Schema.String) }))
 const RoutingBody = Schema.decodeUnknownSync(Routing)
-const TitleBody = Schema.decodeUnknownSync(Schema.Struct({ title: Schema.NullOr(Schema.String) }))
+const StoryBody = Schema.decodeUnknownSync(
+  Schema.Struct({
+    title: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    starred: Schema.optionalKey(Schema.Boolean),
+  }),
+)
+const IdsBody = Schema.decodeUnknownSync(Schema.Struct({ ids: Schema.Array(Schema.Number) }))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
@@ -119,6 +132,29 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       json(200, { current, stories: lib.stories.list() })
     if (req.method === "GET" && req.url === "/stories") return stories()
     if (req.method === "POST" && req.url === "/stories") return stories(lib.stories.create())
+    if (req.method === "DELETE" && req.url === "/stories") {
+      try {
+        lib.stories.delMany(IdsBody(JSON.parse(await body(req))).ids)
+      } catch (e) {
+        return bad(e)
+      }
+      return stories()
+    }
+    const searching = req.method === "GET" && /^\/stories\/search(?:\?(.*))?$/.exec(req.url ?? "")
+    if (searching) return json(200, lib.stories.search(new URLSearchParams(searching[1] ?? "").get("q") ?? ""))
+    const exporting = req.method === "GET" && /^\/stories\/(\d+)\/export\.(md|json)$/.exec(req.url ?? "")
+    if (exporting) {
+      const id = Number(exporting[1])
+      if (!lib.exists(id)) return json(404, { error: `no story ${id}` })
+      const x = lib.stories.export(id)
+      const md = exporting[2] === "md"
+      res.writeHead(200, {
+        "content-type": md ? "text/markdown; charset=utf-8" : "application/json",
+        "content-disposition": disposition(x.story, md ? "md" : "json"),
+      })
+      res.end(md ? markdown(x) : JSON.stringify(backup(x), null, 2))
+      return
+    }
     const storyAt = /^\/stories\/(\d+)$/.exec(req.url ?? "")
     if (storyAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = Number(storyAt[1])
@@ -127,7 +163,9 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         const raw = await body(req)
         if (raw === "") return stories(id)
         try {
-          lib.stories.title(id, TitleBody(JSON.parse(raw)).title)
+          const b = StoryBody(JSON.parse(raw))
+          if (b.title !== undefined) lib.stories.title(id, b.title)
+          if (b.starred !== undefined) lib.stories.star(id, b.starred)
         } catch (e) {
           return bad(e)
         }
