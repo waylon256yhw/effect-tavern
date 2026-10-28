@@ -161,6 +161,7 @@
 .inspect .pane,
 .inspect .wscroll {
   scrollbar-width: thin;
+  scrollbar-gutter: stable; /* the bar comes and goes with overflow; its width must not */
   scrollbar-color: transparent transparent;
   transition: scrollbar-color var(--dur-3) var(--ease);
   mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
