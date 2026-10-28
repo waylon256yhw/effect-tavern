@@ -151,7 +151,7 @@ if (key && !data.providers.list().length && !data.secrets.list().length) {
   data.routing.write({ default: { provider: "anthropic", model: "claude-haiku-5-5" } })
 }
 const card = await loadCard(name)
-// the templates that load here (banxing and ri read files outside the checkout), listed by GET /cards
+// the templates that load here (ri reads files outside the checkout), listed by GET /cards
 const cards = (await Promise.allSettled(cardNames.map(loadCard))).flatMap((r) =>
   r.status === "fulfilled" ? [{ id: r.value.id, title: r.value.title }] : [],
 )

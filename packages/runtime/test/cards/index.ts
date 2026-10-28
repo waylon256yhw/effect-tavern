@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 // The four template cards by name, and the player layers the live scripts, the tests and the server share. A card is one
-// YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`; ri and
-// banxing are converters over third-party files (`bun test/cards/ri.ts` writes the converted card to .dev/ri.yaml).
+// YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`; ri is a
+// converter over third-party files (`bun test/cards/ri.ts` writes the converted card to .dev/ri.yaml).
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { decodeCard, type Card } from "../../src/card.ts"
@@ -54,10 +54,9 @@ export const player: Player = {
 }
 
 const converters: Record<string, () => Promise<Card>> = {
-  banxing: async () => (await import("./banxing.ts")).load(),
   ri: async () => (await import("./ri.ts")).load(),
 }
-export const cardNames = ["wuxia", "yandao", ...Object.keys(converters)]
+export const cardNames = ["wuxia", "yandao", "banxing", ...Object.keys(converters)]
 export const loadCard = async (name: string): Promise<Card> =>
   converters[name] ? converters[name]() : readCard(new URL(`${name}.yaml`, dir))
 

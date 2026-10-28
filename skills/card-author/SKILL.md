@@ -131,7 +131,7 @@ Lint (#27): `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`, `unre
   (`people`), guard, `heading: "scene.place"`.
 - `yandao.yaml` 盐道: author mode, `input: "note"`, the card fills `pov`, a world instead of a person, one field moved by
   a readout, a greeting whose `do` opens a lore window on turn 1.
-- `banxing.ts` 伴星: pure chat, read from a V3 export (a converter: `bun test/cards/banxing.ts` writes `.dev/banxing.yaml`); `mes_example` kept as an unlabelled fiction fragment
+- `banxing.yaml` 伴星: pure chat, ported from a V3 export as-is (no persona, no rules, no lore); `mes_example` kept as an unlabelled fiction fragment
   (示范（角色的声音）), which held the voice in live runs.
 - `ri.ts` 理: an MVU card compiled from its source files (`bun test/cards/ri.ts` writes `.dev/ri.yaml`) into bands on one field, with hidden ending switches
   (`恋人`, `哥哥`).

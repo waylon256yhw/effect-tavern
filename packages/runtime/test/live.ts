@@ -11,13 +11,22 @@ import { makeSession, type Event } from "../src/session.ts"
 import { loadCard, player } from "./cards/index.ts"
 
 const which = process.argv[2] ?? "wuxia"
-// 盐道's turns: direction, not dialogue, each line is what a novelist tells the narrator to write next
-const yandao = [
-  "沈二带的驼队进镇，街上的人在看。先写镇子的样子，不要急着出事。",
-  "老柯带两个差役上来查驼队，沈二不让开包。写到动手为止，写两三个旁观者的反应。",
-  "切到县衙里。周秉文听到消息，写他和老柯的对话。",
-  "第二天早上，镇上的传言。收尾时留一个悬念。",
-]
+// Scripted lines for the YAML cards; ri's live beside its converter in cards/ri.ts.
+const lines: Record<string, string[]> = {
+  // 盐道: direction, not dialogue, each line is what a novelist tells the narrator to write next
+  yandao: [
+    "沈二带的驼队进镇，街上的人在看。先写镇子的样子，不要急着出事。",
+    "老柯带两个差役上来查驼队，沈二不让开包。写到动手为止，写两三个旁观者的反应。",
+    "切到县衙里。周秉文听到消息，写他和老柯的对话。",
+    "第二天早上，镇上的传言。收尾时留一个悬念。",
+  ],
+  banxing: [
+    "我把游戏机放回床头柜，侧过身看着她的侧脸。“排到第几了？”",
+    "“你刚才说，和我在一起也很自由。”我顿了顿，“这话是认真的吗？”",
+    "我伸手把被子往她那边拉了拉，没说话，只是看着手机微光里她的手指。",
+    "“那就别睡了。你想打几局，我在旁边看着。”我把可乐罐拿远了一点。",
+  ],
+}
 type Script = { card: Card; turns: Array<{ parent: number | null; input: { text: string; note?: string } }> }
 const script = async (): Promise<Script> => {
   const card = await loadCard(which)
@@ -48,7 +57,7 @@ const script = async (): Promise<Script> => {
         ],
       }
     default: {
-      const m = which === "yandao" ? { turns: yandao } : ((await import(`./cards/${which}.ts`)) as { turns: string[] })
+      const m = lines[which] ? { turns: lines[which] } : ((await import(`./cards/${which}.ts`)) as { turns: string[] })
       // Linear: each turn follows the previous node; node 0 is the greeting when the card has one. The card's default
       // channel decides which box the typed text lands in: the client reads `input`, the session takes both.
       const first = card.greetings.length ? 1 : 0
