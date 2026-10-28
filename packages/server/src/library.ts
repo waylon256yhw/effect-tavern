@@ -182,6 +182,23 @@ export const library = ({
    *  endpoint the provider has is on one it names; otherwise none (the default, or nothing known). */
   const formatFor = (p: Provider, formats: Format[] | undefined): Format | undefined =>
     formats && !formats.includes(p.defaultFormat) ? formats.find((f) => p.endpoints[f]?.url.trim()) : undefined
+  /** Where a provider lists models: one group per distinct listing URL over every endpoint it has (two formats on
+   *  one address are one group, under the default format's auth), the default's first. What the listing and the
+   *  connectivity probe both walk, so they never disagree on which endpoints exist. Throws on a bad configuration. */
+  const listings = (id: string): Array<{ url: string; formats: Format[]; c: Connection }> => {
+    const p = providerOf(id)
+    const formats = (Object.keys(p.endpoints) as Format[]).filter((f) => p.endpoints[f]?.url.trim())
+    const ordered = [p.defaultFormat, ...formats.filter((f) => f !== p.defaultFormat)]
+    const byUrl = new Map<string, { url: string; formats: Format[]; c: Connection }>()
+    for (const f of ordered) {
+      const c = probe(id, { id: "", format: f })
+      const url = plan(c.format, c.endpoint).models
+      const g = byUrl.get(url) ?? { url, formats: [], c }
+      g.formats.push(f)
+      byUrl.set(url, g)
+    }
+    return [...byUrl.values()]
+  }
   const players = {
     read: () => {
       const p = data.player.read()
@@ -284,12 +301,29 @@ export const library = ({
         data.providers.del(id)
         prune((pair) => pair.provider !== id)
       },
-      /** The provider's model list, over its default format's endpoint, each with the format it goes under when the
-       *  listing says it is not on the default and the provider has an endpoint on one it is on (`formatFor`). Read
-       *  only: the sync drawer writes the format into the entries it adds, and offers to on the ones already there. */
+      /** The provider's model list from every endpoint it has (`listings`), merged by id in listing order, each with
+       *  the format it goes under when it is off the default (`formatFor`). A model's formats are what its listing
+       *  says (`supported_endpoints`), else the formats of the endpoint that listed it: a model only the OpenAI host
+       *  lists goes under openai-compatible without the gateway's field. A listing that fails is left out while
+       *  another answers (the connectivity tag names it); all failing is the first's error. Read only: the sync
+       *  drawer writes the format into the entries it adds, and offers to on the ones already there. */
       models: async (id: string): Promise<Array<{ id: string; format?: Format }>> => {
         const p = providerOf(id)
-        return (await listModels(probe(id, { id: "" }))).map(({ id, formats }) => {
+        const groups = listings(id)
+        const got = await Promise.allSettled(groups.map((g) => listModels(g.c)))
+        const merged = new Map<string, Format[]>()
+        got.forEach((r, i) => {
+          if (r.status !== "fulfilled") return
+          for (const m of r.value) {
+            const formats = m.formats ?? groups[i]!.formats
+            merged.set(m.id, [...new Set([...(merged.get(m.id) ?? []), ...formats])])
+          }
+        })
+        if (!merged.size) {
+          const failed = got.find((r) => r.status === "rejected")
+          if (failed) throw failed.reason
+        }
+        return [...merged].map(([id, formats]) => {
           const format = formatFor(p, formats)
           return { id, ...(format && { format }) }
         })
@@ -314,18 +348,8 @@ export const library = ({
             }),
           ]
         }
-        const formats = (Object.keys(p.endpoints) as Format[]).filter((f) => p.endpoints[f]?.url.trim())
-        const ordered = [p.defaultFormat, ...formats.filter((f) => f !== p.defaultFormat)]
-        const byUrl = new Map<string, { formats: Format[]; c: Connection }>()
-        for (const f of ordered) {
-          const c = probe(id, { id: "", format: f })
-          const url = plan(c.format, c.endpoint).models
-          const g = byUrl.get(url) ?? { formats: [], c }
-          g.formats.push(f)
-          byUrl.set(url, g)
-        }
         return Promise.all(
-          [...byUrl].map(([url, g]) => probed(g.formats, g.c, url, (onTrace) => listModels(g.c, { onTrace }))),
+          listings(id).map((g) => probed(g.formats, g.c, g.url, (onTrace) => listModels(g.c, { onTrace }))),
         )
       },
     },

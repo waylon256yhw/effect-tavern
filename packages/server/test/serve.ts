@@ -411,6 +411,7 @@ await run(false)
       endpoints: { "openai-compatible": { url: up }, anthropic: { url: up }, gemini: { url: deadUrl } },
     }
     await call("PUT", "/providers/relay", three)
+    // the listing walks the same endpoints: the dead one is left out while the shared address answers
     assert.deepEqual((await call("GET", "/providers/relay/models")).body, [
       { id: "m" },
       { id: "n", format: "anthropic" },
@@ -429,6 +430,26 @@ await run(false)
     await call("PUT", "/providers/relay", { ...relay, endpoints: { "openai-compatible": { url: `${up}/x` } } })
     const page = (await call("POST", "/providers/relay/test")).body
     assert.deepEqual([page[0].status, page[0].ok, page[0].error], [200, false, "model listing failed: not JSON"])
+    // two hosts: the default's listing first, then the other's; a model only the other host lists, with no word of
+    // its own on formats, goes under that host's format; one both list is on the default and gets none
+    const host = createServer((_, res) => res.end(JSON.stringify({ data: [{ id: "o" }, { id: "m" }] }))).listen(0)
+    const hostUrl = `http://localhost:${(host.address() as AddressInfo).port}`
+    try {
+      await call("PUT", "/providers/relay", {
+        ...relay,
+        endpoints: { "openai-compatible": { url: up }, anthropic: { url: hostUrl } },
+      })
+      assert.deepEqual((await call("GET", "/providers/relay/models")).body, [
+        { id: "m" },
+        { id: "n", format: "anthropic" },
+        { id: "o", format: "anthropic" },
+      ])
+      // only the other host left: every listing failing is the error, not an empty list
+      await call("PUT", "/providers/relay", { ...relay, endpoints: { "openai-compatible": { url: deadUrl } } })
+      assert.equal((await call("GET", "/providers/relay/models")).status, 502)
+    } finally {
+      host.close()
+    }
     // the provider's configuration is the request's fault, not a finding: a 400, not a probe
     await call("PUT", "/providers/relay", { ...relay, secret: undefined })
     assert.equal((await call("POST", "/providers/relay/test")).status, 400)

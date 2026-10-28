@@ -66,12 +66,16 @@ const EFFORTS: [Effort, string][] = [
 const providerOf = (id: string) => registry.get(providers).find((p) => p.id === id)
 /** For handlers and snapshots (the registry, not a tracked read); JSX reads `vault()` itself. */
 const secretOf = (p: Provider): SecretView | undefined => registry.get(secrets).find((s) => s.id === p.secret)
-/** Added as listed: with the format the listing put them under when that is off the provider's default. */
+/** Added as listed: with the format the listing put them under when that is off the provider's default. One already
+ *  there with no format of its own takes the listing's too (添加全部 fixes what 更正 would), one the player set stays. */
 const addModels = (p: Provider, models: readonly Listed[]) =>
   void putProvider({
     ...p,
     models: [
-      ...p.models,
+      ...p.models.map((x) => {
+        const listed = models.find((m) => m.id === x.id)
+        return x.format === undefined && listed?.format ? { ...x, format: listed.format } : x
+      }),
       ...models
         .filter((m) => !p.models.some((x) => x.id === m.id))
         .map(({ id, format }) => ({ id, ...(format && { format }) })),
@@ -361,6 +365,8 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   const testOne = async (id: string) => {
     const x = p()
     if (!x) return
+    if (typed().trim()) void storeKey() // a key still in the field goes up first, as on runReach
+    await keySaved()
     const n = (inflight.get(id) ?? 0) + 1
     inflight.set(id, n)
     setTests((t) => ({ ...t, [id]: "running" }))
@@ -375,6 +381,8 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   const testAll = async () => {
     const x = p()
     if (!x || batch()) return
+    if (typed().trim()) void storeKey() // once, ahead of the queue: a rekey clears the results, so before any lands
+    await keySaved()
     const ac = new AbortController()
     setBatch(ac)
     const queue = models(x)

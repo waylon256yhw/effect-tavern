@@ -31,8 +31,9 @@
 //   GET  /providers  the player's model providers (provider providers.ts `Provider`), a key only as a secret id.
 //                 PUT /providers/<id> writes one (decoded as `Provider` without id), DELETE /providers/<id> removes it
 //                 and the routing pairs on it. Both answer the list. GET /providers/<id>/models lists the service's
-//                 models ({id, format?}[], the format where the listing puts the model off the default protocol and
-//                 onto an endpoint the provider has; a failure is a 502 {error}). POST /providers/<id>/test {model?}
+//                 models from every endpoint the provider has, merged ({id, format?}[], the format where the listing
+//                 puts the model off the default protocol and onto an endpoint the provider has; every listing
+//                 failing is a 502 {error}). POST /providers/<id>/test {model?}
 //                 probes: with a model one request for a one-token answer, without one the listing from every endpoint
 //                 the provider has (one request per distinct listing URL). The answer is the probes, 200 whatever they
 //                 found (provider `Probe`: {formats, url, method, status, ms, ok, code?, error?}, status 0 = nothing
