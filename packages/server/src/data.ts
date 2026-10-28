@@ -169,18 +169,18 @@ export const open = (asked: string) => {
     /** One card's stories, newest first, each with its title (the player's, or none) and its turns: on the head's line
      *  (head, its parent, up to the root), the nodes with a player input, a line or a note to the narrator (a note-only
      *  turn has `text: ""`). So a greeting is not a turn, a story with only its opening has none, and a swipe (a
-     *  sibling carrying the same input) is still the one turn. Only the line's nodes have their JSON read. */
+     *  sibling carrying the same input) is still the one turn. The line is walked once, each node read by its key. */
     stories: {
       list: (card: string) =>
         (
           q(
             `select s.id, s.title, s.updated,
-               (with recursive line(id) as (
-                  select s.head
+               (with recursive line(parent, json) as (
+                  select parent, json from node where story = s.id and id = s.head
                   union all
-                  select n.parent from node n join line on n.story = s.id and n.id = line.id)
-                select count(*) from node where story = s.id and id in (select id from line)
-                  and (json_extract(json, '$.input.text') != '' or json_extract(json, '$.input.note') is not null)) as turns
+                  select n.parent, n.json from node n join line on n.story = s.id and n.id = line.parent)
+                select count(*) from line
+                  where json_extract(json, '$.input.text') != '' or json_extract(json, '$.input.note') is not null) as turns
              from story s where card = ? order by updated desc, id desc`,
           ).all(card) as Row[]
         ).map((r) => ({

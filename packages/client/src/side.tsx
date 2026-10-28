@@ -70,6 +70,8 @@ export const Session = () => {
     const t = q().trim().toLowerCase()
     return t ? people().filter((p) => p.name.toLowerCase().includes(t) || p.text.toLowerCase().includes(t)) : people()
   })
+  /** The card's own row stays while the search is empty or names it; the rule under it only when rows follow. */
+  const showDefault = () => !q().trim() || "卡片默认".includes(q().trim())
   let picker!: HTMLDialogElement
   let search!: HTMLInputElement
   const openPicker = () => {
@@ -114,7 +116,12 @@ export const Session = () => {
     <>
       <div class="session">
         {/* the card: its name with the way in beside it (a badge at rest, not a hover), its line to three rows */}
-        <button type="button" class="cardhead" onClick={openCard} aria-label="The card">
+        <button
+          type="button"
+          class="cardhead"
+          onClick={(e) => (closeUp(e.currentTarget), openCard())}
+          aria-label="The card"
+        >
           <span class="top">
             <h1>{view()?.title}</h1>
             <span class="enter" aria-hidden="true">
@@ -324,7 +331,7 @@ export const Session = () => {
             <span class="tag mono">{people().length}</span>
           </div>
           <div class="list scroller" role="menu" onKeyDown={roam}>
-            <Show when={!q().trim() || "卡片默认".includes(q().trim())}>
+            <Show when={showDefault()}>
               <button
                 type="button"
                 role="menuitemradio"
@@ -338,7 +345,7 @@ export const Session = () => {
                 <Check class="check" aria-hidden="true" />
                 <span class="bio">这张卡写定的玩家角色</span>
               </button>
-              <Show when={people().length}>
+              <Show when={hits().length}>
                 <hr />
               </Show>
             </Show>
@@ -366,7 +373,7 @@ export const Session = () => {
                 </button>
               </div>
             </Show>
-            <Show when={people().length && q().trim() && !hits().length}>
+            <Show when={people().length && q().trim() && !hits().length && !showDefault()}>
               <div class="empty">
                 <span>没有匹配「{q().trim()}」的人设</span>
               </div>
