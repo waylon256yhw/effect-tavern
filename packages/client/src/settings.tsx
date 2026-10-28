@@ -62,7 +62,7 @@ export const Settings = () => {
 
   onSettled(() => {
     void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards(), fetchNames()])
-    // a popover, a dialog or an open drawer takes its own Escape (the drawer's is providers.tsx's); so does a field
+    // a popover, a dialog or an open drawer takes its own Escape (controls.tsx's shells); so does a field
     // that prevents it
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return

@@ -1,10 +1,11 @@
-// The settings page's shared pieces (settings.tsx, providers.tsx): the controls the prototype draws (a menu instead of
-// <select>, a switch, a letter avatar, a name edited in place), the shells (a side drawer over the detail card, a
-// modal, the one delete confirm), and the small pure helpers the sections share. No state of a section lives here.
+// The settings page's shared pieces (settings.tsx, providers.tsx and its parts): the controls the prototype draws (a
+// menu instead of <select>, a switch, a letter avatar, a name edited in place), the shells (a side drawer over the
+// detail card, a modal, the one delete confirm), and the small pure helpers the sections share. No state of a section
+// lives here.
 import { lookup } from "@effect-tavern/provider/src/names.ts"
 import { normalize, plan, type Format } from "@effect-tavern/provider/src/url.ts"
 import type { JSX } from "@solidjs/web"
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, onSettled, Show } from "solid-js"
 import { Family } from "./family.tsx"
 import { Back, Caret, Check, Close } from "./icons.tsx"
 import { roam } from "./side.tsx"
@@ -36,6 +37,15 @@ export const preview = (format: Format, url: string, exact: boolean | undefined,
   }
 }
 export const hide = (el: HTMLElement) => el.closest<HTMLElement>("[popover]")?.hidePopover()
+/** A value (a key, an error) onto the clipboard, then `flash` for a moment. A plain-http page off localhost (a phone
+ *  on the LAN) has no clipboard: the button then does nothing. */
+export const copyKey = async (value: string | Promise<string>, flash: (on: boolean) => void) => {
+  const v = await value
+  if (!v || !navigator.clipboard) return
+  await navigator.clipboard.writeText(v)
+  flash(true)
+  setTimeout(() => flash(false), 1200)
+}
 
 // ───────── Controls ─────────
 let menus = 0
@@ -153,15 +163,28 @@ export interface Pane {
 }
 
 // ───────── Shells ─────────
-/** A card sliding in over the detail card's right side, its scrim closing it; the content is the caller's. */
-export const Drawer = (props: { open: boolean; label: string; onClose: () => void; children: JSX.Element }) => (
-  <>
-    <div class="drawer-scrim" data-open={props.open ? "true" : "false"} onClick={() => props.onClose()} />
-    <aside class="side-drawer" data-open={props.open ? "true" : "false"} aria-label={props.label}>
-      {props.children}
-    </aside>
-  </>
-)
+/** A card sliding in over the detail card's right side, its scrim and Escape closing it; the content is the caller's.
+ *  A popover or a dialog over it takes the Escape instead, and the page's Escape (settings.tsx) leaves an open
+ *  drawer to this. */
+export const Drawer = (props: { open: boolean; label: string; onClose: () => void; children: JSX.Element }) => {
+  onSettled(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && props.open && !document.querySelector(":popover-open, dialog[open]")) props.onClose()
+    }
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  })
+  return (
+    <>
+      <div class="drawer-scrim" data-open={props.open ? "true" : "false"} onClick={() => props.onClose()} />
+      <aside class="side-drawer" data-open={props.open ? "true" : "false"} aria-label={props.label}>
+        {props.children}
+      </aside>
+    </>
+  )
+}
+/** Opens a dialog component from its parent: the dialog hands its open function up through `opener`. */
+export type Opener<A> = (open: (a: A) => void) => void
 /** A modal: the head with its close, then the caller's body and foot. Scrim click and Escape close it too. */
 export const Modal = (props: {
   title: string

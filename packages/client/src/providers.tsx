@@ -1,18 +1,16 @@
-// The settings page's 模型服务 section: the provider list, one provider's detail (key, endpoint, grouped models), its
-// two drawers (request settings, the service's model list), the key vault's drawer (the section's, with or without a
-// provider in hand) and its dialogs (add a provider, one model's settings, add a
-// model by id). Every write goes through wire.ts and comes back as the list; the drafts here are the drawer's and the
-// dialogs', written on Save, on close and on submit.
-import type { Effort } from "@effect-tavern/provider/src/call.ts"
-import { DEFAULTS, type Capabilities } from "@effect-tavern/provider/src/capabilities.ts"
+// The settings page's 模型服务 section: the provider list, one provider's detail (key, endpoint, grouped models, the
+// probes of probe.ts), its two drawers (request settings, the service's model list) and the dialog that adds a
+// provider. The key vault's drawer is vault.tsx, the dialogs about one model are models.tsx. Every write goes through
+// wire.ts and comes back as the list; the drafts here are the drawer's and the dialog's, written on Save and on submit.
 import { lookup } from "@effect-tavern/provider/src/names.ts"
 import type { ModelEntry, Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
-import { createEffect, createSignal, For, onSettled, Show, untrack } from "solid-js"
+import { createSignal, For, onSettled, Show, untrack } from "solid-js"
 import { read } from "./bridge.ts"
 import {
   ask,
   Avatar,
+  copyKey,
   Drawer,
   FORMAT,
   FORMATS,
@@ -21,6 +19,7 @@ import {
   Modal,
   Name,
   newId,
+  type Opener,
   preview,
   Switch,
   ToList,
@@ -44,11 +43,13 @@ import {
   Sync,
   Trash,
 } from "./icons.tsx"
-import { hats, names, providers, registry, secrets } from "./store.ts"
+import { AddModelDialog, addModels, ModelDialog, removeModels } from "./models.tsx"
+import { createProbing, IDLE, result, type Slot } from "./probe.ts"
+import { names, providers, registry, secrets } from "./store.ts"
+import { VaultDrawer } from "./vault.tsx"
 import {
   addSecret,
   deleteProvider,
-  deleteSecret,
   listModels,
   putProvider,
   secretValue,
@@ -57,33 +58,9 @@ import {
   type Listed,
 } from "./wire.ts"
 
-const EFFORTS: [Effort, string][] = [
-  ["off", "关闭"],
-  ["low", "低"],
-  ["medium", "中"],
-  ["high", "高"],
-  ["max", "最高"],
-]
 const providerOf = (id: string) => registry.get(providers).find((p) => p.id === id)
 /** For handlers and snapshots (the registry, not a tracked read); JSX reads `vault()` itself. */
 const secretOf = (p: Provider): SecretView | undefined => registry.get(secrets).find((s) => s.id === p.secret)
-/** Added as listed: with the format the listing put them under when that is off the provider's default. One already
- *  there with no format of its own takes the listing's too (添加全部 fixes what 更正 would), one the player set stays. */
-const addModels = (p: Provider, models: readonly Listed[]) =>
-  void putProvider({
-    ...p,
-    models: [
-      ...p.models.map((x) => {
-        const listed = models.find((m) => m.id === x.id)
-        return x.format === undefined && listed?.format ? { ...x, format: listed.format } : x
-      }),
-      ...models
-        .filter((m) => !p.models.some((x) => x.id === m.id))
-        .map(({ id, format }) => ({ id, ...(format && { format }) })),
-    ],
-  })
-const removeModels = (p: Provider, ids: readonly string[]) =>
-  void putProvider({ ...p, models: p.models.filter((m) => !ids.includes(m.id)) })
 /** A model id matches a search by itself or by its table name. */
 const hit = (id: string, q: string) =>
   `${id} ${lookup(read(names)(), id)?.name ?? ""}`.toLowerCase().includes(q.toLowerCase())
@@ -105,31 +82,8 @@ const setUrl = (p: Provider, f: Format, url: string): Provider["endpoints"] => {
   const { [f]: old, ...rest } = p.endpoints
   return url.trim() ? { ...rest, [f]: { ...old, url: url.trim() } } : rest
 }
-const AUTH: { value: SecretView["type"]; label: string }[] = [
-  { value: "api_key", label: "API Key Header" },
-  { value: "auth_token", label: "Bearer Token" },
-]
-/** A key onto the clipboard, then `flash` for a moment. A plain-http page off localhost (a phone on the LAN) has no
- *  clipboard: the button then does nothing. */
-const copyKey = async (value: string | Promise<string>, flash: (on: boolean) => void) => {
-  const v = await value
-  if (!v || !navigator.clipboard) return
-  await navigator.clipboard.writeText(v)
-  flash(true)
-  setTimeout(() => flash(false), 1200)
-}
 /** A latency for a slot of one width: `240ms`, `1.2s` past a second. */
 const took = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`)
-/** What a probe that could not be made looks like (the server refused the request: no key, no endpoint): no URL. */
-const refused = (e: unknown): Probe => ({
-  formats: [],
-  url: "",
-  method: "",
-  status: 0,
-  ms: 0,
-  ok: false,
-  error: e instanceof Error ? e.message : String(e),
-})
 /** A listing probe's verdict, by the status first (0: nothing answered, the proxy or the route), then by what the
  *  address said: a listing, a refused key, no listing there, a page that is not an API, some other status. */
 const verdict = (p: Probe): { text: string; tone: "ok" | "bad" | "" } =>
@@ -175,8 +129,6 @@ const ProbeError = (props: { probe: Probe }) => {
   )
 }
 const DRAWER_OUT = 250 // ms: past the drawer's --dur-3 slide, so its content leaves with it
-/** Opens a dialog component from its parent: the dialog hands its open function up through `opener`. */
-type Opener<A> = (open: (a: A) => void) => void
 
 export const Providers = (props: Pane) => {
   const list = read(providers)
@@ -188,14 +140,6 @@ export const Providers = (props: Pane) => {
   const [vaultOpen, setVaultOpen] = createSignal(false)
   const [vaultFor, setVaultFor] = createSignal<string | undefined>()
   const openVault = (id: string | undefined) => (setVaultFor(id), setVaultOpen(true))
-  onSettled(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(":popover-open, dialog[open]") && vaultOpen())
-        setVaultOpen(false)
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  })
   return (
     <>
       <aside class="master-card" aria-label="服务商">
@@ -267,21 +211,6 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   // the stored key while the eye is open, read on that click and dropped when it closes or the secret changes
   const [plain, setPlain] = createSignal<{ id: string; value: string } | null>(null)
   const [copied, setCopied] = createSignal(false)
-  // the probes' results, this detail's only (it remounts per provider): the connectivity's, and one per model tested.
-  // They answer the configuration they ran on, so a change to it clears them (the effects below)
-  const [reach, setReach] = createSignal<Probe[] | "running" | null>(null)
-  const [tests, setTests] = createSignal<Record<string, Probe | "running" | undefined>>({})
-  const [batch, setBatch] = createSignal<AbortController | null>(null) // 检测全部 in flight
-  let reachRun: object | null = null // the connectivity run whose result may land; another run or a clear voids it
-  const inflight = new Map<string, number>() // per model, the test whose result may land, the same way
-  const clearResults = () => {
-    reachRun = null
-    inflight.clear()
-    batch()?.abort()
-    setBatch(null)
-    setReach(null)
-    setTests({})
-  }
   const [mq, setMq] = createSignal("")
   const [searching, setSearching] = createSignal(false)
   const [folded, setFolded] = createSignal(false)
@@ -298,18 +227,15 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
 
   /** A typed key goes up once. Retyped on the provider's own secret (the one named after it), the value is replaced in
    *  place; on a secret the player named in the vault, it is a new secret under the provider's name. */
-  // the key's write in flight: a drawer's first request and the probe wait for it, or they would go out keyless
+  // the key's write in flight: a drawer's first request and the probes wait for it, or they would go out keyless
   let savingKey: Promise<void> | undefined
   const keySaved = () => savingKey ?? Promise.resolve()
   const storeKey = (): Promise<void> => {
     const run: Promise<void> = writeKey()
       .then((how) => {
-        // a key replaced in place changes nothing the effects below watch: the results go here, and the address
-        // is tried with the new key (a new secret changes the provider, and the effect does the same)
-        if (how === "rekeyed") {
-          clearResults()
-          void runReach()
-        }
+        // a key replaced in place changes nothing the probes watch: they start over here, with the new key (a new
+        // secret changes the provider, and the probes see that themselves)
+        if (how === "rekeyed") probing.restart()
       })
       .finally(() => {
         if (savingKey === run) savingKey = undefined
@@ -343,96 +269,21 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
     if (x && !typed() && secretOf(x)) setPlain({ id: x.secret!, value: await secretValue(x.secret!) })
   }
   const stored = (x: Provider) => (secretOf(x) ? secretValue(x.secret!) : "")
-  /** Connectivity: the listing from every endpoint the provider has, through its proxy with its key; no model, no
-   *  token. A key being typed goes up first, or the probe would go out without it. */
-  const runReach = async () => {
-    const x = p()
-    if (!x) return
+  /** The key field's part of a probe: a key still being typed goes up first, or the probe would go out without it. */
+  const flushKey = () => {
     if (typed().trim()) void storeKey()
-    await keySaved()
-    const run = (reachRun = {})
-    setReach("running")
-    const got = await testProvider(x.id).catch((e: unknown) => [refused(e)])
-    if (reachRun === run) setReach(got)
+    return keySaved()
   }
-  /** One model: a request for a few tokens under its format. */
-  const testOne = async (id: string) => {
-    const x = p()
-    if (!x) return
-    if (typed().trim()) void storeKey() // a key still in the field goes up first, as on runReach
-    await keySaved()
-    const n = (inflight.get(id) ?? 0) + 1
-    inflight.set(id, n)
-    setTests((t) => ({ ...t, [id]: "running" }))
-    const got = await testProvider(x.id, id).then(
-      (r) => r[0] ?? refused(new Error("no probe")),
-      (e: unknown) => refused(e),
-    )
-    if (inflight.get(id) === n) setTests((t) => ({ ...t, [id]: got }))
-  }
-  /** Every model the list shows (a search narrows it), three at a time, in list order; the stop lets the three in
-   *  flight finish and starts no more. */
-  const testAll = async () => {
-    const x = p()
-    if (!x || batch()) return
-    if (typed().trim()) void storeKey() // once, ahead of the queue: a rekey clears the results, so before any lands
-    await keySaved()
-    const ac = new AbortController()
-    setBatch(ac)
-    const queue = models(x)
-    const worker = async () => {
-      for (let id = queue.shift(); id !== undefined && !ac.signal.aborted; id = queue.shift()) await testOne(id)
-    }
-    await Promise.all([worker(), worker(), worker()])
-    if (batch() === ac) setBatch(null)
-  }
-  const stopAll = () => {
-    batch()?.abort()
-    setBatch(null)
-  }
-  const done = (t: Probe | "running" | undefined): Probe | undefined => (t && t !== "running" ? t : undefined)
-  const failed = (t: Probe | "running" | undefined): Probe | undefined => (done(t)?.ok === false ? done(t) : undefined)
-  const slot = (t: Probe | "running" | undefined) =>
-    t === undefined ? "检测" : t === "running" ? "…" : t.ok ? took(t.ms) : "失败"
-  // the results answer the configuration they ran on: the address, the proxy, the headers, the key or the default
-  // protocol changed clears them all and tries the address again (it was just saved: this is the moment to know);
-  // a model's own protocol changed clears that model's
-  createEffect(
-    () => {
-      const x = p()
-      return x && JSON.stringify([x.endpoints, x.proxy, x.headers, x.secret, x.defaultFormat])
-    },
-    (fp, prev) => {
-      if (prev !== undefined && fp !== undefined && fp !== prev) {
-        clearResults()
-        void runReach()
-      }
-    },
-  )
-  createEffect(
-    () => {
-      const x = p()
-      return Object.fromEntries((x?.models ?? []).map((m) => [m.id, m.format ?? x!.defaultFormat]))
-    },
-    (now, prev) => {
-      if (!prev) return
-      const changed = Object.keys(now).filter((id) => prev[id] !== undefined && prev[id] !== now[id])
-      if (!changed.length) return
-      for (const id of changed) inflight.delete(id)
-      setTests((t) => Object.fromEntries(Object.entries(t).filter(([id]) => !changed.includes(id))))
-    },
-  )
+  // the probes, this detail's (it remounts per provider): the connectivity's, and one per model tested
+  const probing = createProbing({ provider: p, ready: flushKey, run: testProvider })
+  const reach = () => probing.probes().reach
+  const test = (id: string): Slot<Probe> => probing.probes().tests[id] ?? IDLE
+  const failed = (s: Slot<Probe>) => (result(s)?.ok === false ? result(s) : undefined)
+  /** The test's slot label: one width through its states. */
+  const label = (s: Slot<Probe>) =>
+    s.state === "idle" ? "检测" : s.state === "running" ? "…" : s.result.ok ? took(s.result.ms) : "失败"
   const endpoints = (x: Provider) => FORMATS.filter((f) => x.endpoints[f]?.url.trim()).length
   const models = (x: Provider) => x.models.map((m) => m.id).filter((id) => hit(id, mq()))
-
-  onSettled(() => {
-    // the page's Escape leaves the drawer to this: it closes the drawer, not the page (settings.tsx checks the DOM)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(":popover-open, dialog[open]") && drawer()) shut()
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  })
 
   return (
     <Show when={p()}>
@@ -457,33 +308,28 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
               <div class="block-title">
                 <h3>API 密钥</h3>
                 {/* connectivity results: a tag per distinct listing URL in the title row, so the controls below never move */}
-                <Show when={reach()}>
-                  {(r) => (
-                    <div class="right probes">
-                      <Show
-                        when={r() !== "running" ? (r() as Probe[]) : undefined}
-                        fallback={<span class="tag">…</span>}
-                      >
-                        {(probes) => (
-                          <For each={probes()} keyed={false}>
-                            {(pr) => {
-                              const v = () => verdict(pr())
-                              return (
-                                <span class={{ tag: true, ok: v().tone === "ok", bad: v().tone === "bad" }}>
-                                  {probes().length > 1
-                                    ? `${pr()
-                                        .formats.map((f) => FORMAT[f])
-                                        .join("/")} · `
-                                    : ""}
-                                  {v().text}
-                                </span>
-                              )
-                            }}
-                          </For>
-                        )}
-                      </Show>
-                    </div>
-                  )}
+                <Show when={reach().state !== "idle"}>
+                  <div class="right probes">
+                    <Show when={result(reach())} fallback={<span class="tag">…</span>}>
+                      {(probes) => (
+                        <For each={probes()} keyed={false}>
+                          {(pr) => {
+                            const v = () => verdict(pr())
+                            return (
+                              <span class={{ tag: true, ok: v().tone === "ok", bad: v().tone === "bad" }}>
+                                {probes().length > 1
+                                  ? `${pr()
+                                      .formats.map((f) => FORMAT[f])
+                                      .join("/")} · `
+                                  : ""}
+                                {v().text}
+                              </span>
+                            )
+                          }}
+                        </For>
+                      )}
+                    </Show>
+                  </div>
                 </Show>
               </div>
               <div
@@ -536,14 +382,14 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   type="button"
                   class="icon boxed"
                   aria-label="检测连通性"
-                  disabled={reach() === "running"}
-                  onClick={() => void runReach()}
+                  disabled={reach().state === "running"}
+                  onClick={() => void probing.reach()}
                 >
                   <Lightning />
                 </button>
               </div>
               {/* a failed probe explains itself under the row; a 404 does not: the address answered, it just lists nothing */}
-              <Show when={reach() !== "running" ? (reach() as Probe[] | null) : null}>
+              <Show when={result(reach())}>
                 {(probes) => (
                   <For each={probes().filter((pr) => !pr.ok && pr.status !== 404)} keyed={false}>
                     {(pr) => <ProbeError probe={pr()} />}
@@ -617,14 +463,14 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                 <div class="right">
                   <Show when={x().models.length}>
                     <Show
-                      when={batch()}
+                      when={probing.batch()}
                       fallback={
-                        <button type="button" class="btn sm ghost" onClick={() => void testAll()}>
+                        <button type="button" class="btn sm ghost" onClick={() => void probing.testAll(models(x()))}>
                           检测全部
                         </button>
                       }
                     >
-                      <button type="button" class="btn sm ghost" onClick={stopAll}>
+                      <button type="button" class="btn sm ghost" onClick={probing.stop}>
                         停止
                       </button>
                     </Show>
@@ -674,7 +520,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                       </summary>
                       <For each={g()[1]} keyed={(id) => id}>
                         {(id) => {
-                          const t = () => tests()[id()]
+                          const t = () => test(id())
                           return (
                             <>
                               <div class="m-row">
@@ -684,12 +530,12 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                                     result shows the time or 失败, and a press tests again */}
                                 <button
                                   type="button"
-                                  class={{ "m-probe": true, ok: !!done(t())?.ok, bad: !!failed(t()) }}
+                                  class={{ "m-probe": true, ok: !!result(t())?.ok, bad: !!failed(t()) }}
                                   aria-label={`检测 ${id()}`}
-                                  disabled={t() === "running"}
-                                  onClick={() => void testOne(id())}
+                                  disabled={t().state === "running"}
+                                  onClick={() => void probing.test(id())}
                                 >
-                                  {slot(t())}
+                                  {label(t())}
                                 </button>
                                 <button
                                   type="button"
@@ -962,169 +808,6 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
   )
 }
 
-// ───────── The vault drawer: every secret, named, typed, revealed or copied one click at a time ─────────
-const VaultDrawer = (props: { for: string | undefined; onClose: () => void }) => {
-  const vault = read(secrets)
-  const list = read(providers)
-  const target = () => list().find((p) => p.id === props.for)
-  const [draft, setDraft] = createSignal<{ name: string; type: SecretView["type"]; value: string }>({
-    name: "",
-    type: "api_key",
-    value: "",
-  })
-  const add = async () => {
-    const d = draft()
-    if (!d.name.trim() || !d.value.trim()) return
-    await addSecret({ name: d.name.trim(), type: d.type, value: d.value.trim() })
-    setDraft({ ...d, name: "", value: "" })
-  }
-  return (
-    <>
-      <div class="drawer-head">
-        <h3>密钥库</h3>
-        <Show when={target()}>{(t) => <span class="tag">{t().name}</span>}</Show>
-        <span class="spacer" />
-        <button type="button" class="icon sm" aria-label="关闭" onClick={() => props.onClose()}>
-          <Close />
-        </button>
-      </div>
-      <div class="drawer-body scroller">
-        <div class="field-group">
-          <span class="label">添加密钥</span>
-          <div class="row">
-            <div class="input-box sm grow">
-              <input
-                type="text"
-                placeholder="密钥名称"
-                aria-label="密钥名称"
-                value={draft().name}
-                onInput={(e) => {
-                  const name = e.currentTarget.value
-                  setDraft((d) => ({ ...d, name }))
-                }}
-              />
-            </div>
-            <Menu
-              small
-              label="认证方式"
-              value={draft().type}
-              options={AUTH}
-              onPick={(type) => setDraft((d) => ({ ...d, type }))}
-            />
-          </div>
-          <div class="row">
-            <div class="input-box sm grow">
-              <input
-                type="password"
-                class="mono"
-                autocomplete="off"
-                placeholder="密钥"
-                aria-label="密钥"
-                value={draft().value}
-                onInput={(e) => {
-                  const value = e.currentTarget.value
-                  setDraft((d) => ({ ...d, value }))
-                }}
-                onKeyDown={(e) => e.key === "Enter" && void add()}
-              />
-            </div>
-            <button
-              type="button"
-              class="btn sm"
-              disabled={!draft().name.trim() || !draft().value.trim()}
-              onClick={() => void add()}
-            >
-              添加
-            </button>
-          </div>
-        </div>
-        <For each={vault()} keyed={(s) => s.id} fallback={<p class="none">密钥库为空</p>}>
-          {(s) => {
-            const [plain, setPlain] = createSignal<string | null>(null) // read on the eye's click, dropped on the next
-            const [copied, setCopied] = createSignal(false)
-            const flip = async () => setPlain(plain() === null ? await secretValue(s().id) : null)
-            return (
-              <div class="setting-card vault-card">
-                <div class="row">
-                  <div class="input-box sm grow">
-                    <input
-                      type="text"
-                      value={s().name}
-                      aria-label="密钥名称"
-                      onChange={(e) => {
-                        const name = e.currentTarget.value.trim()
-                        if (name) void setSecret(s().id, { name, type: s().type })
-                      }}
-                    />
-                  </div>
-                  <Menu
-                    small
-                    label="认证方式"
-                    value={s().type}
-                    options={AUTH}
-                    onPick={(type) => void setSecret(s().id, { name: s().name, type })}
-                  />
-                  <button
-                    type="button"
-                    class="icon sm"
-                    aria-label="删除密钥"
-                    onClick={() =>
-                      ask(`删除密钥「${s().name}」？用到它的服务商将没有密钥。`, () => void deleteSecret(s().id))
-                    }
-                  >
-                    <Trash />
-                  </button>
-                </div>
-                <div class="row">
-                  <span class="mono hint grow">{plain() ?? s().hint}</span>
-                  <button
-                    type="button"
-                    class="icon sm"
-                    aria-label={plain() === null ? "显示密钥" : "隐藏密钥"}
-                    onClick={() => void flip()}
-                  >
-                    <Show when={plain() !== null} fallback={<Eye />}>
-                      <EyeOff />
-                    </Show>
-                  </button>
-                  <button
-                    type="button"
-                    class="icon sm"
-                    aria-label="复制密钥"
-                    onClick={() => void copyKey(secretValue(s().id), setCopied)}
-                  >
-                    <Show when={copied()} fallback={<Copy />}>
-                      <Check />
-                    </Show>
-                  </button>
-                  <Show when={target()}>
-                    {(t) => (
-                      <Show
-                        when={t().secret === s().id}
-                        fallback={
-                          <button
-                            type="button"
-                            class="btn xs"
-                            onClick={() => void putProvider({ ...t(), secret: s().id })}
-                          >
-                            使用
-                          </button>
-                        }
-                      >
-                        <span class="tag ok">使用中</span>
-                      </Show>
-                    )}
-                  </Show>
-                </div>
-              </div>
-            )
-          }}
-        </For>
-      </div>
-    </>
-  )
-}
-
 // ───────── The sync drawer: the service's own model list, toggled into the provider's ─────────
 const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: () => void }) => {
   const list = read(providers)
@@ -1262,249 +945,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
   )
 }
 
-// ───────── The model dialog: a draft of one entry, written when the dialog closes ─────────
-const formatOf = (p: Provider, m: ModelEntry) => m.format ?? p.defaultFormat
-const capOf = <K extends keyof Capabilities>(p: Provider, m: ModelEntry, k: K): Capabilities[K] =>
-  (m.capabilities?.[k] as Capabilities[K] | undefined) ?? DEFAULTS[formatOf(p, m)][k]
-const without = <K extends Exclude<keyof ModelEntry, "id">>(
-  m: ModelEntry,
-  k: K,
-  v: ModelEntry[K] | undefined,
-): ModelEntry => {
-  const { [k]: _, ...rest } = m
-  return (v === undefined ? rest : { ...rest, [k]: v }) as ModelEntry
-}
-
-const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) => {
-  const list = read(providers)
-  const hatList = read(hats)
-  const p = () => list().find((x) => x.id === props.id)
-  let el!: HTMLDialogElement
-  const [entry, setEntry] = createSignal<ModelEntry | null>(null)
-  const change = (f: (m: ModelEntry) => ModelEntry) => setEntry((m) => (m ? f(m) : m))
-  /** An override set only where it differs from the format's default. */
-  const setCap = <K extends keyof Capabilities>(k: K, v: Capabilities[K]) => {
-    const x = p()
-    if (x)
-      change((m) => {
-        const { [k]: _, ...caps } = m.capabilities ?? {}
-        const next = v === DEFAULTS[formatOf(x, m)][k] ? caps : { ...caps, [k]: v }
-        const { capabilities: _c, ...rest } = m
-        return Object.keys(next).length ? { ...rest, capabilities: next } : rest
-      })
-  }
-  const conflict = (x: Provider, m: ModelEntry) =>
-    hatList()
-      .find((h) => h.id === m.hat)
-      ?.narrate?.tail?.at(-1)?.role === "assistant" && !capOf(x, m, "prefill")
-  const commit = () => {
-    const m = entry()
-    const x = p()
-    setEntry(null)
-    const stored = x?.models.find((y) => y.id === m?.id)
-    if (m && x && JSON.stringify(m) !== JSON.stringify(stored))
-      void putProvider({ ...x, models: x.models.map((y) => (y.id === m.id ? m : y)) })
-  }
-  return (
-    <Modal
-      title={entry()?.id ?? ""}
-      dialog={(d) => {
-        el = d
-        props.opener((m) => (setEntry(m), d.showModal()))
-      }}
-      onClose={commit}
-    >
-      <Show when={entry() && p() ? { m: entry()!, x: p()! } : undefined}>
-        {(c) => (
-          <>
-            <div class="modal-body scroller">
-              <Show when={conflict(c().x, c().m)}>
-                <div class="warn">所选提示词模板以 Assistant 消息结尾，请开启下方「允许预填续写」。</div>
-              </Show>
-              <div class="pair">
-                <div class="field-group">
-                  <span class="label">提示词模板</span>
-                  <Menu
-                    label="提示词模板"
-                    value={c().m.hat ?? ""}
-                    options={[
-                      { value: "", label: "无模板" },
-                      ...hatList().map((h) => ({ value: h.id, label: h.name })),
-                    ]}
-                    onPick={(v) => change((m) => without(m, "hat", v || undefined))}
-                  />
-                </div>
-                <div class="field-group">
-                  <span class="label">请求端点协议</span>
-                  <Menu
-                    label="请求端点协议"
-                    value={c().m.format ?? ""}
-                    options={[
-                      { value: "", label: `默认 (${FORMAT[c().x.defaultFormat]})` },
-                      ...FORMATS.map((f) => ({ value: f, label: FORMAT[f] })),
-                    ]}
-                    onPick={(v) => change((m) => without(m, "format", (v || undefined) as Format | undefined))}
-                  />
-                </div>
-              </div>
-              <div class="field-group">
-                <span class="label">结构化输出方式</span>
-                <Menu
-                  label="结构化输出方式"
-                  value={capOf(c().x, c().m, "structured")}
-                  options={[
-                    { value: "schema", label: "JSON Schema (原生)" },
-                    { value: "tool", label: "Tool Call (强制工具)" },
-                    { value: "json", label: "JSON Object (提示词内嵌)" },
-                  ]}
-                  onPick={(v) => setCap("structured", v)}
-                />
-              </div>
-              <Effort value={c().m.effort} onPick={(v) => change((m) => without(m, "effort", v))} />
-              <div class="pair">
-                <label class="field-group">
-                  <span class="label">上下文上限 (Token)</span>
-                  <input
-                    class="field mono"
-                    type="number"
-                    min="1024"
-                    step="1024"
-                    placeholder="默认"
-                    value={c().m.contextTokens ?? ""}
-                    onChange={(e) => {
-                      const n = parseInt(e.currentTarget.value, 10)
-                      change((m) => without(m, "contextTokens", n > 0 ? n : undefined))
-                    }}
-                  />
-                </label>
-                <label class="field-group">
-                  <span class="label">最大输出 (Token)</span>
-                  <input
-                    class="field mono"
-                    type="number"
-                    min="256"
-                    step="256"
-                    placeholder="默认"
-                    value={c().m.maxOutputTokens ?? ""}
-                    onChange={(e) => {
-                      const n = parseInt(e.currentTarget.value, 10)
-                      change((m) => without(m, "maxOutputTokens", n > 0 ? n : undefined))
-                    }}
-                  />
-                </label>
-              </div>
-              <div class="inline-row">
-                <span>允许预填续写 (Prefill)</span>
-                <Switch
-                  on={capOf(c().x, c().m, "prefill")}
-                  label="允许预填续写"
-                  onFlip={() => setCap("prefill", !capOf(c().x, c().m, "prefill"))}
-                />
-              </div>
-              <div class="inline-row">
-                <span>回传历史思考过程</span>
-                <Switch
-                  on={capOf(c().x, c().m, "reasoningBack")}
-                  label="回传历史思考过程"
-                  onFlip={() => setCap("reasoningBack", !capOf(c().x, c().m, "reasoningBack"))}
-                />
-              </div>
-            </div>
-            <div class="modal-foot">
-              <button type="button" class="btn primary" onClick={() => el.close()}>
-                完成
-              </button>
-            </div>
-          </>
-        )}
-      </Show>
-    </Modal>
-  )
-}
-
-/** The effort stepper: five stops on a rail; unset reads 默认, and pressing the set stop unsets it. */
-const Effort = (props: { value: Effort | undefined; onPick: (v: Effort | undefined) => void }) => {
-  const at = () => EFFORTS.findIndex(([e]) => e === props.value)
-  return (
-    <div class="field-group">
-      <div class="label-row">
-        <span class="label">思考强度</span>
-        <span class="tag mono">{EFFORTS[at()]?.[1] ?? "默认"}</span>
-      </div>
-      <div class="effort" role="radiogroup" aria-label="思考强度">
-        <div class="rail">
-          <div class="fill" style={{ width: `${Math.max(0, at()) * 25}%` }} />
-        </div>
-        <div class="stops">
-          <For each={EFFORTS} keyed={false}>
-            {(e, i) => (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={at() === i ? "true" : "false"}
-                class={{ stop: true, passed: i < at(), active: at() === i }}
-                onClick={() => props.onPick(props.value === e()[0] ? undefined : e()[0])}
-              >
-                <span class="dot" />
-                <span class="tick">{e()[1]}</span>
-              </button>
-            )}
-          </For>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ───────── Add a model by id; add a provider ─────────
-const AddModelDialog = (props: { id: string; opener: Opener<undefined> }) => {
-  let el!: HTMLDialogElement
-  const [id, setId] = createSignal("")
-  return (
-    <Modal
-      title="添加模型"
-      narrow
-      dialog={(d) => {
-        el = d
-        props.opener(() => (setId(""), d.showModal()))
-      }}
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          const p = providerOf(props.id)
-          if (p && id().trim()) addModels(p, [{ id: id().trim() }])
-          el.close()
-        }}
-      >
-        <div class="modal-body scroller">
-          <label class="field-group">
-            <span class="label">
-              模型 ID <span class="req">*</span>
-            </span>
-            <input
-              class="field mono"
-              type="text"
-              required
-              placeholder="例如 claude-opus-4-6"
-              value={id()}
-              onInput={(e) => setId(e.currentTarget.value)}
-            />
-          </label>
-        </div>
-        <div class="modal-foot">
-          <button type="button" class="btn" onClick={() => el.close()}>
-            取消
-          </button>
-          <button type="submit" class="btn primary">
-            添加
-          </button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
+// ───────── Add a provider ─────────
 const BASE_URL: Record<Format, string> = {
   "openai-compatible": "https://api.openai.com",
   anthropic: "https://api.anthropic.com",
