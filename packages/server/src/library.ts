@@ -44,6 +44,7 @@ import {
 } from "@effect-tavern/runtime/src/session.ts"
 import { Effect, Schema } from "effect"
 import type { Data } from "./data.ts"
+import type { Exported } from "./export.ts"
 import { names } from "./names.ts"
 
 /** The model test asks for this many output tokens: the least a gateway accepts (CommandCode refuses `max_tokens` under
@@ -215,7 +216,7 @@ export const library = ({
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
   const sessions = new Map<Id, Session>()
-  const exists = (id: Id) => data.stories.list(card.id).some((s) => s.id === id)
+  const exists = (id: Id) => data.stories.list(card.id, id).length > 0 // one story's line, not the card's
   /** The most recently updated story, or a new one when the card has none. */
   const newest = () => data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
   /** A story's session, opened on its first request and the same one for every request that names it after. */
@@ -242,16 +243,33 @@ export const library = ({
     setPlayer,
     calls: (id: Id) => data.calls(id),
     stories: {
-      /** A row: the player's title or none (the client prints "New story"), the turns, the time. A card's stories all
-       *  open on the same greeting, so no line of the text tells them apart: only a name the player gave does. */
+      /** A row: the player's title or none (the client prints "New story"), the star, the turns and the last one's
+       *  input, the time. A card's stories all open on the same greeting, so no line of the text tells them apart:
+       *  a name the player gave does, and the last line they wrote recalls where the story stands. */
       list: () => data.stories.list(card.id),
       /** Named by the player, or the name cleared (empty or blank): null, the state "never named". */
       title: (id: Id, title: string | null) => data.stories.title(id, title?.trim() || null),
+      /** Starred: the left card and the manager put it first. */
+      star: (id: Id, starred: boolean) => data.stories.star(id, starred),
       create: (): Id => data.stories.create(card.id),
       del: (id: Id) => {
         if (!exists(id)) throw new Error(`no story ${id}`)
         data.stories.del(id)
         sessions.delete(id)
+      },
+      /** The batch cleanup: the card's own among `ids` go, in one transaction, their sessions with them; another
+       *  card's or a stranger's id is left alone. */
+      delMany: (ids: readonly Id[]) => {
+        for (const id of data.stories.delMany(card.id, ids)) sessions.delete(id)
+      },
+      /** This card's stories that hold `q` on their head's line (data.ts `Hit`). The title is the client's to match. */
+      search: (q: string) => data.stories.search(card.id, q),
+      /** One story whole for export.ts: its row, the card it is of, and its log tree; none when it is not this
+       *  card's. */
+      export: (id: Id): Exported | undefined => {
+        const story = data.stories.list(card.id, id)[0]
+        if (!story) return undefined
+        return { card: { id: card.id, title: card.title ?? card.id }, story, snapshot: data.store<Turn>(id).read()! }
       },
     },
     hats: data.hats,

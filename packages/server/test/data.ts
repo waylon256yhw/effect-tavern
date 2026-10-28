@@ -7,11 +7,13 @@ import { spawnSync } from "node:child_process"
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 import { open, traced } from "../src/data.ts"
 
 interface N extends L.Noded {
   text: string
   input?: { text: string; note?: string } // a turn's player input, what `turns` counts
+  reply?: { type: string; text: string }[] // the model's parts; the text ones are the prose the search reads
 }
 const data = open(":memory:")
 
@@ -82,6 +84,83 @@ assert.deepEqual(
   ],
 )
 assert.equal(data.stories.list("other").length, 0)
+// The row's `last` is the input of the line's last turn (the note-only one here), null on the fresh story; a star is
+// a flag on the row, off by default and leaving `updated` alone.
+assert.deepEqual(
+  data.stories.list("wuxia").map((s) => [s.starred, s.last]),
+  [
+    [false, null],
+    [false, { text: "", note: "slower" }],
+  ],
+)
+data.stories.star(story, true)
+assert.deepEqual(
+  data.stories.list("wuxia").map((s) => [s.id, s.starred]),
+  [
+    [second, false],
+    [story, true],
+  ],
+)
+// The search: the head's line only (node 6, the swipe off the line, never hits), the earliest hit node first with the
+// field that hit (the line, then the note, then the prose) cut to a window, numbered by the turns up to it (the
+// greeting is turn 0), and the count of hit nodes; ASCII case folds; blank hits nothing.
+back.commit(L.amend(back.log, 0, { reply: [{ type: "text", text: "An opening scene." }] }))
+back.commit(
+  L.add(back.log, {
+    parent: 5,
+    text: "rain",
+    input: { text: "look up" },
+    reply: [
+      { type: "reasoning", text: "hidden hello" },
+      { type: "text", text: "A rainy night " },
+      { type: "text", text: "on Bamboo Ridge." },
+    ],
+  }),
+)
+const hits = (q: string) => data.stories.search("wuxia", q)
+assert.deepEqual(hits("hello"), [{ id: story, turn: 1, kind: "input", text: "hello", count: 1 }])
+assert.deepEqual(hits("SLOWER"), [{ id: story, turn: 2, kind: "note", text: "slower", count: 1 }])
+assert.deepEqual(hits("Ärger"), []) // only ASCII folds, on both sides: Ä stays Ä (SQLite's lower()), so the query must match as typed
+back.commit(L.add(back.log, { parent: 7, text: "umlaut", input: { text: "Ärger im İstanbul" } }))
+assert.deepEqual(hits("Ärger"), [{ id: story, turn: 4, kind: "input", text: "Ärger im İstanbul", count: 1 }])
+assert.deepEqual(hits("ärger"), [])
+assert.equal(hits("stan")[0]!.text, "Ärger im İstanbul") // the fold keeps the length: the window is cut where it was found
+back.commit(L.drop(back.log, 8))
+assert.deepEqual(hits("bamboo"), [
+  { id: story, turn: 3, kind: "reply", text: "A rainy night on Bamboo Ridge.", count: 1 },
+])
+assert.deepEqual(hits("opening"), [{ id: story, turn: 0, kind: "reply", text: "An opening scene.", count: 1 }])
+assert.deepEqual(hits("n"), [{ id: story, turn: 0, kind: "reply", text: "An opening scene.", count: 2 }]) // the root and node 7
+assert.deepEqual([hits("hidden"), hits(""), hits("  ")], [[], [], []]) // a reasoning part is not prose
+assert.deepEqual(data.stories.search("other", "hello"), [])
+{
+  const long = `${"x".repeat(50)}needle${"y".repeat(200)}`
+  back.commit(L.add(back.log, { parent: 7, text: "long", input: { text: long } }))
+  assert.equal(hits("needle")[0]!.text, `…${"x".repeat(30)}needle${"y".repeat(90)}…`)
+  back.commit(L.drop(back.log, 9))
+}
+// A batch delete takes the card's own among the ids given in one go, answering them; another card's and a stranger's
+// are skipped. The listing narrows to one story by id, none for another card's.
+{
+  const [x, y, z] = [data.stories.create("wuxia"), data.stories.create("wuxia"), data.stories.create("other")]
+  assert.deepEqual(
+    data.stories.list("wuxia", y).map((s) => s.id),
+    [y],
+  )
+  assert.deepEqual([data.stories.list("wuxia", z), data.stories.list("wuxia", 9999)], [[], []])
+  // the one row, its line walked alone, equal to its row in the whole listing
+  assert.deepEqual(
+    data.stories.list("wuxia", story)[0],
+    data.stories.list("wuxia").find((s) => s.id === story),
+  )
+  assert.deepEqual(data.stories.delMany("wuxia", [x, y, z, 9999]), [x, y])
+  assert.equal(data.stories.list("other").length, 1)
+  data.stories.del(z)
+  assert.deepEqual(
+    data.stories.list("wuxia").map((s) => s.id),
+    [story, second], // the commits above made `story` the newer
+  )
+}
 data.stories.del(story)
 assert.deepEqual(
   data.stories.list("wuxia").map((s) => s.id),
@@ -89,6 +168,26 @@ assert.deepEqual(
 )
 assert.throws(() => data.store<N>(story).read(), /no story/)
 assert.deepEqual(trace.list(), {})
+
+// A library made before `story.starred` existed gets the column on open, its rows unstarred.
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-old-"))
+  const file = join(dir, "tavern.db")
+  const old = new DatabaseSync(file)
+  old.exec(`create table story (id integer primary key autoincrement, card text not null, title text, head integer,
+    next integer not null default 0, updated integer not null);
+    insert into story (card, updated) values ('wuxia', 1);`)
+  old.close()
+  const opened = open(file)
+  assert.deepEqual(
+    opened.stories.list("wuxia").map((s) => [s.starred, s.turns, s.last]),
+    [[false, 0, null]],
+  )
+  opened.stories.star(1, true)
+  assert.equal(opened.stories.list("wuxia")[0]!.starred, true)
+  opened.close()
+  rmSync(dir, { recursive: true, force: true })
+}
 
 // Personas by name; the player row: JSON in, the same out (which persona is on which card is the player's).
 data.personas.put({ id: "friend", name: "旧友", text: "你是替故人送还遗物的旧友。" })

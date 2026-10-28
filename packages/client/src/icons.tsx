@@ -46,3 +46,5 @@ export { default as Lightning } from "~icons/ph/lightning"
 export { default as Import } from "~icons/ph/upload-simple"
 export { default as Export } from "~icons/ph/download-simple"
 export { default as Jump } from "~icons/ph/arrow-up-right"
+export { default as Star } from "~icons/ph/star" // a story the player keeps first
+export { default as StarFill } from "~icons/ph/star-fill"

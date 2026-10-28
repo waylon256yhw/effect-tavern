@@ -233,9 +233,18 @@ const run = async (inspect: boolean) => {
       ((await (await globalThis.fetch(`${base}/stories`, on(opened.current))).json()) as { current: number }).current,
       first,
     )
-    // A row has no name until the player titles it, and a greeting is not a turn: the first player line is. A title
-    // is the player's: blank clears it, and a rename never moves `updated`.
-    type Row = { id: number; title: string | null; turns: number; updated: number }
+    // A row has no name until the player titles it, and a greeting is not a turn: the first player line is, and its
+    // input is the row's `last`. A title is the player's: blank clears it, and a rename never moves `updated`; a star
+    // is the same kind of write. The search finds the line in the player's line or the prose, numbered by turn; the
+    // exports are attachments named by the title. A batch delete takes this card's own among the ids, in one go.
+    type Row = {
+      id: number
+      title: string | null
+      starred: boolean
+      turns: number
+      updated: number
+      last: { text: string; note?: string } | null
+    }
     story = ((await (await fetch(`${base}/stories`, { method: "POST" })).json()) as { current: number }).current
     const row = async (init?: RequestInit) =>
       (
@@ -243,14 +252,58 @@ const run = async (inspect: boolean) => {
       ).stories.find((s) => s.id === story)!
     await (await post({ kind: "greet" })).text()
     const fresh = await row()
-    assert.deepEqual([fresh.title, fresh.turns, "opening" in fresh, "last" in fresh], [null, 0, false, false])
+    assert.deepEqual(
+      [fresh.title, fresh.starred, fresh.turns, fresh.last, "opening" in fresh],
+      [null, false, 0, null, false],
+    )
     await (await post({ kind: "act", input: { text: "onward" } })).text() // the stream read to its end: the turn is saved
     const acted = await row()
-    assert.equal(acted.turns, 1)
+    assert.deepEqual([acted.turns, acted.last], [1, { text: "onward" }])
     const named = await row({ method: "PUT", body: JSON.stringify({ title: "  竹林夜话 " }) })
     assert.deepEqual([named.title, named.updated], ["竹林夜话", acted.updated])
     assert.equal((await fetch(`${base}/stories/${story}`, { method: "PUT", body: '{"title":1}' })).status, 400)
+    const starred = await row({ method: "PUT", body: JSON.stringify({ starred: true }) })
+    assert.deepEqual([starred.title, starred.starred, starred.updated], ["竹林夜话", true, acted.updated])
+    assert.equal((await fetch(`${base}/stories/${story}`, { method: "PUT", body: '{"starred":"yes"}' })).status, 400)
+    const search = async (q: string) =>
+      (await (await fetch(`${base}/stories/search?q=${encodeURIComponent(q)}`)).json()) as unknown[]
+    assert.deepEqual(await search("onward"), [{ id: story, turn: 1, kind: "input", text: "onward", count: 1 }])
+    assert.deepEqual(
+      (await search("HELLO")).map((h) => (h as { id: number; kind: string }).kind), // the prose, ASCII case folded
+      ["reply", "reply"], // this story's turn and the first story's (the fake answers every act with "hello world")
+    )
+    assert.deepEqual([await search(""), await search("nowhere")], [[], []])
+    const md = await fetch(`${base}/stories/${story}/export.md`)
+    assert.deepEqual(
+      [md.headers.get("content-type"), md.headers.get("content-disposition")],
+      [
+        "text/markdown; charset=utf-8",
+        `attachment; filename="____.md"; filename*=UTF-8''${encodeURIComponent("竹林夜话.md")}`,
+      ],
+    )
+    const reading = await md.text()
+    assert.ok(reading.startsWith("# 竹林夜话\n\n") && reading.includes("\n\nG\n\n> onward\n\nhello world\n"), reading)
+    const backup = await fetch(`${base}/stories/${story}/export.json`)
+    assert.equal(backup.headers.get("content-type"), "application/json")
+    const saved = (await backup.json()) as { format: string; story: { title: string }; snapshot: { nodes: unknown[] } }
+    assert.deepEqual(
+      [saved.format, saved.story.title, saved.snapshot.nodes.length],
+      ["effect-tavern/story", "竹林夜话", 2],
+    )
+    assert.equal((await fetch(`${base}/stories/999/export.md`)).status, 404)
     assert.equal((await row({ method: "PUT", body: JSON.stringify({ title: "" }) })).title, null)
+    {
+      const make = async () =>
+        ((await (await fetch(`${base}/stories`, { method: "POST" })).json()) as { current: number }).current
+      const [x, y] = [await make(), await make()]
+      const batch = (ids: unknown) => fetch(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) })
+      assert.equal((await batch("x")).status, 400)
+      const after = (await (await batch([x, y, 999])).json()) as { current: number; stories: { id: number }[] }
+      assert.deepEqual(
+        [after.stories.some((s) => s.id === x || s.id === y), after.stories.some((s) => s.id === story), after.current],
+        [false, true, story],
+      )
+    }
     assert.equal(
       ((await (await fetch(`${base}/stories/${first}`, { method: "PUT" })).json()) as { current: number }).current,
       first,

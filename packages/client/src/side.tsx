@@ -5,33 +5,25 @@
 // story is one root's tree. The persona is a player asset, a sibling of the card, not a step of a story: the pick is
 // `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one. The
 // pick is a sheet with a search (a popover is pinned to the column or hangs out of the card, and a long list is a chore
-// on a phone); making and editing personas is the settings page's.
+// on a phone); making and editing personas is the settings page's. The card shows four stories, the starred first
+// and the open one among them; every story, with the star, the search, the cleanup and the exports, is the manager's
+// sheet (manager.tsx, #75), opened from the row under the four. The dialogs a story needs (rename, the delete
+// confirm, the export's two formats) are here, one each, for the card's rows and the manager's cards alike.
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
 import { Check, Clue, Edit, Jump, Next, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
+import { Manager } from "./manager.tsx"
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, type StoryRow, working } from "./store.ts"
+import { ago, shown } from "./stories.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
 import { openTimeline } from "./timeline.tsx"
-import { deleteStory, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
+import { deleteStories, deleteStory, exportUrl, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
-
-const units: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["day", 864e5],
-  ["hour", 36e5],
-  ["minute", 6e4],
-]
-const rel = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
-/** "2 hours ago", "yesterday", "now". */
-const ago = (at: number): string => {
-  const d = at - Date.now()
-  const u = units.find(([, ms]) => Math.abs(d) >= ms)
-  return u ? rel.format(Math.round(d / u[1]), u[0]) : "now"
-}
 
 /** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
 export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
@@ -112,6 +104,35 @@ export const Session = () => {
     const t = name.value.trim()
     if (t !== (s.title ?? "")) void nameStory(s.id, t)
   }
+  // the delete confirm: the one story a trash names (the header's, for the open story; a manager card's), or the
+  // manager's checked set; its own list, so a cancel leaves the checks as they were. One is the single call, several
+  // the batch, and the reader only moves when the open story went
+  const [doomed, setDoomed] = createSignal<readonly StoryRow[]>([])
+  const openDelete = (rows: readonly StoryRow[]) => {
+    if (!rows.length) return
+    setDoomed(rows)
+    confirm.showModal()
+  }
+  const commitDelete = () => {
+    const rows = doomed()
+    confirm.close()
+    if (rows.length === 1) void deleteStory(rows[0]!.id)
+    else if (rows.length) void deleteStories(rows.map((s) => s.id))
+  }
+  // the export: the two formats of #75 as links the browser downloads, the server naming the file by the title
+  const [exporting, setExporting] = createSignal<StoryRow | null>(null)
+  let exportDialog!: HTMLDialogElement
+  const openExport = (s: StoryRow) => {
+    setExporting(s)
+    exportDialog.showModal()
+  }
+  // the manager: every story; a card opens its story and closes the sheet (on a phone the session sheet under it too)
+  let manager!: HTMLDialogElement
+  const openFromManager = (s: StoryRow) => {
+    manager.close()
+    manager.parentElement?.closest("dialog")?.close()
+    if (s.id !== lib()?.current) void openStory(s.id)
+  }
   return (
     <>
       <div class="session">
@@ -155,14 +176,15 @@ export const Session = () => {
               type="button"
               class="icon"
               aria-label="Delete story"
-              disabled={busy()}
-              onClick={() => confirm.showModal()}
+              disabled={busy() || !lib()?.stories.some((s) => s.id === lib()?.current)}
+              onClick={() => openDelete(lib()!.stories.filter((s) => s.id === lib()!.current))}
             >
               <Trash />
             </button>
           </h2>
+          {/* four rows: the starred first, then the newest, the open one among them whatever its rank (stories.ts) */}
           <ul>
-            <For each={lib()?.stories ?? []} keyed={(s) => s.id}>
+            <For each={shown(lib()?.stories ?? [], lib()?.current)} keyed={(s) => s.id}>
               {(s) => (
                 <li>
                   {/* the name the player gave, or "New story" (every story of a card opens on the same greeting, so no
@@ -187,6 +209,11 @@ export const Session = () => {
               )}
             </For>
           </ul>
+          {/* the rest, and the star, the search, the cleanup, the exports: the manager's sheet */}
+          <button type="button" class="all" disabled={!lib()} onClick={() => manager.showModal()}>
+            <span>全部 {lib()?.stories.length ?? 0} 个故事</span>
+            <Next class="chev" aria-hidden="true" />
+          </button>
           <dialog class="confirm" ref={(el) => (rename = el)} closedby="any" onClose={() => setRenaming(null)}>
             <form method="dialog" onSubmit={commitRename}>
               <p>Rename story</p>
@@ -201,19 +228,44 @@ export const Session = () => {
               </div>
             </form>
           </dialog>
-          <dialog class="confirm" ref={(el) => (confirm = el)} closedby="any">
-            <p>Delete this story? Every turn in it is gone for good.</p>
+          <dialog class="confirm" ref={(el) => (confirm = el)} closedby="any" onClose={() => setDoomed([])}>
+            <p>
+              {doomed().length > 1
+                ? `删除选中的 ${doomed().length} 个故事？其中的所有回合都将永久移除。`
+                : `删除「${doomed()[0]?.title ?? "New story"}」？其中的所有回合都将永久移除。`}
+            </p>
             <div class="row">
               <button type="button" class="chip state" onClick={() => confirm.close()}>
-                Cancel
+                取消
               </button>
-              <button
-                type="button"
-                class="chip danger"
-                onClick={() => (confirm.close(), void deleteStory(lib()!.current))}
+              <button type="button" class="chip danger" onClick={commitDelete}>
+                删除
+              </button>
+            </div>
+          </dialog>
+          <dialog class="confirm" ref={(el) => (exportDialog = el)} closedby="any" onClose={() => setExporting(null)}>
+            <p>导出「{exporting()?.title ?? "New story"}」</p>
+            <p class="sub">阅读稿只拼当前主线的开场白、玩家台词与正文；完整树是整棵分支的 JSON 备份。</p>
+            <div class="row">
+              <button type="button" class="chip state" onClick={() => exportDialog.close()}>
+                取消
+              </button>
+              <a
+                class="chip state"
+                href={exportUrl(exporting()?.id ?? 0, "json")}
+                download
+                onClick={() => exportDialog.close()}
               >
-                Delete
-              </button>
+                完整树 .json
+              </a>
+              <a
+                class="chip primary"
+                href={exportUrl(exporting()?.id ?? 0, "md")}
+                download
+                onClick={() => exportDialog.close()}
+              >
+                阅读稿 .md
+              </a>
             </div>
           </dialog>
         </section>
@@ -302,6 +354,14 @@ export const Session = () => {
           </button>
         </nav>
       </div>
+      {/* the manager: a sheet beside the session like the picker, every story with its star, the search, the cleanup */}
+      <Manager
+        dialog={(el) => (manager = el)}
+        onOpen={openFromManager}
+        onRename={openRename}
+        onDelete={openDelete}
+        onExport={openExport}
+      />
       {/* the picker: a sheet beside the session (not in it: the sheet's heading is not a session caption), a search over
         the player's personas and two-line rows, the card's own first; made and edited on the settings page */}
       <Sheet

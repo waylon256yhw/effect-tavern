@@ -13,7 +13,10 @@
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
 // A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
-// Ceilings: full-text search over nodes; sync between two installs (the Android copy is a copy of this file).
+// A column added after a library was made (`story.starred`) is added to it on open (`migrate`): the schema's create is
+// for a fresh file. The stories' search (`stories.search`) walks each story's line and reads the player's lines and
+// the prose with `instr`, enough for one card's stories on a phone. Ceilings: an FTS5 index over nodes once a
+// library holds hundreds of long stories; sync between two installs (the Android copy is a copy of this file).
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
@@ -31,7 +34,7 @@ create table if not exists provider (id text primary key, name text not null, js
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
 create table if not exists names (id integer primary key check (id = 1), etag text, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null);
-create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null);
+create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
 create table if not exists call (seq integer primary key autoincrement, story integer not null, node integer not null,
@@ -41,8 +44,48 @@ create index if not exists call_node on call (story, node);
 /** How many nodes of a story keep their calls: the Inspector's trace is for recent turns, and a call holds the whole
  *  request under `inspect`, so an unbounded trace would grow the library by a fold budget per turn. */
 export const traced = 200
+/** Columns added to a table after libraries were made with it, each applied on open when the table lacks it. */
+const migrations: readonly { table: string; column: string; add: string }[] = [
+  { table: "story", column: "starred", add: "alter table story add column starred integer not null default 0" },
+]
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
+/** A player's input as the node keeps it: the line, and a note to the narrator when one went with it. */
+export interface Input {
+  text: string
+  note?: string
+}
+/** One story's row for the client: the player's name for it or none, whether it is starred, the turns on the head's
+ *  line and the input of the last of them (what the manager previews), the time. */
+export interface StoryRow {
+  id: Id
+  title: string | null
+  starred: boolean
+  updated: number
+  turns: number
+  last: Input | null
+}
+/** A search hit on a story: the earliest turn on the head's line whose player line, note or prose holds the query
+ *  (`turn` 0 is the greeting's prose), a snippet of that field around the first match, and how many nodes hit. */
+export interface Hit {
+  id: Id
+  turn: number
+  kind: "input" | "note" | "reply"
+  text: string
+  count: number
+}
+/** ASCII case folded, exactly what SQLite's lower() does: the query and the text fold the same way on both sides,
+ *  and a fold never changes a string's length (JS's toLowerCase can: İ becomes two code units), so an index found
+ *  in the folded text is an index in the text. */
+export const fold = (s: string): string => s.replace(/[A-Z]+/g, (m) => m.toLowerCase())
+/** A window of `text` around the first `q` (both folded), with ellipses where cut. */
+const snippet = (text: string, q: string, before = 30, after = 90): string => {
+  const i = fold(text).indexOf(q)
+  if (i < 0) return text.slice(0, before + after)
+  const start = Math.max(0, i - before)
+  const end = Math.min(text.length, i + q.length + after)
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`
+}
 
 /** A named frame fragment of the player's: who they are in the fiction, picked per card on the player row. */
 export interface Persona {
@@ -101,6 +144,12 @@ export const open = (asked: string) => {
   const db = new DatabaseSync(file)
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on;")
   db.exec(schema)
+  for (const m of migrations) {
+    const has = (db.prepare(`select name from pragma_table_info(?)`).all(m.table) as Row[]).some(
+      (r) => r["name"] === m.column,
+    )
+    if (!has) db.exec(m.add)
+  }
   const q = (sql: string) => db.prepare(sql)
   const tx = <A>(f: () => A): A => {
     db.exec("begin")
@@ -166,34 +215,101 @@ export const open = (asked: string) => {
     /** The library's cards by id and title, the Card in the json column left unread. */
     cards: (): { id: string; title: string }[] =>
       q("select id, title from card order by title").all() as { id: string; title: string }[],
-    /** One card's stories, newest first, each with its title (the player's, or none) and its turns: on the head's line
-     *  (head, its parent, up to the root), the nodes with a player input, a line or a note to the narrator (a note-only
-     *  turn has `text: ""`). So a greeting is not a turn, a story with only its opening has none, and a swipe (a
-     *  sibling carrying the same input) is still the one turn. The line is walked once, each node read by its key. */
+    /** One card's stories, newest first, each with its title (the player's, or none), its star, its turns and the
+     *  last of them. The turns are on the head's line (head, its parent, up to the root): the nodes with a player
+     *  input, a line or a note to the narrator (a note-only turn has `text: ""`). So a greeting is not a turn, a
+     *  story with only its opening has none, and a swipe (a sibling carrying the same input) is still the one turn.
+     *  The last turn is the line's input node with the greatest id (a child's id is greater than its parent's), and
+     *  `last` is its input: what the manager previews, since every story of a card opens on the same greeting. Every
+     *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
-      list: (card: string) =>
+      /** The card's rows, or the one of them `only` names (none when that is another card's or no story): the walk
+       *  starts from that story's head alone, so one row costs one line. */
+      list: (card: string, only?: Id): StoryRow[] =>
         (
           q(
-            `select s.id, s.title, s.updated,
-               (with recursive line(parent, json) as (
-                  select parent, json from node where story = s.id and id = s.head
-                  union all
-                  select n.parent, n.json from node n join line on n.story = s.id and n.id = line.parent)
-                select count(*) from line
-                  where json_extract(json, '$.input.text') != '' or json_extract(json, '$.input.note') is not null) as turns
-             from story s where card = ? order by updated desc, id desc`,
-          ).all(card) as Row[]
+            `with recursive line(story, id, parent, text, note) as (
+               select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
+                 from story s join node n on n.story = s.id and n.id = s.head
+                 where s.card = ?1 and (?2 is null or s.id = ?2)
+               union all
+               select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
+                 from node n join line l on n.story = l.story and n.id = l.parent),
+             turns as (
+               select story, count(*) as turns, max(id) as last from line
+                 where text != '' or note is not null group by story)
+             select s.id, s.title, s.starred, s.updated, coalesce(t.turns, 0) as turns,
+               (select json_extract(json, '$.input') from node where story = s.id and id = t.last) as last
+             from story s left join turns t on t.story = s.id
+             where s.card = ?1 and (?2 is null or s.id = ?2) order by s.updated desc, s.id desc`,
+          ).all(card, only ?? null) as Row[]
         ).map((r) => ({
           id: r["id"] as Id,
           title: (r["title"] as string | null) ?? null,
+          starred: r["starred"] === 1,
           updated: r["updated"] as number,
           turns: r["turns"] as number,
+          last: r["last"] ? (JSON.parse(r["last"] as string) as Input) : null,
         })),
       /** A name the player gave, or none; `updated` untouched, so a rename never reorders the list. */
       title: (id: Id, title: string | null) => void q("update story set title = ? where id = ?").run(title, id),
+      /** Starred or not; `updated` untouched like a rename. The client puts the starred first. */
+      star: (id: Id, starred: boolean) => void q("update story set starred = ? where id = ?").run(starred ? 1 : 0, id),
       create: (card: string): Id =>
         Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
+      /** Several at once, one transaction: the batch cleanup. Only the card's own go; another card's, or no story,
+       *  is skipped. The ids deleted are answered. */
+      delMany: (card: string, ids: readonly Id[]): Id[] =>
+        tx(() => ids.filter((id) => q("delete from story where id = ? and card = ?").run(id, card).changes > 0)),
+      /** The card's stories whose head's line holds `q` in a player's line, a note or the prose (the text parts of
+       *  the reply), one Hit per story: the earliest hit node on the line (a snippet of the field that hit, the
+       *  line first, then the note, then the prose), numbered by the turns up to it, and the count of hit nodes.
+       *  ASCII case folds (`fold`, SQLite's lower()); a blank query hits nothing. The prose is gathered from the
+       *  reply's parts in SQL (`json_each`), so no node's JSON is parsed here; the turn number is a running count
+       *  over the line (a window), one pass. */
+      search: (card: string, query: string): Hit[] => {
+        const needle = fold(query.trim())
+        if (!needle) return []
+        const rows = q(
+          `with recursive line(story, id, parent, text, note, prose) as (
+             select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
+               (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
+                  where json_extract(p.value, '$.type') = 'text')
+               from story s join node n on n.story = s.id and n.id = s.head where s.card = ?
+             union all
+             select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
+               (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
+                  where json_extract(p.value, '$.type') = 'text')
+               from node n join line l on n.story = l.story and n.id = l.parent),
+           numbered as (
+             select story, id, text, note, prose,
+               count(*) filter (where text != '' or note is not null) over (partition by story order by id) as turn
+             from line)
+           select story, id, text, note, prose, turn from numbered
+           where instr(lower(text), ?) > 0 or instr(lower(coalesce(note, '')), ?) > 0 or instr(lower(coalesce(prose, '')), ?) > 0
+           order by story, id`,
+        ).all(card, needle, needle, needle) as Row[]
+        const hits = new Map<Id, Hit>()
+        for (const r of rows) {
+          const id = r["story"] as Id
+          const seen = hits.get(id)
+          if (seen) {
+            seen.count++
+            continue
+          }
+          const text = (r["text"] as string | null) ?? ""
+          const note = (r["note"] as string | null) ?? ""
+          const prose = (r["prose"] as string | null) ?? ""
+          const [kind, field]: [Hit["kind"], string] = fold(text).includes(needle)
+            ? ["input", text]
+            : fold(note).includes(needle)
+              ? ["note", note]
+              : ["reply", prose]
+          hits.set(id, { id, turn: r["turn"] as number, kind, text: snippet(field, needle), count: 1 })
+        }
+        return [...hits.values()]
+      },
     },
     /** One story's trace: calls by node id, in the order they were made. */
     calls: (story: Id) => ({

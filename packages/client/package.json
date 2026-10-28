@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
-    "verify": "bun check && bun --conditions=browser --conditions=development test/store.ts && bun --conditions=browser --conditions=development test/probe.ts && bun test/record.ts && bun test/inspect.ts && bun test/tokens.ts && bun test/lanes.ts && bun test/phrase.ts && bun test/manifest.ts && bun test/writing.ts && bun test/theme.ts"
+    "verify": "bun check && bun --conditions=browser --conditions=development test/store.ts && bun --conditions=browser --conditions=development test/probe.ts && bun test/record.ts && bun test/inspect.ts && bun test/tokens.ts && bun test/lanes.ts && bun test/phrase.ts && bun test/manifest.ts && bun test/writing.ts && bun test/theme.ts && bun test/stories.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",

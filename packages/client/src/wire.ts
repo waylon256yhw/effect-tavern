@@ -1,6 +1,9 @@
 // The seam to packages/server: `GET /card`, `GET /nodes` (nodes and head) and the library (`/stories`, `/personas`,
 // `/player`) are the snapshot, `POST /` is one action whose events come back as SSE. A story call (open, new, delete)
 // answers the listing with the story to be on (`current`): the client adopts it, names it on every request after, and starts over on it (nodes, calls, the draft and the pin gone).
+// A delete that leaves the open story open (another story's, the manager's cleanup) only replaces the listing. The
+// manager's search (`GET /stories/search`) and the exports (`/stories/<id>/export.md|json`, plain links the browser
+// downloads) are the manager's (stories.ts, side.tsx).
 // `DELETE /nodes/<id>` drops a node and everything under it (the reply is the Change): the Timeline's branch delete.
 // Closing the response is the stop (before the first delta it withdraws the turn, after it the prose halts).
 import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
@@ -9,6 +12,7 @@ import type { Hat, Player } from "@effect-tavern/runtime/src/fragment.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
+import type { Hit } from "./stories.ts"
 import {
   apply,
   calls,
@@ -29,6 +33,7 @@ import {
   secrets,
   settle,
   stories,
+  type StoryRow,
   type CardView,
   type Routing,
   type Wire,
@@ -62,10 +67,11 @@ export const fetchStories = async (): Promise<void> => registry.set(stories, awa
 export const fetchPersonas = async (): Promise<void> => registry.set(personas, await got(call(`${base}/personas`)))
 export const fetchPlayer = async (): Promise<void> => registry.set(player, await got(call(`${base}/player`)))
 
+type Listing = { current: number; stories: readonly StoryRow[] }
 /** A story call: the listing comes back with the open story, and the client is on it as if just opened: an empty
  *  story lands on the card page. */
-const onStory = async (res: Promise<Response>): Promise<void> => {
-  registry.set(stories, await got(res))
+const adopt = async (listing: Listing): Promise<void> => {
+  registry.set(stories, listing)
   settle()
   registry.set(pin, null)
   registry.set(editing, null)
@@ -73,12 +79,31 @@ const onStory = async (res: Promise<Response>): Promise<void> => {
   await fetchNodes()
   registry.set(page, registry.get(log).nodes.size ? "reader" : "card")
 }
+const onStory = async (res: Promise<Response>): Promise<void> => adopt((await got(res)) as Listing)
+/** A delete: the listing comes back; when the open story is still the one to be on, nothing else moves (the reader
+ *  keeps its draft and its place), otherwise the client is on the story the listing names, as just opened. */
+const onDelete = async (res: Promise<Response>): Promise<void> => {
+  const listing = (await got(res)) as Listing
+  if (listing.current === registry.get(stories)?.current) registry.set(stories, listing)
+  else await adopt(listing)
+}
 export const openStory = (id: number): Promise<void> => onStory(call(`${base}/stories/${id}`, { method: "PUT" }))
 export const newStory = (): Promise<void> => onStory(call(`${base}/stories`, { method: "POST" }))
-export const deleteStory = (id: number): Promise<void> => onStory(call(`${base}/stories/${id}`, { method: "DELETE" }))
+export const deleteStory = (id: number): Promise<void> => onDelete(call(`${base}/stories/${id}`, { method: "DELETE" }))
+/** The cleanup: several at once (`DELETE /stories` with the ids), one listing back. */
+export const deleteStories = (ids: readonly number[]): Promise<void> =>
+  onDelete(call(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) }))
 /** A name the player gives the story; blank clears it. Nothing else moves: only the listing comes back. */
 export const nameStory = async (id: number, title: string): Promise<void> =>
   registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) })))
+/** Starred or not: the same write as a name, only the listing comes back. */
+export const starStory = async (id: number, starred: boolean): Promise<void> =>
+  registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ starred }) })))
+/** The manager's search: this card's stories whose turns hold `q`, as hits by story (stories.ts `Hit`). */
+export const searchStories = (q: string): Promise<Hit[]> =>
+  got(call(`${base}/stories/search?q=${encodeURIComponent(q)}`)) as Promise<Hit[]>
+/** Where a story's export is: a link the browser downloads (the server names the file by the title). */
+export const exportUrl = (id: number, ext: "md" | "json"): string => `${base}/stories/${id}/export.${ext}`
 const at = (id: string) => `${base}/personas/${encodeURIComponent(id)}`
 export const putPersona = async ({ id, ...body }: Persona): Promise<void> =>
   registry.set(personas, await got(call(at(id), { method: "PUT", body: JSON.stringify(body) })))
