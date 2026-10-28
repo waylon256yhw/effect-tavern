@@ -166,15 +166,20 @@ export const open = (asked: string) => {
     /** The library's cards by id and title, the Card in the json column left unread. */
     cards: (): { id: string; title: string }[] =>
       q("select id, title from card order by title").all() as { id: string; title: string }[],
-    /** One card's stories, newest first, each with its title (the player's, or none) and its turns: the nodes with a
-     *  player input, a line or a note to the narrator (a note-only turn has `text: ""`), so a greeting is not a turn and
-     *  a story with only its opening has none. No node JSON is read: a row is its name, its size and its time. */
+    /** One card's stories, newest first, each with its title (the player's, or none) and its turns: on the head's line
+     *  (head, its parent, up to the root), the nodes with a player input, a line or a note to the narrator (a note-only
+     *  turn has `text: ""`). So a greeting is not a turn, a story with only its opening has none, and a swipe (a
+     *  sibling carrying the same input) is still the one turn. Only the line's nodes have their JSON read. */
     stories: {
       list: (card: string) =>
         (
           q(
             `select s.id, s.title, s.updated,
-               (select count(*) from node where story = s.id
+               (with recursive line(id) as (
+                  select s.head
+                  union all
+                  select n.parent from node n join line on n.story = s.id and n.id = line.id)
+                select count(*) from node where story = s.id and id in (select id from line)
                   and (json_extract(json, '$.input.text') != '' or json_extract(json, '$.input.note') is not null)) as turns
              from story s where card = ? order by updated desc, id desc`,
           ).all(card) as Row[]

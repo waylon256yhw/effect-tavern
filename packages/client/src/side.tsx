@@ -6,7 +6,7 @@
 // `Player.persona[card]`, changeable any time (one head rewrite, like a writing switch); this card only picks one. The
 // pick is a sheet with a search (a popover is pinned to the column or hangs out of the card, and a long list is a chore
 // on a phone); making and editing personas is the settings page's.
-import { createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
 import { Check, Clue, Edit, Jump, Next, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
@@ -63,13 +63,13 @@ export const Session = () => {
   // The persona in force on this card, and the pick: a change of the player's own layer, nothing of the story's.
   const cardId = () => view()?.id ?? ""
   const current = () => people().find((p) => p.id === me()?.persona?.[cardId()])
-  const writing = () => chosen(me()?.writing, !!me()?.forCard[cardId()]?.some((f) => f.text?.trim()))
+  const writing = createMemo(() => chosen(me()?.writing, !!me()?.forCard[cardId()]?.some((f) => f.text?.trim())))
   // the picker: the search over name and text, the rows it leaves; opened from the row, closed by a pick
   const [q, setQ] = createSignal("")
-  const hits = () => {
+  const hits = createMemo(() => {
     const t = q().trim().toLowerCase()
     return t ? people().filter((p) => p.name.toLowerCase().includes(t) || p.text.toLowerCase().includes(t)) : people()
-  }
+  })
   let picker!: HTMLDialogElement
   let search!: HTMLInputElement
   const openPicker = () => {
@@ -91,8 +91,9 @@ export const Session = () => {
     const next = id === undefined ? rest : { ...rest, [cardId()]: id }
     void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
   }
-  // the rename dialog (the header's pencil for the open story, a double-click for any row): the confirm's shape with a
-  // field; Enter or Save names it, blank clears the name back to "New story", Escape or Cancel keeps it
+  // the rename dialog (the header's pencil, for the open story): the confirm's shape with a field; Enter or Save names
+  // it, blank clears the name back to "New story", Escape or Cancel keeps it. Not a double-click on a row: its two
+  // clicks would open the story twice, and on a phone close the sheet the dialog lives in
   const [renaming, setRenaming] = createSignal<StoryRow | null>(null)
   let confirm!: HTMLDialogElement
   let rename!: HTMLDialogElement
@@ -168,7 +169,6 @@ export const Session = () => {
                       closeUp(e.currentTarget) // the open one too: on a phone, back to the reader
                       if (s().id !== lib()?.current) void openStory(s().id)
                     }}
-                    onDblClick={() => openRename(s())}
                   >
                     <span class={{ first: true, unnamed: s().title === null }}>{s().title ?? "New story"}</span>
                     <span class="meta">

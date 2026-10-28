@@ -201,7 +201,7 @@ const run = async (inspect: boolean) => {
     await persona("monk", { name: monk.name, text: "你是还俗的武僧。" })
     assert.equal((await headOf("and now")).includes("你是还俗的武僧。"), inspect) // the edit is in force, same story
     const listed = (await (await fetch(`${base}/stories`)).json()) as { stories: { turns: number }[] }
-    assert.equal(listed.stories[0]!.turns, 2) // two player lines, two turns
+    assert.equal(listed.stories[0]!.turns, 1) // two roots (parent: null): the head's line holds one turn
     // Two clients on two stories: each request is on the story its header names, and neither moves the other.
     const on = (id: number) => ({ headers: { "x-tavern-story": String(id) } })
     const sizeOn = async (id: number) =>
