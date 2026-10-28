@@ -18,8 +18,8 @@ export { default as Next } from "~icons/ph/caret-right"
 export { default as Status } from "~icons/ph/chart-bar"
 export { default as Die } from "~icons/ph/dice-five"
 export { default as DieFill } from "~icons/ph/dice-five-fill"
-export { default as Tree } from "~icons/ph/git-branch"
-export { default as Probe } from "~icons/ph/terminal-window"
+export { default as Tree } from "~icons/ph/tree-structure" // the Timeline: a story's branching, not a repo's
+export { default as Probe } from "~icons/ph/list-magnifying-glass" // the Inspector: looking into the request, not a terminal
 export { default as Reword } from "~icons/ph/magic-wand"
 export { default as Edit } from "~icons/ph/pencil-simple"
 export { default as Clue } from "~icons/ph/magnifying-glass"
