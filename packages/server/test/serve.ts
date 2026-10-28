@@ -521,7 +521,7 @@ await run(false)
 }
 
 // The listing and the test against aimock's native Anthropic surface (anthropic-version enforced): the model route
-// answers the catalog, the test answers the Trace of the fetch it made, the listing's without a model, a one-token
+// answers the catalog, the test answers the Trace of the fetch it made, the listing's without a model, a few tokens'
 // /v1/messages with one.
 {
   const mock = new LLMock({ port: 0, policy: { requiredHeaders: "enforce", modelCatalog: "native" } })

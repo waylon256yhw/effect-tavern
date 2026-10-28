@@ -47,6 +47,9 @@ import { Effect, Schema } from "effect"
 import type { Data } from "./data.ts"
 import { names } from "./names.ts"
 
+/** The model test asks for this many output tokens: the least a gateway accepts (CommandCode refuses `max_tokens` under
+ *  16), still a fraction of a cent on any model. */
+const PROBE_TOKENS = 16
 const Pair = Schema.Struct({ provider: Schema.String, model: Schema.String })
 const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const satisfies Phase[]
 export const Routing = Schema.Struct({
@@ -329,7 +332,7 @@ export const library = ({
         })
       },
       /** Minimal requests, each a Probe (a completed probe is one whatever it found; what throws here is the provider's
-       *  configuration: no key, no endpoint, a bad URL). With a model, one request for a one-token answer under the
+       *  configuration: no key, no endpoint, a bad URL). With a model, one request for a few tokens' answer under the
        *  model's format. Without, the listing from every endpoint the provider has: one request per distinct listing
        *  URL (two formats on one address share a probe, sent under the default format's auth), the default's first. */
       test: async (id: string, model?: string): Promise<Probe[]> => {
@@ -340,7 +343,7 @@ export const library = ({
             await probed([c.format], c, plan(c.format, c.endpoint, c.model).generate, async (onTrace) => {
               const m = { format: c.format, model: compile(c, { onTrace }), prefill: capabilities(c).prefill }
               const failed = await Effect.runPromise(
-                text(m, [{ role: "user", content: "Hi" }], { maxOutputTokens: 1 }).pipe(
+                text(m, [{ role: "user", content: "Hi" }], { maxOutputTokens: PROBE_TOKENS }).pipe(
                   Effect.match({ onFailure: (e) => e, onSuccess: () => undefined }),
                 ),
               )

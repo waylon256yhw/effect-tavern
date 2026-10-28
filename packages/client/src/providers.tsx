@@ -361,7 +361,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
     const got = await testProvider(x.id).catch((e: unknown) => [refused(e)])
     if (reachRun === run) setReach(got)
   }
-  /** One model: a one-token request under its format. */
+  /** One model: a request for a few tokens under its format. */
   const testOne = async (id: string) => {
     const x = p()
     if (!x) return

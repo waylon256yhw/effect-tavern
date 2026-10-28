@@ -34,7 +34,7 @@
 //                 models from every endpoint the provider has, merged ({id, format?}[], the format where the listing
 //                 puts the model off the default protocol and onto an endpoint the provider has; every listing
 //                 failing is a 502 {error}). POST /providers/<id>/test {model?}
-//                 probes: with a model one request for a one-token answer, without one the listing from every endpoint
+//                 probes: with a model one request for a few tokens' answer, without one the listing from every endpoint
 //                 the provider has (one request per distinct listing URL). The answer is the probes, 200 whatever they
 //                 found (provider `Probe`: {formats, url, method, status, ms, ok, code?, error?}, status 0 = nothing
 //                 answered); a 400 {error} is the provider's configuration (no key, no endpoint, a bad URL).

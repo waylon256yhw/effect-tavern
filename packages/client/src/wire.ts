@@ -120,7 +120,7 @@ export interface Listed {
 }
 /** The service's own model list, each with the format it goes under when that is not the provider's default. */
 export const listModels = (id: string): Promise<Listed[]> => checked(call(`${base}/providers/${enc(id)}/models`))
-/** The probes (provider `Probe`): with a model one request for a one-token answer, without one the listing from
+/** The probes (provider `Probe`): with a model one request for a few tokens' answer, without one the listing from
  *  every endpoint the provider has, one per distinct listing URL. A completed probe is one whatever it found; what
  *  throws is the provider's configuration (no key, no endpoint, a bad URL), the server's message. */
 export const testProvider = (id: string, model?: string): Promise<Probe[]> =>
