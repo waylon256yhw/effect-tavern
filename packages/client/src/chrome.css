@@ -696,16 +696,117 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-/* the session's menu (persona) hangs under the chip that opens it (the invoker is the implicit anchor), exactly as
-   wide as the content column (the chip button bleeds a gutter each side): never past the card's edge, never over what
-   it sets */
-.session .snippets {
-  position-anchor: auto;
-  position-area: bottom;
-  box-sizing: border-box;
-  width: calc(anchor-size(width) - 2 * var(--space-2));
+/* the persona picker (side.tsx): a sheet (rising on a phone over the session sheet; on desktop a centred card of
+   25rem) with a search over the player's personas and two-line rows, the card's own first; the list alone scrolls */
+.picker {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-3);
+}
+.picker .search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.picker .search .input-box {
+  flex: 1;
+}
+.picker .list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+}
+/* a row: the name, under it the text's first line, the check at the right on the pick in force */
+.picker .item {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  row-gap: 1px;
+  align-items: center;
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.picker .item:hover,
+.picker .item:focus-visible {
+  background: var(--ghost-hover);
+  outline: none;
+}
+.picker .item .name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  margin: var(--space-1) 0 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker .item[aria-checked="true"] .name {
+  font-weight: 600;
+  color: var(--primary);
+}
+.picker .item .name .tag {
+  height: 18px;
+  padding: 0 5px;
+  font-weight: 500;
+}
+.picker .item .check {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 14px;
+  height: 14px;
+  color: var(--ink);
+  visibility: hidden;
+}
+.picker .item[aria-checked="true"] .check {
+  visibility: visible;
+}
+.picker .item .bio {
+  grid-column: 1;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker hr {
+  flex: none;
+  margin: 2px var(--space-2);
+  border: 0;
+  height: var(--hairline);
+  background: var(--line);
+}
+.picker .empty {
+  margin: var(--space-1) 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--alpha-1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+}
+.sheet footer .btn.ghost {
+  gap: 4px;
 }
 /* the pick in force among the menu's names */
 .snippets [aria-checked="true"] .name {
@@ -834,6 +935,9 @@
   }
   .sheet .record {
     flex: 0 1 auto;
+  }
+  .sheet:has(> .picker) {
+    width: min(25rem, calc(100% - 2 * var(--space-5)));
   }
   .canvas {
     box-sizing: border-box;
