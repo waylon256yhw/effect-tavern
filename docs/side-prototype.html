@@ -7,6 +7,7 @@
   <!--
     ═══════════════════════════════════════════════════════════════════════════════
     SESSION CARD REFACTOR PROTOTYPE (ISSUE #77, WITH #75 STEP 1, #67, #70)
+    States: 1. desktop left card · 2. phone sheet · 3. the persona menu open
     ═══════════════════════════════════════════════════════════════════════════════
 
     1. CARD GEOMETRY & ELASTIC ALLOCATION (`.side` = 15rem / 240px, net 192px):
@@ -36,16 +37,23 @@
          * Rename via `<dialog class="confirm">` + `.field` input (pencil button or
            double-click row).
          * Final row: `"全部 N 个故事 ›"` opens the #75 Stories management page.
-       - Zone 3 (Persona `section.persona` + `Persona Modal`):
+       - Zone 3 (Persona `section.persona` + its menu):
          * Sidebar row: unified `.chosen` row with `<span class="chip">卡片默认</span>`
-           (or picked persona name) + right chevron `›`. Never disabled when
+           (or the picked persona's name) + right chevron `›`. Never disabled when
            `people().length === 0`.
-         * Replaces narrow popover with `<dialog class="modal">`:
-           - Top pinned card: `"卡片默认"` (selectable, with expandable/readable
-             original `frame.persona` text from the card).
-           - Search input + global player personas (`starred` pinned first, each 2 lines:
-             name + bio first line, inline star toggle).
-           - Footer: `"管理人设"` jumps to `openSettings("personas")`.
+         * DECIDED: the pick stays a popover menu (side.tsx's `.snippets` mechanism), not
+           a modal. The menu is no longer pinned to the 176px column: `width: max-content`
+           up to 20rem (320px, so it fits a 390px phone), like the settings page's menus.
+           Each row is two lines, name + the text's first line; `卡片默认` is the first row;
+           after a rule, `管理人设` goes to `openSettings("personas")`. With no personas
+           the menu is those two rows, so a new player finds where to make one.
+         * NOT here: reading a persona whole, search, stars, editing. Those are the
+           settings page's 玩家人设 (master list + detail editor, which exists). A modal
+           that lists and shows full text would be that page without its textarea, and
+           the card's own persona text does not reach the client (`GET /card` leaves it
+           out; the card page is where it would belong, beside the openings).
+         * `As the card has it` becomes `卡片默认`, so it no longer collides with
+           Writing's `跟随卡片`.
        - Zone 4 (Writing `section.writing`):
          * Unified `.chosen` row: `.chips` on ONE line (`flex-flow: row nowrap`) + right
            chevron `›`. DECIDED: up to 3 chips show whole, 4 or 5 collapse to the first 2
@@ -344,8 +352,7 @@
       font-size: var(--text-field);
       outline: none;
     }
-    .field:focus,
-    .input-box:focus-within {
+    .field:focus {
       box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
     }
 
@@ -850,306 +857,129 @@
       flex: 1;
     }
 
-    /* ───────── 4. Persona Modal (<dialog class="modal persona-modal">) ─────────
-       - No top/bottom white dead zones (.modal-foot removed; "管理人设 ↗" lives in the compact top bar)
-       - No redundant divider lines (no full-width hairline borders on header, columns, or preview head)
-       - Unified persona list ("卡片默认" is the pinned 1st row) + soft rounded full-text reader well */
-    .persona-modal-shell {
-      width: min(31.5rem, calc(100vw - 2 * var(--space-4)));
-      height: min(33.5rem, calc(100dvh - 2 * var(--space-5)));
-      padding: var(--space-4);
-      gap: var(--space-3);
-      display: flex;
-      flex-direction: column;
-      border-radius: var(--radius-dialog);
-      background: var(--surface-1);
-      color: var(--ink);
-      box-shadow: var(--shadow-1);
-      overflow: hidden;
-    }
-    dialog.persona-modal .persona-modal-shell {
-      background: var(--surface-3);
-      box-shadow: var(--shadow-pop);
-    }
-    .persona-modal-shell[data-layout="single"] {
-      width: min(25.5rem, calc(100vw - 2 * var(--space-4)));
-    }
-    .modal-head {
-      flex: none;
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding: 0;
-    }
-    .modal-head h3 {
-      font-size: var(--text-heading);
-      font-weight: 650;
-    }
-    .modal-head .spacer {
-      flex: 1;
-    }
-    .modal-body {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      padding: 0;
-    }
-
-    /* Split Layout: Left list (224px) + Right soft rounded full-text reader well (no border lines) */
-    .modal-body.split {
-      flex-direction: row;
-      gap: var(--space-3);
-    }
-    .p-left-col {
-      width: 224px;
-      flex: none;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      min-height: 0;
-    }
-    .p-right-preview {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-      min-height: 0;
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-card);
-      background: var(--alpha-1);
-    }
-    .p-preview-head {
-      flex: none;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-2);
-    }
-    .p-preview-title {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-    }
-    .p-preview-title b {
-      font-size: var(--text-body);
-      font-weight: 650;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .p-preview-scroll {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-    }
-    .p-preview-scroll p {
+    /* ───────── 4. Persona Menu (the popover the Persona row opens; side.tsx .session .snippets, widened) ─────────
+       Width: max-content up to 20rem (fits a 390px phone), no longer anchor-size(width) = 176px.
+       Rows: two lines, name + first line of text; the pick in force carries a check; 卡片默认 first,
+       管理人设 last after a rule. In the overview's third state the menu is drawn open in place. */
+    .persona-menu {
+      box-sizing: border-box;
+      width: max-content;
+      min-width: 12rem;
+      max-width: min(20rem, calc(100vw - 2 * var(--space-4)));
       margin: 0;
-      font-size: var(--text-footnote);
-      line-height: 1.65;
-      color: var(--ink-2);
-      white-space: pre-wrap;
-    }
-
-    /* Global Personas Search + Unified 2-Line List ("卡片默认" is the pinned 1st row, same shape) */
-    .p-search-bar {
-      flex: none;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .input-box {
-      flex: 1;
-      min-width: 0;
-      height: 30px;
-      padding: 0 var(--space-2) 0 10px;
-      border-radius: var(--radius);
-      background: var(--alpha-1);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .input-box svg {
-      flex: none;
-      width: 14px;
-      height: 14px;
-      color: var(--ink-3);
-    }
-    .input-box input {
-      flex: 1;
-      min-width: 0;
-      height: 100%;
-      font-size: var(--text-caption);
+      padding: var(--space-1);
+      border: 0;
+      border-radius: var(--radius-card);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow:
+        var(--shadow-pop),
+        inset 0 0 0 var(--hairline) var(--line);
       outline: none;
-    }
-    .persona-list {
-      flex: 1;
-      min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 5px;
-      margin: 0 -2px;
-      padding: 2px;
-    }
-    .persona-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 7px 10px;
-      border-radius: var(--radius-card);
-      background: var(--surface-2);
-      box-shadow: inset 0 0 0 var(--hairline) var(--line);
-      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
-    }
-    .persona-item:hover {
-      background: var(--alpha-1);
-    }
-    .persona-item[aria-checked="true"] {
-      background: var(--surface-2);
-      box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--line-strong);
-    }
-    .persona-main {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
+      gap: 2px;
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
       text-align: left;
     }
-    .avatar {
-      flex: none;
-      width: 26px;
-      height: 26px;
-      margin-top: 2px;
-      border-radius: 50%;
+    .persona-menu[popover] {
+      position: fixed;
+      inset: auto;
+    }
+    .persona-menu[popover]:not(:popover-open) {
+      display: none;
+    }
+    /* overview: drawn open above its row, over the card (the row sits near the card's foot, so a live popover flips up
+       there too: placeMenu) */
+    .persona-menu.static {
+      position: absolute;
+      bottom: calc(100% + var(--space-1));
+      left: calc(-1 * var(--space-2));
+      z-index: 5;
+    }
+    .side.menu-shown {
+      overflow: visible;
+    }
+    .side.menu-shown .persona {
+      position: relative;
+    }
+    .persona-menu .item {
       display: grid;
-      place-items: center;
-      background: var(--alpha-2);
-      color: var(--ink-2);
-      font-size: 11px;
-      font-weight: 650;
-    }
-    .avatar.card-av {
-      border-radius: 7px;
-      background: var(--alpha-1);
-      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
-      color: var(--ink);
-    }
-    .persona-lines {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .persona-line1 {
-      display: flex;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: var(--space-2);
+      row-gap: 1px;
       align-items: center;
-      gap: 5px;
-      min-width: 0;
+      width: 100%;
+      padding: 5px var(--space-2);
+      border-radius: var(--radius);
+      text-align: left;
     }
-    .persona-name {
-      font-weight: 600;
-      font-size: var(--text-body);
+    .persona-menu .item:hover,
+    .persona-menu .item:focus-visible {
+      background: var(--ghost-hover);
+      outline: none;
+    }
+    .persona-menu .item .name {
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .persona-bio {
+    .persona-menu .item[aria-checked="true"] .name {
+      font-weight: 600;
+      color: var(--primary);
+    }
+    .persona-menu .item .check {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      width: 14px;
+      height: 14px;
+      color: var(--ink);
+      visibility: hidden;
+    }
+    .persona-menu .item[aria-checked="true"] .check {
+      visibility: visible;
+    }
+    .persona-menu .item .bio {
+      grid-column: 1;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .persona-menu .item.default .name::after {
+      content: "随卡";
+      margin-left: 6px;
+      padding: 0 5px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
       color: var(--ink-3);
       font-size: var(--text-caption);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-weight: 500;
+      vertical-align: 1px;
     }
-    .row-acts {
-      flex: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
+    .persona-menu hr {
+      margin: 2px var(--space-2);
+      border: 0;
+      height: var(--hairline);
+      background: var(--line);
     }
-    .read-btn {
-      height: 22px;
-      padding: 0 6px;
-      border-radius: var(--radius-sm);
-      font-size: 11px;
-      color: var(--ink-3);
-      background: var(--alpha-1);
-    }
-    .read-btn:hover {
-      color: var(--ink);
-      background: var(--alpha-2);
-    }
-    .star-btn {
-      flex: none;
-      width: 24px;
-      height: 24px;
-      border-radius: var(--radius-sm);
-      display: grid;
-      place-items: center;
-      color: var(--ink-3);
-    }
-    .star-btn:hover {
-      background: var(--ghost-hover);
-      color: var(--ink);
-    }
-    .star-btn[aria-pressed="true"] {
-      color: var(--warn);
-    }
-    .star-btn svg {
-      width: 13px;
-      height: 13px;
-    }
-
-    /* Full-height detail subview in Single-Column mode (also borderless soft well) */
-    .p-detail-view {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-    .p-detail-bar {
-      flex: none;
+    .persona-menu .item.manage .name {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: var(--space-2);
-    }
-    .p-detail-well {
-      flex: 1;
-      min-height: 0;
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-card);
-      background: var(--alpha-1);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-    }
-    .p-detail-well p {
-      margin: 0;
-      font-size: var(--text-footnote);
-      line-height: 1.68;
+      gap: 4px;
+      font-weight: 500;
       color: var(--ink-2);
-      white-space: pre-wrap;
     }
-
-    .empty-personas {
-      padding: var(--space-5) var(--space-4);
-      border-radius: var(--radius-card);
-      background: var(--alpha-1);
-      text-align: center;
+    .persona-menu .item.manage .name svg {
+      width: 12px;
+      height: 12px;
       color: var(--ink-3);
-      font-size: var(--text-footnote);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--space-2);
+    }
+    .persona-menu .item.manage:hover .name {
+      color: var(--ink);
     }
 
     /* ───────── 5. Mobile Frame & Sheet (.topbar + .sheet) ───────── */
@@ -1262,7 +1092,7 @@
       background: var(--surface-0);
     }
 
-    /* Mode 1: 三态同屏 (Overview: Desktop Left Card + Mobile Sheet + Persona Modal side by side) */
+    /* Mode 1: 三态同屏 (Overview: Desktop Left Card + Mobile Sheet + the left card with its persona menu open) */
     .overview-grid {
       min-height: 100dvh;
       padding: 14px 20px 58px;
@@ -1397,7 +1227,7 @@
       background: var(--ink);
     }
 
-    /* Native Dialogs: Rename / Delete Confirm & Live Persona Modal Overlay */
+    /* Native Dialogs: Rename / Delete Confirm */
     dialog.confirm {
       width: min(22rem, calc(100% - 2 * var(--space-4)));
       margin: auto;
@@ -1411,8 +1241,7 @@
       line-height: var(--leading-body);
       outline: none;
     }
-    dialog.confirm::backdrop,
-    dialog.live-modal::backdrop {
+    dialog.confirm::backdrop {
       background: var(--scrim);
     }
     dialog.confirm p {
@@ -1435,13 +1264,6 @@
       height: var(--control);
       padding: 0 var(--space-4);
       font-size: var(--text-body);
-    }
-    dialog.live-modal {
-      margin: auto;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      outline: none;
     }
 
     /* Toast feedback for navigation actions */
@@ -1564,11 +1386,6 @@
     </div>
   </dialog>
 
-  <!-- Live Persona Modal (<dialog> used in Desktop Canvas / Mobile Sheet modes) -->
-  <dialog id="live-persona-dialog" class="live-modal" closedby="any">
-    <div id="live-persona-mount"></div>
-  </dialog>
-
   <!-- Prototype Control Dock -->
   <nav class="demo-dock" aria-label="原型状态与方案切换">
     <span class="group-label">视图</span>
@@ -1581,8 +1398,8 @@
     <button type="button" id="btn-mode-mobile" aria-pressed="false" onclick="setStageMode('mobile')">
       手机Sheet
     </button>
-    <button type="button" id="btn-mode-modal" aria-pressed="false" onclick="setStageMode('modal')">
-      Persona弹窗
+    <button type="button" id="btn-mode-menu" aria-pressed="false" onclick="setStageMode('menu')">
+      人设菜单
     </button>
 
     <span class="sep"></span>
@@ -1625,9 +1442,6 @@
     </button>
 
     <span class="sep"></span>
-    <button type="button" id="btn-modal-layout" aria-pressed="true" onclick="toggleModalLayout()" title="切换人设弹窗布局：左右分栏常驻全文 vs 单栏列表+全文层">
-      弹窗:分栏全文
-    </button>
     <button type="button" id="btn-lang-toggle" aria-pressed="true" onclick="toggleLangMode()">
       中文小标
     </button>
@@ -1735,48 +1549,36 @@
         id: "p-shen",
         name: "沈砚",
         text: "关外行脚医者，背一只旧药箱，性情温和沉静，曾替李鹤医治过剑伤，不通武艺但极重然诺。\n\n两年前在朔州风雪夜救下重伤濒死的李鹤，为其取出肩胛下的一枚柳叶镖。李鹤伤愈离去前将随身短剑相托，言明若三年不归，便请沈砚南下越州走一趟。\n\n言谈举止带着医者的审慎，善于从伤口形制、气息脉象与旧痕中推知实情。",
-        starred: true,
-        otherCards: ["伴星"],
       },
       {
         id: "p-gu",
         name: "顾长风",
         text: "江南六扇门解职捕头，行事老辣果决，名为送还故人遗物，实则暗查三年前苏州库银失窃一案。\n\n当年经办李鹤一案时察觉卷宗另有隐情，遂辞官独自追查至塞外，虽赶上李鹤临终托剑，却仍缺最关键的一环人证。",
-        starred: true,
-        otherCards: [],
       },
       {
         id: "p-lin",
         name: "林晚音",
         text: "李鹤同乡义妹，携一把油纸伞自吴中北上，说话轻声细语，却在伞骨中藏有一卷当年的书信。",
-        starred: false,
-        otherCards: ["理"],
       },
       {
         id: "p-xie",
         name: "谢无咎",
         text: "落魄刀客，嗜酒少言，曾在雁门关外与李鹤同饮三日，受人之托忠人之事，拔刀从不留情。",
-        starred: false,
-        otherCards: [],
       },
       {
         id: "p-su",
         name: "苏知微",
         text: "越州地方志书生，为采写旧闻误入苦竹岭，好奇心重，随身带着炭笔与记事册。",
-        starred: false,
-        otherCards: [],
       },
       {
         id: "p-chen",
         name: "陈敬之",
         text: "太湖漕帮旧部，镖局出身，熟悉江南水陆暗桩，寡言稳重。",
-        starred: false,
-        otherCards: [],
       },
     ];
 
     // State
-    let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "modal"
+    let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "menu" (desktop with the persona menu open)
     let navStyle = "icons";     // "icons" (decided: 纯图标同行) | "inline" (带字同行) | "stack" (竖排三行)
     let iconSet = "a";          // "a" (treeStructure + listMag) | "b" (path + magGlass)
     let storySlice = 4;         // 4 (decided) | 5 | 2
@@ -1789,9 +1591,6 @@
     let headLines = 3;          // 3 (decided) | 2 (for comparison)
     let langZh = true; // default Chinese section headers (故事 / 人设 / 写作)
     let pickedPersonaByCard = { wuxia: undefined, yandao: undefined }; // undefined = 卡片默认
-    let modalLayout = "split";  // "split" (左右分栏常驻全文) | "single" (单栏列表 + 独立全文阅读层)
-    let singleDetailId = null;  // null (列表态) | "__default__" | persona.id (单栏模式下的独立全文层)
-    let personaSearch = "";
     let phoneSheetOpen = true;
     let renamingStoryId = null;
 
@@ -1999,15 +1798,16 @@
             ${allStoriesRow}
           </section>
 
-          <!-- 3. Persona: 默认叫「卡片默认」(不再与 Writing 撞车)；空人设时也不 disable，点击打开 Modal -->
+          <!-- 3. Persona: 默认叫「卡片默认」(不再与 Writing 撞车)；空人设时也不 disable；点击打开加宽的两行菜单 (popover) -->
           <section class="persona" aria-label="Persona">
             <h2>${langZh ? "人设" : "Persona"}</h2>
-            <button type="button" class="chosen" onclick="openPersonaModal()">
+            <button type="button" class="chosen" ${context === "menu" ? "" : `popovertarget="persona-menu-${context}"`}>
               <span class="chips">
                 <span class="chip">${escapeHtml(curP ? curP.name : "卡片默认")}</span>
               </span>
               <span class="chev" aria-hidden="true">${ICONS.caretRight}</span>
             </button>
+            ${renderPersonaMenuHTML(context)}
           </section>
 
           <!-- 4. Writing: 胶囊同行不折行 (3项直接同行，4-5项支持 +N 收纳或双字短签) + 右侧 chevron -->
@@ -2035,215 +1835,44 @@
       `;
     }
 
-    function renderPersonaModalHTML(inOverview = false) {
+    /** The persona menu: the rows the client has (name, text; the card's own persona text is not served), 卡片默认
+     *  first, 管理人设 last. `context === "menu"` draws it open in place (the overview's third state); the others are
+     *  popovers the row opens, placed under it by placeMenu on toggle. */
+    function renderPersonaMenuHTML(context) {
       const c = activeCard();
       const curP = activePersona();
-      const isDefaultPicked = !curP;
-      const defaultBio = c.defaultPersona
-        ? c.defaultPersona
-        : "本卡为大世界无主角卡（frame 未声明 persona 槽），默认不设玩家角色。";
-      const defaultFirstLine = defaultBio.split("\n")[0];
-
-      const sortedPersonas = emptyPersonas
-        ? []
-        : [...personas]
-            .sort((a, b) => Number(b.starred) - Number(a.starred))
-            .filter((p) => {
-              if (!personaSearch.trim()) return true;
-              const q = personaSearch.trim().toLowerCase();
-              return p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q);
-            });
-
-      // Pinned 1st row: "卡片默认" (same compact 2-line card structure as player personas, no bloated nested box)
-      const defaultRowHTML = `
-        <div class="persona-item" role="menuitemradio" aria-checked="${isDefaultPicked ? "true" : "false"}">
-          <button type="button" class="persona-main" onclick="pickPersona(undefined)">
-            <span class="avatar card-av" title="卡片默认设定">卡</span>
-            <span class="persona-lines">
-              <span class="persona-line1">
-                <span class="persona-name">卡片默认</span>
-                <span class="tag">随卡</span>
-                ${isDefaultPicked ? `<span class="tag" style="color: var(--ink); font-weight: 600;">当前</span>` : ""}
-              </span>
-              <span class="persona-bio">${escapeHtml(defaultFirstLine)}</span>
-            </span>
-          </button>
-          ${
-            modalLayout === "single"
-              ? `<div class="row-acts">
-                  <button type="button" class="read-btn" onclick="openSingleDetail(event, '__default__')" title="查看完整设定文本">全文</button>
-                </div>`
-              : ""
-          }
-        </div>
+      const isStatic = context === "menu";
+      const list = emptyPersonas ? [] : personas;
+      const defaultBio = c.defaultPersona ? "这张卡写定的玩家角色" : "无主角卡：没有玩家角色";
+      const row = (id, name, bio, checked, cls = "") => `
+        <button
+          type="button"
+          role="menuitemradio"
+          class="item ${cls}"
+          aria-checked="${checked ? "true" : "false"}"
+          onclick="pickPersona(${id === undefined ? "undefined" : `'${id}'`}, event)"
+        >
+          <span class="name">${escapeHtml(name)}</span>
+          <span class="check" aria-hidden="true">${ICONS.check}</span>
+          <span class="bio">${escapeHtml(bio)}</span>
+        </button>
       `;
-
-      const playerRowsHTML = emptyPersonas
-        ? `
-          <div class="empty-personas">
-            <span>尚未创建自定义人设，当前使用「卡片默认」设定。</span>
-            <button type="button" class="btn sm" onclick="showToast('跳转 Settings → 玩家人设 新建')">
-              ${ICONS.plus} <span>去设置页新建人设</span>
-            </button>
-          </div>
-        `
-        : sortedPersonas.length === 0
-          ? `<div class="empty-personas"><span>无匹配「${escapeHtml(personaSearch)}」的人设</span></div>`
-          : sortedPersonas
-              .map((p) => {
-                const picked = curP && curP.id === p.id;
-                const firstLine = p.text.split("\n")[0];
-                const tags = p.otherCards
-                  .map((t) => `<span class="tag" title="已在卡片「${escapeHtml(t)}」上选用">${escapeHtml(t)}</span>`)
-                  .join("");
-                return `
-                  <div class="persona-item" role="menuitemradio" aria-checked="${picked ? "true" : "false"}">
-                    <button type="button" class="persona-main" onclick="pickPersona('${p.id}')">
-                      <span class="avatar">${escapeHtml(p.name.slice(0, 1))}</span>
-                      <span class="persona-lines">
-                        <span class="persona-line1">
-                          <span class="persona-name">${escapeHtml(p.name)}</span>
-                          ${picked ? `<span class="tag" style="color: var(--ink); font-weight: 600;">当前</span>` : ""}
-                          ${tags}
-                        </span>
-                        <span class="persona-bio">${escapeHtml(firstLine)}</span>
-                      </span>
-                    </button>
-                    <div class="row-acts">
-                      ${
-                        modalLayout === "single"
-                          ? `<button type="button" class="read-btn" onclick="openSingleDetail(event, '${p.id}')" title="查看完整设定文本">全文</button>`
-                          : ""
-                      }
-                      <button
-                        type="button"
-                        class="star-btn"
-                        aria-label="标星人设"
-                        aria-pressed="${p.starred ? "true" : "false"}"
-                        onclick="togglePersonaStar(event, '${p.id}')"
-                        title="${p.starred ? "取消星标" : "标星置顶"}"
-                      >
-                        ${p.starred ? ICONS.starFill : ICONS.star}
-                      </button>
-                    </div>
-                  </div>
-                `;
-              })
-              .join("");
-
-      const searchAndListHTML = `
-        <div class="p-search-bar">
-          <div class="input-box">
-            ${ICONS.magGlass}
-            <input
-              type="search"
-              placeholder="搜索人设..."
-              value="${escapeAttr(personaSearch)}"
-              oninput="onPersonaSearch(this.value)"
-              aria-label="搜索人设"
-            />
-          </div>
-          <span class="tag mono">${emptyPersonas ? 0 : personas.length}</span>
-        </div>
-        <div class="persona-list scroller">
-          ${defaultRowHTML}
-          ${playerRowsHTML}
-        </div>
-      `;
-
-      // Right full-text pane in Split mode (or Full-height detail subview in Single mode)
-      const focusedPersona =
-        modalLayout === "single" && singleDetailId && singleDetailId !== "__default__"
-          ? personas.find((p) => p.id === singleDetailId)
-          : curP;
-      const previewIsDefault = modalLayout === "single" ? singleDetailId === "__default__" : !curP;
-      const previewTitle = previewIsDefault ? "卡片默认" : focusedPersona ? focusedPersona.name : "卡片默认";
-      const previewTag = previewIsDefault ? "随卡设定" : "全局人设";
-      const previewText = previewIsDefault ? defaultBio : focusedPersona ? focusedPersona.text : defaultBio;
-      const previewParagraphs = previewText
-        .split(/\n{2,}/)
-        .map((para) => `<p>${escapeHtml(para)}</p>`)
-        .join("");
-
-      let bodyContentHTML = "";
-      if (modalLayout === "split") {
-        bodyContentHTML = `
-          <div class="modal-body split">
-            <div class="p-left-col">
-              ${searchAndListHTML}
-            </div>
-            <div class="p-right-preview">
-              <div class="p-preview-head">
-                <div class="p-preview-title">
-                  <b>${escapeHtml(previewTitle)}</b>
-                  <span class="tag">${previewTag}</span>
-                </div>
-                <span class="tag mono">${previewText.length} 字</span>
-              </div>
-              <div class="p-preview-scroll scroller">
-                ${previewParagraphs}
-              </div>
-            </div>
-          </div>
-        `;
-      } else if (singleDetailId) {
-        const isCurrentPicked =
-          (singleDetailId === "__default__" && isDefaultPicked) ||
-          (curP && curP.id === singleDetailId);
-        bodyContentHTML = `
-          <div class="modal-body">
-            <div class="p-detail-view">
-              <div class="p-detail-bar">
-                <button type="button" class="btn sm ghost" onclick="closeSingleDetail()">
-                  ← 返回人设列表
-                </button>
-                <div class="p-preview-title">
-                  <b>${escapeHtml(previewTitle)}</b>
-                  <span class="tag mono">${previewText.length} 字</span>
-                </div>
-                <button
-                  type="button"
-                  class="btn sm"
-                  onclick="pickPersona(${singleDetailId === "__default__" ? "undefined" : `'${singleDetailId}'`}); closeSingleDetail();"
-                >
-                  ${isCurrentPicked ? "当前正在使用" : "选用此人设"}
-                </button>
-              </div>
-              <div class="p-detail-well scroller">
-                ${previewParagraphs}
-              </div>
-            </div>
-          </div>
-        `;
-      } else {
-        bodyContentHTML = `
-          <div class="modal-body">
-            ${searchAndListHTML}
-          </div>
-        `;
-      }
-
+      const rows =
+        row(undefined, "卡片默认", defaultBio, !curP, "default") +
+        list.map((p) => row(p.id, p.name, p.text.split("\n")[0], curP && curP.id === p.id)).join("");
       return `
-        <div class="persona-modal-shell" data-layout="${modalLayout}" role="dialog" aria-label="选择本卡人设">
-          <header class="modal-head">
-            <h3>选择人设</h3>
-            <span class="tag">${escapeHtml(c.title)}</span>
-            <span class="spacer"></span>
-            <button
-              type="button"
-              class="btn sm ghost"
-              onclick="showToast('跳转 openSettings(\\"personas\\") 管理与新建人设')"
-              title="前往设置页管理与新建全局人设"
-            >
-              <span>管理人设</span>
-              ${ICONS.arrowUpRight}
-            </button>
-            <button type="button" class="icon sm" aria-label="关闭" onclick="closePersonaModal()">
-              ${ICONS.close}
-            </button>
-          </header>
-
-          ${bodyContentHTML}
+        <div
+          ${isStatic ? 'class="persona-menu static"' : `id="persona-menu-${context}" class="persona-menu" popover ontoggle="placeMenu(event)"`}
+          role="menu"
+          aria-label="选择人设"
+        >
+          ${rows}
+          <hr />
+          <button type="button" role="menuitem" class="item manage" onclick="goManagePersonas(event)">
+            <span class="name">管理人设 ${ICONS.arrowUpRight}</span>
+            <span class="check" aria-hidden="true"></span>
+            <span class="bio">${list.length ? "新建、改写、删除都在设置页" : "尚未创建人设，去设置页新建"}</span>
+          </button>
         </div>
       `;
     }
@@ -2322,17 +1951,21 @@
               ${renderPhoneFrameHTML()}
             </div>
 
-            <!-- State 3: Persona Modal 打开 -->
+            <!-- State 3: the persona menu open on the left card -->
             <div class="state-col">
               <div class="state-label">
-                <span>3. Persona Modal 打开</span>
-                <span class="spec-pill">置顶卡片默认 + 独立全文阅读</span>
+                <span>3. 人设菜单打开 (popover)</span>
+                <span class="spec-pill">两行 · 卡片默认置顶 · 管理人设</span>
               </div>
-              ${renderPersonaModalHTML(true)}
+              <div class="overview-side-host">
+                <aside class="side menu-shown" aria-label="Desktop Session Card, persona menu open">
+                  ${renderSessionHTML("menu")}
+                </aside>
+              </div>
             </div>
           </div>
         `;
-      } else if (stageMode === "desktop" || stageMode === "modal") {
+      } else if (stageMode === "desktop" || stageMode === "menu") {
         stage.innerHTML = `
           <div class="desktop-canvas">
             <aside class="side" aria-label="Session">
@@ -2387,28 +2020,19 @@
         `;
       }
 
-      // Sync live Persona dialog if open
-      const liveDialog = document.getElementById("live-persona-dialog");
-      const liveMount = document.getElementById("live-persona-mount");
-      if (liveMount) {
-        liveMount.innerHTML = renderPersonaModalHTML(false);
-      }
-      if (stageMode === "modal" && liveDialog && !liveDialog.open) {
-        liveDialog.showModal();
+      // the "menu" mode: the desktop canvas with the persona menu open
+      if (stageMode === "menu") {
+        document.getElementById("persona-menu-side")?.showPopover();
       }
     }
 
     // ───────── 4. Interactive Handlers ─────────
     function setStageMode(mode) {
       stageMode = mode;
-      const liveDialog = document.getElementById("live-persona-dialog");
-      if (mode !== "modal" && liveDialog && liveDialog.open) {
-        liveDialog.close();
-      }
       if (mode === "mobile") {
         phoneSheetOpen = true;
       }
-      for (const m of ["overview", "desktop", "mobile", "modal"]) {
+      for (const m of ["overview", "desktop", "mobile", "menu"]) {
         const btn = document.getElementById(`btn-mode-${m}`);
         if (btn) btn.setAttribute("aria-pressed", String(m === mode));
       }
@@ -2567,65 +2191,35 @@
       renderAll();
     }
 
-    function openPersonaModal() {
-      const dlg = document.getElementById("live-persona-dialog");
-      renderAll();
-      if (dlg && !dlg.open) dlg.showModal();
+    /** A popover menu opens under its row (the row's left edge minus the row's own margin), flipped above when the
+     *  bottom is out of the viewport, pulled left when the right is. */
+    function placeMenu(e) {
+      const menu = e.currentTarget;
+      if (e.newState !== "open") return;
+      const btn = menu.previousElementSibling;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const w = menu.offsetWidth;
+      const h = menu.offsetHeight;
+      let left = r.left;
+      let top = r.bottom + 4;
+      if (left + w > window.innerWidth - 16) left = Math.max(16, window.innerWidth - 16 - w);
+      if (top + h > window.innerHeight - 16) top = Math.max(16, r.top - 4 - h);
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+      menu.querySelector('[aria-checked="true"]')?.focus();
     }
 
-    function closePersonaModal() {
-      const dlg = document.getElementById("live-persona-dialog");
-      if (dlg && dlg.open) dlg.close();
-      if (stageMode === "modal") {
-        setStageMode("desktop");
-      }
-    }
-
-    function pickPersona(id) {
+    function pickPersona(id, e) {
+      e?.currentTarget?.closest("[popover]")?.hidePopover();
       pickedPersonaByCard[currentCardKey] = id;
-      renderAll();
+      if (stageMode === "menu") stageMode = "desktop", setStageMode("desktop");
+      else renderAll();
     }
 
-    function togglePersonaStar(e, id) {
-      e.stopPropagation();
-      const p = personas.find((x) => x.id === id);
-      if (p) p.starred = !p.starred;
-      renderAll();
-    }
-
-    function toggleModalLayout() {
-      modalLayout = modalLayout === "split" ? "single" : "split";
-      singleDetailId = null;
-      const btn = document.getElementById("btn-modal-layout");
-      if (btn) {
-        btn.setAttribute("aria-pressed", String(modalLayout === "split"));
-        btn.textContent = modalLayout === "split" ? "弹窗:分栏全文" : "弹窗:单栏全文";
-      }
-      renderAll();
-    }
-
-    function openSingleDetail(e, id) {
-      e.stopPropagation();
-      singleDetailId = id;
-      renderAll();
-    }
-
-    function closeSingleDetail() {
-      singleDetailId = null;
-      renderAll();
-    }
-
-    function onPersonaSearch(val) {
-      personaSearch = val;
-      renderAll();
-      // Restore focus & caret in search input
-      const inputs = document.querySelectorAll('.input-box input[type="search"]');
-      inputs.forEach((inp) => {
-        if (document.activeElement !== inp && stageMode === "overview") {
-          inp.focus();
-          inp.setSelectionRange(val.length, val.length);
-        }
-      });
+    function goManagePersonas(e) {
+      e?.currentTarget?.closest("[popover]")?.hidePopover();
+      showToast('跳转 openSettings("personas")：设置页的玩家人设（新建 / 改写 / 删除 / 全文）');
     }
 
     let toastTimer = null;
