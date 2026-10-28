@@ -18,25 +18,12 @@ import { Manager } from "./manager.tsx"
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, path, personas, pin, player, stories, type StoryRow, working } from "./store.ts"
-import { shown } from "./stories.ts"
+import { ago, shown } from "./stories.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
 import { openTimeline } from "./timeline.tsx"
 import { deleteStories, deleteStory, exportUrl, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
-
-const units: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["day", 864e5],
-  ["hour", 36e5],
-  ["minute", 6e4],
-]
-const rel = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
-/** "2 hours ago", "yesterday", "now". */
-const ago = (at: number): string => {
-  const d = at - Date.now()
-  const u = units.find(([, ms]) => Math.abs(d) >= ms)
-  return u ? rel.format(Math.round(d / u[1]), u[0]) : "now"
-}
 
 /** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
 export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {

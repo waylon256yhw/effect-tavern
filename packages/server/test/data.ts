@@ -120,6 +120,12 @@ back.commit(
 const hits = (q: string) => data.stories.search("wuxia", q)
 assert.deepEqual(hits("hello"), [{ id: story, turn: 1, kind: "input", text: "hello", count: 1 }])
 assert.deepEqual(hits("SLOWER"), [{ id: story, turn: 2, kind: "note", text: "slower", count: 1 }])
+assert.deepEqual(hits("Ärger"), []) // only ASCII folds, on both sides: Ä stays Ä (SQLite's lower()), so the query must match as typed
+back.commit(L.add(back.log, { parent: 7, text: "umlaut", input: { text: "Ärger im İstanbul" } }))
+assert.deepEqual(hits("Ärger"), [{ id: story, turn: 4, kind: "input", text: "Ärger im İstanbul", count: 1 }])
+assert.deepEqual(hits("ärger"), [])
+assert.equal(hits("stan")[0]!.text, "Ärger im İstanbul") // the fold keeps the length: the window is cut where it was found
+back.commit(L.drop(back.log, 8))
 assert.deepEqual(hits("bamboo"), [
   { id: story, turn: 3, kind: "reply", text: "A rainy night on Bamboo Ridge.", count: 1 },
 ])
@@ -131,12 +137,20 @@ assert.deepEqual(data.stories.search("other", "hello"), [])
   const long = `${"x".repeat(50)}needle${"y".repeat(200)}`
   back.commit(L.add(back.log, { parent: 7, text: "long", input: { text: long } }))
   assert.equal(hits("needle")[0]!.text, `…${"x".repeat(30)}needle${"y".repeat(90)}…`)
-  back.commit(L.drop(back.log, 8))
+  back.commit(L.drop(back.log, 9))
 }
-// A batch delete takes the ids given in one go, strangers skipped.
+// A batch delete takes the card's own among the ids given in one go, answering them; another card's and a stranger's
+// are skipped. The listing narrows to one story by id, none for another card's.
 {
-  const [x, y] = [data.stories.create("wuxia"), data.stories.create("wuxia")]
-  data.stories.delMany([x, y, 9999])
+  const [x, y, z] = [data.stories.create("wuxia"), data.stories.create("wuxia"), data.stories.create("other")]
+  assert.deepEqual(
+    data.stories.list("wuxia", y).map((s) => s.id),
+    [y],
+  )
+  assert.deepEqual([data.stories.list("wuxia", z), data.stories.list("wuxia", 9999)], [[], []])
+  assert.deepEqual(data.stories.delMany("wuxia", [x, y, z, 9999]), [x, y])
+  assert.equal(data.stories.list("other").length, 1)
+  data.stories.del(z)
   assert.deepEqual(
     data.stories.list("wuxia").map((s) => s.id),
     [story, second], // the commits above made `story` the newer

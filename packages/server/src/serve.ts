@@ -145,8 +145,8 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const exporting = req.method === "GET" && /^\/stories\/(\d+)\/export\.(md|json)$/.exec(req.url ?? "")
     if (exporting) {
       const id = Number(exporting[1])
-      if (!lib.exists(id)) return json(404, { error: `no story ${id}` })
       const x = lib.stories.export(id)
+      if (!x) return json(404, { error: `no story ${id}` })
       const md = exporting[2] === "md"
       res.writeHead(200, {
         "content-type": md ? "text/markdown; charset=utf-8" : "application/json",

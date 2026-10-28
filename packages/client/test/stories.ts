@@ -1,7 +1,7 @@
 // stories.ts: the card's four rows (starred first, the open one kept in view), the preview a row carries, the search's
 // match over title and hits, the marks it cuts, the cleanup's quick picks.
 import assert from "node:assert/strict"
-import { empty, matches, pieces, preview, ranked, shown, turnLabel, unnamed, type Hit } from "../src/stories.ts"
+import { ago, empty, matches, pieces, preview, ranked, shown, turnLabel, unnamed, type Hit } from "../src/stories.ts"
 import type { StoryRow } from "../src/store.ts"
 
 const row = (id: number, p: Partial<StoryRow> = {}): StoryRow => ({
@@ -64,6 +64,24 @@ assert.deepEqual(pieces("the rain in Spain", "ain"), [
 assert.deepEqual(pieces("Rain", "rain"), [{ text: "Rain", hit: true }])
 assert.deepEqual(pieces("no hit", "x"), [{ text: "no hit", hit: false }])
 assert.deepEqual(pieces("as is", "  "), [{ text: "as is", hit: false }])
+assert.deepEqual(pieces("İstanbul", "stan"), [
+  { text: "İ", hit: false },
+  { text: "stan", hit: true },
+  { text: "bul", hit: false },
+]) // only ASCII folds, so the marks land where the text is
+assert.deepEqual(pieces("Ärger", "ärger"), [{ text: "Ärger", hit: false }]) // as the server would not match it either
+assert.equal(matches(row(9, { title: "Ärger" }), "ärger", new Map()), false)
+const now = 1_000_000_000_000
+assert.deepEqual(
+  [
+    ago(now - 16 * 6e4, "en", now),
+    ago(now - 16 * 6e4, "zh", now),
+    ago(now - 864e5, "en", now),
+    ago(now, "en", now),
+    ago(now, "zh", now),
+  ],
+  ["16 minutes ago", "16分钟前", "yesterday", "now", "刚刚"],
+)
 
 assert.deepEqual(rows.map(empty), [false, false, false, false, false, false])
 assert.equal(empty(row(7, { turns: 0 })), true)

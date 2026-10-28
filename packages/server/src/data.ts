@@ -74,9 +74,13 @@ export interface Hit {
   text: string
   count: number
 }
-/** A window of `text` around the first `q` (ASCII case folded, as SQLite's lower() does), with ellipses where cut. */
+/** ASCII case folded, exactly what SQLite's lower() does: the query and the text fold the same way on both sides,
+ *  and a fold never changes a string's length (JS's toLowerCase can: İ becomes two code units), so an index found
+ *  in the folded text is an index in the text. */
+export const fold = (s: string): string => s.replace(/[A-Z]+/g, (m) => m.toLowerCase())
+/** A window of `text` around the first `q` (both folded), with ellipses where cut. */
 const snippet = (text: string, q: string, before = 30, after = 90): string => {
-  const i = text.toLowerCase().indexOf(q)
+  const i = fold(text).indexOf(q)
   if (i < 0) return text.slice(0, before + after)
   const start = Math.max(0, i - before)
   const end = Math.min(text.length, i + q.length + after)
@@ -219,7 +223,8 @@ export const open = (asked: string) => {
      *  `last` is its input: what the manager previews, since every story of a card opens on the same greeting. Every
      *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
-      list: (card: string): StoryRow[] =>
+      /** The card's rows, or the one of them `only` names (none when that is another card's or no story). */
+      list: (card: string, only?: Id): StoryRow[] =>
         (
           q(
             `with recursive line(story, id, parent, text, note) as (
@@ -234,8 +239,8 @@ export const open = (asked: string) => {
              select s.id, s.title, s.starred, s.updated, coalesce(t.turns, 0) as turns,
                (select json_extract(json, '$.input') from node where story = s.id and id = t.last) as last
              from story s left join turns t on t.story = s.id
-             where s.card = ? order by s.updated desc, s.id desc`,
-          ).all(card, card) as Row[]
+             where s.card = ? and (? is null or s.id = ?) order by s.updated desc, s.id desc`,
+          ).all(card, card, only ?? null, only ?? null) as Row[]
         ).map((r) => ({
           id: r["id"] as Id,
           title: (r["title"] as string | null) ?? null,
@@ -251,18 +256,18 @@ export const open = (asked: string) => {
       create: (card: string): Id =>
         Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
-      /** Several at once, one transaction: the batch cleanup. An id that is no story is skipped. */
-      delMany: (ids: readonly Id[]) =>
-        tx(() => {
-          for (const id of ids) q("delete from story where id = ?").run(id)
-        }),
+      /** Several at once, one transaction: the batch cleanup. Only the card's own go; another card's, or no story,
+       *  is skipped. The ids deleted are answered. */
+      delMany: (card: string, ids: readonly Id[]): Id[] =>
+        tx(() => ids.filter((id) => q("delete from story where id = ? and card = ?").run(id, card).changes > 0)),
       /** The card's stories whose head's line holds `q` in a player's line, a note or the prose (the text parts of
        *  the reply), one Hit per story: the earliest hit node on the line (a snippet of the field that hit, the
        *  line first, then the note, then the prose), numbered by the turns up to it, and the count of hit nodes.
-       *  ASCII case folds (SQLite's lower()); a blank query hits nothing. The prose is gathered from the reply's
-       *  parts in SQL (`json_each`), so no node's JSON is parsed here. */
+       *  ASCII case folds (`fold`, SQLite's lower()); a blank query hits nothing. The prose is gathered from the
+       *  reply's parts in SQL (`json_each`), so no node's JSON is parsed here; the turn number is a running count
+       *  over the line (a window), one pass. */
       search: (card: string, query: string): Hit[] => {
-        const needle = query.trim().toLowerCase()
+        const needle = fold(query.trim())
         if (!needle) return []
         const rows = q(
           `with recursive line(story, id, parent, text, note, prose) as (
@@ -274,12 +279,14 @@ export const open = (asked: string) => {
              select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
                (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
                   where json_extract(p.value, '$.type') = 'text')
-               from node n join line l on n.story = l.story and n.id = l.parent)
-           select l.story, l.id, l.text, l.note, l.prose,
-             (select count(*) from line m where m.story = l.story and m.id <= l.id and (m.text != '' or m.note is not null)) as turn
-           from line l
-           where instr(lower(l.text), ?) > 0 or instr(lower(coalesce(l.note, '')), ?) > 0 or instr(lower(coalesce(l.prose, '')), ?) > 0
-           order by l.story, l.id`,
+               from node n join line l on n.story = l.story and n.id = l.parent),
+           numbered as (
+             select story, id, text, note, prose,
+               count(*) filter (where text != '' or note is not null) over (partition by story order by id) as turn
+             from line)
+           select story, id, text, note, prose, turn from numbered
+           where instr(lower(text), ?) > 0 or instr(lower(coalesce(note, '')), ?) > 0 or instr(lower(coalesce(prose, '')), ?) > 0
+           order by story, id`,
         ).all(card, needle, needle, needle) as Row[]
         const hits = new Map<Id, Hit>()
         for (const r of rows) {
@@ -292,9 +299,9 @@ export const open = (asked: string) => {
           const text = (r["text"] as string | null) ?? ""
           const note = (r["note"] as string | null) ?? ""
           const prose = (r["prose"] as string | null) ?? ""
-          const [kind, field]: [Hit["kind"], string] = text.toLowerCase().includes(needle)
+          const [kind, field]: [Hit["kind"], string] = fold(text).includes(needle)
             ? ["input", text]
-            : note.toLowerCase().includes(needle)
+            : fold(note).includes(needle)
               ? ["note", note]
               : ["reply", prose]
           hits.set(id, { id, turn: r["turn"] as number, kind, text: snippet(field, needle), count: 1 })

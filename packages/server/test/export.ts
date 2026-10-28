@@ -89,4 +89,11 @@ assert.equal(
   disposition({ ...story, title: "   " }, "md"),
   `attachment; filename="story-7.md"; filename*=UTF-8''story-7.md`,
 )
+// the cut is by grapheme: an emoji at the edge stays whole or goes whole, never half, and is one mark in the fallback
+const edge = `${"a".repeat(59)}😀 tail`
+assert.equal(
+  disposition({ ...story, title: edge }, "md"),
+  `attachment; filename="${"a".repeat(59)}_.md"; filename*=UTF-8''${encodeURIComponent(`${"a".repeat(59)}😀.md`)}`,
+)
+assert.equal(markdown({ ...x, story: { ...story, turns: 7 } }, at).split("\n")[2], "竹林 · 7 轮 · 导出于 2026-10-28") // the row's count, not a second one
 console.log("ok")

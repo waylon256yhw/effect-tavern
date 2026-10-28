@@ -57,8 +57,7 @@ const told = (t: Turn): string[] => {
  *  is its prose alone. The head line names the story, the card, the turns and the time of export. */
 export const markdown = (x: Exported, at = new Date()): string => {
   const line = L.path(L.of(x.snapshot))
-  const turns = line.filter((t) => t.input.text !== "" || t.input.note !== undefined).length
-  const head = `# ${x.story.title ?? "New story"}\n\n${x.card.title} · ${turns} 轮 · 导出于 ${at.toISOString().slice(0, 10)}\n\n---`
+  const head = `# ${x.story.title ?? "New story"}\n\n${x.card.title} · ${x.story.turns} 轮 · 导出于 ${at.toISOString().slice(0, 10)}\n\n---`
   const blocks = line.flatMap((t) => {
     const quote = asked(t.input)
     return [...(quote.length ? [quote.join("\n")] : []), ...told(t)]
@@ -66,14 +65,17 @@ export const markdown = (x: Exported, at = new Date()): string => {
   return `${[head, ...blocks].join("\n\n")}\n`
 }
 
+const graphemes = new Intl.Segmenter()
 /** A download's file name from the story's title (or its id): the characters a file system refuses taken out, cut
- *  to a sensible length; `filename*` carries it UTF-8 encoded, `filename` an ASCII fallback. */
+ *  to a sensible length by grapheme (a cut inside a surrogate pair would be no UTF-8 at all, and half an emoji is
+ *  no better); `filename*` carries it UTF-8 encoded, `filename` an ASCII fallback. */
 export const disposition = (story: StoryRow, ext: "md" | "json"): string => {
-  const base = (story.title ?? `story-${story.id}`)
-    .replace(/[\\/:*?"<>|\p{Cc}]+/gu, " ")
-    .trim()
+  const clean = (story.title ?? `story-${story.id}`).replace(/[\\/:*?"<>|\p{Cc}]+/gu, " ").trim()
+  const base = Array.from(graphemes.segment(clean), (g) => g.segment)
     .slice(0, 60)
+    .join("")
+    .trimEnd()
   const name = `${base || `story-${story.id}`}.${ext}`
-  const ascii = name.replace(/[^\x20-\x7e]/g, "_")
+  const ascii = name.replace(/[^\x20-\x7e]/gu, "_") // one mark per code point, not per UTF-16 unit
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`
 }

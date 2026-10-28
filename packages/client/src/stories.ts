@@ -13,6 +13,23 @@ export interface Hit {
   count: number
 }
 
+/** ASCII case folded, as the server's search folds (SQLite's lower()): the title here and the turns there match
+ *  the same way, and a fold never moves an index (JS's toLowerCase can lengthen a string: İ becomes two units). */
+export const fold = (s: string): string => s.replace(/[A-Z]+/g, (m) => m.toLowerCase())
+const units: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["day", 864e5],
+  ["hour", 36e5],
+  ["minute", 6e4],
+]
+const formats = new Map<string, Intl.RelativeTimeFormat>()
+/** "2 hours ago", "yesterday", "now" in the locale given (the card's rows are English, the manager Chinese). */
+export const ago = (at: number, locale = "en", now = Date.now()): string => {
+  let rel = formats.get(locale)
+  if (!rel) formats.set(locale, (rel = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })))
+  const d = at - now
+  const u = units.find(([, ms]) => Math.abs(d) >= ms)
+  return u ? rel.format(Math.round(d / u[1]), u[0]) : locale.startsWith("zh") ? "刚刚" : "now"
+}
 /** Starred first; within each, the listing's own order (newest first). */
 export const ranked = (rows: readonly StoryRow[]): StoryRow[] =>
   [...rows].sort((a, b) => Number(b.starred) - Number(a.starred))
@@ -38,15 +55,15 @@ export const preview = (row: StoryRow): string | null => {
 }
 /** Whether a row stays under the search: no search, its title holds the query, or the server's hits name it. */
 export const matches = (row: StoryRow, q: string, hits: ReadonlyMap<number, Hit>): boolean => {
-  const t = q.trim().toLowerCase()
-  return !t || (row.title ?? "").toLowerCase().includes(t) || hits.has(row.id)
+  const t = fold(q.trim())
+  return !t || fold(row.title ?? "").includes(t) || hits.has(row.id)
 }
-/** `text` cut at every `q` (case folded), each cut marked as a hit, for a `<mark>`; no query, the text whole. */
+/** `text` cut at every `q` (ASCII folded), each cut marked as a hit, for a `<mark>`; no query, the text whole. */
 export const pieces = (text: string, q: string): { text: string; hit: boolean }[] => {
-  const t = q.trim().toLowerCase()
+  const t = fold(q.trim())
   if (!t) return [{ text, hit: false }]
   const out: { text: string; hit: boolean }[] = []
-  const lower = text.toLowerCase()
+  const lower = fold(text)
   let at = 0
   for (let i = lower.indexOf(t); i >= 0; i = lower.indexOf(t, at)) {
     if (i > at) out.push({ text: text.slice(at, i), hit: false })

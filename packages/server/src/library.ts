@@ -260,17 +260,15 @@ export const library = ({
       /** The batch cleanup: the card's own among `ids` go, in one transaction, their sessions with them; another
        *  card's or a stranger's id is left alone. */
       delMany: (ids: readonly Id[]) => {
-        const own = new Set(data.stories.list(card.id).map((s) => s.id))
-        const going = ids.filter((id) => own.has(id))
-        data.stories.delMany(going)
-        for (const id of going) sessions.delete(id)
+        for (const id of data.stories.delMany(card.id, ids)) sessions.delete(id)
       },
       /** This card's stories that hold `q` on their head's line (data.ts `Hit`). The title is the client's to match. */
       search: (q: string) => data.stories.search(card.id, q),
-      /** One story whole for export.ts: its row, the card it is of, and its log tree. */
-      export: (id: Id): Exported => {
-        const story = data.stories.list(card.id).find((s) => s.id === id)
-        if (!story) throw new Error(`no story ${id}`)
+      /** One story whole for export.ts: its row, the card it is of, and its log tree; none when it is not this
+       *  card's. */
+      export: (id: Id): Exported | undefined => {
+        const story = data.stories.list(card.id, id)[0]
+        if (!story) return undefined
         return { card: { id: card.id, title: card.title ?? card.id }, story, snapshot: data.store<Turn>(id).read()! }
       },
     },

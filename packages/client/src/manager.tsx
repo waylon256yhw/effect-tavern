@@ -8,21 +8,10 @@ import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Clue, Edit, Export, Snippets, Star, StarFill, Trash } from "./icons.tsx"
 import { Sheet } from "./readings.tsx"
-import { empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
+import { ago, empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
 import { stories, type StoryRow, working } from "./store.ts"
 import { newStory, searchStories, starStory } from "./wire.ts"
 
-const units: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["day", 864e5],
-  ["hour", 36e5],
-  ["minute", 6e4],
-]
-const rel = new Intl.RelativeTimeFormat("zh", { numeric: "auto" })
-const ago = (at: number): string => {
-  const d = at - Date.now()
-  const u = units.find(([, ms]) => Math.abs(d) >= ms)
-  return u ? rel.format(Math.round(d / u[1]), u[0]) : "刚刚"
-}
 /** `text` with every `q` in a `<mark>`. */
 const Mark = (props: { text: string; q: string }) => (
   <For each={pieces(props.text, props.q)} keyed={false}>
@@ -276,8 +265,8 @@ export const Manager = (props: {
                     </Show>
                     <div class="meta">
                       {s().turns
-                        ? `${s().turns} 轮 · 最后更新 ${ago(s().updated)}`
-                        : `0 轮（空档） · ${ago(s().updated)}`}
+                        ? `${s().turns} 轮 · 最后更新 ${ago(s().updated, "zh")}`
+                        : `0 轮（空档） · ${ago(s().updated, "zh")}`}
                     </div>
                   </div>
                 </div>
@@ -289,7 +278,9 @@ export const Manager = (props: {
               <span>
                 {q().trim()
                   ? `没有匹配「${q().trim()}」的故事（已检索标题、玩家台词与正文）`
-                  : "还没有收藏的故事：点卡片上的星标即可收藏，收藏的故事在左栏置顶。"}
+                  : filter() === "starred"
+                    ? "还没有收藏的故事：点卡片上的星标即可收藏，收藏的故事在左栏置顶。"
+                    : "这张卡还没有故事。"}
               </span>
               <Show when={q().trim()}>
                 <button type="button" class="btn sm" onClick={() => ((search.value = ""), ask(""))}>
