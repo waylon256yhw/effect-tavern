@@ -37,16 +37,27 @@
          * Rename via `<dialog class="confirm">` + `.field` input (pencil button or
            double-click row).
          * Final row: `"全部 N 个故事 ›"` opens the #75 Stories manager.
-         * DECIDED (#75 Step 2): the manager is a compact dialog the size of the persona
-           picker (25rem; phone: a second sheet), not a page. Its content is one list with
-           four facts per row (star, name, turns, time) and the batch actions; neither the
-           content nor the volume carries a page of the settings kind. Head (全部故事 · the
-           card · count · 新建 · ×), rows (checkbox, star, name + `N 轮 · time`, pencil,
-           export), a footer that is always there: the two quick picks of the issue (空档 =
-           `turns === 0`, 未命名未收藏 = `title is null and starred = 0`) and 删除选中, which
-           confirms through `dialog.confirm`. Export is the same dialog with the two formats
-           (阅读稿 .md of the current line, 完整树 .json). No search, no previews, no mode
-           switch: starred rows sit on top and the rest run by recency.
+         * DECIDED (#75 Step 2): the manager is a compact dialog on the picker's mechanism
+           (`dialog.picker.stories`, `.picker-shell`; phone: a second sheet), one step wider
+           than the picker (32rem against 25rem) so each story card breathes, and not a page:
+           neither the content nor the volume carries a page of the settings kind.
+           Head: 全部故事 · the card · count · 新建 · ×. Under it one row: the full-text
+           search (title, and the turns' player lines and prose: most stories are unnamed
+           `New story`, so a title search finds nothing) and the 全部 / ★ 收藏 toggle.
+           Each story is a three-line card: 1) checkbox, star, title (`title ?? "New
+           story"`, the 当前 tag) and three small icons, 改名 · 导出 · 删除; 2) a preview,
+           the head of the last player input (0 turns: 尚未开始对话) so the player recalls
+           where the save stands, replaced by the hit when the search matches a turn
+           (`第 N 轮 · 玩家台词 / 正文` badge, `<mark>` on the word); 3) `N 轮 · 最后更新
+           xx前` (`0 轮（空档） · xx前`). Starred cards sit on top, the rest by recency.
+           The footer is always there: the issue's two quick picks (空档 = `turns === 0`,
+           未命名未收藏 = `title is null and starred = 0`), 清空, and 删除选中 N, which
+           confirms through `dialog.confirm`; export is the same dialog with the two
+           formats (阅读稿 .md of the current line, 完整树 .json). A click on the card opens
+           the story and closes the manager; rename is the pencil only (a double-click's
+           first click would already have switched and closed). The delete confirm works
+           on its own `pendingDeleteIds` (one story from a trash, or the checked set), so
+           取消 keeps the checks.
        - Zone 3 (Persona `section.persona` + the picker `dialog.picker`):
          * Sidebar row: unified `.chosen` row with `<span class="chip">卡片默认</span>`
            (or the picked persona's name) + right chevron `›`. Never disabled when
@@ -1049,11 +1060,19 @@
     }
 
     /* ───────── 4b. Stories manager (dialog.picker.stories; the phone's .stories-sheet; the overview's .stories-static) ─────────
-       #75 Step 2, DECIDED a compact dialog, not a page: the picker's box and shell (25rem, 32rem tall at most, only the
-       list scrolls), one row per story (checkbox, star, name + `N 轮 · time`, pencil, export), and a footer always
-       there with the two quick picks and 删除选中. */
+       #75 Step 2, DECIDED a compact dialog on the picker's mechanism, one step wider (32rem), not a page. Head; one
+       row with the full-text search and the 全部 / ★ 收藏 toggle; three-line story cards (checkbox, star, title, three
+       icons / preview or search hit / turns and time); a footer always there with the quick picks and 删除选中. */
+    dialog.picker.stories {
+      width: min(32rem, calc(100vw - 2 * var(--space-4)));
+      max-height: min(40rem, calc(100dvh - 2 * var(--space-5)));
+    }
+    dialog.picker.stories .picker-shell,
+    .stories-static .picker-shell {
+      max-height: min(40rem, calc(100dvh - 2 * var(--space-5)));
+    }
     .stories-static {
-      width: 25rem;
+      width: 32rem;
       max-width: calc(100vw - 2 * var(--space-5));
       border-radius: var(--radius-dialog);
       background: var(--surface-3);
@@ -1061,41 +1080,90 @@
       box-shadow: var(--shadow-pop);
       display: flex;
     }
+    .stories-search {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .filter-pills {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .filter-pill {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      color: var(--ink-2);
+      background: var(--alpha-1);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .filter-pill:hover {
+      background: var(--alpha-2);
+      color: var(--ink);
+    }
+    .filter-pill[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+    .filter-pill svg {
+      width: 12px;
+      height: 12px;
+    }
+    .filter-pill .cnt {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      opacity: 0.75;
+    }
     .stories-list {
       flex: 1;
       min-height: 0;
       margin: 0 calc(-1 * var(--space-2));
-      padding: 0 var(--space-2);
+      padding: 2px var(--space-2);
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 6px;
     }
-    .story-row {
+    .story-card {
       flex: none;
       display: grid;
-      grid-template-columns: auto auto minmax(0, 1fr) auto;
-      column-gap: 6px;
-      align-items: center;
-      padding: 3px 4px 3px var(--space-2);
-      border-radius: var(--radius);
+      grid-template-columns: auto auto minmax(0, 1fr);
+      column-gap: 8px;
+      align-items: start;
+      padding: 8px 8px 8px var(--space-2);
+      border-radius: var(--radius-card);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      cursor: pointer;
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
     }
-    .story-row:hover {
+    .story-card:hover {
       background: var(--ghost-hover);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
     }
-    .story-row[aria-current="true"] {
+    .story-card[aria-current="true"] {
       background: var(--alpha-1);
+      box-shadow: inset 0 0 0 1.5px var(--line-strong);
     }
-    .story-row[data-selected="true"] {
+    .story-card[data-selected="true"] {
       background: var(--warn-soft);
+      box-shadow: inset 0 0 0 1.5px var(--warn);
     }
-    .story-row .box {
+    .story-card .box {
       width: 15px;
       height: 15px;
-      margin: 0;
+      margin: 5px 0 0;
       accent-color: var(--ink);
       cursor: pointer;
     }
-    .story-row .star {
+    .story-card .star {
       width: 24px;
       height: 24px;
       border-radius: var(--radius-sm);
@@ -1103,65 +1171,105 @@
       place-items: center;
       color: var(--ink-3);
     }
-    .story-row .star:hover {
+    .story-card .star:hover {
       background: var(--alpha-2);
       color: var(--ink);
     }
-    .story-row .star[aria-pressed="true"] {
+    .story-card .star[aria-pressed="true"] {
       color: var(--warn);
     }
-    .story-row .star svg {
+    .story-card .star svg {
       width: 14px;
       height: 14px;
     }
-    .story-row .main {
+    .story-card .body {
       min-width: 0;
-      display: grid;
-      row-gap: 1px;
-      padding: 2px 0;
-      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
-    .story-row .name {
+    .story-card .top {
       min-width: 0;
+      min-height: 24px;
       display: flex;
       align-items: center;
       gap: 6px;
-      font-weight: 500;
     }
-    .story-row .name > span:first-child {
+    .story-card .title {
       min-width: 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      font-weight: 500;
     }
-    .story-row .name.unnamed > span:first-child {
+    .story-card .title.unnamed {
       color: var(--ink-2);
       font-weight: 400;
     }
-    .story-row[aria-current="true"] .name > span:first-child {
+    .story-card[aria-current="true"] .title {
       font-weight: 600;
       color: var(--primary);
     }
-    .story-row .meta {
+    .story-card .acts {
+      margin-left: auto;
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .story-card .acts .icon.sm {
+      width: 24px;
+      height: 24px;
+      color: var(--ink-3);
+    }
+    .story-card .acts .icon.sm:hover {
+      color: var(--ink);
+      background: var(--alpha-2);
+    }
+    .story-card .acts .icon.sm.danger-hover:hover {
+      color: var(--danger);
+      background: light-dark(rgb(220 38 38 / 0.1), rgb(248 113 113 / 0.14));
+    }
+    /* line 2: the head of the last player input, or the search hit */
+    .story-card .preview {
+      font-size: var(--text-footnote);
+      line-height: 1.45;
+      color: var(--ink-2);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .story-card .preview.empty {
+      color: var(--ink-3);
+    }
+    .story-card .hit-badge {
+      display: inline-flex;
+      align-items: center;
+      height: 18px;
+      padding: 0 5px;
+      margin-right: 5px;
+      border-radius: var(--radius-sm);
+      background: var(--warn-soft);
+      color: var(--warn);
+      font-size: var(--text-caption);
+      font-weight: 600;
+      vertical-align: baseline;
+    }
+    .story-card mark {
+      background: var(--warn-soft);
+      color: var(--ink);
+      font-weight: 600;
+      padding: 0 2px;
+      border-radius: 3px;
+    }
+    /* line 3: turns and time */
+    .story-card .meta {
       font-size: var(--text-caption);
       color: var(--ink-3);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-    .story-row .acts {
-      display: inline-flex;
-      align-items: center;
-    }
-    .story-row .acts .icon.sm {
-      width: 24px;
-      height: 24px;
-      color: var(--ink-3);
-    }
-    .story-row .acts .icon.sm:hover {
-      color: var(--ink);
-      background: var(--alpha-2);
     }
     .stories-foot {
       flex: none;
@@ -1598,9 +1706,9 @@
   </dialog>
 
   <!-- Delete the checked stories (#75 Step 2: the manager's 删除选中 confirms here) -->
-  <dialog id="delete-dialog" class="confirm" closedby="any" onclose="onDeleteDialogClose()">
-    <p id="delete-text">删除选中的故事？</p>
-    <p class="sub-hint">其中的所有回合都将永久移除。删到最后一个时会留下一条新故事，和 library.newest() 一样。</p>
+  <dialog id="delete-dialog" class="confirm" closedby="any">
+    <p id="delete-text">删除故事？</p>
+    <p class="sub-hint">其中的所有回合都将永久移除；取消不会丢掉已勾选的项。删到最后一个时会留下一条新故事，和 library.newest() 一样。</p>
     <div class="row">
       <button type="button" class="chip state" onclick="document.getElementById('delete-dialog').close()">
         取消
@@ -1631,7 +1739,7 @@
   <!-- Persona picker (desktop: a centred modal dialog; its content is rendered by renderAll) -->
   <dialog id="persona-dialog" class="picker" closedby="any" onclose="onPickerClose()"></dialog>
 
-  <!-- Stories manager (#75 Step 2: the picker's dialog box, 25rem; on the phone a second sheet) -->
+  <!-- Stories manager (#75 Step 2: the picker's dialog mechanism, one step wider at 32rem; on the phone a second sheet) -->
   <dialog id="stories-dialog" class="picker stories" closedby="any" onclose="onStoriesModalClose()"></dialog>
 
   <!-- Prototype Control Dock -->
@@ -1794,6 +1902,12 @@
         agoEn: "16 minutes ago",
         agoZh: "16 分钟前",
         starred: true,
+        last: "我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的，不知裴兄可认得剑柄上的鹤纹？」",
+        history: [
+          { turn: 3, kind: "input", text: "我从行囊里取出半壶关外烧刀子推过去：「山雨寒重，裴兄不妨先饮一口暖身。」" },
+          { turn: 6, kind: "reply", text: "裴青舟目光落在牛皮鞘旧短剑末端那道浅刻的鹤纹上，指节微微发白：「三年前他在太湖渡口与唐门高手死战，此剑怎会流落到朔州？」" },
+          { turn: 14, kind: "input", text: "我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的，不知裴兄可认得剑柄上的鹤纹？」" },
+        ],
       },
       {
         id: 102,
@@ -1802,6 +1916,8 @@
         agoEn: "just now",
         agoZh: "刚刚",
         starred: false,
+        last: "",
+        history: [],
       },
       {
         id: 103,
@@ -1810,6 +1926,12 @@
         agoEn: "3 hours ago",
         agoZh: "3 小时前",
         starred: true,
+        last: "「当年苏州库银失窃一案卷宗早已被人抽换，李鹤替师门背下黑锅，裴兄当真毫不知情？」",
+        history: [
+          { turn: 8, kind: "input", text: "我取出当年从李鹤肩胛下取出的那枚带毒柳叶镖，轻轻搁在青石案上。" },
+          { turn: 9, kind: "reply", text: "那枚乌青色的柳叶镖在雨光下泛着微腥的冷芒。裴青舟看清镖尾暗记，脸色骤变：「这是越州知府幕僚的独门暗器，原来当年截杀他的人并非山匪！」" },
+          { turn: 28, kind: "input", text: "「当年苏州库银失窃一案卷宗早已被人抽换，李鹤替师门背下黑锅，裴兄当真毫不知情？」" },
+        ],
       },
       {
         id: 104,
@@ -1818,6 +1940,12 @@
         agoEn: "yesterday",
         agoZh: "昨天",
         starred: false,
+        last: "我按住药箱退后半步：「在下来越州只为送还故人遗物，不懂贵派剑法，还请裴大侠收剑。」",
+        history: [
+          { turn: 2, kind: "input", text: "我在朔州风雪夜曾替他包扎过左肩的柳叶镖伤，今日是按三年之约南下。" },
+          { turn: 4, kind: "reply", text: "荒亭外竹叶被疾风卷起，裴青舟横剑拦在孤坟石碑前，冷声道：「苦竹岭不迎外客，把剑留下，人可以走。」" },
+          { turn: 6, kind: "input", text: "我按住药箱退后半步：「在下来越州只为送还故人遗物，不懂贵派剑法，还请裴大侠收剑。」" },
+        ],
       },
       {
         id: 105,
@@ -1826,6 +1954,12 @@
         agoEn: "3 days ago",
         agoZh: "3 天前",
         starred: true,
+        last: "[场外指导] 让两个六扇门暗探在破庙外露出马脚，裴青舟与玩家暂时联手御敌。",
+        history: [
+          { turn: 5, kind: "input", text: "趁夜色冒雨掘开苦竹岭后山那座孤坟，看看棺木里装的究竟是不是李鹤遗骸。" },
+          { turn: 7, kind: "reply", text: "泥土翻开三尺，底下并无棺木，只有一个油布包着的木匣，里面躺着一件被柳叶镖射穿的染血旧青衫。" },
+          { turn: 11, kind: "input", text: "[场外指导] 让两个六扇门暗探在破庙外露出马脚，裴青舟与玩家暂时联手御敌。" },
+        ],
       },
       {
         id: 106,
@@ -1834,6 +1968,11 @@
         agoEn: "5 days ago",
         agoZh: "5 天前",
         starred: false,
+        last: "「掌柜的，往苦竹岭去的山道被雨水冲塌了，附近可还有落脚的破庙？」",
+        history: [
+          { turn: 1, kind: "input", text: "入山前先在山脚茶寮打听苦竹岭守坟人的来历。" },
+          { turn: 3, kind: "input", text: "「掌柜的，往苦竹岭去的山道被雨水冲塌了，附近可还有落脚的破庙？」" },
+        ],
       },
       {
         id: 107,
@@ -1842,6 +1981,8 @@
         agoEn: "1 week ago",
         agoZh: "1 周前",
         starred: false,
+        last: "",
+        history: [],
       },
       {
         id: 108,
@@ -1850,6 +1991,10 @@
         agoEn: "2 weeks ago",
         agoZh: "2 周前",
         starred: false,
+        last: "我将半枚铜钱拍在石桌上，一言不发地盯着裴青舟。",
+        history: [
+          { turn: 2, kind: "input", text: "我将半枚铜钱拍在石桌上，一言不发地盯着裴青舟。" },
+        ],
       },
     ];
     let currentStoryId = 101;
@@ -1891,9 +2036,12 @@
     let stageMode = "overview"; // "overview" | "desktop" | "mobile" | "stories" | "picker"
     let personaSearch = "";     // the picker's search, name and text
     let pickerOpen = false;     // the phone's picker sheet
+    let storiesSearch = "";       // the manager's search: title, and the turns' player lines and prose
+    let storiesFilter = "all";    // "all" | "starred"
     let storiesModalOpen = false; // the phone's stories sheet
     let selectedStoryIds = new Set();
     let exportingStoryId = null; // the story the export dialog is about
+    let pendingDeleteIds = new Set(); // what the delete confirm is about: one story from a trash, or the checked set
     let navStyle = "icons";     // "icons" (decided: 纯图标同行) | "inline" (带字同行) | "stack" (竖排三行)
     let iconSet = "a";          // "a" (treeStructure + listMag) | "b" (path + magGlass)
     let storySlice = 4;         // 4 (decided) | 5 | 2
@@ -2155,28 +2303,95 @@
       `;
     }
 
-    /** The manager's rows: starred first, then the rest by recency. Each row: checkbox (the batch actions), star,
-     *  name + `N 轮 · time` (the click switches the story and closes; double-click renames), pencil, export. */
-    function renderStoriesRowsHTML(context) {
-      const sorted = [...stories].sort((a, b) => Number(b.starred) - Number(a.starred));
-      return sorted
-        .map((s) => {
+    /** Highlights occurrences of query `q` inside `text` with <mark>. */
+    function highlightMatch(text, q) {
+      if (!q) return escapeHtml(text);
+      const lower = text.toLowerCase();
+      const qLower = q.toLowerCase();
+      const idx = lower.indexOf(qLower);
+      if (idx === -1) return escapeHtml(text);
+      const before = text.slice(0, idx);
+      const match = text.slice(idx, idx + q.length);
+      const after = text.slice(idx + q.length);
+      return `${escapeHtml(before)}<mark>${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+    }
+
+    /** Full-text match for a story: checks title, then historical turns (input + reply), then last input. */
+    function matchStory(s, q) {
+      if (!q) return { matched: true, hit: null };
+      const qLower = q.toLowerCase();
+      const titleMatch = s.title && s.title.toLowerCase().includes(qLower);
+      const turnHits = (s.history ?? []).filter((h) => h.text.toLowerCase().includes(qLower));
+      if (turnHits.length > 0) {
+        return { matched: true, titleMatch, hit: turnHits[0], hitCount: turnHits.length };
+      }
+      if (s.last && s.last.toLowerCase().includes(qLower)) {
+        return { matched: true, titleMatch, hit: { turn: s.turns, kind: "input", text: s.last }, hitCount: 1 };
+      }
+      if (titleMatch) {
+        return { matched: true, titleMatch: true, hit: null, hitCount: 0 };
+      }
+      return { matched: false, hit: null };
+    }
+
+    /** The manager's cards: starred first, then the rest by recency; the 收藏 filter and the search cut the list.
+     *  Each card: checkbox and star; title, the 当前 tag and 改名 · 导出 · 删除; the preview (the last player input,
+     *  or the search hit with its turn); turns and time. A click on the card opens the story and closes. */
+    function renderStoriesCardsHTML(context) {
+      const q = storiesSearch.trim();
+      const shown = [...stories]
+        .filter((s) => (storiesFilter === "starred" ? s.starred : true))
+        .sort((a, b) => Number(b.starred) - Number(a.starred))
+        .map((s) => ({ story: s, ...matchStory(s, q) }))
+        .filter((x) => x.matched);
+
+      if (shown.length === 0) {
+        const msg = q
+          ? `没有匹配「${escapeHtml(q)}」的故事（已检索标题、玩家台词与正文）`
+          : storiesFilter === "starred"
+            ? "还没有收藏的故事：点卡片上的星标即可收藏，收藏的故事在左栏置顶。"
+            : "暂无故事";
+        return `
+          <div class="picker-empty">
+            <span>${msg}</span>
+            ${q ? `<button type="button" class="btn sm" onclick="setStoriesSearchQuery('')">清空搜索</button>` : ""}
+          </div>
+        `;
+      }
+
+      return shown
+        .map(({ story: s, hit, hitCount }) => {
           const isCurrent = s.id === currentStoryId;
           const isSelected = selectedStoryIds.has(s.id);
           const displayTitle = s.title ?? "New story";
-          const meta = s.turns === 0 ? s.agoZh : `${s.turns} 轮 · ${s.agoZh}`;
+
+          let previewHTML;
+          if (hit && q) {
+            const kind = hit.kind === "input" ? "玩家台词" : "正文";
+            const more = hitCount > 1 ? ` · 共 ${hitCount} 处` : "";
+            previewHTML = `<div class="preview"><span class="hit-badge">第 ${hit.turn} 轮 · ${kind}${more}</span>${highlightMatch(hit.text, q)}</div>`;
+          } else if (s.turns === 0 || !s.last) {
+            previewHTML = `<div class="preview empty">尚未开始对话</div>`;
+          } else {
+            previewHTML = `<div class="preview">${highlightMatch(s.last, q)}</div>`;
+          }
+          const meta = s.turns === 0 ? `0 轮（空档） · ${s.agoZh}` : `${s.turns} 轮 · 最后更新 ${s.agoZh}`;
+
           return `
             <div
-              class="story-row"
+              class="story-card"
               role="listitem"
               aria-current="${isCurrent ? "true" : "false"}"
               data-selected="${isSelected ? "true" : "false"}"
+              title="打开这个故事"
+              onclick="pickStoryFromModal(${s.id}, '${context}')"
             >
               <input
                 type="checkbox"
                 class="box"
                 aria-label="勾选「${escapeAttr(displayTitle)}」"
                 ${isSelected ? "checked" : ""}
+                onclick="event.stopPropagation()"
                 onchange="toggleSelectStory(${s.id})"
               />
               <button
@@ -2185,41 +2400,41 @@
                 aria-label="${s.starred ? "取消收藏" : "收藏"}"
                 aria-pressed="${s.starred ? "true" : "false"}"
                 title="${s.starred ? "已收藏：左栏置顶（点击取消）" : "收藏：左栏置顶"}"
-                onclick="toggleStoryStar(${s.id})"
+                onclick="event.stopPropagation(); toggleStoryStar(${s.id})"
               >
                 ${s.starred ? ICONS.starFill : ICONS.star}
               </button>
-              <button
-                type="button"
-                class="main"
-                title="${s.turns === 0 ? "空档：只有开场白" : "打开这个故事；双击改名"}"
-                onclick="pickStoryFromModal(${s.id}, '${context}')"
-                ondblclick="openRenameDialog(${s.id})"
-              >
-                <span class="name ${s.title === null ? "unnamed" : ""}">
-                  <span>${escapeHtml(displayTitle)}</span>
+              <div class="body">
+                <div class="top">
+                  <span class="title ${s.title === null ? "unnamed" : ""}">${highlightMatch(displayTitle, q)}</span>
                   ${isCurrent ? `<span class="tag ok">当前</span>` : ""}
-                </span>
-                <span class="meta">${meta}</span>
-              </button>
-              <span class="acts">
-                <button type="button" class="icon sm" aria-label="重命名" title="重命名" onclick="openRenameDialog(${s.id})">
-                  ${ICONS.pencil}
-                </button>
-                <button type="button" class="icon sm" aria-label="导出" title="导出：阅读稿 .md 或完整树 .json" onclick="openExportDialog(${s.id})">
-                  ${ICONS.download}
-                </button>
-              </span>
+                  <span class="acts" onclick="event.stopPropagation()">
+                    <button type="button" class="icon sm" aria-label="重命名" title="重命名" onclick="openRenameDialog(${s.id})">
+                      ${ICONS.pencil}
+                    </button>
+                    <button type="button" class="icon sm" aria-label="导出" title="导出：阅读稿 .md 或完整树 .json" onclick="openExportDialog(${s.id})">
+                      ${ICONS.download}
+                    </button>
+                    <button type="button" class="icon sm danger-hover" aria-label="删除" title="删除这个故事" onclick="openDeleteDialog(${s.id})">
+                      ${ICONS.trash}
+                    </button>
+                  </span>
+                </div>
+                ${previewHTML}
+                <div class="meta">${meta}</div>
+              </div>
             </div>
           `;
         })
         .join("");
     }
 
-    /** The manager: the picker's shell (head, list, footer). Desktop: inside dialog#stories-dialog; phone: a sheet
-     *  over the session sheet; overview: drawn open in .stories-static. */
+    /** The manager: the picker's shell, one step wider (head, search + filter, cards, footer). Desktop: inside
+     *  dialog#stories-dialog; phone: a sheet over the session sheet; overview: drawn open in .stories-static. The
+     *  search re-renders the cards in place (filterStoriesModal), so the field keeps its focus. */
     function renderStoriesModalHTML(context) {
       const c = activeCard();
+      const starredCount = stories.filter((s) => s.starred).length;
       const emptyCount = stories.filter((s) => s.turns === 0).length;
       const unnamedCount = stories.filter((s) => s.title === null && !s.starred).length;
       const picked = selectedStoryIds.size;
@@ -2238,8 +2453,42 @@
               ${ICONS.close}
             </button>
           </header>
+          <div class="stories-search">
+            <div class="input-box">
+              ${ICONS.magGlass}
+              <input
+                type="search"
+                placeholder="搜索标题、玩家台词或正文（试试「柳叶镖」）"
+                value="${escapeAttr(storiesSearch)}"
+                oninput="filterStoriesModal(this, '${context}')"
+                aria-label="搜索故事"
+                ${context === "static" ? "" : "autofocus"}
+              />
+            </div>
+            <div class="filter-pills" role="group" aria-label="筛选故事">
+              <button
+                type="button"
+                class="filter-pill"
+                aria-pressed="${storiesFilter === "all" ? "true" : "false"}"
+                onclick="setStoriesFilter('all')"
+              >
+                <span>全部</span>
+                <span class="cnt">${stories.length}</span>
+              </button>
+              <button
+                type="button"
+                class="filter-pill"
+                aria-pressed="${storiesFilter === "starred" ? "true" : "false"}"
+                onclick="setStoriesFilter('starred')"
+              >
+                ${ICONS.starFill}
+                <span>收藏</span>
+                <span class="cnt">${starredCount}</span>
+              </button>
+            </div>
+          </div>
           <div class="stories-list scroller" role="list">
-            ${renderStoriesRowsHTML(context)}
+            ${renderStoriesCardsHTML(context)}
           </div>
           <footer class="stories-foot">
             <span class="quick">
@@ -2419,7 +2668,7 @@
             <div class="state-col">
               <div class="state-label">
                 <span>2. 故事管理弹窗 (#75 第二步 · 紧凑 dialog)</span>
-                <span class="spec-pill">25rem · 与选人设同尺寸 · 收藏置顶 · 勾选 + 快选废档 · 改名 / 导出</span>
+                <span class="spec-pill">32rem · 全文搜索 · 全部 / ★ 收藏 · 三层卡片 · 快选废档 + 删除选中</span>
               </div>
               <div class="stories-static">
                 ${renderStoriesModalHTML("static")}
@@ -2647,6 +2896,8 @@
         agoEn: "just now",
         agoZh: "刚刚",
         starred: false,
+        last: "",
+        history: [],
       });
       currentStoryId = nextId;
       showToast("已新建故事 (默认显示 New story，0轮仅显示时间)");
@@ -2679,6 +2930,7 @@
     // ───────── Stories manager handlers (#75 Step 2) ─────────
     function openStoriesModal(context) {
       selectedStoryIds.clear();
+      storiesSearch = "";
       if (context === "sheet") {
         storiesModalOpen = true;
         renderAll();
@@ -2758,43 +3010,58 @@
       renderAll();
     }
 
-    /** The left card's trash: the current story alone, through the same confirm. */
+    /** A trash (the left card's, or a card's): that one story, through the same confirm; the checks stay. */
     function openDeleteDialog(id = currentStoryId) {
       const s = stories.find((x) => x.id === id);
       if (!s) return;
-      selectedStoryIds = new Set([id]);
+      pendingDeleteIds = new Set([id]);
       document.getElementById("delete-text").textContent = `删除「${s.title ?? "New story"}」？`;
       document.getElementById("delete-dialog").showModal();
     }
 
+    /** 删除选中: the checked set, through the confirm; 取消 leaves the checks as they were. */
     function requestDeleteSelected() {
       if (selectedStoryIds.size === 0) return;
-      document.getElementById("delete-text").textContent = `删除选中的 ${selectedStoryIds.size} 个故事？`;
+      pendingDeleteIds = new Set(selectedStoryIds);
+      document.getElementById("delete-text").textContent = `删除选中的 ${pendingDeleteIds.size} 个故事？`;
       document.getElementById("delete-dialog").showModal();
     }
 
-    function onDeleteDialogClose() {
-      // a cancelled delete leaves nothing checked behind (the left card's trash checks its one story)
-      selectedStoryIds.clear();
-      renderAll();
-    }
-
     function commitDeleteSelected() {
-      const count = selectedStoryIds.size;
-      const remaining = stories.filter((s) => !selectedStoryIds.has(s.id));
+      const ids = pendingDeleteIds;
+      pendingDeleteIds = new Set();
+      if (ids.size === 0) return;
+      const remaining = stories.filter((s) => !ids.has(s.id));
       if (remaining.length === 0) {
         // Always keep at least one fresh story, matching library.newest()
         const freshId = Math.max(0, ...stories.map((s) => s.id)) + 1;
-        stories = [{ id: freshId, title: null, turns: 0, agoEn: "just now", agoZh: "刚刚", starred: false }];
+        stories = [{ id: freshId, title: null, turns: 0, agoEn: "just now", agoZh: "刚刚", starred: false, last: "", history: [] }];
       } else {
         stories = remaining;
       }
       if (!stories.some((s) => s.id === currentStoryId)) {
         currentStoryId = stories[0].id;
       }
-      selectedStoryIds.clear();
-      document.getElementById("delete-dialog").close(); // onclose renders
-      showToast(`已删除 ${count} 个故事`);
+      for (const id of ids) selectedStoryIds.delete(id); // only what was deleted leaves the checked set
+      document.getElementById("delete-dialog").close();
+      showToast(ids.size === 1 ? "已删除故事" : `已删除 ${ids.size} 个故事`);
+      renderAll();
+    }
+
+    function filterStoriesModal(input, context) {
+      storiesSearch = input.value;
+      const list = input.closest(".picker-shell")?.querySelector(".stories-list");
+      if (list) list.innerHTML = renderStoriesCardsHTML(context);
+    }
+
+    function setStoriesSearchQuery(q) {
+      storiesSearch = q;
+      renderAll();
+    }
+
+    function setStoriesFilter(f) {
+      storiesFilter = f;
+      renderAll();
     }
 
     /** The Persona row: on the phone's sheet the picker is a second sheet; elsewhere the modal dialog. */
