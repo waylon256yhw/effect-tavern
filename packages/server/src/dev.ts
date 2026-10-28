@@ -1,4 +1,4 @@
-// The developer's session: one card (CARD, default wuxia) on the local Anthropic connection, or on a scripted model
+// The developer's session: one card (CARD, default ri) on the local Anthropic connection, or on a scripted model
 // (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The library (data.ts)
 // is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a runtime/server
 // edit, or a restart, keeps the story; a second process on the same DATA gets a library of its own (data.ts `lock`).
@@ -24,7 +24,7 @@ import { library } from "./library.ts"
 import { refresh } from "./names.ts"
 import { handle } from "./serve.ts"
 
-const name = process.env["CARD"] ?? "wuxia"
+const name = process.env["CARD"] ?? "ri"
 // a compiled binary (bun build --compile) has no checkout around it: its library lives where it is run
 const dir =
   process.env["DATA"] ??
