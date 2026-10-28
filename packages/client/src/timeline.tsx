@@ -348,13 +348,7 @@ export const Timeline = () => {
                     </h2>
                     <span class="acts">
                       <Show when={all().head !== target()} fallback={<span class="at">at #{target()}</span>}>
-                        <button
-                          type="button"
-                          class="checkout"
-                          data-hint={`Move head to #${target()}`}
-                          disabled={busy()}
-                          onClick={() => checkout(n().id)}
-                        >
+                        <button type="button" class="checkout" disabled={busy()} onClick={() => checkout(n().id)}>
                           <Checkout aria-hidden="true" />
                           Checkout #{target()}
                         </button>
@@ -363,26 +357,18 @@ export const Timeline = () => {
                         type="button"
                         class="icon"
                         aria-label="Open in reader"
-                        data-hint="Open in reader"
                         disabled={busy() && !onLine().has(n().id)}
                         onClick={() => openInReader(n().id)}
                       >
                         <Notes />
                       </button>
-                      <button
-                        type="button"
-                        class="icon"
-                        aria-label="Inspect"
-                        data-hint="Inspect this turn"
-                        onClick={() => inspect(n().id)}
-                      >
+                      <button type="button" class="icon" aria-label="Inspect" onClick={() => inspect(n().id)}>
                         <Clue />
                       </button>
                       <button
                         type="button"
                         class="icon danger"
                         aria-label="Drop subtree"
-                        data-hint={`Drop #${n().id} and everything under it`}
                         disabled={busy()}
                         onClick={() => confirm.showModal()}
                       >

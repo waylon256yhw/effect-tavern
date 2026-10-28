@@ -82,7 +82,6 @@ export const Session = (props: { at: string }) => {
             type="button"
             class="icon"
             aria-label="New story"
-            data-hint="New story"
             disabled={busy()}
             onClick={(e) => (closeUp(e.currentTarget), void newStory())}
           >
@@ -92,7 +91,6 @@ export const Session = (props: { at: string }) => {
             type="button"
             class="icon"
             aria-label="Rename story"
-            data-hint="Rename story"
             disabled={busy() || renaming()}
             onClick={() => setRenaming(true)}
           >
@@ -102,7 +100,6 @@ export const Session = (props: { at: string }) => {
             type="button"
             class="icon"
             aria-label="Delete story"
-            data-hint="Delete story"
             disabled={busy()}
             onClick={() => confirm.showModal()}
           >
@@ -248,7 +245,6 @@ export const Session = (props: { at: string }) => {
           type="button"
           class="icon"
           aria-label="Timeline"
-          data-hint="Timeline"
           onClick={(e) => (closeUp(e.currentTarget), openTimeline())}
         >
           <Tree />
@@ -257,7 +253,6 @@ export const Session = (props: { at: string }) => {
           type="button"
           class="icon"
           aria-label="Inspector"
-          data-hint="Inspector"
           disabled={line().length === 0}
           onClick={(e) => (closeUp(e.currentTarget), openInspector())}
         >
@@ -267,7 +262,6 @@ export const Session = (props: { at: string }) => {
           type="button"
           class="icon"
           aria-label="Settings"
-          data-hint="Settings"
           onClick={(e) => (closeUp(e.currentTarget), openSettings())}
         >
           <Settings />

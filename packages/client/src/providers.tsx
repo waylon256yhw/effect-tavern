@@ -36,6 +36,7 @@ import {
   EyeOff,
   Fold,
   Key,
+  Lightning,
   Minus,
   Next,
   Settings as Gear,
@@ -165,13 +166,7 @@ const ProbeError = (props: { probe: Probe }) => {
           {error().length > ERR_CAP ? `${error().slice(0, ERR_CAP)}…` : error()}
         </span>
       </div>
-      <button
-        type="button"
-        class="icon sm"
-        aria-label="复制报错"
-        data-hint="复制报错"
-        onClick={() => void copyKey(full(), setCopied)}
-      >
+      <button type="button" class="icon sm" aria-label="复制报错" onClick={() => void copyKey(full(), setCopied)}>
         <Show when={copied()} fallback={<Copy />}>
           <Check />
         </Show>
@@ -239,7 +234,6 @@ export const Providers = (props: Pane) => {
             type="button"
             class="icon boxed"
             aria-label="密钥库"
-            data-hint="密钥库"
             onClick={() => (props.onPick(props.picked ?? ""), openVault(undefined))}
           >
             <Key />
@@ -462,9 +456,38 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
             <div class="block">
               <div class="block-title">
                 <h3>API 密钥</h3>
+                {/* connectivity results: a tag per distinct listing URL in the title row, so the controls below never move */}
+                <Show when={reach()}>
+                  {(r) => (
+                    <div class="right probes">
+                      <Show
+                        when={r() !== "running" ? (r() as Probe[]) : undefined}
+                        fallback={<span class="tag">…</span>}
+                      >
+                        {(probes) => (
+                          <For each={probes()} keyed={false}>
+                            {(pr) => {
+                              const v = () => verdict(pr())
+                              return (
+                                <span class={{ tag: true, ok: v().tone === "ok", bad: v().tone === "bad" }}>
+                                  {probes().length > 1
+                                    ? `${pr()
+                                        .formats.map((f) => FORMAT[f])
+                                        .join("/")} · `
+                                    : ""}
+                                  {v().text}
+                                </span>
+                              )
+                            }}
+                          </For>
+                        )}
+                      </Show>
+                    </div>
+                  )}
+                </Show>
               </div>
               <div
-                class="row keyrow"
+                class="row"
                 onFocusOut={(e) =>
                   !e.currentTarget.contains(e.relatedTarget as Node | null) && typed().trim() && void storeKey()
                 }
@@ -484,7 +507,6 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                     type="button"
                     class="icon sm"
                     aria-label={reveal() ? "隐藏密钥" : "显示密钥"}
-                    data-hint={reveal() ? "隐藏密钥" : "显示密钥"}
                     onClick={() => void flipReveal()}
                   >
                     <Show when={reveal()} fallback={<Eye />}>
@@ -495,7 +517,6 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                     type="button"
                     class="icon sm"
                     aria-label="复制密钥"
-                    data-hint="复制密钥"
                     onClick={() => void copyKey(typed().trim() || stored(x()), setCopied)}
                   >
                     <Show when={copied()} fallback={<Copy />}>
@@ -507,53 +528,19 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   type="button"
                   class="icon boxed"
                   aria-label="密钥库"
-                  data-hint="密钥库"
                   onClick={() => (typed().trim() && void storeKey(), props.onVault())}
                 >
                   <Key />
                 </button>
-                {/* connectivity: a tag per distinct listing URL, each a button that runs it again (the proxy may have
-                    changed outside this page); a verdict is one of a few fixed strings, so the tags hold their width */}
-                <div class="probes">
-                  <Show
-                    when={reach()}
-                    fallback={
-                      <button type="button" class="tag act" onClick={() => void runReach()}>
-                        检测
-                      </button>
-                    }
-                  >
-                    {(r) => (
-                      <Show
-                        when={r() !== "running" ? (r() as Probe[]) : undefined}
-                        fallback={<span class="tag">…</span>}
-                      >
-                        {(probes) => (
-                          <For each={probes()} keyed={false}>
-                            {(pr) => {
-                              const v = () => verdict(pr())
-                              return (
-                                <button
-                                  type="button"
-                                  class={{ tag: true, act: true, ok: v().tone === "ok", bad: v().tone === "bad" }}
-                                  data-hint={sent(pr())}
-                                  onClick={() => void runReach()}
-                                >
-                                  {probes().length > 1
-                                    ? `${pr()
-                                        .formats.map((f) => FORMAT[f])
-                                        .join("/")} · `
-                                    : ""}
-                                  {v().text}
-                                </button>
-                              )
-                            }}
-                          </For>
-                        )}
-                      </Show>
-                    )}
-                  </Show>
-                </div>
+                <button
+                  type="button"
+                  class="icon boxed"
+                  aria-label="检测连通性"
+                  disabled={reach() === "running"}
+                  onClick={() => void runReach()}
+                >
+                  <Lightning />
+                </button>
               </div>
               {/* a failed probe explains itself under the row; a 404 does not: the address answered, it just lists nothing */}
               <Show when={reach() !== "running" ? (reach() as Probe[] | null) : null}>
@@ -699,7 +686,6 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                                   type="button"
                                   class={{ "m-probe": true, ok: !!done(t())?.ok, bad: !!failed(t()) }}
                                   aria-label={`检测 ${id()}`}
-                                  data-hint={done(t()) && sent(done(t())!)}
                                   disabled={t() === "running"}
                                   onClick={() => void testOne(id())}
                                 >
@@ -1082,7 +1068,6 @@ const VaultDrawer = (props: { for: string | undefined; onClose: () => void }) =>
                     type="button"
                     class="icon sm"
                     aria-label="删除密钥"
-                    data-hint="删除密钥"
                     onClick={() =>
                       ask(`删除密钥「${s().name}」？用到它的服务商将没有密钥。`, () => void deleteSecret(s().id))
                     }
@@ -1096,7 +1081,6 @@ const VaultDrawer = (props: { for: string | undefined; onClose: () => void }) =>
                     type="button"
                     class="icon sm"
                     aria-label={plain() === null ? "显示密钥" : "隐藏密钥"}
-                    data-hint={plain() === null ? "显示密钥" : "隐藏密钥"}
                     onClick={() => void flip()}
                   >
                     <Show when={plain() !== null} fallback={<Eye />}>
@@ -1107,7 +1091,6 @@ const VaultDrawer = (props: { for: string | undefined; onClose: () => void }) =>
                     type="button"
                     class="icon sm"
                     aria-label="复制密钥"
-                    data-hint="复制密钥"
                     onClick={() => void copyKey(secretValue(s().id), setCopied)}
                   >
                     <Show when={copied()} fallback={<Copy />}>

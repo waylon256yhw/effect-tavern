@@ -145,10 +145,10 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
         onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
       />
       <div class="editkeys">
-        <button type="button" class="icon" aria-label="Cancel" data-hint="Cancel Esc" onClick={() => props.onDone()}>
+        <button type="button" class="icon" aria-label="Cancel" onClick={() => props.onDone()}>
           <Close />
         </button>
-        <button type="button" class="icon" aria-label="Save" data-hint="Save ⌘↵" onClick={submit}>
+        <button type="button" class="icon" aria-label="Save" onClick={submit}>
           <Check />
         </button>
       </div>
@@ -348,7 +348,6 @@ const Said = (props: {
             type="button"
             class="icon"
             aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
-            data-hint="Revise"
             disabled={!props.onEdit}
             onClick={() => {
               props.onEdit!(p.field)
@@ -359,7 +358,7 @@ const Said = (props: {
           >
             <Edit />
           </button>
-          <button type="button" class="icon" aria-label="Copy" data-hint="Copy" disabled={!props.onEdit} onClick={copy}>
+          <button type="button" class="icon" aria-label="Copy" disabled={!props.onEdit} onClick={copy}>
             <Show when={copied()} fallback={<Copy />}>
               <Check />
             </Show>

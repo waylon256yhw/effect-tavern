@@ -521,27 +521,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* a tag that is a button (connectivity): the tag's look, a press runs the probe again */
-.tag.act {
-  cursor: pointer;
-  transition: background var(--dur-2) var(--ease);
-}
-.tag.act:hover {
-  background: var(--alpha-2);
-}
-.tag.act.ok:hover {
-  background: var(--ok-wash);
-}
-
-/* ── probes: the connectivity tags at the key row's end, the error bar under what failed ── */
-.keyrow {
-  flex-wrap: wrap; /* a phone: the tags take a line of their own under the field */
-}
+/* ── probes: the connectivity tags in the title row, the error bar under what failed ── */
 .probes {
-  display: inline-flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
+  justify-content: flex-end;
 }
 /* the request as sent, then the error, wrapping, capped by the component (300 characters) not the box */
 .probe-err {

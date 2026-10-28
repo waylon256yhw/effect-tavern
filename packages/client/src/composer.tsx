@@ -197,14 +197,7 @@ export const Composer = (props: {
         </Show>
         <div class="row">
           <Show when={quick().length > 0}>
-            <button
-              type="button"
-              class="icon"
-              aria-label="Snippets"
-              data-hint="Snippets /"
-              aria-haspopup="menu"
-              popovertarget="snippets"
-            >
+            <button type="button" class="icon" aria-label="Snippets" aria-haspopup="menu" popovertarget="snippets">
               <Snippets />
             </button>
             <div
@@ -251,7 +244,6 @@ export const Composer = (props: {
               type="button"
               class="icon"
               aria-label="Keep the prose"
-              data-hint="Keep the prose, redo the record"
               disabled={!filled() || props.busy}
               onPointerDown={keep}
               onClick={() => submit(true)}
@@ -266,7 +258,6 @@ export const Composer = (props: {
                 type="submit"
                 class="send"
                 aria-label="Send"
-                data-hint="Send ⌘↵"
                 disabled={!filled() || props.busy || waiting()}
                 onPointerDown={keep}
               >

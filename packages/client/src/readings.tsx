@@ -356,19 +356,12 @@ export const Rewrite = (props: {
         />
       </Show>
       <Show when={props.rerun}>
-        <button
-          class="icon"
-          aria-label="Swipe"
-          data-hint="Swipe: the turn again, dice and all"
-          disabled={busy()}
-          onClick={() => props.onSwipe()}
-        >
+        <button class="icon" aria-label="Swipe" disabled={busy()} onClick={() => props.onSwipe()}>
           <Swipe />
         </button>
         <button
           class="icon"
           aria-label="Reword"
-          data-hint="Reword: new prose, same turn"
           aria-expanded={asking() ? "true" : "false"}
           disabled={busy()}
           onPointerDown={(e) => e.preventDefault()}
@@ -377,13 +370,7 @@ export const Rewrite = (props: {
           <Reword />
         </button>
       </Show>
-      <button
-        class="icon"
-        aria-label="Edit"
-        data-hint="Edit: write it yourself"
-        disabled={busy()}
-        onClick={() => props.onEdit()}
-      >
+      <button class="icon" aria-label="Edit" disabled={busy()} onClick={() => props.onEdit()}>
         <Edit />
       </button>
       <span class="spacer" />
