@@ -79,6 +79,7 @@ export type Ask =
       known: string
       current?: string
       asks: readonly string[] // `<product>: <question>` lines
+      readout: string // the `record.readout` ask: how to answer the questions; sent only with them
       questions?: readonly string[] // readout lines, when the card declares any
       prose: string
     }
@@ -177,7 +178,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
       return [
         ...reviewed,
         sys([a.known, ...(a.current ? [a.current] : []), ...a.asks].join("\n")),
-        ...(a.questions ? [sys(`Questions: ${a.questions.join("\n")}`)] : []),
+        ...(a.questions ? [sys(`${a.readout}\nQuestions: ${a.questions.join("\n")}`)] : []),
         ...thoughtOf(c),
         scene(c.input, a.prose),
       ]

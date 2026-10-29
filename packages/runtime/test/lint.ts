@@ -189,6 +189,24 @@ assert.deepEqual(
   ],
 )
 
+// unknown-frame-slot: a frame id outside the slot list is a warn (fiction misfiled); a slot left empty is still a slot.
+assert.deepEqual(
+  said(
+    {
+      ...base,
+      frame: [
+        { id: "persona", text: "你是新来的牧师。" },
+        { id: "npc", text: "罗伦斯：六十岁的老牧师。" },
+        { id: "voice" },
+      ],
+    },
+    "unknown-frame-slot",
+  ),
+  [
+    "warn frame.npc: npc is not a frame slot (persona, pov, voice, style, setting, language, verbosity); every stage reads it as part of the frame",
+  ],
+)
+
 // inline-product: an output format asked in the text.
 assert.deepEqual(of({ ...base, frame: [{ id: "style", text: "每次回复末尾附上状态栏，并给出三个选项。" }] }), [
   "error inline-product frame.style.text",

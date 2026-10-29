@@ -27,6 +27,9 @@ export interface Section {
 }
 export interface View {
   state: State
+  bands: string[] // the conditional fiction fragments whose `when` holds at this state
+  windows: string[] // `<lore id>→<layer>`: the entries whose offer holds at this state (the greeting's events counted)
+  asked: string[] // the readouts record would ask at this state
   sections: Section[]
   doc: Message[] // request() for the stage at this state, empty input
   total: number
@@ -114,7 +117,7 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
     stage === "lookup"
       ? { stage, question: wordingOf(player, card, "lookup"), index }
       : stage === "record"
-        ? { stage, known: "Known: ", asks, questions, prose: "" }
+        ? { stage, known: "Known: ", asks, readout: wordingOf(player, card, "record.readout"), questions, prose: "" }
         : {
             stage,
             fiction: head(card.fiction, { state: s }),
@@ -177,5 +180,26 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
     ...sections.map((x) => `\n── ${x.name}${x.tokens ? `  ~${x.tokens} tokens` : ""} ──\n${x.text || "(none)"}`),
     `\n── ${stage} document: ${doc.length} messages, ~${total} tokens ──`,
   ].join("\n")
-  return { state: s, sections, doc, total, text }
+  return {
+    state: s,
+    bands: card.fiction.filter((f) => f.when && head([f], { state: s }).length).map((f) => f.id),
+    windows: [...windows].map(([id, layer]) => `${id}→${layer}`),
+    asked: rpg.asked(s).map((q) => q.id),
+    sections,
+    doc,
+    total,
+    text,
+  }
 }
+
+/** One line per greeting (`card check`): the state its `do` leaves, and what that state puts in play before a word of
+ *  prose is written: the fiction bands that hold, the lore windows open for turn 1, the readouts record asks after it.
+ *  An observation, not a rule (#83): an opening that fires an event on turn 1 may be meant; the author reads it here
+ *  rather than in a live run (ri's single opening set 好感度 60, and the confession opened and was judged on turn 1). */
+export const openings = (card: Card, player: Player): string[] =>
+  card.greetings.map((_, i) => {
+    const v = view(card, player, { greeting: i })
+    const state = Object.entries(v.state).map(([k, x]) => `${k}=${x}`)
+    const list = (xs: string[]) => (xs.length ? xs.join(", ") : "-")
+    return `greeting ${i}  ${state.length ? state.join(" ") : "(no fields)"}  bands: ${list(v.bands)}  windows: ${list(v.windows)}  readouts: ${list(v.asked)}`
+  })

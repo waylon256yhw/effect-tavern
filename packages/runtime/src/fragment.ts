@@ -18,6 +18,11 @@ export const Fragment = Schema.Struct({
 })
 export type Fragment = typeof Fragment.Type
 export type Mode = NonNullable<Fragment["mode"]>
+/** The frame's slots (GLOSSARY 槽位): the ids a player's layer meets a card's frame on. `persona`, `pov` and `verbosity`
+ *  the harness itself fills or compiles; the rest are the names cards and players write. The list is open at the
+ *  mechanism (`frame` merges by id, whatever the id), closed here for lint: a frame fragment under another id is most
+ *  often a person or a world put where every stage reads it (lint `unknown-frame-slot`, issue #83). */
+export const SLOTS: readonly string[] = ["persona", "pov", "voice", "style", "setting", "language", "verbosity"]
 export const decodeFragments = Schema.decodeUnknownSync(Schema.Array(Fragment))
 
 /** What the model wrote, as parts: the prose, reasoning carrying whatever the provider needs to take it back, and the

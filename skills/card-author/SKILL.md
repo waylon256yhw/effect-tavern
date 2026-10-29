@@ -51,15 +51,24 @@ The narrator never sees a number. State reaches it only as the fiction variants 
 
 ## Where each thing goes
 
-- **How the narrator writes, who it is** → `frame` fragments. `id` is a slot (`persona`, `pov`, `style`, `setting`, …);
-  the player's same-named slot overrides or yields per the player's setting (`frame()` in fragment.ts). A fragment
-  without `text` is a slot left for the player to fill. `pov` is compiled from the player's writing switches unless the
-  card fills it. `role` defaults to system. Order is the author's; a `when` flip costs one cache miss, never a reorder.
+- **How the narrator writes, who it is** → `frame` fragments. `id` is a slot, one of seven (`SLOTS` in fragment.ts,
+  GLOSSARY 槽位): `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity`; the player's same-named slot
+  overrides or yields per the player's setting (`frame()` in fragment.ts). A fragment without `text` is a slot left for
+  the player to fill. `pov` is compiled from the player's writing switches unless the card fills it. `role` defaults to
+  system. Order is the author's; a `when` flip costs one cache miss, never a reorder. The frame is the head of every
+  stage's document, lookup, decide and direct included: a character under any id here (`npc`, `character`) is read
+  by the director as the one in the scene (ri before d66becf: the director wrote the old priest's reaction in place of
+  the heroine's). Lint `unknown-frame-slot` warns on any other id; a card may open a new slot on purpose and list the
+  warning as meant.
 - **A person, a cast, a world** → `fiction` fragments. `label` is the shown module name (card page); `when` makes a
   variant (a band). Bands of one field are read as alternatives: at most one should hold at a time (lint `band-gap`).
 - **Openings** → `greetings: [{ text, do? }]`. `do` holds the effects that make this opening differ from the initial
   state (an IF line's route, a later date); its events reach turn 1's gate. Greeting text is the first sample of the
-  voice: the model continues what it reads.
+  voice: the model continues what it reads. When porting, carry every opening the source has, and set each field's
+  `initial` to the lowest state any opening shares; what one opening adds goes in its `do`. ri's first port kept one
+  of three openings and wrote its 好感度 60 into `initial`, so every story began past the confession threshold and
+  the confession fired on turn 1 (#83). `card check` prints one line per greeting (state after `do`, bands, windows,
+  readouts): read it before any prose.
 - **State** → `rules.fields`: `{ path, type: int | number | boolean | enum, min?, max?, initial, options? (enum),
   label?, group?, hidden? }`. Flat paths. Strings exist only inside an enum: free text is never state. `hidden` hides
   a switch from the player (an ending nobody should see coming); settlement reads it like any field.
@@ -72,6 +81,15 @@ The narrator never sees a number. State reaches it only as the fiction variants 
   读数): options name visible deeds (接过信物、追问细节), never psychology (a reserved register keeps psychology
   implicit, the answer falls to the conservative option, the field never moves); and a band gated on a field must not
   describe the trajectory that field's readout measures (pei-cool before b52f7db5 did, and bond was flat five turns).
+  A third, for a readout that latches (an option flips a boolean or an enum and the `when` then stops holding): its
+  options must cover every state the prose can leave, the in-between one included. When the readout's `when` is the
+  same condition as a lore entry's `offer`, record asks it on the very turn the window opens, after the character has
+  raised the matter and before the player has answered; so the no-change option must say "raised, not yet answered",
+  not only "did not happen" (ri's confession before d66becf offered none / accepted / refused, and the model, ruling
+  out the first two by the letter, judged the confession refused the turn it was made, #83). The harness says once,
+  before the Questions line (`record.readout` in session `asks`), that an open matter takes the no-change option; the
+  card's option texts still have to name that state. Check the question as the model reads it with
+  `card view <card> --stage record --state <field>=<threshold>`.
 - **Who may move a field**: a field only actions write is mechanical, the prose cannot move it. A field the fiction
   may move needs a readout (lint `prose-cannot-move`).
 - **Knowledge revealed gradually** → `lore: [{ id, layers, unlock, offer }]`. `layers[0]`'s first sentence is the
@@ -108,7 +126,8 @@ initials. Decide for each field who moves it: actions (mechanical) or a readout 
 readouts with their effects and events. Lay out lore: ids, how many layers, `unlock` per layer, `offer` on which events
 or counters. Lay out fiction: ids, labels, `when` bands with one-line placeholders. Count greetings and write their
 `do`. Patch or add products. Run `bun card check <card>` (in packages/runtime; a name or a path to a .yaml card)
-until there is no error and every warning is one you meant. Exit 1 means an error-level diagnostic.
+until there is no error, every warning is one you meant, and each greeting line shows the opening you intended (a
+window or a latching readout on turn 1 is a choice, not an accident). Exit 1 means an error-level diagnostic.
 
 **2. Novelist** (the mechanism is frozen). Fill `frame`, every fiction band, every lore layer, every greeting. Run
 `card check` again for `field-in-prose` and `inline-product`. Run `card view` at the states that matter: each band
@@ -121,8 +140,9 @@ readout that moves its field print side by side. The semantic rules below apply 
 Decode and load: enum needs options; fold key must name a table column; recall on a list is `true`, on a table a
 column, never on text/record; a product needs text and shape. Settle time: an effect path that is not a field; a Cond
 path that is not a field; a `judge` roll with no chance on the beat.
-Lint (#27): `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`,
-`field-in-prose`, `inline-product`.
+Lint (#27, #83): `unknown-frame-slot`, `unknown-path`, `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`,
+`unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`. `card check` also prints one line per
+greeting: the state its `do` leaves, the bands that hold, the lore windows open for turn 1, the readouts asked after it.
 
 ## Samples in the repo
 
@@ -134,7 +154,8 @@ Lint (#27): `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`, `unre
 - `banxing.yaml` 伴星: pure chat, ported from a V3 export as-is (no persona, no rules, no lore); `mes_example` kept as an unlabelled fiction fragment
   (示范（角色的声音）), which held the voice in live runs.
 - `ri.yaml` 理: an MVU card compiled from its source files into bands on one field, with hidden ending switches
-  (`恋人`, `哥哥`).
+  (`恋人`, `哥哥`); three openings whose `do` sets the field (15, 0, 60), the third on the confession threshold, and a
+  latching readout whose no-change option covers the turn the confession is made.
 
 ## Semantic side: open, to decide with the owner
 

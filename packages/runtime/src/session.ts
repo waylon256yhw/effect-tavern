@@ -143,6 +143,13 @@ export const asks = frags([
     id: "decide.again",
     text: `The input asked to keep going. Given the outcomes so far, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`,
   },
+  // The readouts' rule of evidence, once, before the Questions line. Without it the first ri run judged the confession
+  // refused on the turn it was made: the prose ended on the question, the player had not answered, and the model took
+  // the one option it could not rule out by the letter (#83). A card's option texts still have to cover that turn.
+  {
+    id: "record.readout",
+    text: "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.",
+  },
   { id: "narrate.correction", text: "Previous draft broke:" },
   {
     id: "polish",
@@ -520,6 +527,7 @@ export const makeSession = ({
         known: fed.known,
         current: fed.current,
         asks: asked.map((p) => `${p.id}: ${question(p)}`),
+        readout: wording("record.readout"),
         questions: qs?.lines,
         prose: proseOf(scene.reply),
       })
