@@ -150,6 +150,21 @@ export const open = (asked: string) => {
     )
     if (!has) db.exec(m.add)
   }
+  // A story table made before ids were `autoincrement` (#26) hands a deleted story's id to the next one made: the
+  // client then takes the placeholder for the story it was on and keeps its reader (the delete-the-only-story bug). Rebuilt once, rows and ids
+  // kept: a copy under the current definition, the old table dropped with foreign keys off (on, the drop's implicit
+  // delete would cascade into every node), the copy renamed. The explicit ids seed sqlite_sequence.
+  const made = (db.prepare("select sql from sqlite_master where type = 'table' and name = 'story'").get() as Row)["sql"]
+  if (!/autoincrement/i.test(String(made))) {
+    db.exec("pragma foreign_keys = off")
+    db.exec(`begin;
+      create table story_new (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0);
+      insert into story_new (id, card, title, head, next, updated, starred) select id, card, title, head, next, updated, starred from story;
+      drop table story;
+      alter table story_new rename to story;
+      commit;`)
+    db.exec("pragma foreign_keys = on")
+  }
   const q = (sql: string) => db.prepare(sql)
   const tx = <A>(f: () => A): A => {
     db.exec("begin")
