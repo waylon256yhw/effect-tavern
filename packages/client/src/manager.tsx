@@ -11,6 +11,7 @@ import { Sheet } from "./readings.tsx"
 import { ago, empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
 import { stories, type StoryRow, working } from "./store.ts"
 import { newStory, searchStories, starStory } from "./wire.ts"
+import { t } from "./i18n.ts"
 
 /** `text` with every `q` in a `<mark>`. */
 const Mark = (props: { text: string; q: string }) => (
@@ -105,27 +106,27 @@ export const Manager = (props: {
       }}
       heading={
         <>
-          <span>全部故事</span>
+          <span>{t("manager.allStories")}</span>
           <span class="tag mono">{rows().length}</span>
           <button type="button" class="btn sm ghost" disabled={busy()} onClick={make}>
             <Snippets aria-hidden="true" />
-            <span>新建</span>
+            <span>{t("common.new")}</span>
           </button>
         </>
       }
       footer={
         <footer class="manage">
           <span class="quick">
-            <span>快选</span>
-            <button type="button" class="btn xs" onClick={() => pickAll(empty)} title="只有开场白的档">
-              空档 {empties()}
+            <span>{t("manager.quickPick")}</span>
+            <button type="button" class="btn xs" onClick={() => pickAll(empty)} title={t("manager.emptyHint")}>
+              {t("manager.empty")} {empties()}
             </button>
-            <button type="button" class="btn xs" onClick={() => pickAll(unnamed)} title="没起名也没收藏的档">
-              未命名未收藏 {unnameds()}
+            <button type="button" class="btn xs" onClick={() => pickAll(unnamed)} title={t("manager.unnamedHint")}>
+              {t("manager.unnamed")} {unnameds()}
             </button>
             <Show when={chosen().length}>
               <button type="button" class="btn xs ghost" onClick={() => setPicked(new Set<number>())}>
-                清空
+                {t("manager.clear")}
               </button>
             </Show>
           </span>
@@ -135,7 +136,8 @@ export const Manager = (props: {
             disabled={!chosen().length || busy()}
             onClick={() => props.onDelete(chosen())}
           >
-            删除选中{chosen().length ? ` ${chosen().length}` : ""}
+            {t("manager.deleteSelected")}
+            {chosen().length ? ` ${chosen().length}` : ""}
           </button>
         </footer>
       }
@@ -147,14 +149,14 @@ export const Manager = (props: {
             <input
               type="search"
               ref={(el) => (search = el)}
-              placeholder="搜索标题、玩家台词或正文"
-              aria-label="搜索故事"
+              placeholder={t("manager.searchPlaceholder")}
+              aria-label={t("manager.searchLabel")}
               onInput={(e) => ask(e.currentTarget.value)}
             />
           </div>
-          <div class="filter" role="group" aria-label="筛选故事">
+          <div class="filter" role="group" aria-label={t("manager.filterLabel")}>
             <button type="button" aria-pressed={filter() === "all" ? "true" : "false"} onClick={() => setFilter("all")}>
-              <span>全部</span>
+              <span>{t("manager.all")}</span>
               <span class="n">{rows().length}</span>
             </button>
             <button
@@ -163,7 +165,7 @@ export const Manager = (props: {
               onClick={() => setFilter("starred")}
             >
               <StarFill aria-hidden="true" />
-              <span>收藏</span>
+              <span>{t("manager.starred")}</span>
               <span class="n">{starred()}</span>
             </button>
           </div>
@@ -179,13 +181,13 @@ export const Manager = (props: {
                   role="listitem"
                   aria-current={s().id === lib()?.current ? "true" : undefined}
                   data-checked={picked().has(s().id) ? "" : undefined}
-                  title="打开这个故事"
+                  title={t("manager.openStory")}
                   onClick={() => busy() || props.onOpen(s())}
                 >
                   <input
                     type="checkbox"
                     class="box"
-                    aria-label={`勾选「${s().title ?? "New story"}」`}
+                    aria-label={t("manager.select", { title: s().title ?? t("stories.newStory") })}
                     checked={picked().has(s().id)}
                     onClick={(e) => e.stopPropagation()}
                     onChange={() => toggle(s().id)}
@@ -193,9 +195,9 @@ export const Manager = (props: {
                   <button
                     type="button"
                     class="star"
-                    aria-label={s().starred ? "取消收藏" : "收藏"}
+                    aria-label={s().starred ? t("manager.unstar") : t("manager.star")}
                     aria-pressed={s().starred ? "true" : "false"}
-                    title={s().starred ? "已收藏：左栏置顶（点击取消）" : "收藏：左栏置顶"}
+                    title={s().starred ? t("manager.starredHint") : t("manager.starHint")}
                     onClick={(e) => (e.stopPropagation(), void starStory(s().id, !s().starred))}
                   >
                     <Show when={s().starred} fallback={<Star aria-hidden="true" />}>
@@ -205,17 +207,17 @@ export const Manager = (props: {
                   <div class="body">
                     <div class="top">
                       <span class={{ name: true, unnamed: s().title === null }}>
-                        <Mark text={s().title ?? "New story"} q={q()} />
+                        <Mark text={s().title ?? t("stories.newStory")} q={q()} />
                       </span>
                       <Show when={s().id === lib()?.current}>
-                        <span class="tag ok">当前</span>
+                        <span class="tag ok">{t("manager.current")}</span>
                       </Show>
                       <span class="acts" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           class="icon"
-                          aria-label="重命名"
-                          title="重命名"
+                          aria-label={t("manager.rename")}
+                          title={t("manager.rename")}
                           onClick={() => props.onRename(s())}
                         >
                           <Edit />
@@ -223,8 +225,8 @@ export const Manager = (props: {
                         <button
                           type="button"
                           class="icon"
-                          aria-label="导出"
-                          title="导出：阅读稿 .md 或完整树 .json"
+                          aria-label={t("common.export")}
+                          title={t("manager.exportHint")}
                           onClick={() => props.onExport(s())}
                         >
                           <Export />
@@ -232,8 +234,8 @@ export const Manager = (props: {
                         <button
                           type="button"
                           class="icon danger"
-                          aria-label="删除"
-                          title="删除这个故事"
+                          aria-label={t("common.delete")}
+                          title={t("manager.deleteStory")}
                           disabled={busy()}
                           onClick={() => props.onDelete([s()])}
                         >
@@ -245,7 +247,7 @@ export const Manager = (props: {
                     <Show
                       when={hit()}
                       fallback={
-                        <Show when={line()} fallback={<div class="preview none">尚未开始对话</div>}>
+                        <Show when={line()} fallback={<div class="preview none">{t("manager.notStarted")}</div>}>
                           {(l) => (
                             <div class="preview">
                               <Mark text={l()} q={q()} />
@@ -257,8 +259,8 @@ export const Manager = (props: {
                       {(h) => (
                         <div class="preview">
                           <span class="where">
-                            {turnLabel(h())} · {kindLabel[h().kind]}
-                            {h().count > 1 ? ` · 共 ${h().count} 处` : ""}
+                            {turnLabel(h())} · {kindLabel(h().kind)}
+                            {h().count > 1 ? t("manager.hits", { n: h().count }) : ""}
                           </span>
                           <Mark text={h().text} q={q()} />
                         </div>
@@ -266,8 +268,8 @@ export const Manager = (props: {
                     </Show>
                     <div class="meta">
                       {s().turns
-                        ? `${s().turns} 轮 · 最后更新 ${ago(s().updated, "zh")}`
-                        : `0 轮（空档） · ${ago(s().updated, "zh")}`}
+                        ? t("manager.turnsUpdated", { turns: s().turns, when: ago(s().updated) })
+                        : t("manager.noTurns", { when: ago(s().updated) })}
                     </div>
                   </div>
                 </div>
@@ -278,14 +280,14 @@ export const Manager = (props: {
             <div class="empty">
               <span>
                 {q().trim()
-                  ? `没有匹配「${q().trim()}」的故事（已检索标题、玩家台词与正文）`
+                  ? t("manager.noMatch", { q: q().trim() })
                   : filter() === "starred"
-                    ? "还没有收藏的故事：点卡片上的星标即可收藏，收藏的故事在左栏置顶。"
-                    : "这张卡还没有故事。"}
+                    ? t("manager.noStarred")
+                    : t("manager.noStories")}
               </span>
               <Show when={q().trim()}>
                 <button type="button" class="btn sm" onClick={() => ((search.value = ""), ask(""))}>
-                  清空搜索
+                  {t("manager.clearSearch")}
                 </button>
               </Show>
             </div>

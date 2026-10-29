@@ -8,6 +8,7 @@ import { Check, Close, Edit, Insert, PinFill, Send, Snippets, Stop } from "./ico
 import { imeController } from "./ime.ts"
 import { roam } from "./side.tsx"
 import { aside, card, compose, noted, path, pin, registry, revising, turnOf } from "./store.ts"
+import { t } from "./i18n.ts"
 
 export const Composer = (props: {
   busy: boolean
@@ -38,11 +39,11 @@ export const Composer = (props: {
   const line = read(path)
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
-  const TO_NARRATOR = "To the narrator, not in the story…"
   // An empty line on a card with openings: the story starts from one of them (the card page), not from a typed root.
   const waiting = () => line().length === 0 && (view()?.greetings.length ?? 0) > 0
   // The placeholder is one line of invitation; the keys live on the buttons' tooltips, not in the writing space.
-  const prompt = () => (waiting() ? "Pick an opening on the card page…" : acting() ? "Your line…" : TO_NARRATOR)
+  const prompt = () =>
+    waiting() ? t("composer.pickOpening") : acting() ? t("composer.yourLine") : t("composer.toNarrator")
   let box: HTMLTextAreaElement | undefined
   let noteBox: HTMLTextAreaElement | undefined
   let menu: HTMLDivElement | undefined
@@ -128,7 +129,7 @@ export const Composer = (props: {
         }}
       >
         <Show when={keys().length > 0}>
-          <div class="format" aria-label="Format keys">
+          <div class="format" aria-label={t("composer.formatKeys")}>
             <For each={keys()} keyed={(k) => k.label}>
               {(k) => (
                 <button type="button" class="chip" onPointerDown={keep} onClick={() => insert(k())}>
@@ -170,9 +171,9 @@ export const Composer = (props: {
               ref={(el) => (noteBox = el)}
               class="note"
               value={noteText()}
-              placeholder={TO_NARRATOR}
+              placeholder={t("composer.toNarrator")}
               enterkeyhint="enter"
-              aria-label="Note to the narrator"
+              aria-label={t("composer.noteToNarrator")}
               onInput={(e) => registry.set(noted, e.currentTarget.value)}
               onCompositionStart={noteIme.compositionStart}
               onCompositionEnd={noteIme.compositionEnd}
@@ -187,7 +188,7 @@ export const Composer = (props: {
             <button
               type="button"
               class="icon"
-              aria-label="Close the note"
+              aria-label={t("composer.closeNote")}
               onPointerDown={keep}
               onClick={() => (registry.set(aside, false), registry.set(noted, ""), box?.focus())}
             >
@@ -197,7 +198,13 @@ export const Composer = (props: {
         </Show>
         <div class="row">
           <Show when={quick().length > 0}>
-            <button type="button" class="icon" aria-label="Snippets" aria-haspopup="menu" popovertarget="snippets">
+            <button
+              type="button"
+              class="icon"
+              aria-label={t("composer.snippets")}
+              aria-haspopup="menu"
+              popovertarget="snippets"
+            >
               <Snippets />
             </button>
             <div
@@ -223,18 +230,30 @@ export const Composer = (props: {
           <Show when={revise()}>
             {(r) => (
               <span class="chip state">
-                <button type="button" class="bare" aria-label="Show the turn" onPointerDown={keep} onClick={locate}>
+                <button
+                  type="button"
+                  class="bare"
+                  aria-label={t("composer.showTurn")}
+                  onPointerDown={keep}
+                  onClick={locate}
+                >
                   <Edit aria-hidden="true" />
-                  Revising {turnOf(line(), r().node)}
+                  {t("composer.revising")} {turnOf(line(), r().node)}
                 </button>
-                <button type="button" class="bare" aria-label="Cancel" onPointerDown={keep} onClick={props.onCancel}>
+                <button
+                  type="button"
+                  class="bare"
+                  aria-label={t("common.cancel")}
+                  onPointerDown={keep}
+                  onClick={props.onCancel}
+                >
                   <Close />
                 </button>
               </span>
             )}
           </Show>
           <Show when={pinned()}>
-            <button type="button" class="icon" aria-label="Unpin" onClick={() => registry.set(pin, null)}>
+            <button type="button" class="icon" aria-label={t("composer.unpin")} onClick={() => registry.set(pin, null)}>
               <PinFill />
             </button>
           </Show>
@@ -243,7 +262,7 @@ export const Composer = (props: {
             <button
               type="button"
               class="icon"
-              aria-label="Keep the prose"
+              aria-label={t("composer.keepProse")}
               disabled={!filled() || props.busy}
               onPointerDown={keep}
               onClick={() => submit(true)}
@@ -257,7 +276,7 @@ export const Composer = (props: {
               <button
                 type="submit"
                 class="send"
-                aria-label="Send"
+                aria-label={t("composer.send")}
                 disabled={!filled() || props.busy || waiting()}
                 onPointerDown={keep}
               >
@@ -265,7 +284,13 @@ export const Composer = (props: {
               </button>
             }
           >
-            <button type="button" class="send" aria-label="Stop" onPointerDown={keep} onClick={() => props.onStop()}>
+            <button
+              type="button"
+              class="send"
+              aria-label={t("composer.stop")}
+              onPointerDown={keep}
+              onClick={() => props.onStop()}
+            >
               <Stop />
             </button>
           </Show>

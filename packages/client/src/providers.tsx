@@ -47,6 +47,7 @@ import { AddModelDialog, addModels, ModelDialog, removeModels } from "./models.t
 import { createProbing, IDLE, result, type Slot } from "./probe.ts"
 import { names, providers, registry, secrets } from "./store.ts"
 import { VaultDrawer } from "./vault.tsx"
+import { t } from "./i18n.ts"
 import {
   addSecret,
   deleteProvider,
@@ -88,20 +89,21 @@ const took = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}
  *  address said: a listing, a refused key, no listing there, a page that is not an API, some other status. */
 const verdict = (p: Probe): { text: string; tone: "ok" | "bad" | "" } =>
   !p.url
-    ? { text: "无法检测", tone: "bad" }
+    ? { text: t("providers.cannotProbe"), tone: "bad" }
     : p.status === 0
-      ? { text: "不通", tone: "bad" }
+      ? { text: t("providers.unreachable"), tone: "bad" }
       : p.ok
-        ? { text: `已连通 · ${took(p.ms)}`, tone: "ok" }
+        ? { text: t("providers.connected", { what: took(p.ms) }), tone: "ok" }
         : p.status === 401 || p.status === 403
-          ? { text: "已连通 · key 被拒", tone: "bad" }
+          ? { text: t("providers.keyRejected"), tone: "bad" }
           : p.status === 404
-            ? { text: "已连通 · 该端点不提供模型列表", tone: "" }
+            ? { text: t("providers.noListing"), tone: "" }
             : p.status < 300
-              ? { text: "已连通 · 不是模型列表", tone: "bad" }
-              : { text: `已连通 · HTTP ${p.status}`, tone: "bad" }
+              ? { text: t("providers.notListing"), tone: "bad" }
+              : { text: t("providers.connectedHttp", { status: p.status }), tone: "bad" }
 /** The request a probe made, for a hint: `GET https://… → HTTP 400`. */
-const sent = (p: Probe) => (p.url ? `${p.method} ${p.url}${p.status ? ` → HTTP ${p.status}` : ""}` : undefined)
+const sent = (p: Probe) =>
+  p.url ? `${p.method} ${p.url}${p.status ? t("providers.arrowHttp", { status: p.status }) : ""}` : undefined
 const ERR_CAP = 300
 /** The bar under a probe that failed: the request as sent, the socket's code, the error to ERR_CAP characters (a
  *  gateway's error body can be a whole page; the copy carries all of it). Wraps; never on the row it explains. */
@@ -120,7 +122,12 @@ const ProbeError = (props: { probe: Probe }) => {
           {error().length > ERR_CAP ? `${error().slice(0, ERR_CAP)}…` : error()}
         </span>
       </div>
-      <button type="button" class="icon sm" aria-label="复制报错" onClick={() => void copyKey(full(), setCopied)}>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label={t("providers.copyError")}
+        onClick={() => void copyKey(full(), setCopied)}
+      >
         <Show when={copied()} fallback={<Copy />}>
           <Check />
         </Show>
@@ -142,13 +149,13 @@ export const Providers = (props: Pane) => {
   const openVault = (id: string | undefined) => (setVaultFor(id), setVaultOpen(true))
   return (
     <>
-      <aside class="master-card" aria-label="服务商">
+      <aside class="master-card" aria-label={t("providers.providers")}>
         <div class="master-top">
           <div class="input-box">
             <Clue aria-hidden="true" />
             <input
               type="search"
-              placeholder="搜索模型平台..."
+              placeholder={t("providers.searchProviders")}
               value={search()}
               onInput={(e) => setSearch(e.currentTarget.value)}
             />
@@ -172,24 +179,24 @@ export const Providers = (props: Pane) => {
         </div>
         <div class="master-foot row">
           <button type="button" class="btn" onClick={() => openAdd()}>
-            <Plus /> <span>添加服务商</span>
+            <Plus /> <span>{t("providers.addProvider")}</span>
           </button>
           <button
             type="button"
             class="icon boxed"
-            aria-label="密钥库"
+            aria-label={t("common.vault")}
             onClick={() => (props.onPick(props.picked ?? ""), openVault(undefined))}
           >
             <Key />
           </button>
         </div>
       </aside>
-      <section class="detail-card" aria-label="服务商详情">
+      <section class="detail-card" aria-label={t("providers.providerDetail")}>
         {/* keyed by id: another provider is a fresh detail (key, probe, search, drawer start over), a save is not */}
-        <Show when={current()?.id} keyed fallback={<div class="empty">尚未添加服务商</div>}>
+        <Show when={current()?.id} keyed fallback={<div class="empty">{t("providers.none")}</div>}>
           {(id) => <ProviderDetail id={id} onBack={props.onBack} onVault={() => openVault(id)} />}
         </Show>
-        <Drawer open={vaultOpen()} label="密钥库" onClose={() => setVaultOpen(false)}>
+        <Drawer open={vaultOpen()} label={t("common.vault")} onClose={() => setVaultOpen(false)}>
           <VaultDrawer for={vaultFor()} onClose={() => setVaultOpen(false)} />
         </Drawer>
       </section>
@@ -281,7 +288,13 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   const failed = (s: Slot<Probe>) => (result(s)?.ok === false ? result(s) : undefined)
   /** The test's slot label: one width through its states. */
   const label = (s: Slot<Probe>) =>
-    s.state === "idle" ? "检测" : s.state === "running" ? "…" : s.result.ok ? took(s.result.ms) : "失败"
+    s.state === "idle"
+      ? t("providers.probe")
+      : s.state === "running"
+        ? "…"
+        : s.result.ok
+          ? took(s.result.ms)
+          : t("providers.failed")
   const endpoints = (x: Provider) => FORMATS.filter((f) => x.endpoints[f]?.url.trim()).length
   const models = (x: Provider) => x.models.map((m) => m.id).filter((id) => hit(id, mq()))
 
@@ -291,22 +304,26 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
         <>
           <header class="detail-header">
             <ToList onBack={props.onBack} />
-            <Name value={x().name} label="服务商名称" onCommit={(name) => save((y) => ({ ...y, name }))} />
+            <Name value={x().name} label={t("providers.name")} onCommit={(name) => save((y) => ({ ...y, name }))} />
             <span class="spacer" />
             <button
               type="button"
               class="icon sm"
-              aria-label="删除服务商"
-              onClick={() => ask(`删除服务商「${x().name}」？`, () => void deleteProvider(x().id))}
+              aria-label={t("providers.deleteProvider")}
+              onClick={() => ask(t("providers.confirmDelete", { name: x().name }), () => void deleteProvider(x().id))}
             >
               <Trash />
             </button>
-            <Switch on={x().enabled} label="启用服务商" onFlip={() => save((y) => ({ ...y, enabled: !y.enabled }))} />
+            <Switch
+              on={x().enabled}
+              label={t("providers.enabled")}
+              onFlip={() => save((y) => ({ ...y, enabled: !y.enabled }))}
+            />
           </header>
           <div class="detail-scroll scroller">
             <div class="block">
               <div class="block-title">
-                <h3>API 密钥</h3>
+                <h3>{t("providers.apiKey")}</h3>
                 {/* connectivity results: a tag per distinct listing URL in the title row, so the controls below never move */}
                 <Show when={reach().state !== "idle"}>
                   <div class="right probes">
@@ -344,15 +361,15 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                     class="mono"
                     autocomplete="off"
                     value={shownKey(x())}
-                    placeholder={vault().find((s) => s.id === x().secret)?.hint ?? "输入或从密钥库选择"}
-                    aria-label="API 密钥"
+                    placeholder={vault().find((s) => s.id === x().secret)?.hint ?? t("providers.keyPlaceholder")}
+                    aria-label={t("providers.apiKey")}
                     onInput={(e) => (setTyped(e.currentTarget.value), setPlain(null))}
                     onKeyDown={(e) => e.key === "Enter" && void storeKey()}
                   />
                   <button
                     type="button"
                     class="icon sm"
-                    aria-label={reveal() ? "隐藏密钥" : "显示密钥"}
+                    aria-label={reveal() ? t("common.hideKey") : t("common.showKey")}
                     onClick={() => void flipReveal()}
                   >
                     <Show when={reveal()} fallback={<Eye />}>
@@ -362,7 +379,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   <button
                     type="button"
                     class="icon sm"
-                    aria-label="复制密钥"
+                    aria-label={t("common.copyKey")}
                     onClick={() => void copyKey(typed().trim() || stored(x()), setCopied)}
                   >
                     <Show when={copied()} fallback={<Copy />}>
@@ -373,7 +390,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                 <button
                   type="button"
                   class="icon boxed"
-                  aria-label="密钥库"
+                  aria-label={t("common.vault")}
                   onClick={() => (typed().trim() && void storeKey(), props.onVault())}
                 >
                   <Key />
@@ -381,7 +398,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                 <button
                   type="button"
                   class="icon boxed"
-                  aria-label="检测连通性"
+                  aria-label={t("providers.probeLabel")}
                   disabled={reach().state === "running"}
                   onClick={() => void probing.reach()}
                 >
@@ -400,13 +417,13 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
 
             <div class="block">
               <div class="block-title">
-                <h3>API 地址</h3>
+                <h3>{t("providers.apiUrl")}</h3>
                 <button type="button" class="link" onClick={() => open("endpoint")}>
-                  添加端点
+                  {t("providers.addEndpoint")}
                 </button>
                 <div class="right">
                   <span class="tag">
-                    {FORMAT[x().defaultFormat]} · 默认
+                    {FORMAT[x().defaultFormat]} · {t("common.default")}
                     {endpoints(x()) > 1 ? ` (+${endpoints(x()) - 1})` : ""}
                   </span>
                 </div>
@@ -418,13 +435,18 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                     class="mono"
                     value={x().endpoints[x().defaultFormat]?.url ?? ""}
                     placeholder="https://api.example.com"
-                    aria-label="API 地址"
+                    aria-label={t("providers.apiUrl")}
                     onChange={(e) =>
                       save((y) => ({ ...y, endpoints: setUrl(y, y.defaultFormat, e.currentTarget.value) }))
                     }
                   />
                 </div>
-                <button type="button" class="icon boxed" aria-label="请求配置" onClick={() => open("endpoint")}>
+                <button
+                  type="button"
+                  class="icon boxed"
+                  aria-label={t("providers.requestConfig")}
+                  onClick={() => open("endpoint")}
+                >
                   <Gear />
                 </button>
               </div>
@@ -432,11 +454,11 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
 
             <div class="block">
               <div class="block-title">
-                <h3>模型</h3>
+                <h3>{t("providers.models")}</h3>
                 <button
                   type="button"
                   class="icon sm"
-                  aria-label="展开或折叠分组"
+                  aria-label={t("providers.toggleGroup")}
                   aria-pressed={folded() ? "true" : "false"}
                   onClick={() => setFolded(!folded())}
                 >
@@ -446,8 +468,8 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   <Clue aria-hidden="true" />
                   <input
                     type="search"
-                    placeholder="搜索模型..."
-                    aria-label="搜索模型"
+                    placeholder={t("providers.searchModels")}
+                    aria-label={t("providers.searchModelsLabel")}
                     value={mq()}
                     onFocus={() => setSearching(true)}
                     onBlur={() => setSearching(false)}
@@ -466,20 +488,25 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                       when={probing.batch()}
                       fallback={
                         <button type="button" class="btn sm ghost" onClick={() => void probing.testAll(models(x()))}>
-                          检测全部
+                          {t("providers.probeAll")}
                         </button>
                       }
                     >
                       <button type="button" class="btn sm ghost" onClick={probing.stop}>
-                        停止
+                        {t("providers.stop")}
                       </button>
                     </Show>
                   </Show>
                   <div class="btn-join">
                     <button type="button" class="btn sm" onClick={() => open("sync")}>
-                      <Sync /> <span>同步模型</span>
+                      <Sync /> <span>{t("providers.sync")}</span>
                     </button>
-                    <button type="button" class="btn sm" aria-label="手动添加模型" onClick={() => openAddModel()}>
+                    <button
+                      type="button"
+                      class="btn sm"
+                      aria-label={t("providers.addManually")}
+                      onClick={() => openAddModel()}
+                    >
                       <Plus />
                     </button>
                   </div>
@@ -491,10 +518,10 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                   keyed={(g) => g[0]}
                   fallback={
                     <div class="empty-card">
-                      <span>{mq() ? "无匹配模型" : "尚未添加模型"}</span>
+                      <span>{mq() ? t("providers.noMatch") : t("providers.noModels")}</span>
                       <Show when={!mq()}>
                         <button type="button" class="btn sm" onClick={() => open("sync")}>
-                          <Sync /> 同步模型列表
+                          <Sync /> {t("providers.syncList")}
                         </button>
                       </Show>
                     </div>
@@ -509,9 +536,11 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                           <button
                             type="button"
                             class="icon sm"
-                            aria-label="移除分组"
+                            aria-label={t("providers.removeGroup")}
                             onClick={quiet(() =>
-                              ask(`移除「${g()[0]}」分组的 ${g()[1].length} 个模型？`, () => removeModels(x(), g()[1])),
+                              ask(t("providers.confirmRemoveGroup", { group: g()[0], n: g()[1].length }), () =>
+                                removeModels(x(), g()[1]),
+                              ),
                             )}
                           >
                             <Trash />
@@ -520,7 +549,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                       </summary>
                       <For each={g()[1]} keyed={(id) => id}>
                         {(id) => {
-                          const t = () => test(id())
+                          const probe = () => test(id())
                           return (
                             <>
                               <div class="m-row">
@@ -530,17 +559,17 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                                     result shows the time or 失败, and a press tests again */}
                                 <button
                                   type="button"
-                                  class={{ "m-probe": true, ok: !!result(t())?.ok, bad: !!failed(t()) }}
-                                  aria-label={`检测 ${id()}`}
-                                  disabled={t().state === "running"}
+                                  class={{ "m-probe": true, ok: !!result(probe())?.ok, bad: !!failed(probe()) }}
+                                  aria-label={t("providers.probeOne", { model: id() })}
+                                  disabled={probe().state === "running"}
                                   onClick={() => void probing.test(id())}
                                 >
-                                  {label(t())}
+                                  {label(probe())}
                                 </button>
                                 <button
                                   type="button"
                                   class="icon sm"
-                                  aria-label="模型设置"
+                                  aria-label={t("providers.modelSettings")}
                                   onClick={() => openModel(x().models.find((m) => m.id === id())!)}
                                 >
                                   <Gear />
@@ -548,13 +577,13 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                                 <button
                                   type="button"
                                   class="icon sm"
-                                  aria-label="移除模型"
+                                  aria-label={t("providers.removeModel")}
                                   onClick={() => removeModels(x(), [id()])}
                                 >
                                   <Minus />
                                 </button>
                               </div>
-                              <Show when={failed(t())}>{(pr) => <ProbeError probe={pr()} />}</Show>
+                              <Show when={failed(probe())}>{(pr) => <ProbeError probe={pr()} />}</Show>
                             </>
                           )
                         }}
@@ -566,7 +595,11 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
             </div>
           </div>
 
-          <Drawer open={!!drawer()} label={shown() === "sync" ? "同步模型" : "请求配置"} onClose={shut}>
+          <Drawer
+            open={!!drawer()}
+            label={shown() === "sync" ? t("providers.sync") : t("providers.requestConfig")}
+            onClose={shut}
+          >
             <Show when={shown() === "endpoint"}>
               <RequestDrawer id={props.id} ready={keySaved} onClose={shut} />
             </Show>
@@ -640,9 +673,9 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
       {(d) => (
         <>
           <div class="drawer-head">
-            <h3>请求配置</h3>
+            <h3>{t("providers.requestConfig")}</h3>
             <span class="spacer" />
-            <button type="button" class="icon sm" aria-label="关闭" onClick={() => props.onClose()}>
+            <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => props.onClose()}>
               <Close />
             </button>
           </div>
@@ -661,18 +694,18 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                             class="btn xs"
                             onClick={() => edit((x) => ({ ...x, defaultFormat: f() }))}
                           >
-                            设为默认
+                            {t("providers.setDefault")}
                           </button>
                         }
                       >
-                        <span class="tag ok">默认</span>
+                        <span class="tag ok">{t("common.default")}</span>
                       </Show>
                     </span>
                     <span class="exact">
-                      <span>精确前缀</span>
+                      <span>{t("providers.exactPrefix")}</span>
                       <Switch
                         on={d().endpoints[f()].exactPrefix}
-                        label={`${FORMAT[f()]} 精确前缀`}
+                        label={t("providers.exactPrefixOf", { name: FORMAT[f()] })}
                         onFlip={() => setEndpoint(f(), { exactPrefix: !d().endpoints[f()].exactPrefix })}
                       />
                     </span>
@@ -682,8 +715,8 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                       type="url"
                       class="mono"
                       value={d().endpoints[f()].url}
-                      placeholder="Base URL: https://example.com"
-                      aria-label={`${FORMAT[f()]} 地址`}
+                      placeholder={t("providers.baseUrlExample")}
+                      aria-label={t("providers.urlOf", { name: FORMAT[f()] })}
                       onInput={(e) => setEndpoint(f(), { url: e.currentTarget.value })}
                     />
                   </div>
@@ -700,28 +733,28 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
               {/* no auth menu here: how a key is sent is the key's (the vault's), not the endpoint's */}
               <div class="pair">
                 <div class="field-group">
-                  <span class="label">缓存有效期</span>
+                  <span class="label">{t("providers.cacheTtl")}</span>
                   <Menu
                     small
-                    label="缓存有效期"
+                    label={t("providers.cacheTtl")}
                     value={d().ttl}
                     options={[
-                      { value: "5m", label: "5 分钟" },
-                      { value: "1h", label: "1 小时" },
+                      { value: "5m", label: t("providers.fiveMinutes") },
+                      { value: "1h", label: t("providers.oneHour") },
                     ]}
                     onPick={(ttl) => edit((x) => ({ ...x, ttl }))}
                   />
                 </div>
                 <div class="field-group">
-                  <span class="label">网络代理</span>
+                  <span class="label">{t("providers.proxy")}</span>
                   <Menu
                     small
-                    label="网络代理"
+                    label={t("providers.proxy")}
                     value={d().proxy}
                     options={[
-                      { value: "env", label: "跟随系统环境" },
-                      { value: "direct", label: "强制直连" },
-                      { value: "custom", label: "自定义代理地址" },
+                      { value: "env", label: t("providers.proxySystem") },
+                      { value: "direct", label: t("providers.proxyDirect") },
+                      { value: "custom", label: t("providers.proxyCustom") },
                     ]}
                     onPick={(proxy) => edit((x) => ({ ...x, proxy }))}
                   />
@@ -733,7 +766,7 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                     type="url"
                     class="mono"
                     placeholder="http://127.0.0.1:7890"
-                    aria-label="代理地址"
+                    aria-label={t("providers.proxyUrl")}
                     value={d().proxyUrl}
                     onInput={(e) => {
                       const proxyUrl = e.currentTarget.value
@@ -743,7 +776,7 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                 </div>
               </Show>
               <div class="field-group">
-                <span class="label">自定义请求头</span>
+                <span class="label">{t("providers.headers")}</span>
                 <For each={d().headers} keyed={false}>
                   {(h, i) => (
                     <div class="header-row">
@@ -751,8 +784,8 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                         <input
                           type="text"
                           class="mono"
-                          placeholder="Header"
-                          aria-label="请求头名称"
+                          placeholder={t("providers.headerName")}
+                          aria-label={t("providers.headerNameLabel")}
                           value={h()[0]}
                           onInput={(e) => {
                             const k = e.currentTarget.value
@@ -764,8 +797,8 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                         <input
                           type="text"
                           class="mono"
-                          placeholder="Value"
-                          aria-label="请求头值"
+                          placeholder={t("providers.headerValue")}
+                          aria-label={t("providers.headerValueLabel")}
                           value={h()[1]}
                           onInput={(e) => {
                             const v = e.currentTarget.value
@@ -776,7 +809,7 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                       <button
                         type="button"
                         class="icon sm"
-                        aria-label="移除请求头"
+                        aria-label={t("providers.removeHeader")}
                         onClick={() => edit((x) => ({ ...x, headers: x.headers.filter((_, j) => j !== i) }))}
                       >
                         <Close />
@@ -789,17 +822,17 @@ const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose:
                   class="dashed"
                   onClick={() => edit((x) => ({ ...x, headers: [...x.headers, ["", ""]] }))}
                 >
-                  <Plus /> <span>添加请求头</span>
+                  <Plus /> <span>{t("providers.addHeader")}</span>
                 </button>
               </div>
             </div>
           </div>
           <div class="drawer-foot">
             <button type="button" class="btn" onClick={() => props.onClose()}>
-              取消
+              {t("common.cancel")}
             </button>
             <button type="button" class="btn primary" onClick={() => void save()}>
-              保存
+              {t("common.save")}
             </button>
           </div>
         </>
@@ -842,7 +875,9 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
       {(x) => (
         <>
           <div class="drawer-head">
-            <h3>{x().name} 模型</h3>
+            <h3>
+              {x().name} {t("providers.models")}
+            </h3>
             <Show when={remote()?.models}>{(models) => <span class="tag mono">{models().length}</span>}</Show>
             <span class="spacer" />
             <button
@@ -851,9 +886,9 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
               disabled={!remote()?.models?.length}
               onClick={() => addModels(x(), remote()?.models ?? [])}
             >
-              <Plus /> <span>添加全部</span>
+              <Plus /> <span>{t("providers.addAll")}</span>
             </button>
-            <button type="button" class="icon sm" aria-label="关闭" onClick={() => props.onClose()}>
+            <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => props.onClose()}>
               <Close />
             </button>
           </div>
@@ -862,8 +897,8 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
               <Clue aria-hidden="true" />
               <input
                 type="search"
-                placeholder="搜索模型..."
-                aria-label="搜索模型"
+                placeholder={t("providers.searchModels")}
+                aria-label={t("providers.searchModelsLabel")}
                 value={q()}
                 onInput={(e) => setQ(e.currentTarget.value)}
               />
@@ -872,18 +907,22 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
           <Show when={stale(x()).length}>
             {(n) => (
               <div class="drawer-note">
-                <span>{n()} 个已添加模型的协议与服务商列表不符</span>
+                <span>{t("providers.staleModels", { n: n() })}</span>
                 <button type="button" class="btn xs" onClick={() => correct(x())}>
-                  更正
+                  {t("providers.correct")}
                 </button>
               </div>
             )}
           </Show>
           <div class="drawer-body scroller">
-            <Show when={remote()} fallback={<p class="none">正在获取模型列表…</p>}>
+            <Show when={remote()} fallback={<p class="none">{t("providers.fetching")}</p>}>
               {(r) => (
                 <Show when={!r().error} fallback={<p class="none err">{r().error}</p>}>
-                  <For each={grouped(shown())} keyed={(g) => g[0]} fallback={<p class="none">无匹配模型</p>}>
+                  <For
+                    each={grouped(shown())}
+                    keyed={(g) => g[0]}
+                    fallback={<p class="none">{t("providers.noMatch")}</p>}
+                  >
                     {(g) => (
                       <details class="group" open>
                         <summary>
@@ -894,7 +933,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                             <button
                               type="button"
                               class="icon sm"
-                              aria-label="添加分组全部模型"
+                              aria-label={t("providers.addGroup")}
                               disabled={g()[1].every((id) => x().models.some((m) => m.id === id))}
                               onClick={quiet(() => addModels(x(), pick(g()[1])))}
                             >
@@ -903,7 +942,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                             <button
                               type="button"
                               class="icon sm"
-                              aria-label="移除分组全部模型"
+                              aria-label={t("providers.removeGroupAll")}
                               disabled={!g()[1].some((id) => x().models.some((m) => m.id === id))}
                               onClick={quiet(() => removeModels(x(), g()[1]))}
                             >
@@ -921,7 +960,7 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
                                 <button
                                   type="button"
                                   class="icon sm"
-                                  aria-label={added() ? "移除模型" : "添加模型"}
+                                  aria-label={added() ? t("providers.removeModel") : t("models.addModel")}
                                   onClick={() => (added() ? removeModels(x(), [id()]) : addModels(x(), pick([id()])))}
                                 >
                                   <Show when={added()} fallback={<Plus />}>
@@ -981,7 +1020,7 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
   }
   return (
     <Modal
-      title="添加自定义服务商"
+      title={t("providers.addCustom")}
       dialog={(d) => {
         el = d
         props.opener(() => (setDraft(fresh()), d.showModal()))
@@ -992,13 +1031,13 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
           <div class="pair">
             <label class="field-group">
               <span class="label">
-                服务商名称 <span class="req">*</span>
+                {t("providers.name")} <span class="req">*</span>
               </span>
               <input
                 class="field"
                 type="text"
                 required
-                placeholder="例如 OpenAI / 硅基中转"
+                placeholder={t("providers.nameExample")}
                 value={draft().name}
                 onInput={(e) => {
                   const name = e.currentTarget.value
@@ -1007,12 +1046,12 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
               />
             </label>
             <label class="field-group">
-              <span class="label">API 密钥</span>
+              <span class="label">{t("providers.apiKey")}</span>
               <input
                 class="field mono"
                 type="password"
                 autocomplete="off"
-                placeholder="输入 API 密钥"
+                placeholder={t("providers.enterKey")}
                 value={draft().key}
                 onInput={(e) => {
                   const key = e.currentTarget.value
@@ -1022,7 +1061,7 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
             </label>
           </div>
           <div class="endpoints">
-            <span class="label dim">端点设置</span>
+            <span class="label dim">{t("providers.endpoints")}</span>
             <For each={FORMATS} keyed={(f) => f}>
               {(f) => (
                 <div class="field-group">
@@ -1032,18 +1071,18 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
                       when={draft().def === f()}
                       fallback={
                         <button type="button" class="btn xs" onClick={() => setDraft((d) => ({ ...d, def: f() }))}>
-                          设为默认
+                          {t("providers.setDefault")}
                         </button>
                       }
                     >
-                      <span class="tag ok">默认</span>
+                      <span class="tag ok">{t("common.default")}</span>
                     </Show>
                   </div>
                   <input
                     class="field mono"
                     type="url"
-                    placeholder={`Base URL: ${BASE_URL[f()]}`}
-                    aria-label={`${FORMAT[f()]} 地址`}
+                    placeholder={t("providers.baseUrlOf", { url: BASE_URL[f()] })}
+                    aria-label={t("providers.urlOf", { name: FORMAT[f()] })}
                     value={draft().urls[f()] ?? ""}
                     onInput={(e) => {
                       const url = e.currentTarget.value
@@ -1063,10 +1102,10 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
         </div>
         <div class="modal-foot">
           <button type="button" class="btn" onClick={() => el.close()}>
-            取消
+            {t("common.cancel")}
           </button>
           <button type="submit" class="btn primary">
-            添加
+            {t("common.add")}
           </button>
         </div>
       </form>

@@ -12,7 +12,21 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
-import { Check, Clue, Edit, Jump, Next, Pin, Probe, Settings, Shade, Snippets, Trash, Tree } from "./icons.tsx"
+import {
+  Check,
+  Clue,
+  Edit,
+  Jump,
+  Next,
+  Pin,
+  Probe,
+  Settings,
+  Shade,
+  Snippets,
+  Trash,
+  Tree,
+  Translate,
+} from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { Manager } from "./manager.tsx"
 import { Sheet } from "./readings.tsx"
@@ -24,6 +38,7 @@ import { flip, theme } from "./theme.ts"
 import { openTimeline } from "./timeline.tsx"
 import { deleteStories, deleteStory, exportUrl, nameStory, newStory, openStory, putPlayer } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
+import { flip as flipLocale, locale, t } from "./i18n.ts"
 
 /** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
 export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
@@ -63,7 +78,7 @@ export const Session = () => {
     return t ? people().filter((p) => p.name.toLowerCase().includes(t) || p.text.toLowerCase().includes(t)) : people()
   })
   /** The card's own row stays while the search is empty or names it; the rule under it only when rows follow. */
-  const showDefault = () => !q().trim() || "卡片默认".includes(q().trim())
+  const showDefault = () => !q().trim() || t("side.cardDefault").includes(q().trim())
   let picker!: HTMLDialogElement
   let search!: HTMLInputElement
   const openPicker = () => {
@@ -141,7 +156,7 @@ export const Session = () => {
           type="button"
           class="cardhead"
           onClick={(e) => (closeUp(e.currentTarget), openCard())}
-          aria-label="The card"
+          aria-label={t("side.theCard")}
         >
           <span class="top">
             <h1>{view()?.title}</h1>
@@ -151,13 +166,13 @@ export const Session = () => {
           </span>
           <Show when={view()?.summary}>{(s) => <p>{s()}</p>}</Show>
         </button>
-        <section class="stories" aria-label="Stories">
+        <section class="stories" aria-label={t("side.stories")}>
           <h2>
-            Stories
+            {t("side.stories")}
             <button
               type="button"
               class="icon"
-              aria-label="New story"
+              aria-label={t("stories.newStory")}
               disabled={busy()}
               onClick={(e) => (closeUp(e.currentTarget), void newStory())}
             >
@@ -166,7 +181,7 @@ export const Session = () => {
             <button
               type="button"
               class="icon"
-              aria-label="Rename story"
+              aria-label={t("side.renameStory")}
               disabled={busy() || !lib()?.stories.some((s) => s.id === lib()?.current)}
               onClick={() => openRename(lib()!.stories.find((s) => s.id === lib()!.current)!)}
             >
@@ -175,7 +190,7 @@ export const Session = () => {
             <button
               type="button"
               class="icon"
-              aria-label="Delete story"
+              aria-label={t("side.deleteStory")}
               disabled={busy() || !lib()?.stories.some((s) => s.id === lib()?.current)}
               onClick={() => openDelete(lib()!.stories.filter((s) => s.id === lib()!.current))}
             >
@@ -199,9 +214,11 @@ export const Session = () => {
                       if (s().id !== lib()?.current) void openStory(s().id)
                     }}
                   >
-                    <span class={{ first: true, unnamed: s().title === null }}>{s().title ?? "New story"}</span>
+                    <span class={{ first: true, unnamed: s().title === null }}>
+                      {s().title ?? t("stories.newStory")}
+                    </span>
                     <span class="meta">
-                      {s().turns ? `${s().turns} turns · ` : ""}
+                      {s().turns ? t("side.turns", { n: s().turns }) : ""}
                       {ago(s().updated)}
                     </span>
                   </button>
@@ -211,19 +228,24 @@ export const Session = () => {
           </ul>
           {/* the rest, and the star, the search, the cleanup, the exports: the manager's sheet */}
           <button type="button" class="all" disabled={!lib()} onClick={() => manager.showModal()}>
-            <span>全部 {lib()?.stories.length ?? 0} 个故事</span>
+            <span>{t("side.allStories", { n: lib()?.stories.length ?? 0 })}</span>
             <Next class="chev" aria-hidden="true" />
           </button>
           <dialog class="confirm" ref={(el) => (rename = el)} closedby="any" onClose={() => setRenaming(null)}>
             <form method="dialog" onSubmit={commitRename}>
-              <p>Rename story</p>
-              <input class="field" ref={(el) => (name = el)} aria-label="Story name" placeholder="New story" />
+              <p>{t("side.renameStory")}</p>
+              <input
+                class="field"
+                ref={(el) => (name = el)}
+                aria-label={t("side.storyName")}
+                placeholder={t("stories.newStory")}
+              />
               <div class="row">
                 <button type="button" class="chip state" onClick={() => rename.close()}>
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" class="chip primary">
-                  Save
+                  {t("common.save")}
                 </button>
               </div>
             </form>
@@ -231,24 +253,24 @@ export const Session = () => {
           <dialog class="confirm" ref={(el) => (confirm = el)} closedby="any" onClose={() => setDoomed([])}>
             <p>
               {doomed().length > 1
-                ? `删除选中的 ${doomed().length} 个故事？其中的所有回合都将永久移除。`
-                : `删除「${doomed()[0]?.title ?? "New story"}」？其中的所有回合都将永久移除。`}
+                ? t("side.confirmDeleteMany", { n: doomed().length })
+                : t("side.confirmDeleteOne", { title: doomed()[0]?.title ?? t("stories.newStory") })}
             </p>
             <div class="row">
               <button type="button" class="chip state" onClick={() => confirm.close()}>
-                取消
+                {t("common.cancel")}
               </button>
               <button type="button" class="chip danger" onClick={commitDelete}>
-                删除
+                {t("common.delete")}
               </button>
             </div>
           </dialog>
           <dialog class="confirm" ref={(el) => (exportDialog = el)} closedby="any" onClose={() => setExporting(null)}>
-            <p>导出「{exporting()?.title ?? "New story"}」</p>
-            <p class="sub">阅读稿只拼当前主线的开场白、玩家台词与正文；完整树是整棵分支的 JSON 备份。</p>
+            <p>{t("side.exportTitle", { title: exporting()?.title ?? t("stories.newStory") })}</p>
+            <p class="sub">{t("side.exportHint")}</p>
             <div class="row">
               <button type="button" class="chip state" onClick={() => exportDialog.close()}>
-                取消
+                {t("common.cancel")}
               </button>
               <a
                 class="chip state"
@@ -256,7 +278,7 @@ export const Session = () => {
                 download
                 onClick={() => exportDialog.close()}
               >
-                完整树 .json
+                {t("side.exportJson")}
               </a>
               <a
                 class="chip primary"
@@ -264,7 +286,7 @@ export const Session = () => {
                 download
                 onClick={() => exportDialog.close()}
               >
-                阅读稿 .md
+                {t("side.exportMd")}
               </a>
             </div>
           </dialog>
@@ -272,11 +294,11 @@ export const Session = () => {
         {/* who the player is on this card: one chip, the persona in force (the card's own when none is picked); the row
           opens the picker below, never disabled: with no persona made it still shows the card's own and the way to
           make one. Head text like the switches: a change rewrites the cached prefix, no new story */}
-        <section class="persona" aria-label="Persona">
-          <h2>Persona</h2>
+        <section class="persona" aria-label={t("common.persona")}>
+          <h2>{t("common.persona")}</h2>
           <button type="button" class="chosen" disabled={!me()} onClick={openPicker}>
             <span class="chips">
-              <span class="chip">{current()?.name ?? "卡片默认"}</span>
+              <span class="chip">{current()?.name ?? t("side.cardDefault")}</span>
             </span>
             <Next class="chev" aria-hidden="true" />
           </button>
@@ -285,8 +307,8 @@ export const Session = () => {
           per-card supplement; up to three whole (the row's 176px takes three four-character chips), four or five as
           the first two and "+N" (switches.ts's order, so the voice's two stay in view; the row's title names them
           all). One button, the Writing page (a change there is a head rewrite, so it reads as a preference) */}
-        <section class="writing" aria-label="Writing">
-          <h2>Writing</h2>
+        <section class="writing" aria-label={t("side.writing")}>
+          <h2>{t("side.writing")}</h2>
           <button
             type="button"
             class="chosen"
@@ -308,7 +330,7 @@ export const Session = () => {
         <Show when={pinned()}>
           {(p) => (
             <section class="pinned">
-              <h2>Pinned</h2>
+              <h2>{t("side.pinned")}</h2>
               <p>
                 <Pin aria-hidden="true" />
                 <span>{hookOf(p())}</span>
@@ -316,11 +338,11 @@ export const Session = () => {
             </section>
           )}
         </Show>
-        <nav class="tools" aria-label="Pages">
+        <nav class="tools" aria-label={t("side.pages")}>
           <button
             type="button"
             class="icon"
-            aria-label="Timeline"
+            aria-label={t("common.timeline")}
             onClick={(e) => (closeUp(e.currentTarget), openTimeline())}
           >
             <Tree />
@@ -328,7 +350,7 @@ export const Session = () => {
           <button
             type="button"
             class="icon"
-            aria-label="Inspector"
+            aria-label={t("side.inspector")}
             disabled={line().length === 0}
             onClick={(e) => (closeUp(e.currentTarget), openInspector())}
           >
@@ -338,16 +360,26 @@ export const Session = () => {
           <button
             type="button"
             class="icon theme"
-            aria-label="Dark theme"
+            aria-label={t("side.darkTheme")}
             aria-pressed={theme() === "dark" ? "true" : "false"}
             onClick={flip}
           >
             <Shade />
           </button>
+          {/* the interface's language (i18n.ts): a flip like the theme, the device's pick; pressed while English holds */}
           <button
             type="button"
             class="icon"
-            aria-label="Settings"
+            aria-label={t("side.language")}
+            aria-pressed={locale() === "en" ? "true" : "false"}
+            onClick={flipLocale}
+          >
+            <Translate />
+          </button>
+          <button
+            type="button"
+            class="icon"
+            aria-label={t("common.settings")}
             onClick={(e) => (closeUp(e.currentTarget), openSettings())}
           >
             <Settings />
@@ -366,11 +398,11 @@ export const Session = () => {
         the player's personas and two-line rows, the card's own first; made and edited on the settings page */}
       <Sheet
         dialog={(el) => (picker = el)}
-        heading="选择人设"
+        heading={t("side.pickPersona")}
         footer={
           <footer>
             <button type="button" class="btn ghost" onClick={manage}>
-              <span>管理人设</span>
+              <span>{t("side.managePersonas")}</span>
               <Jump aria-hidden="true" />
             </button>
           </footer>
@@ -383,8 +415,8 @@ export const Session = () => {
               <input
                 type="search"
                 ref={(el) => (search = el)}
-                placeholder="搜索人设（名字或正文）"
-                aria-label="搜索人设"
+                placeholder={t("side.searchPersonas")}
+                aria-label={t("side.searchPersonasLabel")}
                 onInput={(e) => setQ(e.currentTarget.value)}
               />
             </div>
@@ -400,10 +432,11 @@ export const Session = () => {
                 onClick={() => (picker.close(), pick(undefined))}
               >
                 <span class="name">
-                  卡片默认<span class="tag">随卡</span>
+                  {t("side.cardDefault")}
+                  <span class="tag">{t("side.withCard")}</span>
                 </span>
                 <Check class="check" aria-hidden="true" />
-                <span class="bio">这张卡写定的玩家角色</span>
+                <span class="bio">{t("side.cardPersonaBio")}</span>
               </button>
               <Show when={hits().length}>
                 <hr />
@@ -426,16 +459,16 @@ export const Session = () => {
             </For>
             <Show when={!people().length}>
               <div class="empty">
-                <span>尚未创建人设，当前用「卡片默认」。</span>
+                <span>{t("side.noPersonas")}</span>
                 <button type="button" class="btn sm" onClick={manage}>
                   <Snippets aria-hidden="true" />
-                  <span>去设置页新建</span>
+                  <span>{t("side.makeOne")}</span>
                 </button>
               </div>
             </Show>
             <Show when={people().length && q().trim() && !hits().length && !showDefault()}>
               <div class="empty">
-                <span>没有匹配「{q().trim()}」的人设</span>
+                <span>{t("side.noPersonaMatch", { q: q().trim() })}</span>
               </div>
             </Show>
           </div>

@@ -14,6 +14,7 @@ import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } fr
 import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
 import { Providers } from "./providers.tsx"
 import { cards, hats, page, personas, player, providers, registry, routing, type Pair } from "./store.ts"
+import { type Key, t } from "./i18n.ts"
 import {
   deleteHat,
   deletePersona,
@@ -39,11 +40,11 @@ export const openSettings = (at: Section = "providers") => {
 }
 const close = () => registry.set(page, backTo)
 
-const SECTIONS: [Section, string, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element][] = [
-  ["providers", "模型服务", Plugs],
-  ["routing", "默认模型", Sliders],
-  ["templates", "提示词模板", Template],
-  ["personas", "玩家人设", User],
+const SECTIONS: [Section, Key, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element][] = [
+  ["providers", "settings.providers", Plugs],
+  ["routing", "settings.routing", Sliders],
+  ["templates", "settings.templates", Template],
+  ["personas", "settings.personas", User],
 ]
 
 export const Settings = () => {
@@ -58,7 +59,7 @@ export const Settings = () => {
     onBack: () => setPane("list"),
   })
   const switchTo = (s: Section) => (setSection(s), setPane("list"))
-  const title = () => SECTIONS.find(([s]) => s === section())![1]
+  const title = () => t(SECTIONS.find(([s]) => s === section())![1])
 
   onSettled(() => {
     void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards(), fetchNames()])
@@ -75,12 +76,12 @@ export const Settings = () => {
 
   return (
     <div class="settings" data-section={section()} data-pane={section() === "routing" ? "detail" : pane()}>
-      <nav class="nav-card" aria-label="设置">
+      <nav class="nav-card" aria-label={t("common.settings")}>
         <div class="nav-head">
-          <button type="button" class="icon" aria-label="返回故事" onClick={close}>
+          <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
             <Back />
           </button>
-          <h1>设置</h1>
+          <h1>{t("common.settings")}</h1>
         </div>
         <div class="nav-list">
           <For each={SECTIONS} keyed={(s) => s[0]}>
@@ -92,24 +93,24 @@ export const Settings = () => {
                 onClick={() => switchTo(s()[0])}
               >
                 <Dynamic component={s()[2]} aria-hidden="true" />
-                <span>{s()[1]}</span>
+                <span>{t(s()[1])}</span>
               </button>
             )}
           </For>
         </div>
       </nav>
       <header class="phone-bar">
-        <button type="button" class="icon" aria-label="返回故事" onClick={close}>
+        <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
           <Back />
         </button>
         <span class="title">{title()}</span>
-        <div class="tabs" role="tablist" aria-label="设置">
+        <div class="tabs" role="tablist" aria-label={t("common.settings")}>
           <For each={SECTIONS} keyed={(s) => s[0]}>
             {(s) => (
               <button
                 type="button"
                 role="tab"
-                aria-label={s()[1]}
+                aria-label={t(s()[1])}
                 aria-selected={section() === s()[0] ? "true" : "false"}
                 onClick={() => switchTo(s()[0])}
               >
@@ -137,14 +138,14 @@ export const Settings = () => {
 }
 
 // ───────── 默认模型 ─────────
-const STAGES: [Phase, string][] = [
-  ["narrate", "正文叙事"],
-  ["record", "状态与记录结算"],
-  ["decide", "行动判定"],
-  ["direct", "导演规划"],
-  ["lookup", "设定检出"],
-  ["check", "护栏检查"],
-  ["polish", "文风润色"],
+const STAGES: [Phase, Key][] = [
+  ["narrate", "settings.stageNarrate"],
+  ["record", "settings.stageRecord"],
+  ["decide", "settings.stageDecide"],
+  ["direct", "settings.stageDirect"],
+  ["lookup", "settings.stageLookup"],
+  ["check", "settings.stageCheck"],
+  ["polish", "settings.stagePolish"],
 ]
 const key = (p: Pair) => `${p.provider}\u0000${p.model}`
 const pairOf = (k: string): Pair => {
@@ -174,7 +175,7 @@ const Routing = () => {
     const gone = !p || !p.models.some((m) => m.id === pair.model)
     return {
       value: key(pair),
-      label: `${p?.name ?? pair.provider} · ${pair.model}（${gone ? "已移除" : "已禁用"}）`,
+      label: `${p?.name ?? pair.provider} · ${pair.model}（${gone ? t("settings.removed") : t("settings.disabled")}）`,
       glyph: pair.model,
     }
   }
@@ -187,17 +188,17 @@ const Routing = () => {
     void putRouting(stages ? rest : { ...rest, stages: {} })
   }
   return (
-    <section class="detail-card" aria-label="默认模型">
+    <section class="detail-card" aria-label={t("settings.routing")}>
       <header class="detail-header">
-        <h2>默认模型</h2>
+        <h2>{t("settings.routing")}</h2>
       </header>
       <div class="detail-scroll scroller">
         <div class="setting-card hero">
-          <h3>主默认模型</h3>
+          <h3>{t("settings.mainModel")}</h3>
           <div class="hero-pick">
             <Menu
-              label="主默认模型"
-              placeholder="未选择"
+              label={t("settings.mainModel")}
+              placeholder={t("settings.unset")}
               value={route().default && key(route().default!)}
               options={pairs()}
               stale={stale(route().default)}
@@ -207,9 +208,9 @@ const Routing = () => {
         </div>
         <div class="block">
           <div class="block-title">
-            <h3>按阶段指定模型</h3>
+            <h3>{t("settings.byStage")}</h3>
             <div class="right">
-              <Switch on={!!route().stages} label="按阶段指定模型" onFlip={flipStages} />
+              <Switch on={!!route().stages} label={t("settings.byStage")} onFlip={flipStages} />
             </div>
           </div>
           <Show when={route().stages}>
@@ -218,14 +219,14 @@ const Routing = () => {
                 {(s) => (
                   <div class="setting-card">
                     <div class="stage-head">
-                      <span>{s()[1]}</span>
+                      <span>{t(s()[1])}</span>
                       <span class="tag mono">{s()[0]}</span>
                     </div>
                     <Menu
-                      label={s()[1]}
+                      label={t(s()[1])}
                       value={route().stages?.[s()[0]] ? key(route().stages![s()[0]]!) : ""}
-                      placeholder="跟随主默认模型"
-                      options={[{ value: "", label: "跟随主默认模型" }, ...pairs()]}
+                      placeholder={t("settings.followMain")}
+                      options={[{ value: "", label: t("settings.followMain") }, ...pairs()]}
                       stale={stale(route().stages?.[s()[0]])}
                       onPick={(k) => setStage(s()[0], k)}
                     />
@@ -249,10 +250,10 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "user", label: "User" },
   { value: "assistant", label: "Assistant" },
 ]
-const SLOTS: [Slot, string][] = [
-  ["head", "前置引导消息 (Head)"],
-  ["tail", "尾部续写预填 (Tail)"],
-  ["review", "审阅阶段引导 (Review)"],
+const SLOTS: [Slot, Key][] = [
+  ["head", "settings.slotHead"],
+  ["tail", "settings.slotTail"],
+  ["review", "settings.slotReview"],
 ]
 const slotOf = (h: Hat, s: Slot): readonly Said[] =>
   (s === "review" ? h.review?.head : s === "head" ? h.narrate?.head : h.narrate?.tail) ?? []
@@ -268,12 +269,12 @@ const Templates = (props: Pane) => {
   }
   const create = async () => {
     const id = newId("hat")
-    await putHat({ id, name: "新建提示词模板", narrate: { head: [{ role: "system", text: "" }] } })
+    await putHat({ id, name: t("settings.newHat"), narrate: { head: [{ role: "system", text: "" }] } })
     props.onPick(id)
   }
   return (
     <>
-      <aside class="master-card" aria-label="提示词模板">
+      <aside class="master-card" aria-label={t("settings.templates")}>
         <div class="master-list scroller top">
           <For each={list()} keyed={(h) => h.id}>
             {(h) => (
@@ -291,23 +292,27 @@ const Templates = (props: Pane) => {
         </div>
         <div class="master-foot">
           <button type="button" class="btn" onClick={() => void create()}>
-            <Plus /> <span>新建模板</span>
+            <Plus /> <span>{t("settings.newHatShort")}</span>
           </button>
         </div>
       </aside>
-      <section class="detail-card" aria-label="模板详情">
-        <Show when={hat()} fallback={<div class="empty">尚未创建模板</div>}>
+      <section class="detail-card" aria-label={t("settings.hatDetail")}>
+        <Show when={hat()} fallback={<div class="empty">{t("settings.noHats")}</div>}>
           {(h) => (
             <>
               <header class="detail-header">
                 <ToList onBack={props.onBack} />
-                <Name value={h().name} label="模板名称" onCommit={(name) => void putHat({ ...h(), name })} />
+                <Name
+                  value={h().name}
+                  label={t("settings.hatName")}
+                  onCommit={(name) => void putHat({ ...h(), name })}
+                />
                 <span class="spacer" />
                 <button
                   type="button"
                   class="icon sm"
-                  aria-label="删除模板"
-                  onClick={() => ask(`删除模板「${h().name}」？`, () => void deleteHat(h().id))}
+                  aria-label={t("settings.deleteHat")}
+                  onClick={() => ask(t("settings.confirmDeleteHat", { name: h().name }), () => void deleteHat(h().id))}
                 >
                   <Trash />
                 </button>
@@ -316,7 +321,7 @@ const Templates = (props: Pane) => {
                 <For each={SLOTS} keyed={(s) => s[0]}>
                   {(s) => (
                     <SlotEditor
-                      label={s()[1]}
+                      label={t(s()[1])}
                       said={slotOf(h(), s()[0])}
                       tail={s()[0] === "tail"}
                       onEdit={(f) => editSlot(s()[0], f)}
@@ -351,18 +356,18 @@ const SlotEditor = (props: {
             props.onEdit((l) => [...l, { role, text: "" }])
           }}
         >
-          <Plus /> <span>添加消息</span>
+          <Plus /> <span>{t("settings.addMessage")}</span>
         </button>
       </div>
     </div>
-    <Show when={props.said.length} fallback={<div class="setting-card none">未配置消息</div>}>
+    <Show when={props.said.length} fallback={<div class="setting-card none">{t("settings.noMessages")}</div>}>
       <div class="msgs">
         <For each={props.said} keyed={false}>
           {(m, i) => (
             <div class="msg-card">
               <Menu
                 small
-                label="角色"
+                label={t("settings.role")}
                 value={m().role}
                 options={ROLES}
                 onPick={(role) => props.onEdit((l) => l.map((x, j) => (j === i ? { ...x, role } : x)))}
@@ -370,8 +375,8 @@ const SlotEditor = (props: {
               <textarea
                 class="field"
                 rows="2"
-                placeholder="输入消息内容..."
-                aria-label="消息内容"
+                placeholder={t("settings.messagePlaceholder")}
+                aria-label={t("settings.messageLabel")}
                 value={m().text}
                 onChange={(e) => {
                   const text = e.currentTarget.value
@@ -381,7 +386,7 @@ const SlotEditor = (props: {
               <button
                 type="button"
                 class="icon sm"
-                aria-label="移除消息"
+                aria-label={t("settings.removeMessage")}
                 onClick={() => props.onEdit((l) => l.filter((_, j) => j !== i))}
               >
                 <Close />
@@ -410,12 +415,12 @@ const Personas = (props: Pane) => {
   const onCards = (id: string) => picks().get(id) ?? []
   const create = async () => {
     const id = newId("persona")
-    await putPersona({ id, name: "新建人设", text: "" })
+    await putPersona({ id, name: t("settings.newPersona"), text: "" })
     props.onPick(id)
   }
   return (
     <>
-      <aside class="master-card" aria-label="玩家人设">
+      <aside class="master-card" aria-label={t("settings.personas")}>
         <div class="master-list scroller top">
           <For each={people()} keyed={(x) => x.id}>
             {(x) => (
@@ -434,24 +439,30 @@ const Personas = (props: Pane) => {
         </div>
         <div class="master-foot">
           <button type="button" class="btn" onClick={() => void create()}>
-            <Plus /> <span>新建人设</span>
+            <Plus /> <span>{t("settings.newPersona")}</span>
           </button>
         </div>
       </aside>
-      <section class="detail-card" aria-label="人设详情">
-        <Show when={persona()} fallback={<div class="empty">尚未创建人设</div>}>
+      <section class="detail-card" aria-label={t("settings.personaDetail")}>
+        <Show when={persona()} fallback={<div class="empty">{t("settings.noPersonas")}</div>}>
           {(x) => (
             <>
               <header class="detail-header">
                 <ToList onBack={props.onBack} />
-                <Name value={x().name} label="人设名称" onCommit={(name) => void putPersona({ ...x(), name })} />
+                <Name
+                  value={x().name}
+                  label={t("settings.personaName")}
+                  onCommit={(name) => void putPersona({ ...x(), name })}
+                />
                 <For each={onCards(x().id)}>{(t) => <span class="tag">{t}</span>}</For>
                 <span class="spacer" />
                 <button
                   type="button"
                   class="icon sm"
-                  aria-label="删除人设"
-                  onClick={() => ask(`删除人设「${x().name}」？`, () => void deletePersona(x().id))}
+                  aria-label={t("settings.deletePersona")}
+                  onClick={() =>
+                    ask(t("settings.confirmDeletePersona", { name: x().name }), () => void deletePersona(x().id))
+                  }
                 >
                   <Trash />
                 </button>
@@ -459,15 +470,15 @@ const Personas = (props: Pane) => {
               <div class="detail-scroll scroller">
                 <div class="block grow">
                   <div class="block-title">
-                    <h3>人设描述</h3>
+                    <h3>{t("settings.personaText")}</h3>
                     <div class="right">
-                      <span class="tag mono">{x().text.length} 字</span>
+                      <span class="tag mono">{t("common.chars", { n: x().text.length })}</span>
                     </div>
                   </div>
                   <textarea
                     class="field persona-text"
-                    placeholder="描述玩家角色的外貌、身份与性格特征..."
-                    aria-label="人设描述"
+                    placeholder={t("settings.personaPlaceholder")}
+                    aria-label={t("settings.personaText")}
                     value={x().text}
                     onChange={(e) => void putPersona({ ...x(), text: e.currentTarget.value })}
                   />

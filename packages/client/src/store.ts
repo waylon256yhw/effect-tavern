@@ -13,6 +13,7 @@ import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
 import * as Atom from "./atom.ts"
 import { registry } from "./atom.ts"
+import { t } from "./i18n.ts"
 
 export type Id = number
 export interface Draft {
@@ -127,7 +128,7 @@ export const latest = Atom.make((get) => {
 /** A node's name in the chrome: its place on the reading line, or its id when it is off the line. */
 export const turnOf = (line: readonly Node[], id: Id): string => {
   const i = line.findIndex((n) => n.id === id)
-  return i >= 0 ? `turn ${i + 1}` : `#${id}`
+  return i >= 0 ? t("common.turnN", { n: i + 1 }) : `#${id}`
 }
 
 export const prose = (n: Node): string =>

@@ -3,46 +3,47 @@
 // `SENTENCES`, shown as each value's title). A value not set leaves the card's own text in force, and pressing the
 // set one again unsets it. Pure data and helpers, so a test and the side panel read them without the page.
 import { SENTENCES, type Writing } from "@effect-tavern/runtime/src/fragment.ts"
+import { type Key, t } from "./i18n.ts"
 
 export type SwitchKey = keyof typeof SENTENCES
 export interface Switch {
   key: SwitchKey
-  label: string
-  values: [string | boolean, string][]
+  label: Key
+  values: [string | boolean, Key][]
 }
 export const SWITCHES: Switch[] = [
   {
     key: "pov",
-    label: "视角",
+    label: "switches.pov",
     values: [
-      ["second", "第二人称"],
-      ["third", "第三人称"],
-      ["none", "无主角"],
+      ["second", "switches.povSecond"],
+      ["third", "switches.povThird"],
+      ["none", "switches.povNone"],
     ],
   },
   {
     key: "echo",
-    label: "引言",
+    label: "switches.echo",
     values: [
-      [true, "转述言行"],
-      [false, "直接反应"],
+      [true, "switches.echoOn"],
+      [false, "switches.echoOff"],
     ],
   },
   {
     key: "agency",
-    label: "主导",
+    label: "switches.agency",
     values: [
-      ["strict", "仅限输入"],
-      ["free", "允许续写"],
+      ["strict", "switches.agencyStrict"],
+      ["free", "switches.agencyFree"],
     ],
   },
   {
     key: "verbosity",
-    label: "篇幅",
+    label: "switches.verbosity",
     values: [
-      ["concise", "简短"],
-      ["medium", "适中"],
-      ["detailed", "详尽"],
+      ["concise", "switches.verbosityConcise"],
+      ["medium", "switches.verbosityMedium"],
+      ["detailed", "switches.verbosityDetailed"],
     ],
   },
 ]
@@ -59,8 +60,8 @@ export const pressing = (key: SwitchKey, w: Writing | undefined, v: string | boo
  *  session card's row). */
 export const chosen = (w: Writing | undefined, extra = false): string[] => {
   const on = SWITCHES.filter((s) => !moot(s.key, w)).flatMap((s) =>
-    s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => l),
+    s.values.filter(([v]) => w?.[s.key] === v).map(([, l]) => t(l)),
   )
-  const chips = on.length ? on : ["跟随卡片"]
-  return extra ? [...chips, "本卡补充"] : chips
+  const chips = on.length ? on : [t("switches.followCard")]
+  return extra ? [...chips, t("switches.cardExtra")] : chips
 }

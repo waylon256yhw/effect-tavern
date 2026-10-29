@@ -73,15 +73,16 @@ import {
   working,
 } from "./store.ts"
 import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchRouting, fetchStories, send } from "./wire.ts"
+import { type Key, t } from "./i18n.ts"
 
-const waiting: Record<string, string> = {
-  lookup: "Reading",
-  decide: "Rolling",
-  direct: "Directing",
-  narrate: "Writing",
-  check: "Checking",
-  polish: "Polishing",
-  record: "Recording",
+const waiting: Record<string, Key> = {
+  lookup: "app.phaseLookup",
+  decide: "app.phaseDecide",
+  direct: "app.phaseDirect",
+  narrate: "app.phaseNarrate",
+  check: "app.phaseCheck",
+  polish: "app.phasePolish",
+  record: "app.phaseRecord",
 }
 
 const paragraphs = (text: string) => text.split(/\n{2,}/).filter((p) => p.trim())
@@ -115,7 +116,7 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
       <div
         class="editor"
         contenteditable="true"
-        aria-label="Edit the prose"
+        aria-label={t("app.editProse")}
         ref={(el) => (box = el)}
         onBeforeInput={(e) => e.inputType.startsWith("format") && e.preventDefault()}
         onPaste={(e) => {
@@ -128,10 +129,10 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
         onKeyDown={(e) => (e.key === "Escape" ? props.onDone() : ime.keyDown(e))}
       />
       <div class="editkeys">
-        <button type="button" class="icon" aria-label="Cancel" onClick={() => props.onDone()}>
+        <button type="button" class="icon" aria-label={t("common.cancel")} onClick={() => props.onDone()}>
           <Close />
         </button>
-        <button type="button" class="icon" aria-label="Save" onClick={submit}>
+        <button type="button" class="icon" aria-label={t("common.save")} onClick={submit}>
           <Check />
         </button>
       </div>
@@ -227,7 +228,7 @@ const Latest = () => {
       <button
         type="button"
         class="icon latest"
-        aria-label="Jump to latest"
+        aria-label={t("app.jumpToLatest")}
         onClick={() => {
           follow.on = true
           stick()
@@ -266,7 +267,11 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
             open={writing()}
             tail={
               <Show when={writing()}>
-                <span class="cursor" role="status" aria-label={props.phase ? waiting[props.phase] : "Waiting"}>
+                <span
+                  class="cursor"
+                  role="status"
+                  aria-label={props.phase ? t(waiting[props.phase]!) : t("app.waiting")}
+                >
                   <Show when={props.phase === "decide"}>
                     <DieFill />
                   </Show>
@@ -278,7 +283,7 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
       </div>
       <Show when={settling()}>
         <footer class="actions">
-          <span class="record-pill" role="status" aria-label={waiting[props.phase!]}>
+          <span class="record-pill" role="status" aria-label={t(waiting[props.phase!]!)}>
             <Record aria-hidden="true" />
             <span class="dots">
               <span />
@@ -297,11 +302,11 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
               <Show when={e().code === "no-model"}>
                 {" "}
                 <button type="button" class="go" onClick={() => openSettings("routing")}>
-                  Settings → 默认模型
+                  {t("app.goDefaultModel")}
                 </button>
               </Show>
             </span>
-            <button type="button" class="icon" aria-label="Dismiss" onClick={dismiss}>
+            <button type="button" class="icon" aria-label={t("common.dismiss")} onClick={dismiss}>
               <Close />
             </button>
           </p>
@@ -335,7 +340,7 @@ const Said = (props: {
           <button
             type="button"
             class="icon"
-            aria-label={p.field === "note" ? "Revise your note" : "Revise your line"}
+            aria-label={p.field === "note" ? t("app.reviseNote") : t("app.reviseLine")}
             disabled={!props.onEdit}
             onClick={() => {
               props.onEdit!(p.field)
@@ -346,7 +351,7 @@ const Said = (props: {
           >
             <Edit />
           </button>
-          <button type="button" class="icon" aria-label="Copy" disabled={!props.onEdit} onClick={copy}>
+          <button type="button" class="icon" aria-label={t("common.copy")} disabled={!props.onEdit} onClick={copy}>
             <Show when={copied()} fallback={<Copy />}>
               <Check />
             </Show>
@@ -383,16 +388,16 @@ const Topbar = () => {
       <button type="button" class="title" commandfor="session" command="show-modal">
         <h1>{view()?.title}</h1>
       </button>
-      <Sheet id="session" heading="Session">
+      <Sheet id="session" heading={t("app.session")}>
         <Session />
       </Sheet>
-      <button class="icon" aria-label="Status" commandfor="status" command="show-modal">
+      <button class="icon" aria-label={t("common.status")} commandfor="status" command="show-modal">
         <Status />
         <Show when={changed()}>
           <i class="dot" />
         </Show>
       </button>
-      <Sheet id="status" heading="Status">
+      <Sheet id="status" heading={t("common.status")}>
         <StatusTable />
       </Sheet>
     </header>
@@ -402,7 +407,7 @@ const Topbar = () => {
 /** The raised container of this turn's options: a row fills the composer, never sends. No head: the one raised card
  *  at the flow's end, numbered rows with the insert glyph, says what it is; the name is for the screen reader. */
 const Options = (props: { items: readonly string[] }) => (
-  <div class="options" role="group" aria-label="Options">
+  <div class="options" role="group" aria-label={t("app.options")}>
     <For each={props.items} keyed={false}>
       {(t, i) => (
         <button class="option" onClick={() => registry.set(compose, t())}>
@@ -461,7 +466,7 @@ const Section = (props: {
           <span class="siblings">
             <button
               class="icon"
-              aria-label="Previous version"
+              aria-label={t("app.prevVersion")}
               disabled={props.busy || at() === 0}
               onClick={() => go(at() - 1)}
             >
@@ -489,13 +494,13 @@ const Section = (props: {
                   >
                     <Switch fallback={<span class="kind" />}>
                       <Match when={s().turn.sibling === "swipe"}>
-                        <Swipe class="kind" aria-label="Swipe" />
+                        <Swipe class="kind" aria-label={t("common.swipe")} />
                       </Match>
                       <Match when={s().turn.sibling === "reword"}>
-                        <Reword class="kind" aria-label="Reword" />
+                        <Reword class="kind" aria-label={t("common.reword")} />
                       </Match>
                       <Match when={s().turn.sibling === "edit"}>
-                        <Edit class="kind" aria-label="Edit" />
+                        <Edit class="kind" aria-label={t("common.edit")} />
                       </Match>
                     </Switch>
                     <span class="first">
@@ -510,7 +515,7 @@ const Section = (props: {
             </div>
             <button
               class="icon"
-              aria-label="Next version"
+              aria-label={t("app.nextVersion")}
               disabled={props.busy || at() === siblings().length - 1}
               onClick={() => go(at() + 1)}
             >
@@ -519,7 +524,7 @@ const Section = (props: {
           </span>
         </Show>
         <Show when={props.node.turn.end === "stopped"}>
-          <span class="end">Stopped</span>
+          <span class="end">{t("app.stopped")}</span>
         </Show>
       </footer>
       <Show when={props.last && options()?.length}>
@@ -643,8 +648,7 @@ const Reader = () => {
       await fetchNodes()
     }
     // record failed on the server (the closed response never carried its error): the ghost says so, the line comes back
-    if (registry.get(log).nodes.size === was)
-      return apply({ kind: "error", message: "The stopped turn was not recorded" })
+    if (registry.get(log).nodes.size === was) return apply({ kind: "error", message: t("app.stoppedNotRecorded") })
     settle()
   }
 
@@ -703,13 +707,13 @@ const Glance = (props: {
     <aside class="side glance">
       <div class="scrolls">
         <section class="status">
-          <h2>Status</h2>
+          <h2>{t("common.status")}</h2>
           <StatusTable />
         </section>
         <Show when={last()}>
           {(l) => (
             <section>
-              <h2>Record</h2>
+              <h2>{t("common.record")}</h2>
               <TurnRecord node={l().node} prev={l().prev} />
             </section>
           )}

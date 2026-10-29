@@ -4,6 +4,7 @@
 // strict about shape and lenient about junk: a row without a non-empty string pattern is dropped, a hint that is not
 // a string is dropped, duplicates (by pattern) keep the first. Pure, so a test reads it without the page.
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
+import { t } from "./i18n.ts"
 
 export const FILE = "lexicon.json"
 
@@ -13,14 +14,14 @@ export const parseLexicon = (text: string): { entries: Entry[] } | { error: stri
   try {
     v = JSON.parse(text)
   } catch {
-    return { error: "不是 JSON 文件" }
+    return { error: t("lexicon.notJson") }
   }
   const list = Array.isArray(v)
     ? v
     : v && typeof v === "object" && Array.isArray((v as { lexicon?: unknown }).lexicon)
       ? (v as { lexicon: unknown[] }).lexicon
       : undefined
-  if (!list) return { error: "文件里没有词表：需要一个数组，或带 lexicon 键的对象" }
+  if (!list) return { error: t("lexicon.noList") }
   const seen = new Set<string>()
   const entries: Entry[] = []
   for (const row of list) {
