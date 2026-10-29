@@ -2,10 +2,10 @@
 // whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
 // stories, the persona, the Writing page's chips, the pin, the pages). A turn's actions sit under what they act on
 // (#101): a row under the player's bubble (revise, copy), a row under the prose (the Record pill, which opens a
-// full-page sheet of that turn's readings, src/record.ts projecting them; the version count; Swipe / Reword / Edit and
-// 小剧场); the last section carries the Options container, whose rows fill the composer and never send. From 72rem
-// the same pieces sit on three cards: the session on the left, the reading in the middle, Status and this turn's
-// Record inline on the right. Shapes follow
+// full-page sheet of that turn's readings, src/record.ts projecting them, 小剧场 at its foot; the version count;
+// Swipe / Reword / Edit); the last section carries the Options container, whose rows fill the composer and never
+// send. From 72rem the same pieces sit on three cards: the session on the left, the reading in the middle, Status and
+// this turn's Record inline on the right, 小剧场 at its foot. Shapes follow
 // docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
 // menu a popover anchored to its button: the platform is the component library. This file is the reader: the flow,
 // the bar, the side cards; readings.tsx draws the Record's pieces, composer.tsx the box, inspector.tsx the Inspect
@@ -39,7 +39,7 @@ import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
+import { Demand, demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record } from "./record.ts"
 import { Session, Side } from "./side.tsx"
 import {
@@ -433,7 +433,6 @@ const Section = (props: {
   onDemand: (product: string) => void
 }) => {
   const all = read(log)
-  const view = read(card)
   const edited = read(editing)
   const revised = read(revising)
   const siblings = createMemo(() => L.children(all(), props.node.parent))
@@ -458,7 +457,7 @@ const Section = (props: {
           actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it
           is over the section, a touch screen always (reader.css) */}
       <footer class="actions">
-        <RecordSheet node={props.node} n={props.n} />
+        <RecordSheet node={props.node} n={props.n} busy={props.busy} onDemand={props.onDemand} />
         <Show when={siblings().length > 1}>
           <span class="siblings">
             <button
@@ -526,11 +525,9 @@ const Section = (props: {
         <Rewrite
           rerun={!!(props.node.turn.input.text || props.node.turn.input.note)}
           busy={props.busy}
-          demands={demandable(view()?.products ?? [], props.node)}
           onSwipe={props.onSwipe}
           onReword={props.onReword}
           onEdit={() => props.onEdit()}
-          onDemand={props.onDemand}
         />
       </footer>
       <Show when={props.last && options()?.length}>
@@ -692,15 +689,17 @@ const Reader = () => {
         />
         <Latest />
       </div>
-      <Glance />
+      <Glance busy={busy()} onDemand={onDemand} />
     </>
   )
 }
 
-/** Desktop's right card: the Status table and the latest turn's Record, one scroll. Readings only: the turn's actions
- *  are in its row under the prose (#101). A sibling of the panel in the canvas grid; the latest section's pill hides. */
-const Glance = () => {
+/** Desktop's right card: the Status table and the latest turn's Record, one scroll, 小剧场 at the foot (the phone
+ *  sheet's shape). The turn's own actions are in its row under the prose (#101). Rendered by the Reader (the demand is
+ *  its), as a sibling of the panel in the canvas grid; the latest section's pill hides. */
+const Glance = (props: { busy: boolean; onDemand: (n: Node, product: string) => void }) => {
   const last = read(latest)
+  const view = read(card)
   return (
     <aside class="side glance">
       <div class="scrolls">
@@ -717,6 +716,15 @@ const Glance = () => {
           )}
         </Show>
       </div>
+      <Show when={last()}>
+        {(l) => (
+          <Demand
+            busy={props.busy}
+            demands={demandable(view()?.products ?? [], l().node)}
+            onDemand={(id) => props.onDemand(l().node, id)}
+          />
+        )}
+      </Show>
     </aside>
   )
 }

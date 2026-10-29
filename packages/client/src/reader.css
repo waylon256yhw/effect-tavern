@@ -390,7 +390,7 @@ section:has(> .editor) > .actions {
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 /* a thing's own actions, a row of ghost keys in ink-3 at its right end (#101): under the player's block (.spoke: revise
-   and copy), at the end of the turn's row (.actions: Swipe / Reword / Edit, 小剧场), in a model group's summary in the
+   and copy), at the end of the turn's row (.actions: Swipe / Reword / Edit), in a model group's summary in the
    settings. They fade in while the pointer is on the block the row belongs to, or the focus is in it; the latest
    turn's row shows its keys always (the most frequent actions, one tap away); a touch screen, having no pointer to
    hover with, shows every row. A past turn under a pointer is then only its pill and its version count */
@@ -408,8 +408,8 @@ main > section:is(:hover, :focus-within) > .actions .acts,
 main > section:last-of-type > .actions .acts {
   opacity: 1;
 }
-/* the keys: Record-pill tall, the glyph small. The line's row sits close under its bubble and ends on the bubble's
-   own text axis (14px in); the turn's row ends where the prose does, the 小剧场 button its last piece */
+/* the keys: Record-pill tall, the glyph small, the row's end hanging 4px over the text's edge so the glyph sits on it.
+   The line's row sits close under its bubble and ends on the bubble's own text axis (14px in) */
 :is(.spoke, .actions) .acts .icon {
   width: var(--control-sm);
   height: var(--control-sm);
@@ -418,6 +418,9 @@ main > section:last-of-type > .actions .acts {
 :is(.spoke, .actions) .acts .icon svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
+}
+.actions .acts {
+  margin-right: -4px;
 }
 .spoke .acts {
   justify-content: flex-end;

@@ -348,8 +348,8 @@ export const demandable = (products: readonly Declared[], node: Node): Option<st
   products.filter((p) => node.turn.products[p.id] === undefined).map((p) => ({ value: p.id, label: p.label ?? p.id }))
 
 /** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
- *  with a close, the body, an optional footer (the cleanup's). Scrim click and Escape close it (closedby). Record and
- *  Status share it; an opener either names it by `id` (invoker commands) or keeps the element through `dialog`. */
+ *  with a close, the body, an optional footer. Scrim click and Escape close it (closedby). Record and Status share it;
+ *  an opener either names it by `id` (invoker commands) or keeps the element through `dialog`. */
 export const Sheet = (props: {
   id?: string
   dialog?: (el: HTMLDialogElement) => void
@@ -394,27 +394,20 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
 /** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn, new prose: the wand
  *  opens a box for a word to the narrator, which rides as that sibling's note; Enter sends, empty or not, and so does
  *  the wand again) and Edit (the prose editable in place, App.tsx `Editor`). Three icons with hints; the box exists
- *  only while the wand is asking, where the row's spacer was. Then 小剧场: a menu of the products this node can still
- *  be asked for (the `demand` action: one record call over this node's scene, the answer kept on the node, no turn),
- *  named by the card; nothing to ask for, the button is off. The pieces of the row under each turn's prose (App.tsx
+ *  only while the wand is asking, where the row's spacer was. The pieces of the row under each turn's prose (App.tsx
  *  `Section`'s footer, after the Record pill and the version count): the box, then the keys as one `.acts` group,
- *  which the row shows the way the line's bubble shows its own (reader.css). */
+ *  which the row shows the way the line's bubble shows its own (reader.css). 小剧场 is not one of them (`Demand`). */
 export const Rewrite = (props: {
   rerun: boolean // the turn has an input to run the narrator from again; an opening has not, only Edit shows
   busy: boolean
-  demands: readonly Option<string>[]
   onSwipe: () => void
   onReword: (note?: string) => void
   onEdit: () => void
-  onDemand: (product: string) => void
 }) => {
   const [asking, setAsking] = createSignal(false)
   // a demand runs a stage without a draft: while any stage runs, the actions wait (a turn's draft already holds them)
   const phase = read(stage)
   const busy = () => props.busy || phase() !== null
-  // a failed demand has no draft to carry its ghost: the reason shows here until the next action
-  const d = read(draft)
-  const failed = read(error)
   let direction: HTMLInputElement | undefined
   const reword = () => {
     const note = direction?.value.trim()
@@ -442,7 +435,6 @@ export const Rewrite = (props: {
           onBlur={() => !direction?.value.trim() && setAsking(false)}
         />
       </Show>
-      <Show when={!d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
       <span class="acts" role="toolbar" aria-label={t("readings.turnActions")}>
         <Show when={props.rerun}>
           <button class="icon" aria-label={t("common.swipe")} disabled={busy()} onClick={() => props.onSwipe()}>
@@ -462,21 +454,43 @@ export const Rewrite = (props: {
         <button class="icon" aria-label={t("common.edit")} disabled={busy()} onClick={() => props.onEdit()}>
           <Edit />
         </button>
-        <Menu
-          action={t("readings.aside")}
-          label={t("readings.aside")}
-          value={undefined}
-          options={busy() ? [] : props.demands}
-          onPick={(id) => (dismiss(), props.onDemand(id))}
-        />
       </span>
     </>
   )
 }
 
+/** 小剧场: a menu of the products a node can still be asked for (the `demand` action: one record call over the
+ *  node's scene, the answer kept on the node, no turn), named by the card; nothing to ask for, the button is off. Not
+ *  a sibling action (the demand runs no narrate), and its shape is not settled (#101): it stays at its old places, the
+ *  Record sheet's footer on the phone and the right card's on the desktop, until it has a page of its own. A failed
+ *  demand has no draft to carry its ghost: the reason shows beside the button until the next action. */
+export const Demand = (props: {
+  busy: boolean
+  demands: readonly Option<string>[]
+  onDemand: (product: string) => void
+}) => {
+  const phase = read(stage)
+  const busy = () => props.busy || phase() !== null
+  const d = read(draft)
+  const failed = read(error)
+  return (
+    <footer class="actions">
+      <span class="spacer" />
+      <Show when={!d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
+      <Menu
+        action={t("readings.aside")}
+        label={t("readings.aside")}
+        value={undefined}
+        options={busy() ? [] : props.demands}
+        onPick={(id) => (dismiss(), props.onDemand(id))}
+      />
+    </footer>
+  )
+}
+
 /** The Record pill under a turn and the readings panel it opens: what the turn changed and produced, by the card's
- *  heading or the turn's number. Only readings: the turn's actions sit in the row beside the pill (`Rewrite`). */
-export const RecordSheet = (props: { node: Node; n: number }) => {
+ *  heading or the turn's number; 小剧场 at its foot. The turn's own actions sit in the row beside the pill (`Rewrite`). */
+export const RecordSheet = (props: { node: Node; n: number; busy: boolean; onDemand: (product: string) => void }) => {
   const all = read(log)
   const view = read(card)
   let dlg!: HTMLDialogElement
@@ -498,6 +512,13 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
       <Sheet
         dialog={(el) => (dlg = el)}
         heading={heading(view()?.heading, props.node) ?? t("common.turnN", { n: props.n })}
+        footer={
+          <Demand
+            busy={props.busy}
+            demands={demandable(view()?.products ?? [], props.node)}
+            onDemand={(id) => (dlg.close(), props.onDemand(id))}
+          />
+        }
       >
         <TurnRecord node={props.node} prev={prev()} />
       </Sheet>

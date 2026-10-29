@@ -1246,8 +1246,8 @@
   .topbar {
     display: none;
   }
-  /* the latest turn's Record sits in the right card: its pill would open the same thing twice (the draft's pill is
-     the only sign of check and record running: it stays); its actions stay in its row, where every turn's are */
+  /* the latest turn's Record and 小剧场 sit in the right card: its pill would open the same thing twice (the draft's
+     pill is the only sign of check and record running: it stays); its actions stay in its row, where every turn's are */
   main > section:last-of-type:not(.draft) .record-pill,
   main > section:has(+ .draft) .record-pill {
     display: none;
@@ -1346,6 +1346,9 @@
     scrollbar-color: transparent transparent;
     transition: scrollbar-color var(--dur-3) var(--ease);
     mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
+  }
+  .glance > .actions {
+    padding-inline: var(--space-5);
   }
   .panel {
     align-self: stretch;
