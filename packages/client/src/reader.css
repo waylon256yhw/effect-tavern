@@ -392,8 +392,10 @@ section:has(> .editor) > .actions {
 /* a thing's own actions, a row of ghost keys in ink-3 at its right end (#101): under the player's block (.spoke: revise
    and copy), at the end of the turn's row (.actions: Swipe / Reword / Edit), in a model group's summary in the
    settings. They fade in while the pointer is on the block the row belongs to, or the focus is in it; the latest
-   turn's row shows its keys always (the most frequent actions, one tap away); a touch screen, having no pointer to
-   hover with, shows every row. A past turn under a pointer is then only its pill and its version count */
+   landed turn's row shows its keys always (the most frequent actions, one tap away; the draft under it, live or a
+   dead ghost, is not a turn), and so does a row whose reword box is open with words in it (the wand is its send key);
+   a touch screen, having no pointer to hover with, shows every row. A past turn under a pointer is then only its pill
+   and its version count */
 :is(.spoke, .actions, .group > summary) .acts {
   display: flex;
   flex: none;
@@ -405,7 +407,9 @@ section:has(> .editor) > .actions {
 .spoke:is(:hover, :focus-within) .acts,
 .group > summary:is(:hover, :focus-within) .acts,
 main > section:is(:hover, :focus-within) > .actions .acts,
-main > section:last-of-type > .actions .acts {
+main > section:last-of-type:not(.draft) > .actions .acts,
+main > section:has(+ .draft) > .actions .acts,
+.actions:has(> .direction) .acts {
   opacity: 1;
 }
 /* the keys: Record-pill tall, the glyph small, the row's end hanging 4px over the text's edge so the glyph sits on it.

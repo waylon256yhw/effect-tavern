@@ -341,37 +341,40 @@ const Said = (props: {
       setTimeout(() => setCopied(false), 1200)
     })
   // one block: the line's bubble, close under it the note as a marginal line (a word on the side, not a second
-  // speech), then the row; the block keeps the turn's gap to the prose
+  // speech), then the row; the block keeps the turn's gap to the prose. An opening has no input: no block at all, so
+  // no row of keys hangs over prose the player never wrote
   return (
-    <div class="spoke">
-      <Show when={props.input.text}>
-        <Bubble field="text" text={props.input.text} />
-      </Show>
-      <Show when={props.input.note}>
-        <Bubble field="note" text={props.input.note!} />
-      </Show>
-      <div class="acts" role="toolbar" aria-label={t("app.lineActions")}>
-        <button
-          type="button"
-          class="icon"
-          aria-label={field() === "note" ? t("app.reviseNote") : t("app.reviseLine")}
-          disabled={!props.onEdit}
-          onClick={() => {
-            props.onEdit!(field())
-            // the note's box opens with the revision: focus it once it is there
-            const box = field() === "note" ? ".composer textarea.note" : ".composer textarea:not(.note)"
-            requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(box)?.focus())
-          }}
-        >
-          <Edit />
-        </button>
-        <button type="button" class="icon" aria-label={t("common.copy")} disabled={!props.onEdit} onClick={copy}>
-          <Show when={copied()} fallback={<Copy />}>
-            <Check />
-          </Show>
-        </button>
+    <Show when={props.input.text || props.input.note}>
+      <div class="spoke">
+        <Show when={props.input.text}>
+          <Bubble field="text" text={props.input.text} />
+        </Show>
+        <Show when={props.input.note}>
+          <Bubble field="note" text={props.input.note!} />
+        </Show>
+        <div class="acts" role="toolbar" aria-label={t("app.lineActions")}>
+          <button
+            type="button"
+            class="icon"
+            aria-label={field() === "note" ? t("app.reviseNote") : t("app.reviseLine")}
+            disabled={!props.onEdit}
+            onClick={() => {
+              props.onEdit!(field())
+              // the note's box opens with the revision: focus it once it is there
+              const box = field() === "note" ? ".composer textarea.note" : ".composer textarea:not(.note)"
+              requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(box)?.focus())
+            }}
+          >
+            <Edit />
+          </button>
+          <button type="button" class="icon" aria-label={t("common.copy")} disabled={!props.onEdit} onClick={copy}>
+            <Show when={copied()} fallback={<Copy />}>
+              <Check />
+            </Show>
+          </button>
+        </div>
       </div>
-    </div>
+    </Show>
   )
 }
 
