@@ -159,10 +159,11 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
 /** Following the live edge the way every chat reader does (Cherry Studio's state, open-claude-ui's constants): one
  *  state that only the user's intent flips. A scroll event the program did not cause is the user's (content growing
  *  under the viewport fires none): past 40px from the bottom they are reading, back within it they follow again;
- *  growth while following sticks to the bottom unless their hand was on the page within 150ms; the way back shows
- *  past 120px. The one deviation is the anchor: a new turn lands at its own top, where the last section's min-height
- *  puts the column's end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a
- *  smooth one fires many events no one could attribute. The scroller is the column (.scroll), never the page. */
+ *  growth while following sticks to the bottom unless their hand was on the column within 150ms (wheel, touch or
+ *  pointer inside it, or a key outside a field; anchoring a turn clears it); the way back shows past 120px. The one
+ *  deviation is the anchor: a new turn lands at its own top, where the last section's min-height puts the column's
+ *  end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a smooth one fires
+ *  many events no one could attribute. The scroller is the column (.scroll), never the page. */
 const follow = { on: true, ours: null as number | null, touched: -Infinity, landing: false }
 const scroller = () => document.querySelector(".scroll")!
 const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
@@ -175,6 +176,7 @@ const hidden = () => {
 }
 const anchor = () => {
   follow.on = true
+  follow.touched = -Infinity
   document.querySelector("main > section:last-of-type")?.scrollIntoView({ block: "start", behavior: "instant" })
   follow.ours = scroller().scrollTop
 }
@@ -215,8 +217,10 @@ const Latest = () => {
       follow.ours = null
       if (t === null || Math.abs(scroller().scrollTop - t) > 2) follow.on = g <= 40
     }
-    const onInput = () => {
-      follow.touched = performance.now()
+    const onInput = (e: Event) => {
+      const t = e.target as HTMLElement
+      const field = t.isContentEditable || t.matches?.("input, textarea")
+      if (e.type === "keydown" ? !field : t.closest?.(".scroll")) follow.touched = performance.now()
     }
     // opening included: the first growth is the story loading, and following from the start lands at its live edge;
     // the scroller shrinking (the composer growing under it) is the same event from the other side
