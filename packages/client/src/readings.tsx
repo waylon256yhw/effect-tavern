@@ -489,9 +489,8 @@ export const RecordSheet = (props: {
   }
   return (
     <>
-      <button class="record-pill" onClick={() => dlg.showModal()}>
+      <button class="record-pill" aria-label="Record" onClick={() => dlg.showModal()}>
         <Record aria-hidden="true" />
-        Record
         <Show when={marked()}>
           <i class="dot" />
         </Show>

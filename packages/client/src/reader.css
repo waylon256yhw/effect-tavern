@@ -246,6 +246,11 @@ section:has(> .editor) > .actions {
   border-radius: 50%;
   background: var(--ink);
 }
+.record-pill .dot {
+  /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */
+  top: 2px;
+  right: 2px;
+}
 /* the side cards exist on desktop only */
 .side {
   display: none;

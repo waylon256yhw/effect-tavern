@@ -182,11 +182,9 @@
   white-space: nowrap;
 }
 .inspect .sechead .lbl {
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 .inspect .sechead .meta {
   flex: 1;

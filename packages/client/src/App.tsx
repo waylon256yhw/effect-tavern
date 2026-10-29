@@ -415,13 +415,10 @@ const Topbar = () => {
   )
 }
 
-/** The raised container of this turn's options: a row fills the composer, never sends. */
+/** The raised container of this turn's options: a row fills the composer, never sends. No head: the one raised card
+ *  at the flow's end, numbered rows with the insert glyph, says what it is; the name is for the screen reader. */
 const Options = (props: { items: readonly string[] }) => (
-  <div class="options">
-    <header>
-      <Reword aria-hidden="true" />
-      Options
-    </header>
+  <div class="options" role="group" aria-label="Options">
     <For each={props.items} keyed={false}>
       {(t, i) => (
         <button class="option" onClick={() => registry.set(compose, t())}>

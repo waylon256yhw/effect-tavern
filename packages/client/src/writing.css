@@ -137,10 +137,8 @@
 }
 .sw-card legend {
   padding: 0;
-  font-size: var(--text-caption);
+  font-size: var(--text-footnote);
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ink-3);
 }
 .sw-card .sw-pills {
@@ -534,8 +532,7 @@
   min-width: 0;
 }
 .mfield > span {
-  font-size: var(--text-caption);
-  letter-spacing: 0.08em;
+  font-size: var(--text-footnote);
   color: var(--ink-3);
 }
 .mfield .at-toggle {
