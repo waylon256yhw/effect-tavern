@@ -149,26 +149,48 @@ export const Reading = (props: { el: Element }) => (
       )}
     </Match>
     <Match when={is(props.el, "meter")}>
-      {(el) => (
-        <div
-          class="meter"
-          role="meter"
-          aria-valuemin={el().min}
-          aria-valuemax={el().max}
-          aria-valuenow={el().now}
-          aria-label={el().label}
-        >
-          <div class="row">
-            <span class="label">{el().label}</span>
-            <span class="num">
-              {el().now} / {el().max}
-            </span>
+      {(el) => {
+        // a position on the scale, unrounded (pct is for text: two spans rounded apart miss each other); the fill
+        // grows from 0 when the scale reaches below it, else from min
+        const at = (x: number) => `${((x - el().min) / (el().max - el().min)) * 100}%`
+        const span = (a: number, b: number) => ({
+          left: at(Math.min(a, b)),
+          width: `${(Math.abs(a - b) / (el().max - el().min)) * 100}%`,
+        })
+        const origin = () => Math.min(Math.max(0, el().min), el().max)
+        // a loss is the change back toward the origin: the fill stays the value, the lost stretch a ghost past it
+        const loss = () => Math.abs(el().now - origin()) < Math.abs(el().was - origin())
+        return (
+          <div
+            class="meter"
+            role="meter"
+            aria-valuemin={el().min}
+            aria-valuemax={el().max}
+            aria-valuenow={el().now}
+            aria-label={el().label}
+          >
+            <div class="row">
+              <span class="label">{el().label}</span>
+              <span class="num">
+                <Show when={el().was !== el().now}>
+                  {el().was} <Change aria-hidden="true" />
+                </Show>
+                {el().now}
+                <Show when={el().min === 0}> / {el().max}</Show>
+              </span>
+            </div>
+            <div class="track">
+              <i class="fill" style={span(origin(), el().now)} />
+              <Show when={el().was !== el().now}>
+                <i class="new" data-loss={loss()} style={span(el().was, el().now)} />
+              </Show>
+              <Show when={el().min < 0}>
+                <i class="zero" style={{ left: at(origin()) }} />
+              </Show>
+            </div>
           </div>
-          <div class="track">
-            <div class="fill" style={{ width: pct((el().now - el().min) / (el().max - el().min)) }} />
-          </div>
-        </div>
-      )}
+        )
+      }}
     </Match>
     <Match when={is(props.el, "value")}>
       {(el) => (
