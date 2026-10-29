@@ -12,7 +12,7 @@ import type { Hat, Player } from "@effect-tavern/runtime/src/fragment.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
-import type { Hit } from "./stories.ts"
+import { stays, type Hit } from "./stories.ts"
 import {
   apply,
   calls,
@@ -80,19 +80,21 @@ const adopt = async (listing: Listing): Promise<void> => {
   registry.set(page, registry.get(log).nodes.size ? "reader" : "card")
 }
 const onStory = async (res: Promise<Response>): Promise<void> => adopt((await got(res)) as Listing)
-/** A delete: the listing comes back; when the open story is still the one to be on, nothing else moves (the reader
- *  keeps its draft and its place), otherwise the client is on the story the listing names, as just opened. */
-const onDelete = async (res: Promise<Response>): Promise<void> => {
+/** A delete: the listing comes back; when the open story was not among the deleted and is still the one to be on,
+ *  nothing else moves (the reader keeps its draft and its place), otherwise the client is on the story the listing
+ *  names, as just opened (stories.ts `stays`: the id alone cannot tell a placeholder from the story it replaced). */
+const onDelete = async (res: Promise<Response>, deleted: readonly number[]): Promise<void> => {
   const listing = (await got(res)) as Listing
-  if (listing.current === registry.get(stories)?.current) registry.set(stories, listing)
+  if (stays(registry.get(stories)?.current, deleted, listing.current)) registry.set(stories, listing)
   else await adopt(listing)
 }
 export const openStory = (id: number): Promise<void> => onStory(call(`${base}/stories/${id}`, { method: "PUT" }))
 export const newStory = (): Promise<void> => onStory(call(`${base}/stories`, { method: "POST" }))
-export const deleteStory = (id: number): Promise<void> => onDelete(call(`${base}/stories/${id}`, { method: "DELETE" }))
+export const deleteStory = (id: number): Promise<void> =>
+  onDelete(call(`${base}/stories/${id}`, { method: "DELETE" }), [id])
 /** The cleanup: several at once (`DELETE /stories` with the ids), one listing back. */
 export const deleteStories = (ids: readonly number[]): Promise<void> =>
-  onDelete(call(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) }))
+  onDelete(call(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) }), ids)
 /** A name the player gives the story; blank clears it. Nothing else moves: only the listing comes back. */
 export const nameStory = async (id: number, title: string): Promise<void> =>
   registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) })))

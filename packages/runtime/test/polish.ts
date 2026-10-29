@@ -29,6 +29,17 @@ assert.equal(text.slice(t!.start, t!.end), "他的指节攥得发白。") // exa
 assert.deepEqual(scan(`${pad}他说：「我指节都发白了。」`, lex), [])
 assert.deepEqual(scan(`${pad}他说：“不是我，而是他。”`, lex), [])
 assert.equal(scan(`${pad}「走。」他指节发白。`, lex).length, 1)
+// 『』 on its own (心声, 传音) and ‘’ are dialogue too (#63); nested 『』 inside 「」 already was, by depth
+assert.deepEqual(scan(`${pad}他想：『我指节都发白了。』`, lex), [])
+assert.deepEqual(scan(`${pad}她低声道：‘不是我，而是他。’`, lex), [])
+assert.deepEqual(scan(`${pad}他说：「她说过『不是我，而是他』。」`, lex), [])
+assert.equal(scan(`${pad}『走。』他指节发白。`, lex).length, 1)
+assert.deepEqual(spans("他想：『好。我走了。』她点头。"), ["他想：『好。我走了。』", "她点头。"])
+// an apostrophe (’ before a letter) is not a closing quote: outside dialogue it neither ends a sentence nor hides what
+// follows, inside “…” it does not end the speech early
+assert.equal(scan(`${pad}He said don’t. 他指节发白。`, lex).length, 1)
+assert.deepEqual(scan(`${pad}“Don’t say 不是我，而是他.” 她说。`, lex), [])
+assert.deepEqual(spans("“Don’t!” 他走了。"), ["“Don’t!”", "他走了。"])
 // The floor: short prose is never worth a call; an empty lexicon finds nothing.
 assert.deepEqual(scan("他的指节发白。", lex), [])
 assert.deepEqual(scan(text, []), [])
@@ -36,4 +47,6 @@ assert.deepEqual(scan(text, []), [])
 assert.equal(marked(text, [t!]), `${pad}<target id="hit-1" hits="指节攥得发白">他的指节攥得发白。</target>`)
 assert.equal(splice(text, [t!], { "hit-1": "他的指节攥得发白。" }), text)
 assert.equal(splice(text, [t!], { "hit-1": "他握紧了拳。" }), `${pad}他握紧了拳。`)
+assert.equal(splice(text, [t!], { "hit-1": "" }), text) // a blank answer keeps the sentence: a rewrite may not delete
+assert.equal(splice(text, [t!], { "hit-1": "  \n" }), text)
 console.log("polish ok")

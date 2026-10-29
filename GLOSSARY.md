@@ -43,7 +43,7 @@ _不用_："导演"来指作者视角（director 是 harness 的阶段）、"小
 
 **回合（turn）**：固定骨架的一趟流程，不是一次模型调用：`lookup → (decide → settle)* → gate → direct → narrate → check → record`。_不用_："一次生成"、"一条回复"。
 
-**阶段（stage）**：harness 对工具的一次调用方式。结构化阶段（lookup、decide、gate、direct、check）只看事实，大多只看本轮；narrate 是唯一读转录稿的阶段；polish 在 check 之后、record 之前，只在代码按词表（玩家 `writing.lexicon` 加卡的 `lexicon`）在旁白里扫到命中句时调用一次，只改命中的句子；record 每轮都跑。每个阶段读到的文档由 `src/request.ts` 一处拼出：框架进所有阶段，虚构与转录稿只进 narrate，输入作为一个单元按阶段分受众。默认强制单个工具、一轮结束。
+**阶段（stage）**：harness 对工具的一次调用方式。结构化阶段（lookup、decide、gate、direct、check）只看事实，大多只看本轮；narrate 是唯一读转录稿的阶段；polish 在 check 之后、record 之前，只在代码按词表（玩家 `writing.lexicon` 加卡的 `lexicon`）在旁白里扫到命中句时调用一次，只改命中的句子，改完不再过 check（省一次调用，有意为之：改写只限对白之外的命中句，空答案保留原句；掉线索、擦边守则是代价，`writing.polish: false` 可关）；record 每轮都跑。每个阶段读到的文档由 `src/request.ts` 一处拼出：框架进所有阶段，虚构与转录稿只进 narrate，输入作为一个单元按阶段分受众。默认强制单个工具、一轮结束。
 
 - **lookup**：查阅。强制调用 `read_lore`，枚举即闸门。
 - **decide**：动作判断。模型只贡献一个概率或一个选项，结果由代码和种子决定。

@@ -79,3 +79,9 @@ export const unnamed = (row: StoryRow): boolean => row.title === null && !row.st
 /** A hit's place: the greeting, or the turn by number. */
 export const turnLabel = (hit: Hit): string => (hit.turn === 0 ? "开场白" : `第 ${hit.turn} 轮`)
 export const kindLabel: Record<Hit["kind"], string> = { input: "玩家台词", note: "场外指导", reply: "正文" }
+
+/** After a delete answered `next` as the story to be on: whether the client stays where it is (its reader, draft and
+ *  place kept). Only when the story it was on was not among those deleted and is still the one named; the id alone
+ *  does not tell, since a library made before story ids were autoincrement hands a deleted id to the next story made. */
+export const stays = (open: number | undefined, deleted: readonly number[], next: number): boolean =>
+  open !== undefined && !deleted.includes(open) && next === open

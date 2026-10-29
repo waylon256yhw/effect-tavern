@@ -10,6 +10,8 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { open, traced } from "../src/data.ts"
 
+type Row = Record<string, unknown>
+
 interface N extends L.Noded {
   text: string
   input?: { text: string; note?: string } // a turn's player input, what `turns` counts
@@ -186,6 +188,42 @@ assert.deepEqual(trace.list(), {})
   opened.stories.star(1, true)
   assert.equal(opened.stories.list("wuxia")[0]!.starred, true)
   opened.close()
+  rmSync(dir, { recursive: true, force: true })
+}
+
+// A library whose story table predates `autoincrement` is rebuilt on open: the rows and their nodes kept under the
+// same ids, and a deleted story's id never handed to the next one made (the client tells the placeholder from the
+// story it was on by the id).
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-noinc-"))
+  const file = join(dir, "tavern.db")
+  const old = new DatabaseSync(file)
+  old.exec(`create table story (id integer primary key, card text not null, title text, head integer,
+    next integer not null default 0, updated integer not null);
+    create table node (story integer not null references story (id) on delete cascade, id integer not null,
+    parent integer, json text not null, primary key (story, id));
+    insert into story (id, card, head, updated) values (1, 'wuxia', 0, 1), (3, 'wuxia', 0, 2);
+    insert into node (story, id, parent, json) values (1, 0, null, '{}'), (3, 0, null, '{}');`)
+  old.close()
+  const opened = open(file)
+  assert.deepEqual(
+    opened.stories.list("wuxia").map((s) => s.id),
+    [3, 1],
+  )
+  opened.stories.del(3)
+  assert.equal(opened.stories.create("wuxia"), 4) // not 3 again
+  opened.close()
+  const after = new DatabaseSync(file)
+  assert.match(
+    String((after.prepare("select sql from sqlite_master where name = 'story'").get() as { sql: string }).sql),
+    /autoincrement/i,
+  )
+  // 3's node cascaded with its story (foreign keys back on after the rebuild), 1's kept through it
+  assert.deepEqual(
+    (after.prepare("select story, id from node order by story").all() as Row[]).map((r) => [r["story"], r["id"]]),
+    [[1, 0]],
+  )
+  after.close()
   rmSync(dir, { recursive: true, force: true })
 }
 
