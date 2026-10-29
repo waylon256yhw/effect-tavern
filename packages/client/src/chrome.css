@@ -1,9 +1,10 @@
 /* The Record pill and sheet, the readings, the scene list, Options, the snippets menu, the desktop cards. */
-/* the Record pill under each section: the one labelled entry, every section the same */
+/* the Record pill under each section: one glyph in a pill (the icon-only rule of brief 3, as the bar's Status), every
+   section the same; the icon sits centered, and the draft's waiting dots widen it */
 .record-pill {
   position: relative;
   height: var(--control-sm);
-  padding: 0 10px 0 6px;
+  padding: 0 4px;
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
   display: inline-flex;
@@ -106,10 +107,8 @@
 }
 .record .group h3 {
   margin: 0;
-  font-size: var(--text-caption);
+  font-size: var(--text-footnote);
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ink-3);
 }
 .record .row {
@@ -341,9 +340,8 @@
   overflow-wrap: anywhere;
 }
 .product .plabel {
-  font-size: var(--text-caption);
+  font-size: var(--text-footnote);
   font-weight: 600;
-  letter-spacing: 0.08em;
   color: var(--ink-3);
 }
 .product p,
@@ -419,21 +417,6 @@
   border-radius: var(--radius-card);
   background: var(--surface-3);
   box-shadow: var(--shadow-1);
-}
-.options header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-caption);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.options header svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
 }
 .option {
   display: flex;
@@ -650,6 +633,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* a section head is a word in its place (settings' .block-title): no nameplate (uppercase, tracked) in the components
+   layer, so a card's own layer may add one */
 .side h2,
 .session h2 {
   display: flex;
@@ -657,11 +642,9 @@
   gap: var(--space-1);
   margin: 0;
   min-height: var(--control-sm);
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 .session h2 .icon {
   width: var(--control-sm);
