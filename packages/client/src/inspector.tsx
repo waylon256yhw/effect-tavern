@@ -122,7 +122,7 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
           when={props.dev}
           fallback={
             <span class={{ pill: true, bad: props.row.status === "failed", ok: props.row.status !== "failed" }}>
-              {props.row.status === "failed" ? t("inspector.failedSecondDraft") : "ok"}
+              {props.row.status === "failed" ? t("inspector.failedSecondDraft") : t("inspector.ok")}
             </span>
           }
         >
@@ -346,7 +346,7 @@ export const Inspect = (props: { id: Id }) => {
             <Prev />
           </button>
           <span class="n">
-            <b>{at() >= 0 ? `Turn ${at() + 1}` : `#${props.id}`}</b>
+            <b>{at() >= 0 ? t("common.turnN", { n: at() + 1 }) : `#${props.id}`}</b>
             <Show when={siblings().length > 1}>
               <span class="v">
                 {version()}/{siblings().length}

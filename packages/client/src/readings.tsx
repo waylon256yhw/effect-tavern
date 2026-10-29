@@ -504,7 +504,7 @@ export const RecordSheet = (props: {
       </button>
       <Sheet
         dialog={(el) => (dlg = el)}
-        heading={heading(view()?.heading, props.node) ?? `Turn ${props.n}`}
+        heading={heading(view()?.heading, props.node) ?? t("common.turnN", { n: props.n })}
         footer={
           <Rewrite
             for={props.node.id}

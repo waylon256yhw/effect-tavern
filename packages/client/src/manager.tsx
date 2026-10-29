@@ -195,7 +195,7 @@ export const Manager = (props: {
                   <button
                     type="button"
                     class="star"
-                    aria-label={s().starred ? t("manager.unstar") : t("manager.starred")}
+                    aria-label={s().starred ? t("manager.unstar") : t("manager.star")}
                     aria-pressed={s().starred ? "true" : "false"}
                     title={s().starred ? t("manager.starredHint") : t("manager.starHint")}
                     onClick={(e) => (e.stopPropagation(), void starStory(s().id, !s().starred))}

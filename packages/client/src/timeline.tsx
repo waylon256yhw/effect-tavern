@@ -138,7 +138,7 @@ export const Timeline = () => {
         class={{ cell: true, line: onLine().has(p.id), selected: selected() === p.id }}
         style={{ left: `${xy(p.c).x}px`, top: `${xy(p.c).y}px`, width: `${LANE}px` }}
         aria-current={isHead(p.id) ? "true" : undefined}
-        aria-label={`Turn ${p.c.row + 1}, node ${p.id}`}
+        aria-label={t("timeline.cellLabel", { n: p.c.row + 1, id: p.id })}
         onClick={() => setSelected(p.id)}
       >
         <div class="row1">
@@ -178,7 +178,7 @@ export const Timeline = () => {
         class={{ cell: true, cluster: true, line: lit(p.c), selected: p.c.ids.includes(selected()!) }}
         style={{ left: `${xy(p.c).x}px`, top: `${xy(p.c).y}px`, width: `${LANE}px` }}
         role="group"
-        aria-label={`Turn ${p.c.row + 1}, ${p.c.ids.length} versions`}
+        aria-label={t("timeline.clusterLabel", { n: p.c.row + 1, k: p.c.ids.length })}
       >
         <div class="row1 pills">
           <span class="tag">{p.c.ids.length}v</span>
@@ -337,7 +337,7 @@ export const Timeline = () => {
                 <div class="nodehead">
                   <div class="bar">
                     <h2>
-                      {t("timeline.turnN", { n: depth(n().id) })} <span class="v">· #{n().id}</span>
+                      {t("common.turnN", { n: depth(n().id) })} <span class="v">· #{n().id}</span>
                       <Show when={isHead(n().id)}>
                         <span class="pill solid">HEAD</span>
                       </Show>

@@ -79,7 +79,7 @@ export const empty = (row: StoryRow): boolean => row.turns === 0
 export const unnamed = (row: StoryRow): boolean => row.title === null && !row.starred
 /** A hit's place: the greeting, or the turn by number. */
 export const turnLabel = (hit: Hit): string =>
-  hit.turn === 0 ? t("stories.opening") : t("stories.turnN", { n: hit.turn })
+  hit.turn === 0 ? t("stories.opening") : t("common.turnN", { n: hit.turn })
 export const kindLabel = (kind: Hit["kind"]): string =>
   kind === "input" ? t("stories.kindInput") : kind === "note" ? t("stories.kindNote") : t("stories.kindReply")
 
