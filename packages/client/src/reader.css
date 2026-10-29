@@ -604,9 +604,11 @@ button:focus-visible {
   height: var(--icon);
 }
 
-/* the composer: the one raised object, under the column */
+/* the composer: the one raised object, under the column. No padding above the box: the column's mask fades the prose
+   out over its last 24px and the box's top edge sits exactly where that fade ends, so the prose reads as going under
+   the box; padding there was a blank band between the two */
 .composer {
-  padding: var(--space-2) var(--space-3) calc(var(--space-4) + var(--safe-bottom));
+  padding: 0 var(--space-3) calc(var(--space-4) + var(--safe-bottom));
 }
 .composer .box {
   max-width: var(--measure);
