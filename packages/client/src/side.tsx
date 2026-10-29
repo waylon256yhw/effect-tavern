@@ -303,10 +303,10 @@ export const Session = () => {
             <Next class="chev" aria-hidden="true" />
           </button>
         </section>
-        {/* the writing in force, as chips on one line: the switches set (the card's own text holds for the rest) and a
-          per-card supplement; up to three whole (the row's 176px takes three four-character chips), four or five as
-          the first two and "+N" (switches.ts's order, so the voice's two stay in view; the row's title names them
-          all). One button, the Writing page (a change there is a head rewrite, so it reads as a preference) */}
+        {/* the writing in force, as chips: the switches set (the card's own text holds for the rest) and a per-card
+          supplement, every one whole, wrapping when the row is short of them (three four-character chips fill one
+          line; the English ones, or five, take two; the card's spare height is the stories zone's). One button, the
+          Writing page (a change there is a head rewrite, so it reads as a preference) */}
         <section class="writing" aria-label={t("side.writing")}>
           <h2>{t("side.writing")}</h2>
           <button
@@ -317,12 +317,9 @@ export const Session = () => {
             onClick={(e) => (closeUp(e.currentTarget), openWriting())}
           >
             <span class="chips">
-              <For each={writing().length > 3 ? writing().slice(0, 2) : writing()} keyed={(l) => l}>
+              <For each={writing()} keyed={(l) => l}>
                 {(l) => <span class="chip">{l()}</span>}
               </For>
-              <Show when={writing().length > 3}>
-                <span class="chip more">+{writing().length - 2}</span>
-              </Show>
             </span>
             <Next class="chev" aria-hidden="true" />
           </button>

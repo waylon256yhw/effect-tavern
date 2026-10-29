@@ -1152,12 +1152,13 @@
 .snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
-/* the setting in force (persona, writing): its chips on one line, the way in at the right; the persona's menu
-   anchor, the Writing page's button. The chips are a size down from the reader's: three four-character chips
-   (55px each) in the 176px the row leaves beside its chevron */
+/* the setting in force (persona, writing): its chips, the way in at the right; the persona's menu anchor, the
+   Writing page's button. The chips are a size down from the reader's and wrap: three four-character chips fill the
+   176px beside the chevron, longer words (the English) or more chips take a second line; the chevron stays on the
+   first. A chip never widens the row: a long name ends in an ellipsis inside it */
 .session .chosen {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-1);
   width: 100%;
@@ -1172,24 +1173,27 @@
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 3.5px;
-  overflow: hidden;
 }
 .session .chosen .chip {
   flex: none;
+  box-sizing: border-box; /* max-width counts the padding: the chip never passes the row's edge */
+  max-width: 100%;
+  min-width: 0;
   height: 22px;
   padding: 0 5.5px;
   font-size: var(--text-caption);
-}
-/* the chips past the third, as a count */
-.session .chosen .chip.more {
-  font-family: var(--font-mono);
-  color: var(--ink-3);
-  background: var(--alpha-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block; /* inline-flex would not ellipsize its text */
+  line-height: 22px;
 }
 .session .chosen .chev {
   flex: none;
+  margin-top: 5px; /* (22px chip − 12px glyph) / 2: centred on the first line */
   width: 12px;
   height: 12px;
   color: var(--ink-3);
