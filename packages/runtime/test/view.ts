@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Card } from "../src/card.ts"
 import { makeSession } from "../src/session.ts"
-import { openings, view } from "../src/view.ts"
+import { fields, openings, view } from "../src/view.ts"
 import { cardNames, loadCard, player } from "./cards/index.ts"
 
 // A real turn on 盐道 from its second greeting, with 局势 set on the greeting node: every call's messages kept.
@@ -87,6 +87,14 @@ assert.deepEqual(openings(await loadCard("ri"), player), [
   "greeting 1  好感度=0 恋人=false 哥哥=false  bands: band--100  windows: -  readouts: affinity",
   "greeting 2  好感度=60 恋人=false 哥哥=false  bands: band-60  windows: kokuhaku→2  readouts: affinity, confession",
 ])
+// fields: what the client draws each shown field as; ri's 好感度 is a scale cut by its six bands, hidden switches stay out
+assert.deepEqual(fields(await loadCard("ri")), ["field 好感度  scale -30..100  cuts 0 20 40 60 80 90"])
+assert.deepEqual(fields(await loadCard("wuxia")), [
+  "field hp  gauge 0..100",
+  "field foe  value",
+  "field bond  scale -30..100  cuts 0 8",
+])
+assert.deepEqual(fields(await loadCard("yandao")), ["field 局势  gauge 0..10  cuts 6", "field 起点  steps 平静 | 血案"])
 assert.deepEqual(openings(await loadCard("banxing"), player), [
   "greeting 0  (no fields)  bands: -  windows: -  readouts: -",
 ])

@@ -3,9 +3,10 @@
 // full table at a node, grouped by the fields' `group`. Both choose a field's element the same way (`reading`): an enum
 // is a step track, an int with both bounds a meter, anything else (an int bounded on one side, a number, a boolean) a
 // value row, so no field is lost: that row is where a missing display declaration shows itself concretely. A meter is
-// one of two by what its number means: a gauge is a stock filled from min (hp 0..100), a scale is a point on an axis
-// the card's fiction splits into stages (好感度 -30..100 with six bands); the cuts come from the variants' `when`.
-import type { Check, Field, Rules, State } from "@effect-tavern/runtime/src/card.ts"
+// one of two by what its number means (runtime card.ts `drawn`, shared with `card check`): a gauge is a stock filled
+// from min (hp 0..100), a scale is a point on an axis the card's fiction splits into stages (好感度 -30..100 with six
+// bands); the cuts come from the bands' `when`, and the card's `view` overrides the guess.
+import { drawn, type Check, type Field, type Rules, type State } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
@@ -37,30 +38,28 @@ export const reading = (
   whens: readonly (Cond | undefined)[] = [],
 ): Element => {
   const label = f.label ?? f.path
-  if (f.type === "enum" && f.options)
+  const d = drawn(f, whens)
+  if (d.as === "steps")
     return {
       kind: "steps",
       path: f.path,
       label,
-      options: f.options,
-      was: f.options.indexOf(String(was)),
-      now: f.options.indexOf(String(now)),
+      options: f.options!,
+      was: f.options!.indexOf(String(was)),
+      now: f.options!.indexOf(String(now)),
     }
-  if (f.type === "int" && f.min !== undefined && f.max !== undefined) {
-    const c = cuts(f.path, f.min, f.max, whens)
+  if (d.as !== "value")
     return {
       kind: "meter",
       path: f.path,
       label,
-      min: f.min,
-      max: f.max,
+      min: f.min!,
+      max: f.max!,
       was: Number(was),
       now: Number(now),
-      cuts: c,
-      // a negative reach or two or more stages reads as a position; a stock with at most one threshold stays a gauge
-      scale: f.min < 0 || c.length >= 2,
+      cuts: d.cuts,
+      scale: d.as === "scale",
     }
-  }
   return { kind: "value", path: f.path, label, was, now }
 }
 
@@ -127,22 +126,3 @@ export const heading = (ref: string | undefined, node: Node): string | undefined
   const w = (node.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
   return typeof w === "string" && w ? w : undefined
 }
-
-// the ints a comparison on `path` splits the axis at: `gte v` / `lt v` turn at v, `gt v` / `lte v` at v + 1
-const cutsOf = (c: Cond | undefined, path: string): number[] =>
-  !c
-    ? []
-    : "all" in c
-      ? c.all.flatMap((x) => cutsOf(x, path))
-      : "any" in c
-        ? c.any.flatMap((x) => cutsOf(x, path))
-        : "not" in c
-          ? cutsOf(c.not, path)
-          : "op" in c && c.path === path
-            ? [c.op === "gt" || c.op === "lte" ? c.value + 1 : c.value]
-            : []
-
-/** The stage thresholds of a meter on `path`: every comparison in `whens` (the fiction variants' conditions) plus 0
- *  when the scale crosses it, strictly inside (min, max), sorted and deduplicated. */
-export const cuts = (path: string, min: number, max: number, whens: readonly (Cond | undefined)[] = []): number[] =>
-  [...new Set([0, ...whens.flatMap((w) => cutsOf(w, path))].filter((x) => x > min && x < max))].sort((a, b) => a - b)

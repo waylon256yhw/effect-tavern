@@ -31,6 +31,7 @@ export const Field = Schema.Struct({
   options: Schema.optionalKey(Schema.Array(Schema.String)),
   initial: Scalar,
   hidden: Schema.optionalKey(Schema.Boolean), // never shown (the status table and the card page skip it): an ending switch the player should not see coming. Settlement reads it like any field
+  view: Schema.optionalKey(Schema.Literals(["gauge", "scale"])), // how a two-bounded int is drawn when `drawn` would guess wrong: a stock with bands on it is still a gauge
 })
 export const Chance = Schema.Union([
   Num,
@@ -70,6 +71,35 @@ export const Rules = Schema.Struct({
 export type Rules = typeof Rules.Type
 export type Action = typeof Action.Type
 export type Field = typeof Field.Type
+
+// the ints a comparison on `path` splits an axis at: `gte v` / `lt v` turn at v, `gt v` / `lte v` at v + 1
+const cutsOf = (c: Cond | undefined, path: string): number[] =>
+  !c
+    ? []
+    : "all" in c
+      ? c.all.flatMap((x) => cutsOf(x, path))
+      : "any" in c
+        ? c.any.flatMap((x) => cutsOf(x, path))
+        : "not" in c
+          ? cutsOf(c.not, path)
+          : "op" in c && c.path === path
+            ? [c.op === "gt" || c.op === "lte" ? c.value + 1 : c.value]
+            : []
+/** The stage thresholds of a meter on `path`: every comparison in `whens` (the fiction bands' conditions) plus 0 when
+ *  the scale crosses it, strictly inside (min, max), sorted and deduplicated. */
+export const cuts = (path: string, min: number, max: number, whens: readonly (Cond | undefined)[] = []): number[] =>
+  [...new Set([0, ...whens.flatMap((w) => cutsOf(w, path))].filter((x) => x > min && x < max))].sort((a, b) => a - b)
+/** What a client draws a field as (docs/client-design-brief-3.md): an enum a step track; an int with both bounds a
+ *  meter, either a gauge (a stock filled from min, `now / max`) or a scale (a point on an axis in stages, equal cells
+ *  with a dot); anything else a value row. The meter is what `view` says, else a scale when the reach crosses below
+ *  zero or the bands cut two or more stages, else a gauge. `cuts` are the stage thresholds, from the bands' `when`. */
+export type Drawn = { as: "steps" } | { as: "gauge" | "scale"; cuts: number[] } | { as: "value" }
+export const drawn = (f: Field, whens: readonly (Cond | undefined)[] = []): Drawn => {
+  if (f.type === "enum" && f.options) return { as: "steps" }
+  if (f.type !== "int" || f.min === undefined || f.max === undefined) return { as: "value" }
+  const c = cuts(f.path, f.min, f.max, whens)
+  return { as: f.view ?? (f.min < 0 || c.length >= 2 ? "scale" : "gauge"), cuts: c }
+}
 export type State = Record<string, number | boolean | string>
 export interface Beat {
   next: string

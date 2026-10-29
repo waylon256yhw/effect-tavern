@@ -42,7 +42,7 @@
 - **样式分四层**，原生 `@layer tokens, components, card, user;`：默认令牌最底，组件样式只许用令牌，卡片作者带的 CSS 在上，读者自己的最上。后面的层无条件赢，不用 `!important`。一个主题就是一个 CSS 文件；设置面板将来的输出也只是它。
 - **结构名是公开接口。** `.said`、`.prose`、`.record`、`.options`、`.composer` 这类名字一经承诺不随手改，需要一份名单和一条门禁，与 `test/tokens.ts` 同形。外观和结构是两条轴：结构只开几个有名字的开关（如 `data-said="block | bubble | quote"`），不给自由组合。
 - **卡片带的 CSS 是不可信输入**，比读者层低一层；`url()` 泄露 IP、`@import` 拉远端，单用户先放，记下。
-- **显示声明是服务端的缺口。** `Rules.Field` 只有 path / type / min / max / options / initial，够结算不够显示。缺标签、分组、单位、图标名。前端对每种形只有一个渲染器（int 带界 → 计量条，enum → 刻度条，roll → 检定条），作者选形不写组件。这层放哪、叫什么，下一个要定。
+- **显示声明是服务端的缺口。** `Rules.Field` 只有 path / type / min / max / options / initial，够结算不够显示。缺标签、分组、单位、图标名。前端对每种形只有一个渲染器（int 带界 → 计量条，enum → 刻度条，roll → 检定条），作者选形不写组件。这层放哪、叫什么，下一个要定。 定了（2026-10-29）：留在 `Field` 上，`label` / `group` / `hidden` 之外只加 `view: gauge | scale`，覆盖 runtime `card.ts` `drawn` 从 min/max 和 band 推出的画法；客户端和 `card check` 读同一处。
 
 ## 三、图标
 
