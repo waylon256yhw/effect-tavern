@@ -1,14 +1,19 @@
-// The prose drawn: each block of src/markdown.ts as the reader's DOM. Blocks parse under a memo keyed by their
-// text, so a landed turn never re-renders and the draft re-renders only its last block per frame. `tail` is what
-// rides after the last glyph (the draft's cursor): inside the last paragraph or heading, after any other block.
+// The prose drawn: each block of src/markdown.ts as the reader's DOM. A block parses under a memo keyed by its
+// text, so a landed turn never re-renders and the draft re-renders only the block being written, per frame; a
+// block that stops being the last one, or a draft that stops streaming, keeps its DOM (its text is the same
+// string). `tail` is what rides after the last glyph (the draft's cursor): a reactive slot inside the last
+// block's last text holder (the paragraph, the heading, the quote's last paragraph, the list's last item, the
+// fence, the table's last cell), so moving on to a new block only moves the cursor and never rebuilds a <p>.
 // A link is a link only on http(s) or mailto; raw HTML and an image are text, as markdown.ts says.
 import { type JSX } from "@solidjs/web"
 import { createMemo, For } from "solid-js"
-import { blocks, parse, type PhrasingContent, type RootContent } from "./markdown.ts"
+import { blocks, mend, parse, type PhrasingContent, type RootContent } from "./markdown.ts"
 
 export { plain } from "./markdown.ts"
 
 const SAFE = /^(https?:|mailto:)/i
+/** The slot after the last glyph: read inside JSX, so it is reactive where it lands. */
+type Tail = () => JSX.Element
 
 const inline = (n: PhrasingContent): JSX.Element => {
   switch (n.type) {
@@ -46,20 +51,24 @@ const inline = (n: PhrasingContent): JSX.Element => {
   }
 }
 
-const block = (n: RootContent, tail?: JSX.Element): JSX.Element => {
+/** Blocks in a row, the tail in the last one. */
+const run = (ns: readonly RootContent[], tail?: Tail): JSX.Element =>
+  ns.length ? ns.map((c, k) => block(c, k === ns.length - 1 ? tail : undefined)) : tail?.()
+
+const block = (n: RootContent, tail?: Tail): JSX.Element => {
   switch (n.type) {
     case "paragraph":
       return (
         <p>
           {n.children.map(inline)}
-          {tail}
+          {tail?.()}
         </p>
       )
     case "heading": {
       const kids = (
         <>
           {n.children.map(inline)}
-          {tail}
+          {tail?.()}
         </>
       )
       switch (n.depth) {
@@ -78,83 +87,71 @@ const block = (n: RootContent, tail?: JSX.Element): JSX.Element => {
       }
     }
     case "thematicBreak":
-      return [<hr />, tail]
+      return [<hr />, tail?.()] // nothing to ride on: the cursor waits under the rule
     case "blockquote":
-      return [
-        <blockquote>
-          <For each={n.children}>{(c) => block(c)}</For>
-        </blockquote>,
-        tail,
-      ]
+      return <blockquote>{run(n.children, tail)}</blockquote>
     case "list":
-      return [
-        n.ordered ? (
-          <ol start={n.start ?? undefined}>
-            <For each={n.children}>{(c) => block(c)}</For>
-          </ol>
-        ) : (
-          <ul>
-            <For each={n.children}>{(c) => block(c)}</For>
-          </ul>
-        ),
-        tail,
-      ]
+      return n.ordered ? (
+        <ol start={n.start ?? undefined}>{run(n.children, tail)}</ol>
+      ) : (
+        <ul>{run(n.children, tail)}</ul>
+      )
     case "listItem":
       return (
         <li>
           {n.checked === true ? "☑ " : n.checked === false ? "☐ " : ""}
-          <For each={n.children}>{(c) => block(c)}</For>
+          {run(n.children, tail)}
         </li>
       )
     case "code":
-      return [
+      return (
         <pre>
-          <code data-lang={n.lang ?? undefined}>{n.value}</code>
-        </pre>,
-        tail,
-      ]
+          <code data-lang={n.lang ?? undefined}>
+            {n.value}
+            {tail?.()}
+          </code>
+        </pre>
+      )
     case "table": {
       const [head, ...rows] = n.children
-      const cell = (r: (typeof n.children)[number], th: boolean) =>
-        r.children.map((c, i) =>
-          th ? (
-            <th style={{ "text-align": n.align?.[i] ?? undefined }}>{c.children.map(inline)}</th>
-          ) : (
-            <td style={{ "text-align": n.align?.[i] ?? undefined }}>{c.children.map(inline)}</td>
-          ),
-        )
-      return [
+      const cells = (r: (typeof n.children)[number], th: boolean, last: boolean) =>
+        r.children.map((c, i) => {
+          const kids = (
+            <>
+              {c.children.map(inline)}
+              {last && i === r.children.length - 1 && tail?.()}
+            </>
+          )
+          const align = n.align?.[i] ?? undefined
+          return th ? <th style={{ "text-align": align }}>{kids}</th> : <td style={{ "text-align": align }}>{kids}</td>
+        })
+      const body = rows.map((r, k) => <tr>{cells(r, false, k === rows.length - 1)}</tr>) // the tree is static: parsed once per text
+      return (
         <table>
           {head && (
             <thead>
-              <tr>{cell(head, true)}</tr>
+              <tr>{cells(head, true, !rows.length)}</tr>
             </thead>
           )}
-          <tbody>
-            <For each={rows}>{(r) => <tr>{cell(r, false)}</tr>}</For>
-          </tbody>
-        </table>,
-        tail,
-      ]
+          <tbody>{body}</tbody>
+        </table>
+      )
     }
     case "html":
       return (
         <p>
           {n.value}
-          {tail}
+          {tail?.()}
         </p>
       )
     case "footnoteDefinition":
-      return [
+      return (
         <div class="footnote">
-          [{n.label ?? n.identifier}] <For each={n.children}>{(c) => block(c)}</For>
-        </div>,
-        tail,
-      ]
-    case "definition":
-      return tail
+          [{n.label ?? n.identifier}] {run(n.children, tail)}
+        </div>
+      )
     default:
-      return tail
+      return tail?.()
   }
 }
 
@@ -166,18 +163,19 @@ export const Prose = (props: { text: string; open?: boolean; tail?: JSX.Element 
     return bs.length || !("tail" in props) ? bs : [""]
   })
   const last = createMemo(() => bs().length - 1)
+  // `.md` scopes reader.css's block styles; display: contents, so the blocks stay the host's own flex children
   return (
-    <For each={bs()} keyed={false}>
-      {(b, i) => {
-        const nodes = createMemo(() => parse(b(), !!props.open && i === last()))
-        return (
-          <>
-            {nodes().length
-              ? nodes().map((n, k) => block(n, k === nodes().length - 1 && i === last() ? props.tail : undefined))
-              : block({ type: "paragraph", children: [] }, i === last() ? props.tail : undefined)}
-          </>
-        )
-      }}
-    </For>
+    <div class="md">
+      <For each={bs()} keyed={false}>
+        {(b, i) => {
+          const isLast = createMemo(() => i === last())
+          // the same string in → the same nodes: a block that is no longer last, or no longer streaming, holds its DOM
+          const text = createMemo(() => (props.open && isLast() ? mend(b()) : b()))
+          const nodes = createMemo(() => parse(text()))
+          const tail: Tail = () => (isLast() ? props.tail : undefined)
+          return <>{nodes().length ? run(nodes(), tail) : block({ type: "paragraph", children: [] }, tail)}</>
+        }}
+      </For>
+    </div>
   )
 }

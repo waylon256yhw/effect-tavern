@@ -60,5 +60,6 @@ assert.equal(
 assert.equal(openingTag(yandao, { text: "x", do: [{ path: "局势", set: 7 }] }), "局势 = 7")
 assert.equal(openingTag(yandao, { text: "x" }), undefined)
 assert.equal(firstLine("  黄昏。盐津镇的石板街上\r\n第二段"), "黄昏。盐津镇的石板街上")
+assert.equal(firstLine("**午后的阳光**从彩绘玻璃窗渗入\n\n*第二段*"), "午后的阳光从彩绘玻璃窗渗入")
 assert.ok(specs(view({ rules: full.rules, fiction: [] })).some((r) => r.key === "State" && r.items.includes("体力")))
 console.log("manifest ok")

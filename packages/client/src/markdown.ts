@@ -21,18 +21,19 @@ const processor = unified().use(remarkParse).use(remarkGfm).use(remarkCjkFriendl
 const extensions = processor.data("micromarkExtensions") as unknown[]
 extensions.push({ disable: { null: ["codeIndented"] } })
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})/
+// a fence opens on a run of three or more backticks (then no backtick on the line: ```a``` is inline code) or tildes
+const FENCE = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/
 /** A turn's text as blocks: cut at blank lines (as the reader's paragraphs always were), except inside a fence,
  *  which keeps its blank lines and closes at a run of its own character at least as long. */
 export const blocks = (text: string): string[] => {
   const out: string[] = []
   let cur: string[] = []
   let fence: string | undefined
-  for (const line of text.split("\n")) {
-    const m = FENCE.exec(line)
+  for (const line of text.split(/\r?\n/)) {
+    const m = FENCE.exec(line)?.slice(1).find(Boolean)
     if (fence) {
       cur.push(line)
-      if (m && m[1]![0] === fence[0] && m[1]!.length >= fence.length && /^ {0,3}[`~]+\s*$/.test(line)) fence = undefined
+      if (m && m[0] === fence[0] && m.length >= fence.length && /^ {0,3}[`~]+\s*$/.test(line)) fence = undefined
       continue
     }
     if (!line.trim()) {
@@ -40,19 +41,20 @@ export const blocks = (text: string): string[] => {
       cur = []
       continue
     }
-    if (m) fence = m[1]!
+    if (m) fence = m
     cur.push(line)
   }
   if (cur.length) out.push(cur.join("\n"))
   return out
 }
 
-/** One block parsed: its mdast children. `open` is the block still being written: its unclosed marks are closed
- *  for display (the text itself is never changed). */
-export const parse = (block: string, open = false): RootContent[] => {
-  const text = open ? remend(block, { links: false, images: false, inlineKatex: false, katex: false }) : block
-  return (processor.runSync(processor.parse(text)) as Root).children
-}
+/** The block still being written, its unclosed marks closed for display (the text itself is never changed): the
+ *  same string back when nothing is open, so a memo over it holds. */
+export const mend = (block: string): string =>
+  remend(block, { links: false, images: false, inlineKatex: false, katex: false })
+
+/** One block parsed: its mdast children. */
+export const parse = (block: string): RootContent[] => (processor.runSync(processor.parse(block)) as Root).children
 
 /** The text under the marks: what a one-line preview or a menu row shows. */
 export const plain = (text: string): string =>

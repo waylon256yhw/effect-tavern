@@ -141,12 +141,12 @@
 .manifest .opening .wscroll {
   flex: 1;
   padding: var(--fade) 20px;
-}
-.manifest .opening .well p {
-  margin: 0;
+  /* the opening as the reader draws it (prose.tsx): blocks in the turn's rhythm; reader.css styles them here too */
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-item);
   font-size: var(--text-prose);
   line-height: var(--leading-prose);
-  white-space: pre-line;
   overflow-wrap: anywhere;
 }
 .manifest .well.empty {

@@ -181,20 +181,24 @@ p {
   white-space: pre-wrap; /* a single newline is a line break, as the editor (a plaintext-only host) shows it */
 }
 /* the rest of the Markdown subset (src/markdown.ts), as blocks in the turn's own rhythm: each is a flex child of the
-   section (or the draft's .now), so the gap between blocks is the paragraph gap and no block carries a margin.
+   section (or the draft's .now, the timeline's node pane, the card page's opening), so the gap between blocks is
+   the paragraph gap and no block carries a margin.
    Emphasis: CJK fonts have no italic and a synthesized slant is a smear, so an em is upright there (a Latin run
    still slants) and a shade lighter than its line, whatever the line's own shade (a dimmed draft stays dimmed) */
-main section :is(h1, h2, h3, h4, h5, h6) {
+.md {
+  display: contents; /* the host (a section, the draft's .now, the timeline's node pane, the opening's well) lays the blocks out */
+}
+.md :is(h1, h2, h3, h4, h5, h6) {
   margin: 0;
   font-size: var(--text-prose);
   font-weight: 600;
   line-height: var(--leading-prose);
   line-break: strict;
 }
-main section h1 {
+.md h1 {
   font-size: var(--text-title);
 }
-main section h2 {
+.md h2 {
   font-size: calc(var(--text-prose) * 1.125);
 }
 em {
@@ -208,14 +212,14 @@ strong {
 del {
   color: color-mix(in oklab, currentColor 60%, var(--surface-1));
 }
-:is(main section, .timeline .prose) :is(ul, ol) {
+.md :is(ul, ol) {
   margin: 0;
   padding-inline-start: 1.5em;
   display: flex;
   flex-direction: column;
   gap: calc(var(--gap-item) / 2);
 }
-:is(main section, .timeline .prose) blockquote {
+.md blockquote {
   margin: 0;
   padding-inline-start: var(--space-3);
   border-inline-start: 2px solid var(--line-strong);
@@ -224,21 +228,21 @@ del {
   gap: var(--gap-item);
   color: color-mix(in oklab, currentColor 80%, var(--surface-1));
 }
-:is(main section, .timeline .prose) hr {
+.md hr {
   /* a scene cut: a short rule, centered */
   width: 6rem;
   margin: var(--space-1) auto;
   border: 0;
   border-top: var(--hairline) solid var(--line-strong);
 }
-:is(main section, .timeline .prose) code {
+.md code {
   font-family: var(--font-mono);
   font-size: 0.9em;
   padding: 0 0.3em;
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
 }
-:is(main section, .timeline .prose) pre {
+.md pre {
   /* no highlighting: a fence is monospace in a quiet box, and the language rides on the <code> as data-lang */
   margin: 0;
   padding: var(--space-2) var(--space-3);
@@ -248,35 +252,35 @@ del {
   font-size: var(--text-body);
   line-height: 1.5;
 }
-:is(main section, .timeline .prose) pre code {
+.md pre code {
   padding: 0;
   font-size: inherit;
   background: none;
 }
-:is(main section, .timeline .prose) table {
+.md table {
   border-collapse: collapse;
   width: 100%;
   font-size: var(--text-body);
   line-height: 1.5;
 }
-:is(main section, .timeline .prose) :is(th, td) {
+.md :is(th, td) {
   padding: var(--space-1) var(--space-2);
   border-bottom: var(--hairline) solid var(--line);
   text-align: start;
   vertical-align: top;
 }
-:is(main section, .timeline .prose) th {
+.md th {
   font-weight: 600;
   color: var(--ink-2);
   border-bottom-color: var(--line-strong);
 }
-:is(main section, .timeline .prose) a {
+.md a {
   color: inherit;
   text-decoration: underline;
   text-decoration-color: var(--line-strong);
   text-underline-offset: 0.15em;
 }
-:is(main section, .timeline .prose) .footnote {
+.md .footnote {
   font-size: var(--text-body);
   color: var(--ink-2);
 }

@@ -213,7 +213,7 @@ export const Timeline = () => {
         <span class="nid">Draft</span>
         <span class="where">{p.c.parent === null ? "root" : `#${p.c.parent}`}</span>
       </div>
-      <div class="row2">{d()?.input.text || d()?.input.note || d()?.text || "Writing…"}</div>
+      <div class="row2">{d()?.input.text || d()?.input.note || plain(d()?.text ?? "") || "Writing…"}</div>
     </div>
   )
 

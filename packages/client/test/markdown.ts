@@ -1,11 +1,11 @@
 // The Markdown subset the reader draws: blocks cut as the paragraphs were, CJK punctuation beside a mark, the
 // block in flight mended, indented lines kept as prose, HTML and images as text, and the previews' plain text.
 import assert from "node:assert/strict"
-import { blocks, parse, plain } from "../src/markdown.ts"
+import { blocks, mend, parse, plain } from "../src/markdown.ts"
 
-const types = (block: string, open = false) => parse(block, open).map((n) => n.type)
+const types = (block: string, open = false) => parse(open ? mend(block) : block).map((n) => n.type)
 const inlines = (block: string, open = false) => {
-  const [p] = parse(block, open)
+  const [p] = parse(open ? mend(block) : block)
   assert.equal(p?.type, "paragraph")
   return (p as { children: { type: string; value?: string }[] }).children.map(
     (c) => c.type + (c.value ? `:${c.value}` : ""),
@@ -18,6 +18,9 @@ assert.deepEqual(blocks("一\n二"), ["一\n二"]) // one newline is one block, 
 assert.deepEqual(blocks("前\n\n```\na\n\nb\n```\n\n后"), ["前", "```\na\n\nb\n```", "后"])
 assert.deepEqual(blocks("~~~~\n```\n\nx\n~~~\n~~~~\n\n后"), ["~~~~\n```\n\nx\n~~~\n~~~~", "后"]) // closes only at its own run
 assert.deepEqual(blocks("```\n未闭合\n\n仍在栅栏内"), ["```\n未闭合\n\n仍在栅栏内"])
+assert.deepEqual(blocks("```foo```\n\n后"), ["```foo```", "后"]) // inline code, not a fence (no backtick in an info string)
+assert.deepEqual(blocks("~~~ a~b\nx\n~~~\n\n后"), ["~~~ a~b\nx\n~~~", "后"]) // a tilde fence's info string may hold anything
+assert.deepEqual(blocks("一\r\n\r\n二"), ["一", "二"])
 assert.deepEqual(blocks(""), [])
 assert.deepEqual(blocks("   \n\n  "), [])
 
@@ -31,7 +34,10 @@ assert.deepEqual(inlines("***粗斜***体"), ["emphasis", "text:体"]) // emphas
 assert.deepEqual(inlines("~~划掉~~的"), ["delete", "text:的"])
 assert.deepEqual(inlines("20~25度之间"), ["text:20~25度之间"]) // one tilde is never strikethrough
 
-// the block in flight: an unclosed mark is closed for display, the text itself untouched
+// the block in flight: an unclosed mark is closed for display, the text itself untouched; a closed block mends to
+// the same string, so the memo over it holds when the block stops being the last one
+assert.equal(mend("**她坐在木椅**靠背"), "**她坐在木椅**靠背")
+assert.equal(mend("她说：“别"), "她说：“别")
 assert.deepEqual(inlines("**她坐在木椅", true), ["strong"])
 assert.deepEqual(inlines("*你还未来得及辨清", true), ["emphasis"])
 assert.deepEqual(inlines("**她坐在木椅"), ["text:**她坐在木椅"]) // landed as the model left it
