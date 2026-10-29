@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Meter prototype</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --surface-0: light-dark(#f9f9f7, #0b0b0b);
+    --surface-3: light-dark(#ffffff, #20201f);
+    --ink: light-dark(#151515, #f5f5f5);
+    --ink-2: light-dark(#525252, #a3a3a3);
+    --ink-3: light-dark(#8a8a8a, #6f6f6f);
+    --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+    --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+    --danger: light-dark(#dc2626, #f87171);
+    --ok: light-dark(#1f7a3f, #4ade80);
+    --ok-soft: light-dark(rgb(31 122 63 / 0.22), rgb(74 222 128 / 0.25));
+    --danger-soft: light-dark(rgb(220 38 38 / 0.18), rgb(248 113 113 / 0.22));
+  }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--surface-0); color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  p.lead { color: var(--ink-2); margin: 0 0 24px; max-width: 60ch; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 760px; }
+  @media (min-width: 680px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card { background: var(--surface-3); border-radius: 10px; padding: 14px 16px 16px; box-shadow: 0 1px 2px rgb(0 0 0 / .06); }
+  .card h2 { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink-3); margin: 0 0 10px; text-transform: uppercase; }
+  .case { padding: 8px 0; }
+  .case + .case { border-top: 1px solid var(--alpha-2); }
+  .case .cap { font-size: 11px; color: var(--ink-3); margin: 0 0 4px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .label { font-weight: 500; }
+  .num { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-2); display: inline-flex; gap: 4px; align-items: center; }
+  .num .arrow { color: var(--ink-3); }
+
+  /* ── current (3a48330): segmented track, fill chopped by segments ── */
+  .cur .track { display: flex; gap: 3px; height: 6px; }
+  .cur .seg { position: relative; overflow: hidden; border-radius: 3px; background: var(--alpha-2); }
+  .cur .fill { position: absolute; inset-block: 0; min-width: 8px; max-width: 100%; border-radius: 999px; background: var(--ink); }
+  .cur .fill[data-gain] { background: var(--ok); }
+  .cur .fill[data-loss] { background: var(--danger); }
+
+  /* ── proposed: gauge (stock) ── */
+  .gauge .track { position: relative; height: 6px; border-radius: 3px; background: var(--alpha-2); overflow: hidden; }
+  .gauge .track i { position: absolute; inset-block: 0; }
+  .gauge .fill { background: var(--ink); border-radius: 3px; }
+  .gauge .delta[data-gain] { background: var(--ok); }
+  .gauge .delta[data-loss] { background: var(--danger-soft); }
+  .gauge .tick { width: 1px; background: var(--surface-3); }
+  .gauge .ticks { position: relative; height: 14px; font-size: 11px; color: var(--ink-3); }
+  .gauge .ticks span { position: absolute; translate: -50% 0; }
+
+  /* ── proposed: scale (position on an axis) ── */
+  .scale .track { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; height: 6px; }
+  .scale .cell { position: relative; border-radius: 3px; background: var(--alpha-2); }
+  .scale .cell[data-here] { background: var(--alpha-4); }
+  .scale .stroke { position: absolute; inset-block: 0; border-radius: 3px; }
+  .scale .stroke[data-gain] { background: var(--ok); }
+  .scale .stroke[data-loss] { background: var(--danger); }
+  .scale .dot { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--ink);
+    translate: -50% -50%; box-shadow: 0 0 0 2px var(--surface-3); }
+  .scale .dot[data-gain] { background: var(--ok); }
+  .scale .dot[data-loss] { background: var(--danger); }
+  .scale .names { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px;
+    font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+  .scale .names > span { overflow: hidden; text-overflow: ellipsis; }
+  .scale .names > span[data-here] { color: var(--ink); font-weight: 600; }
+  .scale .names.ticks { position: relative; display: block; height: 14px; }
+  .scale .names.ticks span { position: absolute; translate: -50% 0; }
+</style>
+</head>
+<body>
+<h1>计量条：现状（3a48330）对比提案</h1>
+<p class="lead">左列是 main 上现在的画法（段按阈值切、本回合只画 was→now 的胶囊）。右列把带界 int 分成两种：<b>量（gauge）</b>从 min 起填充、阈值只是刻度；<b>位（scale）</b>不填充，等宽格是作者定义的阶段，点是当前位置，本回合的跳跃是一段描边。</p>
+<div class="grid" id="root"></div>
+<script>
+const root = document.getElementById("root")
+const h = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === false || v === undefined || v === null) continue
+    if (k === "style") Object.assign(e.style, v); else if (k === "class") e.className = v; else e.setAttribute(k, v === true ? "" : v)
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k)
+  return e
+}
+const header = (label, was, now, max) =>
+  h("div", { class: "row" }, h("span", { class: "label" }, label),
+    h("span", { class: "num" }, was !== now ? [String(was), h("span", { class: "arrow" }, "→")] : null, String(now), max !== undefined ? ` / ${max}` : null))
+
+/* ── current, transcribed from readings.tsx@3a48330 ── */
+const segments = (min, max, cuts) => {
+  const pts = [...new Set([0, ...cuts].filter((x) => x > min && x < max))].sort((a, b) => a - b)
+  const edges = [min, ...pts, max]
+  return edges.slice(0, -1).map((a, i) => [a, edges[i + 1]])
+}
+const current = ({ label, min, max, was, now, cuts }) => {
+  const origin = Math.min(Math.max(0, min), max)
+  const from = was === now ? origin : was
+  const lo = Math.min(from, now), hi = Math.max(from, now)
+  const span = (sLo, sHi) => {
+    const a = Math.max(lo, sLo), b = Math.min(hi, sHi), w = sHi - sLo
+    const width = `${((b - a) / w) * 100}%`
+    return sHi <= origin ? { right: `min(${((sHi - b) / w) * 100}%, calc(100% - 8px))`, width } : { left: `min(${((a - sLo) / w) * 100}%, calc(100% - 8px))`, width }
+  }
+  return h("div", { class: "cur" }, header(label, was, now, min === 0 ? max : undefined),
+    h("div", { class: "track" }, segments(min, max, cuts).map(([sLo, sHi]) =>
+      h("span", { class: "seg", style: { flex: String(sHi - sLo) } },
+        Math.min(hi, sHi) > Math.max(lo, sLo) ? h("i", { class: "fill", "data-gain": now > was, "data-loss": now < was, style: span(sLo, sHi) }) : null))))
+}
+
+/* ── proposed: gauge ── */
+const gauge = ({ label, min, max, was, now, cuts }) => {
+  const at = (x) => `${((x - min) / (max - min)) * 100}%`
+  const w = (a, b) => `${(Math.abs(a - b) / (max - min)) * 100}%`
+  const kids = [h("i", { class: "fill", style: { left: at(min), width: w(min, now > was ? was : now) } })]
+  if (now !== was) kids.push(h("i", { class: "delta", "data-gain": now > was, "data-loss": now < was, style: { left: at(Math.min(was, now)), width: w(was, now) } }))
+  for (const c of cuts.filter((x) => x > min && x < max)) kids.push(h("i", { class: "tick", style: { left: at(c) } }))
+  return h("div", { class: "gauge" }, header(label, was, now, max), h("div", { class: "track" }, kids),
+    cuts.length ? h("div", { class: "ticks" }, cuts.filter((x) => x > min && x < max).map((c) => h("span", { style: { left: at(c) } }, String(c)))) : null)
+}
+
+/* ── proposed: scale ── */
+const scale = ({ label, min, max, was, now, cuts, names }) => {
+  const pts = [...new Set(cuts.filter((x) => x > min && x < max))].sort((a, b) => a - b)
+  const edges = [min, ...pts, max]
+  const cells = edges.slice(0, -1).map((a, i) => [a, edges[i + 1]])
+  const cellOf = (x) => Math.max(0, cells.findIndex(([a, b], i) => x >= a && (x < b || i === cells.length - 1)))
+  const ci = cellOf(now), wi = cellOf(was)
+  const within = (x, [a, b]) => ((x - a) / (b - a)) * 100
+  const lo = Math.min(was, now), hi = Math.max(was, now)
+  const track = h("div", { class: "track" }, cells.map((c, i) => {
+    const kids = []
+    if (now !== was && hi > c[0] && lo < c[1]) {
+      const a = Math.max(lo, c[0]), b = Math.min(hi, c[1])
+      kids.push(h("i", { class: "stroke", "data-gain": now > was, "data-loss": now < was, style: { left: `${within(a, c)}%`, width: `${within(b, c) - within(a, c)}%` } }))
+    }
+    if (i === ci) kids.push(h("i", { class: "dot", "data-gain": now > was, "data-loss": now < was, style: { left: `${within(now, c)}%` } }))
+    return h("span", { class: "cell", "data-here": i === ci }, kids)
+  }))
+  const under = names
+    ? h("div", { class: "names" }, cells.map((c, i) => h("span", { "data-here": i === ci }, names[i] ?? String(c[0]))))
+    : h("div", { class: "names ticks" }, pts.map((p, i) => h("span", { style: { left: `${((i + 1) / cells.length) * 100}%` } }, String(p))))
+  return h("div", { class: "scale" }, header(label, was, now), track, under)
+}
+
+const column = (title, draw, cases) => h("div", { class: "card" }, h("h2", title), cases.map((c) => h("div", { class: "case" }, h("p", { class: "cap" }, c.cap), draw(c))))
+
+const ri = { label: "好感度", min: -30, max: 100, cuts: [20, 40, 60, 80, 90] }
+const bond = { label: "交情", min: -30, max: 100, cuts: [8] }
+const hp = { label: "体力", min: 0, max: 100, cuts: [] }
+const ju = { label: "局势", min: 0, max: 10, cuts: [6] }
+const riCases = [
+  { ...ri, cap: "Status · 开局 0", was: 0, now: 0 },
+  { ...ri, cap: "Status · 57", was: 57, now: 57 },
+  { ...ri, cap: "Record · 57 → 65，跨过 60 的告白门槛", was: 57, now: 65 },
+  { ...ri, cap: "Record · 22 → 17，跌出一段", was: 22, now: 17 },
+  { ...ri, cap: "Record · 2 → -3，过零", was: 2, now: -3 },
+  { ...ri, cap: "Status · -12", was: -12, now: -12 },
+]
+const others = [
+  { ...hp, cap: "体力 Status · 40", was: 40, now: 40 },
+  { ...hp, cap: "体力 Record · 40 → 30", was: 40, now: 30 },
+  { ...hp, cap: "体力 Record · 30 → 45", was: 30, now: 45 },
+  { ...ju, cap: "局势 Record · 2 → 7，踩过 6", was: 2, now: 7 },
+  { ...bond, cap: "交情 Record · 5 → 10，过 8", was: 5, now: 10 },
+]
+const kindOf = (c) => (c.min < 0 ? "scale" : "gauge")
+root.append(
+  column("现状 · 好感度（理）", current, riCases),
+  column("提案 · 位（scale）", scale, riCases),
+  column("现状 · 其它卡", current, others),
+  column("提案 · 按形选画法", (c) => (kindOf(c) === "scale" ? scale(c) : gauge(c)), others),
+)
+</script>
+</body>
+</html>
