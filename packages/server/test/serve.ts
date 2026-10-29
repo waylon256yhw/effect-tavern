@@ -16,6 +16,9 @@ import { open } from "../src/data.ts"
 import { library } from "../src/library.ts"
 import { app, handle, serve } from "../src/serve.ts"
 
+// the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
+process.env.NO_PROXY = "localhost,127.0.0.1"
+
 const model = {
   ...fake((o) =>
     o.responseFormat?.type === "json"
