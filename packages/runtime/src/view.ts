@@ -192,10 +192,6 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
   }
 }
 
-/** One line per greeting (`card check`): the state its `do` leaves, and what that state puts in play before a word of
- *  prose is written: the fiction bands that hold, the lore windows open for turn 1, the readouts record asks after it.
- *  An observation, not a rule (#83): an opening that fires an event on turn 1 may be meant; the author reads it here
- *  rather than in a live run (ri's single opening set 好感度 60, and the confession opened and was judged on turn 1). */
 /** One line per shown field with what the client draws it as (card.ts `drawn`): the meter kind with its stage
  *  thresholds, a step track's options, or a value row; the author sees the picture without the client. */
 export const fields = (card: Card): string[] =>
@@ -214,6 +210,10 @@ export const fields = (card: Card): string[] =>
             : `${d.as} ${f.min}..${f.max}${d.cuts.length ? `  cuts ${d.cuts.join(" ")}` : ""}`
       return `field ${f.path}  ${how}`
     })
+/** One line per greeting (`card check`): the state its `do` leaves, and what that state puts in play before a word of
+ *  prose is written: the fiction bands that hold, the lore windows open for turn 1, the readouts record asks after it.
+ *  An observation, not a rule (#83): an opening that fires an event on turn 1 may be meant; the author reads it here
+ *  rather than in a live run (ri's single opening set 好感度 60, and the confession opened and was judged on turn 1). */
 export const openings = (card: Card, player: Player): string[] =>
   card.greetings.map((_, i) => {
     const v = view(card, player, { greeting: i })

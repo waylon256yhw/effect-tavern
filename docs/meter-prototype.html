@@ -73,7 +73,7 @@
 </head>
 <body>
 <h1>计量条：现状（3a48330）对比提案</h1>
-<p class="lead">左列是 main 上现在的画法（段按阈值切、本回合只画 was→now 的胶囊）。右列把带界 int 分成两种：<b>量（gauge）</b>从 min 起填充、阈值只是刻度；<b>位（scale）</b>不填充，等宽格是作者定义的阶段，点是当前位置，本回合的跳跃是一段描边。</p>
+<p class="lead">左列是 main 上现在的画法（段按阈值切、本回合只画 was→now 的胶囊）。右列把带界 int 分成两种：<b>量（gauge）</b>从 min 起填充、阈值只是刻度；<b>位（scale）</b>不填充，等宽格是作者定义的阶段（跨负区时 0 也是一道分界），点是当前位置，本回合的跳跃是一段描边。判据 <code>min &lt; 0 || cuts ≥ 2</code>，卡上 <code>view</code> 可覆盖。</p>
 <div class="grid" id="root"></div>
 <script>
 const root = document.getElementById("root")
@@ -148,8 +148,8 @@ const scale = ({ label, min, max, was, now, cuts, names }) => {
 
 const column = (title, draw, cases) => h("div", { class: "card" }, h("h2", title), cases.map((c) => h("div", { class: "case" }, h("p", { class: "cap" }, c.cap), draw(c))))
 
-const ri = { label: "好感度", min: -30, max: 100, cuts: [20, 40, 60, 80, 90] }
-const bond = { label: "交情", min: -30, max: 100, cuts: [8] }
+const ri = { label: "好感度", min: -30, max: 100, cuts: [0, 20, 40, 60, 80, 90] }
+const bond = { label: "交情", min: -30, max: 100, cuts: [0, 8] }
 const hp = { label: "体力", min: 0, max: 100, cuts: [] }
 const ju = { label: "局势", min: 0, max: 10, cuts: [6] }
 const riCases = [
@@ -167,7 +167,7 @@ const others = [
   { ...ju, cap: "局势 Record · 2 → 7，踩过 6", was: 2, now: 7 },
   { ...bond, cap: "交情 Record · 5 → 10，过 8", was: 5, now: 10 },
 ]
-const kindOf = (c) => (c.min < 0 ? "scale" : "gauge")
+const kindOf = (c) => (c.min < 0 || c.cuts.length >= 2 ? "scale" : "gauge") // runtime card.ts drawn, without `view`
 root.append(
   column("现状 · 好感度（理）", current, riCases),
   column("提案 · 位（scale）", scale, riCases),
