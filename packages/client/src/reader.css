@@ -201,15 +201,15 @@ p {
 .md h2 {
   font-size: calc(var(--text-prose) * 1.125);
 }
-em {
+.md em {
   font-style: italic;
   font-synthesis-style: none;
   color: color-mix(in oklab, currentColor 72%, var(--surface-1));
 }
-strong {
+.md strong {
   font-weight: 600;
 }
-del {
+.md del {
   color: color-mix(in oklab, currentColor 60%, var(--surface-1));
 }
 .md :is(ul, ol) {
