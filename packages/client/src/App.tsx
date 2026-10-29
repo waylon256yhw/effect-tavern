@@ -160,9 +160,10 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
  *  state that only the user's intent flips. A scroll event the program did not cause is the user's (content growing
  *  under the viewport fires none): past 40px from the bottom they are reading, back within it they follow again;
  *  growth while following sticks to the bottom unless their hand was on the column within 150ms (wheel, touch or
- *  pointer inside it, or a key outside a field; anchoring a turn clears it); the way back shows past 120px. The one deviation is the anchor: a new turn lands at its own top, where the last section's min-height
- *  puts the column's end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a
- *  smooth one fires many events no one could attribute. The scroller is the column (.scroll), never the page. */
+ *  pointer inside it, or a key outside a field; anchoring a turn clears it); the way back shows past 120px. The one
+ *  deviation is the anchor: a new turn lands at its own top, where the last section's min-height puts the column's
+ *  end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a smooth one fires
+ *  many events no one could attribute. The scroller is the column (.scroll), never the page. */
 const follow = { on: true, ours: null as number | null, touched: -Infinity, landing: false }
 const scroller = () => document.querySelector(".scroll")!
 const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
