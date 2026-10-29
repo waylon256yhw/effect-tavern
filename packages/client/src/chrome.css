@@ -184,34 +184,88 @@
 .steps .names b {
   color: var(--ink);
 }
-.meter .track {
-  display: flex;
+/* a gauge: ink fills min → now, this turn's gain past it in ok, a loss as the lost stretch in soft danger, a cut a tick */
+.meter.gauge .track {
+  overflow: hidden;
+}
+.meter.gauge .track i {
+  position: absolute;
+  inset-block: 0;
+}
+.meter.gauge .fill {
+  left: 0;
+  border-radius: 3px;
+  background: var(--ink);
+  transition: width var(--dur-4) var(--ease);
+}
+.meter.gauge .delta[data-gain] {
+  background: var(--ok);
+}
+.meter.gauge .delta[data-loss] {
+  background: var(--danger-soft);
+}
+.meter.gauge .tick {
+  width: 1px;
+  background: var(--ink-3);
+}
+/* a scale: equal cells like steps', the stage held tinted, a dot at now within its cell (the check's dot), this
+   turn's was → now a stroke in ok / danger */
+.meter.scale .track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 3px;
   background: none;
 }
-.meter .seg {
+.meter.scale .cell {
   position: relative;
-  overflow: hidden;
   border-radius: 3px;
   background: var(--alpha-2);
 }
-.meter .fill {
+.meter.scale .cell[data-here] {
+  background: var(--alpha-4);
+}
+.meter.scale .stroke {
   position: absolute;
   inset-block: 0;
-  min-width: 8px;
-  max-width: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--ink);
-  transition:
-    left var(--dur-4) var(--ease),
-    right var(--dur-4) var(--ease),
-    width var(--dur-4) var(--ease);
+  border-radius: 3px;
 }
-.meter .fill[data-gain] {
+.meter.scale .stroke[data-gain] {
   background: var(--ok);
 }
-.meter .fill[data-loss] {
+.meter.scale .stroke[data-loss] {
   background: var(--danger);
+}
+.meter.scale .dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink);
+  translate: -50% -50%;
+  box-shadow: 0 0 0 2px var(--surface-3);
+  transition: left var(--dur-4) var(--ease);
+}
+.meter.scale .dot[data-gain] {
+  background: var(--ok);
+}
+.meter.scale .dot[data-loss] {
+  background: var(--danger);
+}
+/* the cut values under the track, each centred on its cut: a gauge's on the axis, a scale's on the cell gaps */
+.meter .marks {
+  position: relative;
+  height: calc(var(--text-caption) + var(--space-1));
+  margin-top: var(--space-1);
+  font-size: var(--text-caption);
+  line-height: 1;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.meter .marks span {
+  position: absolute;
+  translate: -50% 0;
 }
 .check .zone {
   position: absolute;

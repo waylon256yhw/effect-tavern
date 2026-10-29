@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "s
 import { read } from "./bridge.ts"
 import { Back, Clue, Next, Prev, Record } from "./icons.tsx"
 import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type Tray } from "./inspect.ts"
-import { KeyValues, PinButton, Reading, Shaped } from "./readings.tsx"
+import { KeyValues, PinButton, Reading, Shaped, whens } from "./readings.tsx"
 import { record } from "./record.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import { calls, card, log, page, path, pin, registry, turnOf, type Id } from "./store.ts"
@@ -313,7 +313,7 @@ export const Inspect = (props: { id: Id }) => {
   const fields = createMemo(() => {
     const r = view()?.rules
     const x = node()
-    return r && x ? record(r, x, parent()).filter((e) => "path" in e) : []
+    return r && x ? record(r, x, parent(), [], whens(view())).filter((e) => "path" in e) : []
   })
   const shapeOf = (id: string) => view()?.products.find((p) => p.id === id)?.shape
   const One = (p: { row: Row }) => (
