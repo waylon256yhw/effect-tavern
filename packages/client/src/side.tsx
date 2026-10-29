@@ -356,7 +356,7 @@ export const Session = () => {
           {/* the theme (theme.ts): a flip, not a page, so the phone's sheet stays; pressed while the dark side holds */}
           <button
             type="button"
-            class="icon theme"
+            class="icon"
             aria-label={t("side.darkTheme")}
             aria-pressed={theme() === "dark" ? "true" : "false"}
             onClick={flip}

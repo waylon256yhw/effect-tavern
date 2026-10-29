@@ -1227,15 +1227,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the pages that look at the story, at the bottom: the two that look at it on the left, the theme and the settings
-   on the right */
+/* the keys at the bottom: the two pages that look at the story, the two device flips (theme, language) and the
+   settings, spread evenly: five fill the row, so a grouping gap would only read as a hole; the flips show their
+   state as pressed keys */
 .tools {
   display: flex;
-  gap: var(--space-1);
+  justify-content: space-between;
   margin-top: auto;
-}
-.tools .theme {
-  margin-left: auto;
 }
 
 /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold. From
