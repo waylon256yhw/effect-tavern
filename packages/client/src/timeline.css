@@ -325,7 +325,9 @@ button.cell:hover {
   font-size: var(--text-prose);
   line-height: var(--leading-prose);
   color: var(--ink);
-  white-space: pre-wrap;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-item);
 }
 .timeline .vlist {
   display: flex;
