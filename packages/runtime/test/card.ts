@@ -1,7 +1,7 @@
 // Tests for src/card.ts: the three earlier RPG prototypes written as data, settled by the interpreter.
 import assert from "node:assert/strict"
 import { Schema } from "effect"
-import { Greeting, decodeCard, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
+import { cuts, drawn, Field, Greeting, decodeCard, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
 import { full, loadCard } from "./cards/index.ts"
 import { holds } from "../src/cond.ts"
 
@@ -211,5 +211,59 @@ assert.throws(() => Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path:
 assert.deepEqual(decodeCard({ ...full, version: "1.2", source: "hand" }).version, "1.2") // optional metadata, decoded as-is
 // a card is a YAML file by name: a missing one fails naming the file
 await assert.rejects(loadCard("nowhere"), /nowhere\.yaml/)
+// What a client draws a field as. Cuts: 0 (when min < 0 < max) and any threshold on the path strictly inside
+// (min, max), sorted and deduplicated; gt / lte on an int turn one above their value. Then the verdict: a scale below
+// zero or with two or more stages, else a gauge, unless `view` says; an enum steps, a one-sided int a value row.
+assert.deepEqual(cuts("hp", 0, 100), [])
+assert.deepEqual(
+  cuts("hp", 0, 100, [
+    { path: "hp", op: "gt", value: 50 },
+    { path: "hp", op: "lte", value: 50 },
+  ]),
+  [51],
+)
+assert.deepEqual(
+  cuts("好感度", -30, 100, [
+    {
+      all: [
+        { path: "好感度", op: "gte", value: -100 },
+        { path: "好感度", op: "lt", value: 20 },
+      ],
+    },
+    {
+      all: [
+        { path: "好感度", op: "gte", value: 20 },
+        { path: "好感度", op: "lt", value: 40 },
+      ],
+    },
+    { path: "好感度", op: "gte", value: 90 },
+    { not: { path: "好感度", op: "gte", value: 60 } },
+    { path: "other", op: "gte", value: 50 },
+    undefined,
+  ]),
+  [0, 20, 40, 60, 90],
+)
+const int = (f: Partial<Field>): Field => ({ path: "x", type: "int", initial: 0, ...f })
+assert.deepEqual(drawn(int({ min: 0, max: 100 })), { as: "gauge", cuts: [] })
+assert.deepEqual(drawn(int({ min: 0, max: 10 }), [{ path: "x", op: "gte", value: 6 }]), { as: "gauge", cuts: [6] })
+assert.deepEqual(
+  drawn(int({ min: 0, max: 10 }), [
+    { path: "x", op: "lt", value: 3 },
+    { path: "x", op: "lt", value: 6 },
+  ]),
+  { as: "scale", cuts: [3, 6] },
+)
+assert.deepEqual(drawn(int({ min: -30, max: 100 })), { as: "scale", cuts: [0] })
+assert.deepEqual(
+  drawn(int({ min: 0, max: 10, view: "gauge" }), [
+    { path: "x", op: "lt", value: 3 },
+    { path: "x", op: "lt", value: 6 },
+  ]),
+  { as: "gauge", cuts: [3, 6] },
+)
+assert.deepEqual(drawn(int({ min: 0, max: 100, view: "scale" })), { as: "scale", cuts: [] })
+assert.deepEqual(drawn(int({ min: 0 })), { as: "value" })
+assert.deepEqual(drawn({ path: "m", type: "enum", options: ["a", "b"], initial: "a" }), { as: "steps" })
+assert.throws(() => Schema.decodeUnknownSync(Field)({ path: "x", type: "int", initial: 0, view: "bar" }))
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")

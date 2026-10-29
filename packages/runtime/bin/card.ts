@@ -5,7 +5,7 @@ import { Console, Effect, Exit, FileSystem, Layer, Option, Path, Stdio, Terminal
 import { Argument, Command, Flag } from "effect/cli"
 import { ChildProcessSpawner } from "effect/process"
 import { lint } from "../src/lint.ts"
-import { openings, stages, view } from "../src/view.ts"
+import { fields, openings, stages, view } from "../src/view.ts"
 import { loadCard, player, readCard } from "../test/cards/index.ts"
 
 const card = Argument.String("card").pipe(
@@ -23,6 +23,7 @@ const check = Command.make("check", { card }, ({ card: name }) =>
     const ds = lint(c)
     for (const d of ds)
       yield* Console.log(`${d.level} ${d.rule} ${d.path}: ${d.message}${d.hint ? `\n    hint: ${d.hint}` : ""}`)
+    for (const line of fields(c)) yield* Console.log(line)
     for (const line of openings(c, player)) yield* Console.log(line)
     const v = view(c, player)
     for (const s of v.sections.filter((s) => s.tokens)) yield* Console.log(`${s.name} ~${s.tokens} tokens`)

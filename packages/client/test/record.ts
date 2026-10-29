@@ -2,7 +2,8 @@
 // clues with pinnability from `readable`, the pin's fate, notes; an unchanged root yields nothing. Then the turn
 // heading under a field path or a product key, and the reading line folded into scene runs.
 import assert from "node:assert/strict"
-import { heading, record, segments, status } from "../src/record.ts"
+import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
+import { heading, reading, record, status, type Element } from "../src/record.ts"
 
 const rules = {
   fields: [
@@ -30,7 +31,7 @@ const els = record(
   node({ hp: 40, foe: 30, mood: "low" }, { readable: [{ id: "li", hook: "a hook" }] }),
 )
 assert.deepEqual(els, [
-  { kind: "meter", path: "hp", label: "体力", min: 0, max: 100, was: 40, now: 30 },
+  { kind: "meter", path: "hp", label: "体力", min: 0, max: 100, was: 40, now: 30, cuts: [], scale: false },
   { kind: "value", path: "foe", label: "foe", was: 30, now: 20 }, // bounded on one side only: not a meter
   { kind: "steps", path: "mood", label: "mood", options: ["low", "mid", "high"], was: 0, now: 2 },
   { kind: "check", check: { action: "strike", chance: 0.6, roll: 0.7, hit: false } },
@@ -97,31 +98,26 @@ assert.equal(heading("mood", at(1, { mood: "high" })), "high")
 assert.equal(heading("scene.place", at(1, {}, { scene: { place: "竹林小径" } })), "竹林小径")
 assert.equal(heading("scene.place", at(1, {}, { scene: { place: "" } })), undefined)
 assert.equal(heading("scene.place", at(1, {})), undefined)
-// Segments: 0 (when min < 0 < max) and any threshold on the path strictly inside (min, max), sorted and deduplicated
-assert.deepEqual(segments("hp", 0, 100), [[0, 100]])
-assert.deepEqual(
-  segments("好感度", -30, 100, [
-    {
-      all: [
-        { path: "好感度", op: "gte", value: -100 },
-        { path: "好感度", op: "lt", value: 20 },
-      ],
-    },
-    {
-      all: [
-        { path: "好感度", op: "gte", value: 20 },
-        { path: "好感度", op: "lt", value: 40 },
-      ],
-    },
-    { path: "好感度", op: "gte", value: 90 },
-    { path: "other", op: "gte", value: 50 },
-  ]),
-  [
-    [-30, 0],
-    [0, 20],
-    [20, 40],
-    [40, 90],
-    [90, 100],
-  ],
+// A meter is a scale when it reaches below zero or has two or more stages, else a gauge; the card's `view` overrides
+const meter = (f: { min: number; max: number; view?: "gauge" | "scale" }, whens: readonly (Cond | undefined)[] = []) =>
+  reading({ path: "x", type: "int", initial: 0, ...f }, 0, 0, whens) as Extract<Element, { kind: "meter" }>
+assert.deepEqual([meter({ min: 0, max: 100 }).cuts, meter({ min: 0, max: 100 }).scale], [[], false])
+assert.equal(meter({ min: 0, max: 10 }, [{ path: "x", op: "gte", value: 6 }]).scale, false)
+assert.equal(
+  meter({ min: 0, max: 10 }, [
+    { path: "x", op: "gte", value: 3 },
+    { path: "x", op: "lt", value: 6 },
+  ]).scale,
+  true,
 )
+assert.deepEqual(meter({ min: -30, max: 100 }).cuts, [0])
+assert.equal(meter({ min: -30, max: 100 }).scale, true)
+assert.equal(
+  meter({ min: 0, max: 100, view: "gauge" }, [
+    { path: "x", op: "lt", value: 30 },
+    { path: "x", op: "lt", value: 60 },
+  ]).scale,
+  false,
+)
+assert.equal(meter({ min: 0, max: 100, view: "scale" }).scale, true)
 console.log("ok")

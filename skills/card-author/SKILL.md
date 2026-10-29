@@ -70,8 +70,16 @@ The narrator never sees a number. State reaches it only as the fiction variants 
   the confession fired on turn 1 (#83). `card check` prints one line per greeting (state after `do`, bands, windows,
   readouts): read it before any prose.
 - **State** → `rules.fields`: `{ path, type: int | number | boolean | enum, min?, max?, initial, options? (enum),
-  label?, group?, hidden? }`. Flat paths. Strings exist only inside an enum: free text is never state. `hidden` hides
-  a switch from the player (an ending nobody should see coming); settlement reads it like any field.
+  label?, group?, hidden?, view? }`. Flat paths. Strings exist only inside an enum: free text is never state. `hidden`
+  hides a switch from the player (an ending nobody should see coming); settlement reads it like any field. The
+  client draws a field from its shape, not from a component name: an enum is a step track; an int with both bounds
+  is a meter, a **gauge** (filled from min, `now / max`: a stock like hp 0..100) when `min >= 0` and the bands cut at
+  most one threshold, a **scale** (equal cells, one per stage, a dot at the value: a point on an axis like 好感度
+  -30..100) when the reach crosses below zero or the bands cut two or more stages; anything else is a value row. The
+  thresholds under a meter are the bands' `when` on that field (plus 0 where the scale crosses it), so `min: -30`
+  and six bands are already a seven-cell axis. When the guess is wrong (hp with 轻伤 / 重伤 / 濒死 bands is still a
+  stock), `view: gauge | scale` overrides it; nothing else is declared. `card check` prints one `field` line per shown
+  field with what it draws as.
 - **Mechanical moves** → `rules.actions`: `{ id, text, when?, roll?, hit?, miss?, do? }`. `text` is what the model sees
   as the option; `when` gates availability (an unavailable action is not a decodable answer); `roll` is a number, a
   field `{ path }`, or `{ judge }` (the model gives a probability inside decide, the die is code and seed). Effects are
@@ -122,7 +130,7 @@ path`), not at decode; lint (#27) reports it statically.
 ## Two hats, in this order
 
 **1. Architect** (no prose longer than a line). Place the card on its two coordinates. Declare fields with bounds and
-initials. Decide for each field who moves it: actions (mechanical) or a readout (the prose may). Write actions and
+initials; how each is drawn follows from them and the bands (the `field` lines of `card check`), so it is settled here, not by the novelist. Decide for each field who moves it: actions (mechanical) or a readout (the prose may). Write actions and
 readouts with their effects and events. Lay out lore: ids, how many layers, `unlock` per layer, `offer` on which events
 or counters. Lay out fiction: ids, labels, `when` bands with one-line placeholders. Count greetings and write their
 `do`. Patch or add products. Run `bun card check <card>` (in packages/runtime; a name or a path to a .yaml card)

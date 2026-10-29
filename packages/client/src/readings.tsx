@@ -8,10 +8,12 @@ import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
-import { heading, record, segments, status, type Declared, type Element } from "./record.ts"
-import { card, dismiss, draft, error, latest, log, pin, registry, stage } from "./store.ts"
+import { heading, record, status, type Declared, type Element } from "./record.ts"
+import { card, dismiss, draft, error, latest, log, pin, registry, stage, type CardView } from "./store.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
+/** The conditions a meter's stages come from: the fiction variants' `when` (src/record.ts `cuts`). */
+export const whens = (view: CardView | null | undefined) => view?.fiction.map((f) => f.when) ?? []
 
 /** Arms (or disarms) an untold entry as the next act's pin. */
 export const PinButton = (props: { id: string }) => {
@@ -150,38 +152,34 @@ export const Reading = (props: { el: Element }) => (
     </Match>
     <Match when={is(props.el, "meter")}>
       {(el) => {
-        const view = read(card)
-        // Stages on the scale: 0 (when min < 0 < max) and any threshold the card's conditions test on this path.
-        // Status draws origin → now in ink, Record draws this turn's was → now capsule in ok / danger; a negative
-        // stretch anchors its right edge so min-width grows left.
-        const segs = createMemo(() => {
-          const c = view()
-          const whens = c
-            ? [
-                ...c.fiction.map((f) => f.when),
-                ...c.rules.actions.map((a) => a.when),
-                ...(c.rules.readouts?.map((r) => r.when) ?? []),
-                c.rules.over,
-              ]
-            : []
-          return segments(el().path, el().min, el().max, whens)
-        })
-        const origin = () => Math.min(Math.max(0, el().min), el().max)
-        const from = () => (el().was === el().now ? origin() : el().was)
-        const lo = () => Math.min(from(), el().now)
-        const hi = () => Math.max(from(), el().now)
-        const span = (sLo: number, sHi: number) => {
-          const a = Math.max(lo(), sLo)
-          const b = Math.min(hi(), sHi)
-          const w = sHi - sLo
-          const width = `${((b - a) / w) * 100}%`
-          return sHi <= origin()
-            ? { right: `min(${((sHi - b) / w) * 100}%, calc(100% - 8px))`, width }
-            : { left: `min(${((a - sLo) / w) * 100}%, calc(100% - 8px))`, width }
-        }
+        // Two meters by what the number means (src/record.ts). A gauge is a stock: ink fills min → now, this turn's
+        // gain rides past it in ok, a loss leaves the lost stretch in soft danger, each cut is a tick. A scale is a
+        // point on an axis: the stages are equal cells like a step track, the stage held is tinted, a dot sits at
+        // now within its cell, and this turn's was → now is a stroke in ok / danger. Status and Record draw the same
+        // picture; the Record adds the change.
+        const lo = () => Math.min(el().was, el().now)
+        const hi = () => Math.max(el().was, el().now)
+        const gain = () => el().now > el().was
+        const loss = () => el().now < el().was
+        const at = (x: number) => ((x - el().min) / (el().max - el().min)) * 100
+        const edges = () => [el().min, ...el().cuts, el().max]
+        const cells = () =>
+          edges()
+            .slice(0, -1)
+            .map((a, i): [number, number] => [a, edges()[i + 1]!])
+        // the cell holding x: lower edge in, upper edge out, but the last cell takes max
+        const cellOf = (x: number) =>
+          Math.max(
+            0,
+            cells().findIndex(([a, b], i) => x >= a && (x < b || i === cells().length - 1)),
+          )
+        const within = (x: number, [a, b]: [number, number]) => ((x - a) / (b - a)) * 100
+        // the numbers under the track: a gauge's at their place on the axis, a scale's at the cell boundaries
+        const marks = () =>
+          el().cuts.map((c, i) => ({ c, left: el().scale ? ((i + 1) / cells().length) * 100 : at(c) }))
         return (
           <div
-            class="meter"
+            class={{ meter: true, scale: el().scale, gauge: !el().scale }}
             role="meter"
             aria-valuemin={el().min}
             aria-valuemax={el().max}
@@ -195,25 +193,61 @@ export const Reading = (props: { el: Element }) => (
                   {el().was} <Change aria-hidden="true" />
                 </Show>
                 {el().now}
-                <Show when={el().min === 0}> / {el().max}</Show>
+                <Show when={!el().scale}> / {el().max}</Show>
               </span>
             </div>
-            <div class="track">
-              <For each={segs()} keyed={([sLo, sHi]) => `${sLo}:${sHi}`}>
-                {(s) => (
-                  <span class="seg" style={{ flex: s()[1] - s()[0] }}>
-                    <Show when={Math.min(hi(), s()[1]) > Math.max(lo(), s()[0])}>
-                      <i
-                        class="fill"
-                        data-gain={el().now > el().was}
-                        data-loss={el().now < el().was}
-                        style={span(s()[0], s()[1])}
-                      />
-                    </Show>
-                  </span>
-                )}
-              </For>
-            </div>
+            <Show
+              when={el().scale}
+              fallback={
+                <div class="track">
+                  <i class="fill" style={{ width: `${at(gain() ? el().was : el().now)}%` }} />
+                  <Show when={el().was !== el().now}>
+                    <i
+                      class="delta"
+                      data-gain={gain()}
+                      data-loss={loss()}
+                      style={{ left: `${at(lo())}%`, width: `${at(hi()) - at(lo())}%` }}
+                    />
+                  </Show>
+                  <For each={el().cuts}>{(c) => <i class="tick" style={{ left: `${at(c)}%` }} />}</For>
+                </div>
+              }
+            >
+              <div class="track">
+                <For each={cells()} keyed={([a, b]) => `${a}:${b}`}>
+                  {(cell, i) => (
+                    <span class="cell" data-here={i() === cellOf(el().now)}>
+                      <Show when={el().was !== el().now && hi() > cell()[0] && lo() < cell()[1]}>
+                        <i
+                          class="stroke"
+                          data-gain={gain()}
+                          data-loss={loss()}
+                          style={{
+                            left: `${within(Math.max(lo(), cell()[0]), cell())}%`,
+                            width: `${within(Math.min(hi(), cell()[1]), cell()) - within(Math.max(lo(), cell()[0]), cell())}%`,
+                          }}
+                        />
+                      </Show>
+                      <Show when={i() === cellOf(el().now)}>
+                        <i
+                          class="dot"
+                          data-gain={gain()}
+                          data-loss={loss()}
+                          style={{ left: `${within(el().now, cell())}%` }}
+                        />
+                      </Show>
+                    </span>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <Show when={el().cuts.length}>
+              <div class="marks">
+                <For each={marks()} keyed={(m) => m.c}>
+                  {(m) => <span style={{ left: `${m().left}%` }}>{m().c}</span>}
+                </For>
+              </div>
+            </Show>
           </div>
         )
       }}
@@ -336,7 +370,7 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   const els = createMemo(
     () => {
       const r = view()?.rules
-      return r ? record(r, props.node, props.prev, view()?.products) : []
+      return r ? record(r, props.node, props.prev, view()?.products, whens(view())) : []
     },
     { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
   )
@@ -493,7 +527,7 @@ export const StatusTable = () => {
     () => {
       const r = view()?.rules
       const l = last()
-      return r && l ? status(r, l.node.state) : []
+      return r && l ? status(r, l.node.state, whens(view())) : []
     },
     { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
   )
