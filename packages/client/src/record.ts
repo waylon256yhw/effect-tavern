@@ -4,6 +4,7 @@
 // is a step track, an int with both bounds a meter, anything else (an int bounded on one side, a number, a boolean) a
 // value row, so no field is lost: that row is where a missing display declaration shows itself concretely.
 import type { Check, Field, Rules, State } from "@effect-tavern/runtime/src/card.ts"
+import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 
@@ -90,4 +91,31 @@ export const heading = (ref: string | undefined, node: Node): string | undefined
   const [id, key] = ref.split(".")
   const w = (node.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
   return typeof w === "string" && w ? w : undefined
+}
+
+const cutsOf = (c: Cond | undefined, path: string): number[] =>
+  !c
+    ? []
+    : "all" in c
+      ? c.all.flatMap((x) => cutsOf(x, path))
+      : "any" in c
+        ? c.any.flatMap((x) => cutsOf(x, path))
+        : "not" in c
+          ? cutsOf(c.not, path)
+          : "op" in c && c.path === path
+            ? [c.value]
+            : []
+
+/** A meter's scale split into stages `[lo, hi]` by `0` (when `min < 0 < max`) and any threshold on `path` in `whens`. */
+export const segments = (
+  path: string,
+  min: number,
+  max: number,
+  whens: readonly (Cond | undefined)[] = [],
+): [number, number][] => {
+  const pts = [...new Set([0, ...whens.flatMap((w) => cutsOf(w, path))].filter((x) => x > min && x < max))].sort(
+    (a, b) => a - b,
+  )
+  const edges = [min, ...pts, max]
+  return edges.slice(0, -1).map((a, i) => [a, edges[i + 1]!])
 }

@@ -8,7 +8,7 @@ import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
-import { heading, record, status, type Declared, type Element } from "./record.ts"
+import { heading, record, segments, status, type Declared, type Element } from "./record.ts"
 import { card, dismiss, draft, error, latest, log, pin, registry, stage } from "./store.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -150,16 +150,35 @@ export const Reading = (props: { el: Element }) => (
     </Match>
     <Match when={is(props.el, "meter")}>
       {(el) => {
-        // a position on the scale, unrounded (pct is for text: two spans rounded apart miss each other); the fill
-        // grows from 0 when the scale reaches below it, else from min
-        const at = (x: number) => `${((x - el().min) / (el().max - el().min)) * 100}%`
-        const span = (a: number, b: number) => ({
-          left: at(Math.min(a, b)),
-          width: `${(Math.abs(a - b) / (el().max - el().min)) * 100}%`,
+        const view = read(card)
+        // Stages on the scale: 0 (when min < 0 < max) and any threshold the card's conditions test on this path.
+        // Status draws origin → now in ink, Record draws this turn's was → now capsule in ok / danger; a negative
+        // stretch anchors its right edge so min-width grows left.
+        const segs = createMemo(() => {
+          const c = view()
+          const whens = c
+            ? [
+                ...c.fiction.map((f) => f.when),
+                ...c.rules.actions.map((a) => a.when),
+                ...(c.rules.readouts?.map((r) => r.when) ?? []),
+                c.rules.over,
+              ]
+            : []
+          return segments(el().path, el().min, el().max, whens)
         })
         const origin = () => Math.min(Math.max(0, el().min), el().max)
-        // a loss is the change back toward the origin: the fill stays the value, the lost stretch a ghost past it
-        const loss = () => Math.abs(el().now - origin()) < Math.abs(el().was - origin())
+        const from = () => (el().was === el().now ? origin() : el().was)
+        const lo = () => Math.min(from(), el().now)
+        const hi = () => Math.max(from(), el().now)
+        const span = (sLo: number, sHi: number) => {
+          const a = Math.max(lo(), sLo)
+          const b = Math.min(hi(), sHi)
+          const w = sHi - sLo
+          const width = `${((b - a) / w) * 100}%`
+          return sHi <= origin()
+            ? { right: `min(${((sHi - b) / w) * 100}%, calc(100% - 8px))`, width }
+            : { left: `min(${((a - sLo) / w) * 100}%, calc(100% - 8px))`, width }
+        }
         return (
           <div
             class="meter"
@@ -180,13 +199,20 @@ export const Reading = (props: { el: Element }) => (
               </span>
             </div>
             <div class="track">
-              <i class="fill" style={span(origin(), el().now)} />
-              <Show when={el().was !== el().now}>
-                <i class="new" data-loss={loss()} style={span(el().was, el().now)} />
-              </Show>
-              <Show when={el().min < 0}>
-                <i class="zero" style={{ left: at(origin()) }} />
-              </Show>
+              <For each={segs()} keyed={([sLo, sHi]) => `${sLo}:${sHi}`}>
+                {(s) => (
+                  <span class="seg" style={{ flex: s()[1] - s()[0] }}>
+                    <Show when={Math.min(hi(), s()[1]) > Math.max(lo(), s()[0])}>
+                      <i
+                        class="fill"
+                        data-gain={el().now > el().was}
+                        data-loss={el().now < el().was}
+                        style={span(s()[0], s()[1])}
+                      />
+                    </Show>
+                  </span>
+                )}
+              </For>
             </div>
           </div>
         )

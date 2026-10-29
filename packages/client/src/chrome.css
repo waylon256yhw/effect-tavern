@@ -185,32 +185,33 @@
   color: var(--ink);
 }
 .meter .track {
-  overflow: hidden;
+  display: flex;
+  gap: 3px;
+  background: none;
 }
-.meter .track i {
-  position: absolute;
-  inset-block: 0;
+.meter .seg {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--alpha-2);
 }
 .meter .fill {
+  position: absolute;
+  inset-block: 0;
+  min-width: 8px;
+  max-width: 100%;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   transition:
     left var(--dur-4) var(--ease),
+    right var(--dur-4) var(--ease),
     width var(--dur-4) var(--ease);
 }
-/* this turn's change, was → now: a gain is drawn like steps' data-new over a fill dimmed to steps' reached; a loss
-   keeps the fill as the value and leaves the lost stretch past it in reached grey */
-.meter .fill:has(~ .new:not([data-loss])) {
-  background: var(--alpha-4);
+.meter .fill[data-gain] {
+  background: var(--ok);
 }
-.meter .new {
-  background: var(--ink);
-}
-.meter .new[data-loss] {
-  background: var(--alpha-4);
-}
-.meter .zero {
-  width: 1px;
-  background: var(--ink-3);
+.meter .fill[data-loss] {
+  background: var(--danger);
 }
 .check .zone {
   position: absolute;

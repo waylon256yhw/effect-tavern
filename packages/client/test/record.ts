@@ -2,7 +2,7 @@
 // clues with pinnability from `readable`, the pin's fate, notes; an unchanged root yields nothing. Then the turn
 // heading under a field path or a product key, and the reading line folded into scene runs.
 import assert from "node:assert/strict"
-import { heading, record, status } from "../src/record.ts"
+import { heading, record, segments, status } from "../src/record.ts"
 
 const rules = {
   fields: [
@@ -97,4 +97,31 @@ assert.equal(heading("mood", at(1, { mood: "high" })), "high")
 assert.equal(heading("scene.place", at(1, {}, { scene: { place: "竹林小径" } })), "竹林小径")
 assert.equal(heading("scene.place", at(1, {}, { scene: { place: "" } })), undefined)
 assert.equal(heading("scene.place", at(1, {})), undefined)
+// Segments: 0 (when min < 0 < max) and any threshold on the path strictly inside (min, max), sorted and deduplicated
+assert.deepEqual(segments("hp", 0, 100), [[0, 100]])
+assert.deepEqual(
+  segments("好感度", -30, 100, [
+    {
+      all: [
+        { path: "好感度", op: "gte", value: -100 },
+        { path: "好感度", op: "lt", value: 20 },
+      ],
+    },
+    {
+      all: [
+        { path: "好感度", op: "gte", value: 20 },
+        { path: "好感度", op: "lt", value: 40 },
+      ],
+    },
+    { path: "好感度", op: "gte", value: 90 },
+    { path: "other", op: "gte", value: 50 },
+  ]),
+  [
+    [-30, 0],
+    [0, 20],
+    [20, 40],
+    [40, 90],
+    [90, 100],
+  ],
+)
 console.log("ok")
