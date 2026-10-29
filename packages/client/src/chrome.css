@@ -187,10 +187,26 @@
 .meter .track {
   overflow: hidden;
 }
+.meter .track i {
+  position: absolute;
+  inset-block: 0;
+}
 .meter .fill {
-  height: 100%;
   background: var(--ink);
-  transition: width var(--dur-4) var(--ease);
+  transition:
+    left var(--dur-4) var(--ease),
+    width var(--dur-4) var(--ease);
+}
+/* this turn's change, was → now, drawn like steps' data-new over a fill dimmed to steps' reached */
+.meter .fill:has(~ .new) {
+  background: var(--alpha-4);
+}
+.meter .new {
+  background: var(--ink);
+}
+.meter .zero {
+  width: 1px;
+  background: var(--ink-3);
 }
 .check .zone {
   position: absolute;
