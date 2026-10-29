@@ -1246,8 +1246,8 @@
   .topbar {
     display: none;
   }
-  /* the latest turn's Record and actions sit in the right card: its pill would open the same thing twice (the draft's
-     pill is the only sign of check and record running: it stays) */
+  /* the latest turn's Record and 小剧场 sit in the right card: its pill would open the same thing twice (the draft's
+     pill is the only sign of check and record running: it stays); its actions stay in its row, where every turn's are */
   main > section:last-of-type:not(.draft) .record-pill,
   main > section:has(+ .draft) .record-pill {
     display: none;

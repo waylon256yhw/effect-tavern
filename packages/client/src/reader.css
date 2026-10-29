@@ -360,11 +360,9 @@ section:has(> .editor) > .actions {
   display: none;
 }
 
-/* the reader's line: a sunken block, the only framed thing in the flow; its text and, at its end, two small actions */
+/* the reader's line: a sunken block, the only framed thing in the flow, and plain (#101): its text on its tint, nothing
+   in it to click; the text runs the bubble's whole inner width */
 .said {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
   background: var(--alpha-1);
   border-radius: var(--radius-card);
   padding: 10px 14px;
@@ -372,10 +370,6 @@ section:has(> .editor) > .actions {
   line-height: 1.6;
   text-align: left;
   white-space: pre-wrap;
-}
-.said .text {
-  flex: 1;
-  min-width: 0;
 }
 .spoke {
   display: flex;
@@ -395,39 +389,59 @@ section:has(> .editor) > .actions {
 .said.revising {
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
-/* the actions: revise and copy, as tall as the first line, shown while the pointer is on the bubble (always where there
-   is no hover); on the draft they are there but not yet (so the text keeps its width when the node lands). A model
-   group's summary in the settings shows its actions the same way */
-:is(.said, .group > summary) .acts {
+/* a thing's own actions, a row of ghost keys in ink-3 at its right end (#101): under the player's block (.spoke: revise
+   and copy), at the end of the turn's row (.actions: Swipe / Reword / Edit), in a model group's summary in the
+   settings. They fade in while the pointer is on the block the row belongs to, or the focus is in it; the latest
+   landed turn's row shows its keys always (the most frequent actions, one tap away; the draft under it, live or a
+   dead ghost, is not a turn), and so does a row whose reword box is open with words in it (the wand is its send key);
+   a touch screen, having no pointer to hover with, shows every row. A past turn under a pointer is then only its pill
+   and its version count */
+:is(.spoke, .actions, .group > summary) .acts {
   display: flex;
   flex: none;
+  align-items: center;
   gap: 2px;
-  margin-right: -6px;
   opacity: 0;
   transition: opacity var(--dur-3) var(--ease);
 }
-:is(.said, .group > summary):is(:hover, :focus-within) .acts {
+.spoke:is(:hover, :focus-within) .acts,
+.group > summary:is(:hover, :focus-within) .acts,
+main > section:is(:hover, :focus-within) > .actions .acts,
+main > section:last-of-type:not(.draft) > .actions .acts,
+main > section:has(+ .draft) > .actions .acts,
+.actions:has(> .direction) .acts {
   opacity: 1;
 }
-.said .acts .icon {
+/* the keys: Record-pill tall, the glyph small, the row's end hanging 4px over the text's edge so the glyph sits on it.
+   The line's row sits close under its bubble and ends on the bubble's own text axis (14px in) */
+:is(.spoke, .actions) .acts .icon {
   width: var(--control-sm);
   height: var(--control-sm);
   color: var(--ink-3);
 }
-.said .acts .icon svg {
+:is(.spoke, .actions) .acts .icon svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
 }
-:is(.said, .group > summary) .acts .icon:disabled {
+.actions .acts {
+  margin-right: -4px;
+}
+.spoke .acts {
+  justify-content: flex-end;
+  margin: -2px 10px 0 0;
+}
+/* on the draft the line's keys are there but not yet: the row keeps its height, so nothing moves when the node lands */
+:is(.spoke, .group > summary) .acts .icon:disabled {
   visibility: hidden;
 }
 @media (hover: none) {
-  :is(.said, .group > summary) .acts {
+  :is(.spoke, .actions, .group > summary) .acts {
     opacity: 1;
   }
 }
 
-/* under each section: version nav on the left, actions on the right, all ghost */
+/* under each section's prose, the turn's row: the Record pill and the version nav on the left, the turn's actions at
+   the right end (reader.css `.acts` above; readings.tsx `Rewrite`), all ghost */
 .actions {
   display: flex;
   align-items: center;

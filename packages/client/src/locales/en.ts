@@ -6,6 +6,7 @@ const en: Dict = {
     editProse: "Edit the prose",
     goDefaultModel: "Settings → Default model",
     jumpToLatest: "Jump to latest",
+    lineActions: "Actions on your line",
     nextVersion: "Next version",
     options: "Options",
     phaseCheck: "Checking",
@@ -285,6 +286,7 @@ const en: Dict = {
     none: "none",
     pin: "Pin",
     rewordPlaceholder: "A word for the rewrite…",
+    turnActions: "Actions on this turn",
   },
   settings: {
     addMessage: "Add message",

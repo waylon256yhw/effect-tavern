@@ -1,9 +1,11 @@
 // One screen: the reading line as sections, the draft growing at its end, a composer at the bottom, a slim bar on top
 // whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
-// stories, the persona, the Writing page's chips, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
-// turn's readings (src/record.ts projects them; this file only draws); the last section carries the Options container,
-// whose rows fill the composer and never send. From 72rem the same pieces sit on three cards: the session on the
-// left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
+// stories, the persona, the Writing page's chips, the pin, the pages). A turn's actions sit under what they act on
+// (#101): a row under the player's bubble (revise, copy), a row under the prose (the Record pill, which opens a
+// full-page sheet of that turn's readings, src/record.ts projecting them, 小剧场 at its foot; the version count;
+// Swipe / Reword / Edit); the last section carries the Options container, whose rows fill the composer and never
+// send. From 72rem the same pieces sit on three cards: the session on the left, the reading in the middle, Status and
+// this turn's Record inline on the right, 小剧场 at its foot. Shapes follow
 // docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
 // menu a popover anchored to its button: the platform is the component library. This file is the reader: the flow,
 // the bar, the side cards; readings.tsx draws the Record's pieces, composer.tsx the box, inspector.tsx the Inspect
@@ -37,7 +39,7 @@ import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
+import { Demand, demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { record } from "./record.ts"
 import { Session, Side } from "./side.tsx"
 import {
@@ -322,30 +324,44 @@ const Said = (props: {
   onEdit?: (field: "text" | "note") => void
   revising?: "text" | "note" // the field of this line that is in the composer now: that bubble is marked
 }) => {
-  // The bubble is text, selectable like any; what can be done with it are two small actions at its end, each a click of
-  // its own (shown on hover, always on touch): revise puts it back in the composer (Cherry Studio's edit), copy copies.
-  // The draft has the same bubble with the actions disabled, so the line does not re-wrap when the node lands.
-  const Bubble = (p: { field: "text" | "note"; text: string }) => {
-    const [copied, setCopied] = createSignal(false)
-    const copy = () =>
-      // a plain-http page off localhost (a phone on the LAN) has no clipboard: the key then does nothing
-      void navigator.clipboard?.writeText(p.text).then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1200)
-      })
-    return (
-      <div class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}>
-        <span class="text">{p.text}</span>
-        <span class="acts">
+  // The bubble is text, selectable like any, nothing in it to click (#101). What can be done with it is a row of two
+  // small keys under the block, each a click of its own (shown while the pointer is on the block, always on touch):
+  // revise puts the turn's input back in the composer (Cherry Studio's edit), line and note together, copy copies the
+  // line. The draft has the same row with the keys disabled, so nothing moves when the node lands.
+  const Bubble = (p: { field: "text" | "note"; text: string }) => (
+    <div class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}>{p.text}</div>
+  )
+  // the field the row speaks of: the line, or the note when the turn is that word alone
+  const field = () => (props.input.text ? "text" : "note")
+  const [copied, setCopied] = createSignal(false)
+  const copy = () =>
+    // a plain-http page off localhost (a phone on the LAN) has no clipboard: the key then does nothing
+    void navigator.clipboard?.writeText(props.input[field()] ?? "").then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    })
+  // one block: the line's bubble, close under it the note as a marginal line (a word on the side, not a second
+  // speech), then the row; the block keeps the turn's gap to the prose. An opening has no input: no block at all, so
+  // no row of keys hangs over prose the player never wrote
+  return (
+    <Show when={props.input.text || props.input.note}>
+      <div class="spoke">
+        <Show when={props.input.text}>
+          <Bubble field="text" text={props.input.text} />
+        </Show>
+        <Show when={props.input.note}>
+          <Bubble field="note" text={props.input.note!} />
+        </Show>
+        <div class="acts" role="toolbar" aria-label={t("app.lineActions")}>
           <button
             type="button"
             class="icon"
-            aria-label={p.field === "note" ? t("app.reviseNote") : t("app.reviseLine")}
+            aria-label={field() === "note" ? t("app.reviseNote") : t("app.reviseLine")}
             disabled={!props.onEdit}
             onClick={() => {
-              props.onEdit!(p.field)
+              props.onEdit!(field())
               // the note's box opens with the revision: focus it once it is there
-              const box = p.field === "note" ? ".composer textarea.note" : ".composer textarea:not(.note)"
+              const box = field() === "note" ? ".composer textarea.note" : ".composer textarea:not(.note)"
               requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(box)?.focus())
             }}
           >
@@ -356,21 +372,9 @@ const Said = (props: {
               <Check />
             </Show>
           </button>
-        </span>
+        </div>
       </div>
-    )
-  }
-  // one block: the line's bubble and, close under it, the note as a marginal line (a word on the side, not a second
-  // speech); the block keeps the turn's gap to the prose
-  return (
-    <div class="spoke">
-      <Show when={props.input.text}>
-        <Bubble field="text" text={props.input.text} />
-      </Show>
-      <Show when={props.input.note}>
-        <Bubble field="note" text={props.input.note!} />
-      </Show>
-    </div>
+    </Show>
   )
 }
 
@@ -452,16 +456,11 @@ const Section = (props: {
       <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={(t) => props.onEdit(t)} />
       </Show>
+      {/* the turn's row (#101): the Record pill, the version count, "stopped"; then, at the right end, this turn's
+          actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it
+          is over the section, a touch screen always (reader.css) */}
       <footer class="actions">
-        <RecordSheet
-          node={props.node}
-          n={props.n}
-          busy={props.busy}
-          onSwipe={props.onSwipe}
-          onReword={props.onReword}
-          onEdit={() => props.onEdit()}
-          onDemand={props.onDemand}
-        />
+        <RecordSheet node={props.node} n={props.n} busy={props.busy} onDemand={props.onDemand} />
         <Show when={siblings().length > 1}>
           <span class="siblings">
             <button
@@ -526,6 +525,13 @@ const Section = (props: {
         <Show when={props.node.turn.end === "stopped"}>
           <span class="end">{t("app.stopped")}</span>
         </Show>
+        <Rewrite
+          rerun={!!(props.node.turn.input.text || props.node.turn.input.note)}
+          busy={props.busy}
+          onSwipe={props.onSwipe}
+          onReword={props.onReword}
+          onEdit={() => props.onEdit()}
+        />
       </footer>
       <Show when={props.last && options()?.length}>
         <Options items={options()!} />
@@ -686,21 +692,15 @@ const Reader = () => {
         />
         <Latest />
       </div>
-      <Glance busy={busy()} onSwipe={onSwipe} onReword={onReword} onEdit={onEdit} onDemand={onDemand} />
+      <Glance busy={busy()} onDemand={onDemand} />
     </>
   )
 }
 
-/** Desktop's right card: the Status table and the latest turn's Record scroll, its sibling actions stay at the foot
- *  (the phone sheet's shape). Rendered by the Reader (the actions are its), as a sibling of the panel in the canvas
- *  grid; the latest section's pill hides. */
-const Glance = (props: {
-  busy: boolean
-  onSwipe: (n: Node) => void
-  onReword: (n: Node, note?: string) => void
-  onEdit: (n: Node) => void
-  onDemand: (n: Node, product: string) => void
-}) => {
+/** Desktop's right card: the Status table and the latest turn's Record, one scroll, 小剧场 at the foot (the phone
+ *  sheet's shape). The turn's own actions are in its row under the prose (#101). Rendered by the Reader (the demand is
+ *  its), as a sibling of the panel in the canvas grid; the latest section's pill hides. */
+const Glance = (props: { busy: boolean; onDemand: (n: Node, product: string) => void }) => {
   const last = read(latest)
   const view = read(card)
   return (
@@ -721,14 +721,9 @@ const Glance = (props: {
       </div>
       <Show when={last()}>
         {(l) => (
-          <Rewrite
-            for={l().node.id}
-            rerun={!!(l().node.turn.input.text || l().node.turn.input.note)}
+          <Demand
             busy={props.busy}
             demands={demandable(view()?.products ?? [], l().node)}
-            onSwipe={() => props.onSwipe(l().node)}
-            onReword={(note) => props.onReword(l().node, note)}
-            onEdit={() => props.onEdit(l().node)}
             onDemand={(id) => props.onDemand(l().node, id)}
           />
         )}

@@ -5,6 +5,7 @@ const zh = {
     editProse: "编辑正文",
     goDefaultModel: "设置 → 默认模型",
     jumpToLatest: "跳到最新",
+    lineActions: "这句台词的动作",
     nextVersion: "下一版",
     options: "选项",
     phaseCheck: "检查中",
@@ -284,6 +285,7 @@ const zh = {
     none: "无",
     pin: "固定",
     rewordPlaceholder: "给重写的一句话…",
+    turnActions: "这一轮的动作",
   },
   settings: {
     addMessage: "添加消息",
