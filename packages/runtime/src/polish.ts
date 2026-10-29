@@ -1,7 +1,8 @@
 // The polish scan (issue #3): code finds the sentences of a turn's prose that hit the lexicon, so one targeted call can
 // rewrite those and nothing else. Pure: no model, no session. A lexicon entry is a literal or a simple wildcard (`*` =
-// a short run: `不是*而是`, `指节*白`); dialogue (inside 「」, 『』, “” or ‘’, nested by depth) is never scanned, since slop in
-// speech is how people talk, and a standalone 『心声』 or ‘aside’ is speech too (#63). A hit marks its whole sentence, with exact coordinates into the prose, so replay and the Inspector reproduce it.
+// a short run: `不是*而是`, `指节*白`); dialogue (inside 「」, 『』, “” or ‘’, nested by depth) is never scanned, since slop
+// in speech is how people talk, and a standalone 『心声』 or ‘aside’ is speech too (#63). A hit marks its whole sentence,
+// with exact coordinates into the prose, so replay and the Inspector reproduce it.
 import { Schema } from "effect"
 
 export const Entry = Schema.Struct({ pattern: Schema.String, hint: Schema.optionalKey(Schema.String) })
@@ -19,7 +20,11 @@ export const FLOOR = 200 // prose shorter than this is not worth a call (Story O
 const RUN = 12 // ponytail: `*` spans at most this many characters; per-entry when a pattern needs longer
 const STOP = /[。！？!?…]/
 const OPEN = /[「『“‘]/
-const CLOSE = /[」』”’]/ // ’ as an apostrophe (don’t) closes nothing at depth 0: both walkers ignore it there
+const CLOSE = /[」』”’]/
+/** Whether `cs[i]` closes a quote: any closer but ’ before a letter, which is an apostrophe (don’t, rock ’n’ roll)
+ *  and would otherwise end a “…” early and lay the rest of the speech open to the scan. */
+const closing = (cs: ArrayLike<string>, i: number) =>
+  CLOSE.test(cs[i] ?? "") && !(cs[i] === "’" && /\p{L}/u.test(cs[i + 1] ?? ""))
 const HIDDEN = "\u0000" // a masked dialogue character: no pattern matches it, `*` does not cross it
 
 /** Sentence spans [start, end): a terminator run (and the closing quotes after it) ends one outside dialogue; inside it,
@@ -42,15 +47,15 @@ export const sentences = (text: string): [number, number][] => {
       continue
     }
     if (OPEN.test(c)) depth++
-    else if (CLOSE.test(c)) {
+    else if (closing(text, i)) {
       depth = Math.max(0, depth - 1)
       if (depth === 0 && i > 0 && STOP.test(text[i - 1]!)) {
-        while (CLOSE.test(text[i + 1] ?? "")) i++
+        while (closing(text, i + 1)) i++
         push(i + 1)
       }
     } else if (depth === 0 && (STOP.test(c) || (c === "." && /\s|^$/.test(text[i + 1] ?? "")))) {
       while (STOP.test(text[i + 1] ?? "")) i++
-      while (CLOSE.test(text[i + 1] ?? "")) i++
+      while (closing(text, i + 1)) i++
       push(i + 1)
     }
   }
@@ -61,12 +66,15 @@ export const sentences = (text: string): [number, number][] => {
 /** The text with every dialogue character (quotes included) masked, same length, so offsets still line up. */
 const mask = (text: string) => {
   let depth = 0
-  return Array.from(text, (c) => {
-    if (c === "\n") depth = 0
-    if (OPEN.test(c)) return (depth++, HIDDEN)
-    if (CLOSE.test(c) && depth > 0) return (depth--, HIDDEN)
-    return depth > 0 ? HIDDEN : c
-  }).join("")
+  const cs = Array.from(text)
+  return cs
+    .map((c, i) => {
+      if (c === "\n") depth = 0
+      if (OPEN.test(c)) return (depth++, HIDDEN)
+      if (closing(cs, i) && depth > 0) return (depth--, HIDDEN)
+      return depth > 0 ? HIDDEN : c
+    })
+    .join("")
 }
 const compile = (pattern: string) =>
   new RegExp(
@@ -109,7 +117,6 @@ export const marked = (text: string, targets: readonly Target[]) => {
   return out + text.slice(at)
 }
 
-/** The prose with each changed sentence spliced in; a value equal to the original sentence is a pass-through. */
 /** The prose with each answered target replaced by its answer. An echo is a pass-through; a blank answer keeps the
  *  sentence (a rewrite may not delete: polish is not re-checked, so a clue or a guard the sentence carried would go
  *  silently; a kept sentence at worst keeps its slop). */
