@@ -6,19 +6,25 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
-    "verify": "bun check && bun --conditions=browser --conditions=development test/store.ts && bun --conditions=browser --conditions=development test/probe.ts && bun test/record.ts && bun test/inspect.ts && bun test/tokens.ts && bun test/lanes.ts && bun test/phrase.ts && bun test/manifest.ts && bun test/writing.ts && bun test/theme.ts && bun test/stories.ts"
+    "verify": "bun check && bun --conditions=browser --conditions=development test/store.ts && bun --conditions=browser --conditions=development test/probe.ts && bun test/record.ts && bun test/inspect.ts && bun test/tokens.ts && bun test/lanes.ts && bun test/phrase.ts && bun test/manifest.ts && bun test/writing.ts && bun test/theme.ts && bun test/stories.ts && bun test/markdown.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",
     "@effect-tavern/runtime": "workspace:*",
     "@solidjs/web": "2.0.0-rc.15",
-    "solid-js": "2.0.0-rc.15"
+    "remark-cjk-friendly": "2.3.3",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remend": "1.4.0",
+    "solid-js": "2.0.0-rc.15",
+    "unified": "11.0.5"
   },
   "devDependencies": {
     "@iconify-json/ph": "1.2.2",
     "@lobehub/icons-static-svg": "1.100.0",
     "@solidjs/diagnostics": "2.0.0-rc.15",
     "@solidjs/vite-plugin": "3.0.0-next.50",
+    "@types/mdast": "4.0.4",
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2",
     "unplugin-icons": "24.0.0"

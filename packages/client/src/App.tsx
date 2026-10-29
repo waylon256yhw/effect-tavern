@@ -10,7 +10,6 @@
 // page, bridge.ts the atom → accessor read they all use.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
-import { type JSX } from "@solidjs/web"
 import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { CardPage } from "./card.tsx"
@@ -34,6 +33,7 @@ import {
   Warning,
 } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
+import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
@@ -85,23 +85,6 @@ const waiting: Record<string, string> = {
 }
 
 const paragraphs = (text: string) => text.split(/\n{2,}/).filter((p) => p.trim())
-const Paragraphs = (props: { text: string; tail?: JSX.Element }) => {
-  const ps = createMemo(() => {
-    const ps = paragraphs(props.text)
-    return ps.length || !("tail" in props) ? ps : [""]
-  })
-  const last = createMemo(() => ps().length - 1)
-  return (
-    <For each={ps()} keyed={false}>
-      {(p, i) => (
-        <p>
-          {p()}
-          {i === last() && props.tail}
-        </p>
-      )}
-    </For>
-  )
-}
 
 /** The prose in place, editable (Edit): the same paragraphs made contenteditable, so not a glyph moves when the editor
  *  opens (a textarea re-flowed the whole turn: its own padding, and a blank line where the paragraph gap was). The
@@ -273,13 +256,14 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
         <Show when={props.d.prev}>
           {(p) => (
             <div class="prev" aria-hidden="true" ref={(el: HTMLElement) => void dust(el)}>
-              <Paragraphs text={p()} />
+              <Prose text={p()} />
             </div>
           )}
         </Show>
         <div class="now">
-          <Paragraphs
+          <Prose
             text={props.d.text}
+            open={writing()}
             tail={
               <Show when={writing()}>
                 <span class="cursor" role="status" aria-label={props.phase ? waiting[props.phase] : "Waiting"}>
@@ -463,7 +447,7 @@ const Section = (props: {
         onEdit={(f) => props.onRevise(f)}
         revising={revised()?.node === props.node.id ? revised()!.field : undefined}
       />
-      <Show when={edited() === props.node.turn.id} fallback={<Paragraphs text={prose(props.node)} />}>
+      <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={(t) => props.onEdit(t)} />
       </Show>
       <footer class="actions">
@@ -518,7 +502,9 @@ const Section = (props: {
                       </Match>
                     </Switch>
                     <span class="first">
-                      {varied() ? `${s().turn.input.text || s().turn.input.note} · ${prose(s())}` : prose(s())}
+                      {varied()
+                        ? `${s().turn.input.text || s().turn.input.note} · ${plain(prose(s()))}`
+                        : plain(prose(s()))}
                     </span>
                     <Show when={L.below(all(), s().id)}>{(n) => <span class="below">{n()}</span>}</Show>
                   </button>

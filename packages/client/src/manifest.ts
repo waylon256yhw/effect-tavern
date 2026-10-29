@@ -3,6 +3,7 @@
 import type { Greeting } from "@effect-tavern/runtime/src/card.ts"
 import { effect, labels } from "./phrase.ts"
 import type { CardView } from "./store.ts"
+import { plain } from "./markdown.ts"
 
 /** Names shown inline before "and N more": enough for flavour, one line on a phone. The rest open in a popover. */
 export const SHOWN = 3
@@ -21,8 +22,8 @@ export const specs = (c: CardView): Spec[] => {
   if (fields.length) rows.push({ key: "State", items: fields })
   return rows
 }
-/** An opening's first line, for the picker. */
-export const firstLine = (text: string): string => text.trim().split(/\r?\n/)[0] ?? ""
+/** An opening's first line, for the picker, under its marks. */
+export const firstLine = (text: string): string => plain(text.trim().split(/\r?\n/)[0] ?? "")
 /** What an opening sets at the start, as one phrase: its first enum set (a route's name tells most), else its first set. */
 export const openingTag = (c: CardView, g: Greeting): string | undefined => {
   const sets = (g.do ?? []).filter((e) => "set" in e)

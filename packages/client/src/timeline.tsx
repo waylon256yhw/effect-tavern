@@ -13,6 +13,7 @@ import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "s
 import { read } from "./bridge.ts"
 import { Back, Checkout, Clue, Edit, Notes, Reword, Swipe, Trash } from "./icons.tsx"
 import { type Cell, DRAFT, layout } from "./lanes.ts"
+import { plain, Prose } from "./prose.tsx"
 import { heading } from "./record.ts"
 import { card, draft, type Id, log, page, path, prose, registry, working } from "./store.ts"
 import { dropNodes, fetchCalls, send } from "./wire.ts"
@@ -30,7 +31,7 @@ const KNOT = { x: 7, y: 14 }
 
 export const openTimeline = () => registry.set(page, "timeline")
 const lineOf = (n: Node) => n.turn.input.text || n.turn.input.note || ""
-const textOf = (n: Node) => lineOf(n) || prose(n)
+const textOf = (n: Node) => lineOf(n) || plain(prose(n))
 
 const Kind = (props: { of: Node["turn"]["sibling"] }) => (
   <Switch>
@@ -212,7 +213,7 @@ export const Timeline = () => {
         <span class="nid">Draft</span>
         <span class="where">{p.c.parent === null ? "root" : `#${p.c.parent}`}</span>
       </div>
-      <div class="row2">{d()?.input.text || d()?.input.note || d()?.text || "Writing…"}</div>
+      <div class="row2">{d()?.input.text || d()?.input.note || plain(d()?.text ?? "") || "Writing…"}</div>
     </div>
   )
 
@@ -412,7 +413,9 @@ export const Timeline = () => {
                     </Show>
                   </div>
                 </Show>
-                <div class="prose">{prose(n())}</div>
+                <div class="prose">
+                  <Prose text={prose(n())} />
+                </div>
                 <Show when={siblings().length > 1}>
                   <div class="vlist">
                     <div class="sechead">

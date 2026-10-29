@@ -10,6 +10,7 @@ import { createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
+import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, error, log, page, personas, pin, player, registry, routing, working } from "./store.ts"
 import { newStory, send } from "./wire.ts"
@@ -137,7 +138,7 @@ export const CardPage = () => {
                 {(g) => (
                   <div class="well">
                     <div class="wscroll">
-                      <p>{g().text.replace(/\r\n/g, "\n").trim()}</p>
+                      <Prose text={g().text.trim()} />
                     </div>
                   </div>
                 )}

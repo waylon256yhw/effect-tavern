@@ -180,6 +180,110 @@ p {
   line-break: strict;
   white-space: pre-wrap; /* a single newline is a line break, as the editor (a plaintext-only host) shows it */
 }
+/* the rest of the Markdown subset (src/markdown.ts), as blocks in the turn's own rhythm: each is a flex child of the
+   section (or the draft's .now, the timeline's node pane, the card page's opening), so the gap between blocks is
+   the paragraph gap and no block carries a margin.
+   Emphasis: CJK fonts have no italic and a synthesized slant is a smear, so an em is upright there (a Latin run
+   still slants) and a shade lighter than its line, whatever the line's own shade (a dimmed draft stays dimmed) */
+.md {
+  display: contents; /* the host (a section, the draft's .now, the timeline's node pane, the opening's well) lays the blocks out */
+}
+.md :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-size: var(--text-prose);
+  font-weight: 600;
+  line-height: var(--leading-prose);
+  line-break: strict;
+}
+.md h1 {
+  font-size: var(--text-title);
+}
+.md h2 {
+  font-size: calc(var(--text-prose) * 1.125);
+}
+.md em {
+  font-style: italic;
+  font-synthesis-style: none;
+  color: color-mix(in oklab, currentColor 72%, var(--surface-1));
+}
+.md strong {
+  font-weight: 600;
+}
+.md del {
+  color: color-mix(in oklab, currentColor 60%, var(--surface-1));
+}
+.md :is(ul, ol) {
+  margin: 0;
+  padding-inline-start: 1.5em;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--gap-item) / 2);
+}
+.md blockquote {
+  margin: 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-item);
+  color: color-mix(in oklab, currentColor 80%, var(--surface-1));
+}
+.md hr {
+  /* a scene cut: a short rule, centered */
+  width: 6rem;
+  margin: var(--space-1) auto;
+  border: 0;
+  border-top: var(--hairline) solid var(--line-strong);
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0 0.3em;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+}
+.md pre {
+  /* no highlighting: a fence is monospace in a quiet box, and the language rides on the <code> as data-lang */
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  overflow-x: auto;
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+.md pre code {
+  padding: 0;
+  font-size: inherit;
+  background: none;
+}
+.md table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+.md :is(th, td) {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: var(--hairline) solid var(--line);
+  text-align: start;
+  vertical-align: top;
+}
+.md th {
+  font-weight: 600;
+  color: var(--ink-2);
+  border-bottom-color: var(--line-strong);
+}
+.md a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 0.15em;
+}
+.md .footnote {
+  font-size: var(--text-body);
+  color: var(--ink-2);
+}
 /* the prose in place, editable (Edit): the paragraphs stay where they were (the same column, the same gap); the
    field grows outward by its own padding, margin cancelling it, so the text keeps its width and its place */
 .editor {

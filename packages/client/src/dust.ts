@@ -24,9 +24,22 @@ const PROPS = [
   "hyphens",
   "text-rendering",
   "display",
+  "flex-direction",
   "gap",
   "margin",
   "padding",
+  "white-space",
+  "font-synthesis",
+  "text-decoration",
+  "vertical-align",
+  "list-style",
+  "border-top",
+  "border-right",
+  "border-bottom",
+  "border-left", // the sides: the shorthand serializes to nothing when they differ (a quote's rule)
+  "border-collapse",
+  "border-spacing",
+  "box-sizing",
 ]
 
 /** The element as it is on screen, at device resolution. */
@@ -38,9 +51,11 @@ const snapshot = async (el: HTMLElement, dpr: number): Promise<HTMLImageElement>
     const cs = getComputedStyle(from)
     for (const p of PROPS) to.style.setProperty(p, cs.getPropertyValue(p))
   }
+  // the raster has no stylesheet: every element carries its computed styles (the prose is a tree now, prose.tsx:
+  // the .md host, a <strong> in a <p>, a list, a table)
   copy(el, clone)
-  const src = el.querySelectorAll("p")
-  clone.querySelectorAll("p").forEach((p, i) => copy(src[i]!, p))
+  const src = el.querySelectorAll("*")
+  clone.querySelectorAll("*").forEach((e, i) => copy(src[i]!, e as HTMLElement))
   clone.style.width = `${w}px`
   clone.style.visibility = "visible"
   const xhtml = new XMLSerializer().serializeToString(clone)
