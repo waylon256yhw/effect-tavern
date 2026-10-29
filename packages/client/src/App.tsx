@@ -2,7 +2,7 @@
 // whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
 // stories, the persona, the Writing page's chips, the pin, the pages). Under each section a Record pill opens a full-page sheet of that
 // turn's readings (src/record.ts projects them; this file only draws); the last section carries the Options container,
-// whose rows fill the composer and never send. From 64rem the same pieces sit on three cards: the session on the
+// whose rows fill the composer and never send. From 72rem the same pieces sit on three cards: the session on the
 // left, the reading in the middle, Status and this turn's Record inline on the right. Shapes follow
 // docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
 // menu a popover anchored to its button: the platform is the component library. This file is the reader: the flow,

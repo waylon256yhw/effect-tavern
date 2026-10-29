@@ -1,7 +1,7 @@
 // The polish scan (issue #3): code finds the sentences of a turn's prose that hit the lexicon, so one targeted call can
 // rewrite those and nothing else. Pure: no model, no session. A lexicon entry is a literal or a simple wildcard (`*` =
-// a short run: `不是*而是`, `指节*白`); dialogue (inside 「」 or “”) is never scanned, since slop in speech is how people
-// talk. A hit marks its whole sentence, with exact coordinates into the prose, so replay and the Inspector reproduce it.
+// a short run: `不是*而是`, `指节*白`); dialogue (inside 「」, 『』, “” or ‘’, nested by depth) is never scanned, since slop in
+// speech is how people talk, and a standalone 『心声』 or ‘aside’ is speech too (#63). A hit marks its whole sentence, with exact coordinates into the prose, so replay and the Inspector reproduce it.
 import { Schema } from "effect"
 
 export const Entry = Schema.Struct({ pattern: Schema.String, hint: Schema.optionalKey(Schema.String) })
@@ -18,8 +18,8 @@ export interface Target {
 export const FLOOR = 200 // prose shorter than this is not worth a call (Story Oracle's cost gate)
 const RUN = 12 // ponytail: `*` spans at most this many characters; per-entry when a pattern needs longer
 const STOP = /[。！？!?…]/
-const OPEN = /[「“]/
-const CLOSE = /[」”]/
+const OPEN = /[「『“‘]/
+const CLOSE = /[」』”’]/ // ’ as an apostrophe (don’t) closes nothing at depth 0: both walkers ignore it there
 const HIDDEN = "\u0000" // a masked dialogue character: no pattern matches it, `*` does not cross it
 
 /** Sentence spans [start, end): a terminator run (and the closing quotes after it) ends one outside dialogue; inside it,
@@ -110,11 +110,14 @@ export const marked = (text: string, targets: readonly Target[]) => {
 }
 
 /** The prose with each changed sentence spliced in; a value equal to the original sentence is a pass-through. */
+/** The prose with each answered target replaced by its answer. An echo is a pass-through; a blank answer keeps the
+ *  sentence (a rewrite may not delete: polish is not re-checked, so a clue or a guard the sentence carried would go
+ *  silently; a kept sentence at worst keeps its slop). */
 export const splice = (text: string, targets: readonly Target[], out: Readonly<Record<string, string>>) => {
   let s = text
   for (const t of [...targets].reverse()) {
     const v = out[t.id]
-    if (v !== undefined && v !== text.slice(t.start, t.end)) s = s.slice(0, t.start) + v + s.slice(t.end)
+    if (v !== undefined && v.trim() && v !== text.slice(t.start, t.end)) s = s.slice(0, t.start) + v + s.slice(t.end)
   }
   return s
 }

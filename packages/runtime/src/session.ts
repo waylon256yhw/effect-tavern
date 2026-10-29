@@ -5,7 +5,11 @@
 // One turn, wiring §9/§10 (beats), §13 (brief, guardrail), §14 (layered lore), §17 (record, views), §18 (head).
 // Order: lookup → decide/settle loop → gate → direct → narrate → check → polish → record. The gate runs AFTER settlement
 // because a window can depend on what this turn produced (the sword cut exposes the tattoo). Polish (src/polish.ts) is
-// a call only when code found lexicon hits in the final prose; it rewrites those sentences alone, so nothing is re-checked.
+// a call only when code found lexicon hits in the final prose; it rewrites those sentences alone, and its output is not
+// checked again (#63): a deliberate saving of one call, taken because the rewrite is confined to the hit sentences
+// outside dialogue, the question asks for the same sentence said plainly, and a blank answer keeps the sentence
+// (polish.ts `splice`). The verdict on the node is check's, on the prose before polish; a rewrite that drops a clue's
+// wording or brushes a guard rule is the price, and `writing.polish: false` turns the stage off.
 // There is no tool anywhere: lookup is a structured pick over the literal enum of readable ids, actions are the decide
 // stage. The model never drives a loop, so there is no tool definition to gate or to cache (§15.4 items 1–2 dissolve).
 // Truncation: a narrate that finishes with "length" is re-asked once with the partial as a trailing assistant message

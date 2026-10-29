@@ -1252,7 +1252,9 @@
 }
 
 /* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold */
-@media (min-width: 64rem) {
+/* the three cards from 72rem (#66): the fixed sides and the gaps take 40rem, so at 64rem the reading was left about
+   384px, narrower than a phone; the one-column reader with its sheets serves the tablet and half-screen band instead */
+@media (min-width: 72rem) {
   :root {
     background: var(--surface-0);
   }
