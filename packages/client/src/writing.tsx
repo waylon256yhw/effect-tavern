@@ -28,16 +28,17 @@ import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, wit
 import { card, page, player, registry } from "./store.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
 import { fetchCard, putPlayer } from "./wire.ts"
+import { type Key, t } from "./i18n.ts"
 
 export const openWriting = () => registry.set(page, "writing")
 const close = () => registry.set(page, "reader")
 
 type Tab = "switches" | "prose" | "polish" | "inputs"
-const TABS: [Tab, string][] = [
-  ["switches", "开关与记录"],
-  ["prose", "文风与要求"],
-  ["polish", "润色与禁词"],
-  ["inputs", "快捷输入"],
+const TABS: [Tab, Key][] = [
+  ["switches", "writing.tabSwitches"],
+  ["prose", "writing.tabProse"],
+  ["polish", "writing.tabPolish"],
+  ["inputs", "writing.tabInputs"],
 ]
 
 export const WritingPage = () => {
@@ -55,24 +56,24 @@ export const WritingPage = () => {
   })
   return (
     <div class="inspect wpage">
-      <article class="wsheet" aria-label="写作">
+      <article class="wsheet" aria-label={t("writing.title")}>
         <header class="whead">
-          <button type="button" class="icon" aria-label="返回故事" onClick={close}>
+          <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
             <Back />
           </button>
-          <h1>写作</h1>
+          <h1>{t("writing.title")}</h1>
           <Show when={view()?.title}>{(t) => <span class="tag">{t()}</span>}</Show>
           <span class="spacer" />
-          <nav class="wtabs" role="tablist" aria-label="写作分区">
-            <For each={TABS} keyed={(t) => t[0]}>
-              {(t) => (
+          <nav class="wtabs" role="tablist" aria-label={t("writing.sections")}>
+            <For each={TABS} keyed={(row) => row[0]}>
+              {(row) => (
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={tab() === t()[0] ? "true" : "false"}
-                  onClick={() => setTab(t()[0])}
+                  aria-selected={tab() === row()[0] ? "true" : "false"}
+                  onClick={() => setTab(row()[0])}
                 >
-                  {t()[1]}
+                  {t(row()[1])}
                 </button>
               )}
             </For>
@@ -128,13 +129,13 @@ const Switches = () => {
   }
   const lit = () => products().filter((p) => onOf(p)).length
   return (
-    <section class="wpanel" role="tabpanel" aria-label="开关与记录">
+    <section class="wpanel" role="tabpanel" aria-label={t("writing.tabSwitches")}>
       <div class="wsec">
         <div class="block-title">
-          <h3>叙事开关</h3>
+          <h3>{t("writing.switches")}</h3>
           <div class="right">
             <button type="button" class="btn sm ghost" disabled={!me()} onClick={reset}>
-              全部跟随卡片
+              {t("writing.allFollowCard")}
             </button>
           </div>
         </div>
@@ -143,7 +144,7 @@ const Switches = () => {
           <For each={SWITCHES} keyed={(s) => s.key}>
             {(s) => (
               <fieldset class="sw-card" disabled={moot(s().key, w())}>
-                <legend>{s().label}</legend>
+                <legend>{t(s().label)}</legend>
                 <div class="sw-pills">
                   <For each={s().values} keyed={(v) => String(v[0])}>
                     {(v) => (
@@ -154,7 +155,7 @@ const Switches = () => {
                         disabled={!me()}
                         onClick={() => set(s().key, pressing(s().key, w(), v()[0]))}
                       >
-                        {v()[1]}
+                        {t(v()[1])}
                       </button>
                     )}
                   </For>
@@ -168,7 +169,7 @@ const Switches = () => {
           and stays on; the rest are the player's toggles over the declared default */}
       <div class="wsec grow">
         <div class="block-title">
-          <h3>每轮记录</h3>
+          <h3>{t("writing.products")}</h3>
           <div class="right">
             <span class="tag mono">
               {lit()} / {products().length}
@@ -183,7 +184,7 @@ const Switches = () => {
                 <Show when={!BUILTIN_PRODUCTS.has(p().id) && view()?.title}>
                   {(t) => <span class="tag">{t()}</span>}
                 </Show>
-                <Show when={p().id !== "notes"} fallback={<span class="tag">常开</span>}>
+                <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
                   <Switch on={onOf(p())} label={p().label ?? p().id} onFlip={() => flip(p())} />
                 </Show>
               </div>
@@ -222,21 +223,21 @@ const Prose = () => {
     put((p) => addGlobal(p, newId("req"), d, "tail"))
   }
   return (
-    <section class="wpanel" role="tabpanel" aria-label="文风与要求">
+    <section class="wpanel" role="tabpanel" aria-label={t("writing.tabProse")}>
       <div class="prose-grid">
         {/* this card's supplement: one text, in the tail of every narrate request on this card and no other */}
         <div class="prose-card mine">
           <div class="block-title">
-            <h3>本卡补充</h3>
+            <h3>{t("switches.cardExtra")}</h3>
             <Show when={title()}>{(t) => <span class="tag">{t()}</span>}</Show>
             <div class="right">
-              <span class="tag mono">{extra().length} 字</span>
+              <span class="tag mono">{t("common.chars", { n: extra().length })}</span>
             </div>
           </div>
           <div class="field-well grow">
             <textarea
-              aria-label="本卡补充"
-              placeholder={`只对「${title()}」生效的要求：笔法、人物语气、场景气氛……接在每轮的末尾`}
+              aria-label={t("switches.cardExtra")}
+              placeholder={t("writing.extraPlaceholder", { card: title() })}
               disabled={!me()}
               value={extra()}
               onChange={(e) => put((p) => withExtra(p, cardId(), e.currentTarget.value))}
@@ -247,11 +248,11 @@ const Prose = () => {
         {/* the global requirements: every card, each at the head (before the card's frame) or the tail */}
         <div class="prose-card">
           <div class="block-title">
-            <h3>跨卡通用要求</h3>
-            <span class="tag">所有卡片</span>
+            <h3>{t("writing.global")}</h3>
+            <span class="tag">{t("writing.allCards")}</span>
             <div class="right">
               <button type="button" class="btn sm" disabled={!me() || draft() !== null} onClick={() => setDraft("")}>
-                <Plus /> <span>添加要求</span>
+                <Plus /> <span>{t("writing.addRequirement")}</span>
               </button>
             </div>
           </div>
@@ -264,23 +265,28 @@ const Prose = () => {
                 }}
               >
                 <div class="frag-bar">
-                  <div class="at-toggle" role="group" aria-label="位置">
+                  <div class="at-toggle" role="group" aria-label={t("writing.position")}>
                     <button type="button" aria-pressed="true" tabindex="-1">
-                      每轮末尾
+                      {t("writing.atTail")}
                     </button>
                     <button type="button" aria-pressed="false" disabled>
-                      开头
+                      {t("writing.atHead")}
                     </button>
                   </div>
                   <span class="spacer" />
-                  <button type="button" class="icon sm" aria-label="放弃" onClick={() => setDraft(null)}>
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.discard")}
+                    onClick={() => setDraft(null)}
+                  >
                     <Close />
                   </button>
                 </div>
                 <div class="field-well">
                   <textarea
-                    aria-label="要求"
-                    placeholder="对每张卡都成立的要求：文风、笔法、叙事习惯……"
+                    aria-label={t("writing.requirement")}
+                    placeholder={t("writing.globalPlaceholder")}
                     value={draft() ?? ""}
                     ref={(el) => requestAnimationFrame(() => el.focus())}
                     onInput={(e) => setDraft(e.currentTarget.value)}
@@ -293,28 +299,28 @@ const Prose = () => {
               {(f, i) => (
                 <div class="frag-row">
                   <div class="frag-bar">
-                    <div class="at-toggle" role="group" aria-label="位置">
+                    <div class="at-toggle" role="group" aria-label={t("writing.position")}>
                       <button
                         type="button"
                         aria-pressed={atOf(f()) === "tail" ? "true" : "false"}
                         onClick={() => put((p) => setGlobalAt(p, i, "tail"))}
                       >
-                        每轮末尾
+                        {t("writing.atTail")}
                       </button>
                       <button
                         type="button"
                         aria-pressed={atOf(f()) === "head" ? "true" : "false"}
                         onClick={() => put((p) => setGlobalAt(p, i, "head"))}
                       >
-                        开头
+                        {t("writing.atHead")}
                       </button>
                     </div>
                     <span class="spacer" />
-                    <span class="tag mono">{(f().text ?? "").length} 字</span>
+                    <span class="tag mono">{t("common.chars", { n: (f().text ?? "").length })}</span>
                     <button
                       type="button"
                       class="icon sm"
-                      aria-label="移除要求"
+                      aria-label={t("writing.removeRequirement")}
                       onClick={() => put((p) => removeGlobal(p, i))}
                     >
                       <Close />
@@ -322,8 +328,8 @@ const Prose = () => {
                   </div>
                   <div class="field-well">
                     <textarea
-                      aria-label="要求"
-                      placeholder="留空即移除这条要求"
+                      aria-label={t("writing.requirement")}
+                      placeholder={t("writing.emptyRemoves")}
                       value={f().text ?? ""}
                       onChange={(e) => put((p) => setGlobalText(p, i, e.currentTarget.value))}
                       onKeyDown={leaveArea}
@@ -333,7 +339,7 @@ const Prose = () => {
               )}
             </For>
             <Show when={!globals().length && draft() === null}>
-              <p class="none">还没有通用要求：加一条，它对每张卡都生效</p>
+              <p class="none">{t("writing.noGlobal")}</p>
             </Show>
           </div>
         </div>
@@ -388,7 +394,7 @@ const Polish = () => {
     const r = parseLexicon(await f.text())
     if ("error" in r) return setNotice(r.error)
     const merged = mergeLexicon(lex(), r.entries)
-    setNotice(`导入 ${merged.length - lex().length} 条`)
+    setNotice(t("writing.importN", { n: merged.length - lex().length }))
     setLex(merged)
   }
   const exportFile = () => {
@@ -398,16 +404,16 @@ const Polish = () => {
     URL.revokeObjectURL(url)
   }
   return (
-    <section class="wpanel" role="tabpanel" aria-label="润色与禁词">
+    <section class="wpanel" role="tabpanel" aria-label={t("writing.tabPolish")}>
       <div class="block-title lex-title">
-        <h3>禁词表</h3>
-        <span class="tag mono">{lex().length} 条</span>
+        <h3>{t("writing.lexicon")}</h3>
+        <span class="tag mono">{t("common.entries", { n: lex().length })}</span>
         <label class="inline-search" data-open={searching() || !!q() ? "true" : "false"}>
           <Clue aria-hidden="true" />
           <input
             type="search"
-            placeholder="搜索词条..."
-            aria-label="搜索词条"
+            placeholder={t("writing.searchEntries")}
+            aria-label={t("writing.searchEntriesLabel")}
             value={q()}
             onFocus={() => setSearching(true)}
             onBlur={() => setSearching(false)}
@@ -423,10 +429,10 @@ const Polish = () => {
         <div class="right">
           <Show when={notice()}>{(n) => <span class="tag">{n()}</span>}</Show>
           <button type="button" class="btn sm ghost" disabled={!me()} onClick={() => file.click()}>
-            <Import /> <span>导入</span>
+            <Import /> <span>{t("writing.import")}</span>
           </button>
           <button type="button" class="btn sm ghost" disabled={!lex().length} onClick={exportFile}>
-            <Export /> <span>导出</span>
+            <Export /> <span>{t("common.export")}</span>
           </button>
           <button
             type="button"
@@ -434,11 +440,11 @@ const Polish = () => {
             disabled={!me() || !!draft()}
             onClick={() => (setNotice(null), setDraft({ pattern: "", hint: "" }))}
           >
-            <Plus /> <span>添加禁词</span>
+            <Plus /> <span>{t("writing.addEntry")}</span>
           </button>
           <label class="polish-switch">
-            <span>润色</span>
-            <Switch on={on()} label="润色" onFlip={flip} />
+            <span>{t("writing.polish")}</span>
+            <Switch on={on()} label={t("writing.polish")} onFlip={flip} />
           </label>
         </div>
       </div>
@@ -459,9 +465,9 @@ const Polish = () => {
         fallback={
           <div class="lex-empty">
             <div class="empty-card">
-              <p>词表为空，润色阶段不扫描任何句子</p>
+              <p>{t("writing.lexiconEmpty")}</p>
               <button type="button" class="btn" disabled={!me()} onClick={() => file.click()}>
-                <Import /> <span>导入词表文件</span>
+                <Import /> <span>{t("writing.importFile")}</span>
               </button>
             </div>
           </div>
@@ -469,8 +475,8 @@ const Polish = () => {
       >
         <div class="lex-wrap" data-off={on() ? "false" : "true"}>
           <div class="lex-head">
-            <span>匹配词条（* 为通配）</span>
-            <span>替代写法</span>
+            <span>{t("writing.patternHead")}</span>
+            <span>{t("writing.hint")}</span>
             <span />
           </div>
           <div class="lex-list scroller fade">
@@ -484,8 +490,8 @@ const Polish = () => {
                 >
                   <input
                     class="field"
-                    placeholder="禁词，或带 * 的句式"
-                    aria-label="匹配词条"
+                    placeholder={t("writing.patternPlaceholder")}
+                    aria-label={t("writing.pattern")}
                     value={d().pattern}
                     ref={(el) => requestAnimationFrame(() => el.focus())}
                     onInput={(e) => setDraft({ ...d(), pattern: e.currentTarget.value })}
@@ -493,13 +499,18 @@ const Polish = () => {
                   />
                   <input
                     class="field"
-                    placeholder="怎么改写（选填）"
-                    aria-label="替代写法"
+                    placeholder={t("writing.hintPlaceholder")}
+                    aria-label={t("writing.hint")}
                     value={d().hint}
                     onInput={(e) => setDraft({ ...d(), hint: e.currentTarget.value })}
                     onKeyDown={leave}
                   />
-                  <button type="button" class="icon sm" aria-label="放弃" onClick={() => setDraft(null)}>
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.discard")}
+                    onClick={() => setDraft(null)}
+                  >
                     <Close />
                   </button>
                 </div>
@@ -510,27 +521,32 @@ const Polish = () => {
                 <div class="lex-row">
                   <input
                     class="field"
-                    aria-label="匹配词条"
+                    aria-label={t("writing.pattern")}
                     value={x().e.pattern}
                     onChange={(e) => edit(x().i, { pattern: e.currentTarget.value })}
                     onKeyDown={leave}
                   />
                   <input
                     class="field"
-                    placeholder="怎么改写（选填）"
-                    aria-label="替代写法"
+                    placeholder={t("writing.hintPlaceholder")}
+                    aria-label={t("writing.hint")}
                     value={x().e.hint ?? ""}
                     onChange={(e) => edit(x().i, { hint: e.currentTarget.value })}
                     onKeyDown={leave}
                   />
-                  <button type="button" class="icon sm" aria-label="删除词条" onClick={() => remove(x().i)}>
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.deleteEntry")}
+                    onClick={() => remove(x().i)}
+                  >
                     <Close />
                   </button>
                 </div>
               )}
             </For>
             <Show when={q().trim() && !shown().length}>
-              <p class="none">没有匹配的词条</p>
+              <p class="none">{t("writing.noEntries")}</p>
             </Show>
           </div>
         </div>
@@ -595,12 +611,12 @@ const Inputs = () => {
     dlg.close()
   }
   return (
-    <section class="wpanel" role="tabpanel" aria-label="快捷输入">
+    <section class="wpanel" role="tabpanel" aria-label={t("writing.tabInputs")}>
       {/* the keys: a row of glyphs over the box; the player's are buttons into the editor, the defaults after them */}
       <div class="input-card">
         <div class="block-title">
-          <h3>标点与格式键</h3>
-          <span class="tag mono">{keys().length} 键</span>
+          <h3>{t("writing.formatKeys")}</h3>
+          <span class="tag mono">{t("writing.keysN", { n: keys().length })}</span>
           <div class="right">
             <button
               type="button"
@@ -608,7 +624,7 @@ const Inputs = () => {
               disabled={!me()}
               onClick={() => open({ snippet: false, at: -1, draft: emptyDraft(false) })}
             >
-              <Plus /> <span>添加符号</span>
+              <Plus /> <span>{t("writing.addKey")}</span>
             </button>
           </div>
         </div>
@@ -622,15 +638,15 @@ const Inputs = () => {
                 onClick={() => open({ snippet: false, at: i, draft: draftOfFormat(k()) })}
               >
                 <span class="glyph">{k().label}</span>
-                <span class="mode">{k().after !== undefined ? "居中" : "末尾"}</span>
+                <span class="mode">{k().after !== undefined ? t("writing.caretMiddle") : t("writing.caretEnd")}</span>
               </button>
             )}
           </For>
           <For each={keyDefaults()} keyed={(k) => k.label}>
             {(k) => (
-              <span class="fmt-btn builtin" title={`内置：${caretOf(k())}`}>
+              <span class="fmt-btn builtin" title={t("writing.builtinOf", { glyph: caretOf(k()) })}>
                 <span class="glyph">{k().label}</span>
-                <span class="mode">内置</span>
+                <span class="mode">{t("writing.builtin")}</span>
               </span>
             )}
           </For>
@@ -639,8 +655,8 @@ const Inputs = () => {
       {/* the snippets: the + menu's rows; a note one is a word to the narrator, the rest stay in the story */}
       <div class="input-card grow">
         <div class="block-title">
-          <h3>快捷片段</h3>
-          <span class="tag mono">{snips().length} 条</span>
+          <h3>{t("writing.snippets")}</h3>
+          <span class="tag mono">{t("common.entries", { n: snips().length })}</span>
           <div class="right">
             <button
               type="button"
@@ -648,7 +664,7 @@ const Inputs = () => {
               disabled={!me()}
               onClick={() => open({ snippet: true, at: -1, draft: emptyDraft(true) })}
             >
-              <Plus /> <span>添加片段</span>
+              <Plus /> <span>{t("writing.addSnippet")}</span>
             </button>
           </div>
         </div>
@@ -664,7 +680,7 @@ const Inputs = () => {
                 <span class="snip-cell stext mono">{caretOf(s()) || "—"}</span>
                 <span class="snip-cell shint">
                   <span>{s().hint}</span>
-                  <span class="tag">{s().note ? "给叙事者" : "故事里"}</span>
+                  <span class="tag">{s().note ? t("writing.toNarrator") : t("writing.inStory")}</span>
                 </span>
               </button>
             )}
@@ -676,7 +692,7 @@ const Inputs = () => {
                 <span class="snip-cell stext mono">{caretOf(s()) || "—"}</span>
                 <span class="snip-cell shint">
                   <span>{s().hint}</span>
-                  <span class="tag">内置</span>
+                  <span class="tag">{t("writing.builtin")}</span>
                 </span>
               </div>
             )}
@@ -687,11 +703,11 @@ const Inputs = () => {
         title={
           editing()?.at === -1
             ? editing()?.snippet
-              ? "新片段"
-              : "新符号"
+              ? t("writing.newSnippet")
+              : t("writing.newKey")
             : editing()?.snippet
-              ? "编辑片段"
-              : "编辑符号"
+              ? t("writing.editSnippet")
+              : t("writing.editKey")
         }
         narrow
         dialog={(el) => (dlg = el)}
@@ -702,79 +718,79 @@ const Inputs = () => {
             <>
               <div class="modal-body">
                 <label class="mfield">
-                  <span>{e().snippet ? "名称" : "显示名称"}</span>
+                  <span>{e().snippet ? t("writing.name") : t("writing.displayName")}</span>
                   <input
                     class="field"
-                    placeholder={e().snippet ? "菜单里的名字" : "留空则显示插入的符号"}
+                    placeholder={e().snippet ? t("writing.menuName") : t("writing.blankShowsGlyph")}
                     value={e().draft.label}
                     onInput={(ev) => patch({ label: ev.currentTarget.value })}
                   />
                 </label>
                 <Show when={e().snippet}>
                   <label class="mfield">
-                    <span>说明</span>
+                    <span>{t("writing.description")}</span>
                     <input
                       class="field"
-                      placeholder="菜单里名字下的一行（选填）"
+                      placeholder={t("writing.descriptionPlaceholder")}
                       value={e().draft.hint}
                       onInput={(ev) => patch({ hint: ev.currentTarget.value })}
                     />
                   </label>
                   <div class="mfield">
-                    <span>发给谁</span>
-                    <div class="at-toggle" role="group" aria-label="通道">
+                    <span>{t("writing.channel")}</span>
+                    <div class="at-toggle" role="group" aria-label={t("writing.channelLabel")}>
                       <button
                         type="button"
                         aria-pressed={!e().draft.note ? "true" : "false"}
                         onClick={() => patch({ note: false })}
                       >
-                        故事里
+                        {t("writing.inStory")}
                       </button>
                       <button
                         type="button"
                         aria-pressed={e().draft.note ? "true" : "false"}
                         onClick={() => patch({ note: true })}
                       >
-                        给叙事者
+                        {t("writing.toNarrator")}
                       </button>
                     </div>
                   </div>
                 </Show>
                 <div class="mfield">
-                  <span>插入后光标</span>
-                  <div class="at-toggle" role="group" aria-label="光标位置">
+                  <span>{t("writing.caret")}</span>
+                  <div class="at-toggle" role="group" aria-label={t("writing.caretLabel")}>
                     <button
                       type="button"
                       aria-pressed={e().draft.between ? "true" : "false"}
                       onClick={() => patch({ between: true })}
                     >
-                      内容中间
+                      {t("writing.caretInside")}
                     </button>
                     <button
                       type="button"
                       aria-pressed={!e().draft.between ? "true" : "false"}
                       onClick={() => patch({ between: false })}
                     >
-                      内容末尾
+                      {t("writing.caretAfter")}
                     </button>
                   </div>
                 </div>
                 <div class="mpair">
                   <label class="mfield">
-                    <span>{e().draft.between ? "光标前" : "插入内容"}</span>
+                    <span>{e().draft.between ? t("writing.beforeCaret") : t("writing.insertText")}</span>
                     <input
                       class="field mono"
-                      placeholder={e().draft.between ? "如 「" : "如 ……"}
+                      placeholder={e().draft.between ? t("writing.exampleOpenQuote") : t("writing.exampleEllipsis")}
                       value={e().draft.text}
                       onInput={(ev) => patch({ text: ev.currentTarget.value })}
                     />
                   </label>
                   <Show when={e().draft.between}>
                     <label class="mfield">
-                      <span>光标后</span>
+                      <span>{t("writing.afterCaret")}</span>
                       <input
                         class="field mono"
-                        placeholder="如 」"
+                        placeholder={t("writing.exampleCloseQuote")}
                         value={e().draft.after}
                         onInput={(ev) => patch({ after: ev.currentTarget.value })}
                       />
@@ -785,15 +801,15 @@ const Inputs = () => {
               <div class="modal-foot">
                 <Show when={e().at >= 0}>
                   <button type="button" class="btn sm ghost danger" onClick={remove}>
-                    删除
+                    {t("common.delete")}
                   </button>
                 </Show>
                 <span class="spacer" />
                 <button type="button" class="btn sm ghost" onClick={() => dlg.close()}>
-                  取消
+                  {t("common.cancel")}
                 </button>
                 <button type="button" class="btn sm primary" disabled={!made()} onClick={save}>
-                  保存
+                  {t("common.save")}
                 </button>
               </div>
             </>

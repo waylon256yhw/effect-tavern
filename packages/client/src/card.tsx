@@ -14,6 +14,7 @@ import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { card, error, log, page, personas, pin, player, registry, routing, working } from "./store.ts"
 import { newStory, send } from "./wire.ts"
+import { t } from "./i18n.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
 export const openCard = () => registry.set(page, "card")
@@ -27,7 +28,7 @@ const Bounded = (props: { items: readonly string[] }) => {
       {props.items.slice(0, SHOWN).join(" · ")}
       <Show when={props.items.length > SHOWN}>
         <button type="button" class="more" popovertarget={id}>
-          and {props.items.length - SHOWN} more
+          {t("card.andMore", { n: props.items.length - SHOWN })}
         </button>
         <div id={id} class="versions names" popover>
           {props.items.join(" · ")}
@@ -73,10 +74,10 @@ export const CardPage = () => {
       <Show when={view()}>
         {(c) => (
           <article class="cardsheet">
-            <section class="about" aria-label="Card">
+            <section class="about" aria-label={t("card.card")}>
               <div class="head">
                 <div class="title">
-                  <button type="button" class="icon" aria-label="Back to story" onClick={back}>
+                  <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={back}>
                     <Back />
                   </button>
                   <h1>{c().title}</h1>
@@ -93,7 +94,7 @@ export const CardPage = () => {
                 <For each={specs(c())} keyed={(r) => r.key}>
                   {(r) => (
                     <div class="row">
-                      <dt>{r().key}</dt>
+                      <dt>{t(r().key)}</dt>
                       <dd>
                         <Bounded items={r().items} />
                       </dd>
@@ -103,7 +104,7 @@ export const CardPage = () => {
                 <Show when={persona()}>
                   {(name) => (
                     <div class="row">
-                      <dt>Persona</dt>
+                      <dt>{t("common.persona")}</dt>
                       <dd>{name()}</dd>
                     </div>
                   )}
@@ -111,27 +112,29 @@ export const CardPage = () => {
                 {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}
                 <Show when={!route().default}>
                   <div class="row">
-                    <dt>Model</dt>
+                    <dt>{t("card.model")}</dt>
                     <dd>
-                      No default
+                      {t("card.noDefault")}
                       <button type="button" class="more" onClick={() => openSettings("routing")}>
-                        Settings → 默认模型
+                        {t("app.goDefaultModel")}
                       </button>
                     </dd>
                   </div>
                 </Show>
                 <div class="row">
-                  <dt>Prompt</dt>
-                  <dd class="mono">~{compact.format(c().tokens.head)} tokens</dd>
+                  <dt>{t("card.prompt")}</dt>
+                  <dd class="mono">
+                    ~{compact.format(c().tokens.head)} {t("card.tokens")}
+                  </dd>
                 </div>
               </dl>
             </section>
-            <section class="opening" aria-label="Opening">
+            <section class="opening" aria-label={t("card.opening")}>
               <Show
                 when={opening()}
                 fallback={
                   <div class="well empty">
-                    <p>No opening: your first line begins the story.</p>
+                    <p>{t("card.noOpening")}</p>
                   </div>
                 }
               >
@@ -148,13 +151,13 @@ export const CardPage = () => {
                   <span class="siblings">
                     <button
                       class="icon"
-                      aria-label="Previous opening"
+                      aria-label={t("card.prevOpening")}
                       disabled={at() === 0}
                       onClick={() => setAt(at() - 1)}
                     >
                       <Prev />
                     </button>
-                    <button class="count" popovertarget="openings" aria-label="Pick an opening">
+                    <button class="count" popovertarget="openings" aria-label={t("card.pickOpening")}>
                       {at() + 1} / {openings().length}
                       <Up />
                     </button>
@@ -189,7 +192,7 @@ export const CardPage = () => {
                     </div>
                     <button
                       class="icon"
-                      aria-label="Next opening"
+                      aria-label={t("card.nextOpening")}
                       disabled={at() === openings().length - 1}
                       onClick={() => setAt(at() + 1)}
                     >
@@ -198,7 +201,11 @@ export const CardPage = () => {
                   </span>
                 </Show>
                 <Show when={opening()}>
-                  {(g) => <span class="est mono">~{compact.format(tokens(g().text))} tokens</span>}
+                  {(g) => (
+                    <span class="est mono">
+                      ~{compact.format(tokens(g().text))} {t("card.tokens")}
+                    </span>
+                  )}
                 </Show>
                 <button
                   type="button"
@@ -206,7 +213,7 @@ export const CardPage = () => {
                   disabled={busy()}
                   onClick={() => void begin()}
                 >
-                  {inStory() ? "New story" : "Begin"}
+                  {inStory() ? t("stories.newStory") : t("card.begin")}
                   <Change />
                 </button>
               </footer>

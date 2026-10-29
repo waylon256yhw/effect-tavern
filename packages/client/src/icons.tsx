@@ -31,6 +31,7 @@ export { default as Stop } from "~icons/ph/stop"
 export { default as Close } from "~icons/ph/x"
 export { default as Settings } from "~icons/ph/gear-six"
 export { default as Shade } from "~icons/ph/circle-half"
+export { default as Translate } from "~icons/ph/translate" // the locale flip (i18n.ts)
 export { default as Plugs } from "~icons/ph/plugs"
 export { default as Sliders } from "~icons/ph/sliders-horizontal"
 export { default as Template } from "~icons/ph/brackets-curly"

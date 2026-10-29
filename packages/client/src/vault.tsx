@@ -8,6 +8,7 @@ import { ask, copyKey, Menu } from "./controls.tsx"
 import { Check, Close, Copy, Eye, EyeOff, Trash } from "./icons.tsx"
 import { providers, secrets } from "./store.ts"
 import { addSecret, deleteSecret, putProvider, secretValue, setSecret } from "./wire.ts"
+import { t } from "./i18n.ts"
 
 export const AUTH: { value: SecretView["type"]; label: string }[] = [
   { value: "api_key", label: "API Key Header" },
@@ -32,22 +33,22 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
   return (
     <>
       <div class="drawer-head">
-        <h3>密钥库</h3>
+        <h3>{t("common.vault")}</h3>
         <Show when={target()}>{(t) => <span class="tag">{t().name}</span>}</Show>
         <span class="spacer" />
-        <button type="button" class="icon sm" aria-label="关闭" onClick={() => props.onClose()}>
+        <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => props.onClose()}>
           <Close />
         </button>
       </div>
       <div class="drawer-body scroller">
         <div class="field-group">
-          <span class="label">添加密钥</span>
+          <span class="label">{t("vault.addKey")}</span>
           <div class="row">
             <div class="input-box sm grow">
               <input
                 type="text"
-                placeholder="密钥名称"
-                aria-label="密钥名称"
+                placeholder={t("vault.keyName")}
+                aria-label={t("vault.keyName")}
                 value={draft().name}
                 onInput={(e) => {
                   const name = e.currentTarget.value
@@ -57,7 +58,7 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
             </div>
             <Menu
               small
-              label="认证方式"
+              label={t("vault.auth")}
               value={draft().type}
               options={AUTH}
               onPick={(type) => setDraft((d) => ({ ...d, type }))}
@@ -69,8 +70,8 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                 type="password"
                 class="mono"
                 autocomplete="off"
-                placeholder="密钥"
-                aria-label="密钥"
+                placeholder={t("vault.key")}
+                aria-label={t("vault.key")}
                 value={draft().value}
                 onInput={(e) => {
                   const value = e.currentTarget.value
@@ -85,11 +86,11 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
               disabled={!draft().name.trim() || !draft().value.trim()}
               onClick={() => void add()}
             >
-              添加
+              {t("common.add")}
             </button>
           </div>
         </div>
-        <For each={vault()} keyed={(s) => s.id} fallback={<p class="none">密钥库为空</p>}>
+        <For each={vault()} keyed={(s) => s.id} fallback={<p class="none">{t("vault.empty")}</p>}>
           {(s) => {
             const [plain, setPlain] = createSignal<string | null>(null) // read on the eye's click, dropped on the next
             const [copied, setCopied] = createSignal(false)
@@ -101,7 +102,7 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                     <input
                       type="text"
                       value={s().name}
-                      aria-label="密钥名称"
+                      aria-label={t("vault.keyName")}
                       onChange={(e) => {
                         const name = e.currentTarget.value.trim()
                         if (name) void setSecret(s().id, { name, type: s().type })
@@ -110,7 +111,7 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                   </div>
                   <Menu
                     small
-                    label="认证方式"
+                    label={t("vault.auth")}
                     value={s().type}
                     options={AUTH}
                     onPick={(type) => void setSecret(s().id, { name: s().name, type })}
@@ -118,10 +119,8 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                   <button
                     type="button"
                     class="icon sm"
-                    aria-label="删除密钥"
-                    onClick={() =>
-                      ask(`删除密钥「${s().name}」？用到它的服务商将没有密钥。`, () => void deleteSecret(s().id))
-                    }
+                    aria-label={t("vault.deleteKey")}
+                    onClick={() => ask(t("vault.confirmDelete", { name: s().name }), () => void deleteSecret(s().id))}
                   >
                     <Trash />
                   </button>
@@ -131,7 +130,7 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                   <button
                     type="button"
                     class="icon sm"
-                    aria-label={plain() === null ? "显示密钥" : "隐藏密钥"}
+                    aria-label={plain() === null ? t("common.showKey") : t("common.hideKey")}
                     onClick={() => void flip()}
                   >
                     <Show when={plain() !== null} fallback={<Eye />}>
@@ -141,7 +140,7 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                   <button
                     type="button"
                     class="icon sm"
-                    aria-label="复制密钥"
+                    aria-label={t("common.copyKey")}
                     onClick={() => void copyKey(secretValue(s().id), setCopied)}
                   >
                     <Show when={copied()} fallback={<Copy />}>
@@ -149,20 +148,20 @@ export const VaultDrawer = (props: { for: string | undefined; onClose: () => voi
                     </Show>
                   </button>
                   <Show when={target()}>
-                    {(t) => (
+                    {(tg) => (
                       <Show
-                        when={t().secret === s().id}
+                        when={tg().secret === s().id}
                         fallback={
                           <button
                             type="button"
                             class="btn xs"
-                            onClick={() => void putProvider({ ...t(), secret: s().id })}
+                            onClick={() => void putProvider({ ...tg(), secret: s().id })}
                           >
-                            使用
+                            {t("vault.use")}
                           </button>
                         }
                       >
-                        <span class="tag ok">使用中</span>
+                        <span class="tag ok">{t("vault.inUse")}</span>
                       </Show>
                     )}
                   </Show>

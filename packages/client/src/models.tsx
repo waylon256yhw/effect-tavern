@@ -10,13 +10,14 @@ import { read } from "./bridge.ts"
 import { FORMAT, FORMATS, Menu, Modal, type Opener, Switch } from "./controls.tsx"
 import { hats, providers, registry } from "./store.ts"
 import { putProvider, type Listed } from "./wire.ts"
+import { type Key, t } from "./i18n.ts"
 
-const EFFORTS: [Effort, string][] = [
-  ["off", "关闭"],
-  ["low", "低"],
-  ["medium", "中"],
-  ["high", "高"],
-  ["max", "最高"],
+const EFFORTS: [Effort, Key][] = [
+  ["off", "models.effortOff"],
+  ["low", "models.effortLow"],
+  ["medium", "models.effortMedium"],
+  ["high", "models.effortHigh"],
+  ["max", "models.effortMax"],
 ]
 /** Added as listed: with the format the listing put them under when that is off the provider's default. One already
  *  there with no format of its own takes the listing's too (添加全部 fixes what 更正 would), one the player set stays. */
@@ -93,28 +94,28 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
           <>
             <div class="modal-body scroller">
               <Show when={conflict(c().x, c().m)}>
-                <div class="warn">所选提示词模板以 Assistant 消息结尾，请开启下方「允许预填续写」。</div>
+                <div class="warn">{t("models.hatNeedsPrefill")}</div>
               </Show>
               <div class="pair">
                 <div class="field-group">
-                  <span class="label">提示词模板</span>
+                  <span class="label">{t("models.hat")}</span>
                   <Menu
-                    label="提示词模板"
+                    label={t("models.hat")}
                     value={c().m.hat ?? ""}
                     options={[
-                      { value: "", label: "无模板" },
+                      { value: "", label: t("models.noHat") },
                       ...hatList().map((h) => ({ value: h.id, label: h.name })),
                     ]}
                     onPick={(v) => change((m) => without(m, "hat", v || undefined))}
                   />
                 </div>
                 <div class="field-group">
-                  <span class="label">请求端点协议</span>
+                  <span class="label">{t("models.endpointFormat")}</span>
                   <Menu
-                    label="请求端点协议"
+                    label={t("models.endpointFormat")}
                     value={c().m.format ?? ""}
                     options={[
-                      { value: "", label: `默认 (${FORMAT[c().x.defaultFormat]})` },
+                      { value: "", label: t("models.defaultFormat", { format: FORMAT[c().x.defaultFormat] }) },
                       ...FORMATS.map((f) => ({ value: f, label: FORMAT[f] })),
                     ]}
                     onPick={(v) => change((m) => without(m, "format", (v || undefined) as Format | undefined))}
@@ -122,14 +123,14 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
                 </div>
               </div>
               <div class="field-group">
-                <span class="label">结构化输出方式</span>
+                <span class="label">{t("models.structured")}</span>
                 <Menu
-                  label="结构化输出方式"
+                  label={t("models.structured")}
                   value={capOf(c().x, c().m, "structured")}
                   options={[
-                    { value: "schema", label: "JSON Schema (原生)" },
-                    { value: "tool", label: "Tool Call (强制工具)" },
-                    { value: "json", label: "JSON Object (提示词内嵌)" },
+                    { value: "schema", label: t("models.jsonSchema") },
+                    { value: "tool", label: t("models.toolCall") },
+                    { value: "json", label: t("models.jsonObject") },
                   ]}
                   onPick={(v) => setCap("structured", v)}
                 />
@@ -137,13 +138,13 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
               <Effort value={c().m.effort} onPick={(v) => change((m) => without(m, "effort", v))} />
               <div class="pair">
                 <label class="field-group">
-                  <span class="label">上下文上限 (Token)</span>
+                  <span class="label">{t("models.contextWindow")}</span>
                   <input
                     class="field mono"
                     type="number"
                     min="1024"
                     step="1024"
-                    placeholder="默认"
+                    placeholder={t("common.default")}
                     value={c().m.contextTokens ?? ""}
                     onChange={(e) => {
                       const n = parseInt(e.currentTarget.value, 10)
@@ -152,13 +153,13 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
                   />
                 </label>
                 <label class="field-group">
-                  <span class="label">最大输出 (Token)</span>
+                  <span class="label">{t("models.maxOutput")}</span>
                   <input
                     class="field mono"
                     type="number"
                     min="256"
                     step="256"
-                    placeholder="默认"
+                    placeholder={t("common.default")}
                     value={c().m.maxOutputTokens ?? ""}
                     onChange={(e) => {
                       const n = parseInt(e.currentTarget.value, 10)
@@ -168,25 +169,25 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
                 </label>
               </div>
               <div class="inline-row">
-                <span>允许预填续写 (Prefill)</span>
+                <span>{t("models.prefillLong")}</span>
                 <Switch
                   on={capOf(c().x, c().m, "prefill")}
-                  label="允许预填续写"
+                  label={t("models.prefill")}
                   onFlip={() => setCap("prefill", !capOf(c().x, c().m, "prefill"))}
                 />
               </div>
               <div class="inline-row">
-                <span>回传历史思考过程</span>
+                <span>{t("models.thinkingHistory")}</span>
                 <Switch
                   on={capOf(c().x, c().m, "reasoningBack")}
-                  label="回传历史思考过程"
+                  label={t("models.thinkingHistory")}
                   onFlip={() => setCap("reasoningBack", !capOf(c().x, c().m, "reasoningBack"))}
                 />
               </div>
             </div>
             <div class="modal-foot">
               <button type="button" class="btn primary" onClick={() => el.close()}>
-                完成
+                {t("common.done")}
               </button>
             </div>
           </>
@@ -202,10 +203,10 @@ const Effort = (props: { value: Effort | undefined; onPick: (v: Effort | undefin
   return (
     <div class="field-group">
       <div class="label-row">
-        <span class="label">思考强度</span>
-        <span class="tag mono">{EFFORTS[at()]?.[1] ?? "默认"}</span>
+        <span class="label">{t("models.effort")}</span>
+        <span class="tag mono">{at() >= 0 ? t(EFFORTS[at()]![1]) : t("common.default")}</span>
       </div>
-      <div class="effort" role="radiogroup" aria-label="思考强度">
+      <div class="effort" role="radiogroup" aria-label={t("models.effort")}>
         <div class="rail">
           <div class="fill" style={{ width: `${Math.max(0, at()) * 25}%` }} />
         </div>
@@ -220,7 +221,7 @@ const Effort = (props: { value: Effort | undefined; onPick: (v: Effort | undefin
                 onClick={() => props.onPick(props.value === e()[0] ? undefined : e()[0])}
               >
                 <span class="dot" />
-                <span class="tick">{e()[1]}</span>
+                <span class="tick">{t(e()[1])}</span>
               </button>
             )}
           </For>
@@ -236,7 +237,7 @@ export const AddModelDialog = (props: { id: string; opener: Opener<undefined> })
   const [id, setId] = createSignal("")
   return (
     <Modal
-      title="添加模型"
+      title={t("models.addModel")}
       narrow
       dialog={(d) => {
         el = d
@@ -254,13 +255,13 @@ export const AddModelDialog = (props: { id: string; opener: Opener<undefined> })
         <div class="modal-body scroller">
           <label class="field-group">
             <span class="label">
-              模型 ID <span class="req">*</span>
+              {t("models.modelId")} <span class="req">*</span>
             </span>
             <input
               class="field mono"
               type="text"
               required
-              placeholder="例如 claude-opus-4-6"
+              placeholder={t("models.modelIdExample")}
               value={id()}
               onInput={(e) => setId(e.currentTarget.value)}
             />
@@ -268,10 +269,10 @@ export const AddModelDialog = (props: { id: string; opener: Opener<undefined> })
         </div>
         <div class="modal-foot">
           <button type="button" class="btn" onClick={() => el.close()}>
-            取消
+            {t("common.cancel")}
           </button>
           <button type="submit" class="btn primary">
-            添加
+            {t("common.add")}
           </button>
         </div>
       </form>

@@ -10,6 +10,7 @@ import { Menu, type Option } from "./controls.tsx"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { heading, record, status, type Declared, type Element } from "./record.ts"
 import { card, dismiss, draft, error, latest, log, pin, registry, stage, type CardView } from "./store.ts"
+import { t } from "./i18n.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
 /** The conditions a meter's stages come from: the fiction variants' `when` (src/record.ts `cuts`). */
@@ -22,7 +23,7 @@ export const PinButton = (props: { id: string }) => {
   return (
     <button
       class="icon"
-      aria-label="Pin"
+      aria-label={t("readings.pin")}
       aria-pressed={on() ? "true" : "false"}
       onClick={() => registry.set(pin, on() ? null : props.id)}
     >
@@ -60,7 +61,10 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
   return (
     <Switch fallback={<p class="val">{cell(props.value)}</p>}>
       <Match when={props.shape.kind === "list"}>
-        <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
+        <Show
+          when={((props.value as unknown[] | undefined) ?? []).length}
+          fallback={<p class="dim">{t("readings.none")}</p>}
+        >
           <ul class="items">
             <For each={props.value as unknown[]} keyed={false}>
               {(v) => <li>{cell(v())}</li>}
@@ -69,12 +73,15 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
         </Show>
       </Match>
       <Match when={table()}>
-        {(t) => (
-          <Show when={((props.value as unknown[] | undefined) ?? []).length} fallback={<p class="dim">none</p>}>
+        {(tbl) => (
+          <Show
+            when={((props.value as unknown[] | undefined) ?? []).length}
+            fallback={<p class="dim">{t("readings.none")}</p>}
+          >
             <table class="rows">
               <thead>
                 <tr>
-                  <For each={t().columns} keyed={(c) => c.key}>
+                  <For each={tbl().columns} keyed={(c) => c.key}>
                     {(c) => <th>{c().key}</th>}
                   </For>
                 </tr>
@@ -83,7 +90,7 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
                 <For each={(props.value as Record<string, unknown>[] | undefined) ?? []} keyed={false}>
                   {(r) => (
                     <tr>
-                      <For each={t().columns} keyed={(c) => c.key}>
+                      <For each={tbl().columns} keyed={(c) => c.key}>
                         {(c) => <td>{cell(r()[c().key])}</td>}
                       </For>
                     </tr>
@@ -353,7 +360,7 @@ export const Sheet = (props: {
   <dialog id={props.id} class="sheet" ref={props.dialog} closedby="any">
     <header>
       <h2>{props.heading}</h2>
-      <button class="icon" aria-label="Close" onClick={(e) => e.currentTarget.closest("dialog")!.close()}>
+      <button class="icon" aria-label={t("common.close")} onClick={(e) => e.currentTarget.closest("dialog")!.close()}>
         <Close />
       </button>
     </header>
@@ -421,7 +428,7 @@ export const Rewrite = (props: {
       <Show when={asking()}>
         <input
           class="direction"
-          placeholder="A word for the rewrite…"
+          placeholder={t("readings.rewordPlaceholder")}
           disabled={busy()}
           ref={(el) => {
             direction = el
@@ -438,12 +445,12 @@ export const Rewrite = (props: {
         />
       </Show>
       <Show when={props.rerun}>
-        <button class="icon" aria-label="Swipe" disabled={busy()} onClick={() => props.onSwipe()}>
+        <button class="icon" aria-label={t("common.swipe")} disabled={busy()} onClick={() => props.onSwipe()}>
           <Swipe />
         </button>
         <button
           class="icon"
-          aria-label="Reword"
+          aria-label={t("common.reword")}
           aria-expanded={asking() ? "true" : "false"}
           disabled={busy()}
           onPointerDown={(e) => e.preventDefault()}
@@ -452,14 +459,14 @@ export const Rewrite = (props: {
           <Reword />
         </button>
       </Show>
-      <button class="icon" aria-label="Edit" disabled={busy()} onClick={() => props.onEdit()}>
+      <button class="icon" aria-label={t("common.edit")} disabled={busy()} onClick={() => props.onEdit()}>
         <Edit />
       </button>
       <span class="spacer" />
       <Show when={!d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
       <Menu
-        action="小剧场"
-        label="小剧场"
+        action={t("readings.aside")}
+        label={t("readings.aside")}
         value={undefined}
         options={busy() ? [] : props.demands}
         onPick={(id) => (dismiss(), props.onDemand(id))}
@@ -489,7 +496,7 @@ export const RecordSheet = (props: {
   }
   return (
     <>
-      <button class="record-pill" aria-label="Record" onClick={() => dlg.showModal()}>
+      <button class="record-pill" aria-label={t("common.record")} onClick={() => dlg.showModal()}>
         <Record aria-hidden="true" />
         <Show when={marked()}>
           <i class="dot" />

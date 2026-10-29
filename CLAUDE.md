@@ -72,6 +72,15 @@ Tooling:
 - `vp check` runs `eslint-plugin-solid/configs/v2` through oxlint (root `vite.config.ts`).
 - Docs: https://v2.solidjs.com/llms.txt; append `.md` to any page URL for its Markdown.
 
+## Interface words (i18n, #67)
+
+The chrome's words live in `packages/client/src/locales/zh-CN.ts` (the source, Chinese) and `en.ts` (English, the same
+keys), read with `t("side.stories")` from `src/i18n.ts` where the word is drawn (JSX, a memo, an effect); a module-level
+table holds keys, not words. A new word: add the key to both files (or `x18n set <key> --locale <l> --value <v>` in
+packages/client), then use it. `x18n check` runs in `vp run verify` and fails on a key used but undeclared, declared
+but unused, missing in a locale, or a `{hole}` the English drops; `x18n extract --list` finds hard-coded strings.
+A card's own text (labels, group names, openings) and the model's words are never translated.
+
 ## Dev
 
 Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp test` built-in finds no vitest files and exits 1.

@@ -8,6 +8,7 @@ import { record } from "./record.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import { calls, card, log, page, path, pin, registry, turnOf, type Id } from "./store.ts"
 import { fetchCalls } from "./wire.ts"
+import { t } from "./i18n.ts"
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
 // A full page over the reader (the reader stays mounted, so a turn in flight keeps streaming under it), shaped by
@@ -80,7 +81,7 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
   return (
     <Switch>
       <Match when={props.row.phase === "lookup"}>
-        <Show when={ids(out().read)} fallback={<span class="pill">nothing read</span>}>
+        <Show when={ids(out().read)} fallback={<span class="pill">{t("inspector.nothingRead")}</span>}>
           {(r) => <span class="pill">read: {r()}</span>}
         </Show>
       </Match>
@@ -89,17 +90,17 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
           {(c) => (
             <>
               <span class={{ pill: true, ok: c().hit, bad: !c().hit }}>
-                {c().action} · {c().hit ? "Hit" : "Miss"}
+                {c().action} · {c().hit ? t("inspector.hit") : t("inspector.miss")}
               </span>
               <span class="dtext">
-                roll {c().roll.toFixed(2)} vs {Math.round(c().chance * 100)}%
+                {t("inspector.rollVs", { roll: c().roll.toFixed(2), chance: Math.round(c().chance * 100) })}
               </span>
             </>
           )}
         </Show>
       </Match>
       <Match when={props.row.phase === "direct"}>
-        <Show when={ids(out().must)} fallback={<span class="pill">no must</span>}>
+        <Show when={ids(out().must)} fallback={<span class="pill">{t("inspector.noMust")}</span>}>
           {(m) => <span class="pill">must: {m()}</span>}
         </Show>
         <Show when={props.dev}>
@@ -112,7 +113,7 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
       </Match>
       <Match when={props.row.phase === "narrate"}>
         <Show when={props.row.status === "stopped"}>
-          <span class="pill bad">stopped</span>
+          <span class="pill bad">{t("common.stopped")}</span>
         </Show>
         <span class="dprose">{(typeof props.row.call.out === "string" ? props.row.call.out : "").split("\n")[0]}</span>
       </Match>
@@ -121,7 +122,7 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
           when={props.dev}
           fallback={
             <span class={{ pill: true, bad: props.row.status === "failed", ok: props.row.status !== "failed" }}>
-              {props.row.status === "failed" ? "failed → second draft" : "ok"}
+              {props.row.status === "failed" ? t("inspector.failedSecondDraft") : "ok"}
             </span>
           }
         >
@@ -137,9 +138,9 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         </Show>
       </Match>
       <Match when={props.row.phase === "polish"}>
-        <span class="pill">{Object.keys(out()).length} targets</span>
+        <span class="pill">{t("inspector.targets", { n: Object.keys(out()).length })}</span>
         <Show when={sent().size}>
-          <span class="dtext">{changed()} changed</span>
+          <span class="dtext">{t("inspector.changed", { n: changed() })}</span>
         </Show>
       </Match>
       <Match when={props.row.phase === "record"}>
@@ -180,9 +181,9 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
   // the call's numbers in one line: tokens, and the chars before the last breakpoint beside cache read to compare
   const bar = () =>
     [
-      `tokens · in ${fmt(u().input)} · out ${fmt(u().output)} · cache read ${fmt(u().cacheRead)}`,
-      u().cacheWrite && `cache write ${fmt(u().cacheWrite)}`,
-      props.dev && prefix() && `prefix to the last breakpoint ${fmt(prefix())} chars`,
+      t("inspector.tokensLine", { input: fmt(u().input), output: fmt(u().output), cacheRead: fmt(u().cacheRead) }),
+      u().cacheWrite && t("inspector.cacheWrite", { n: fmt(u().cacheWrite) }),
+      props.dev && prefix() && t("inspector.prefixChars", { n: fmt(prefix()) }),
     ]
       .filter(Boolean)
       .join(" · ")
@@ -201,7 +202,8 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
           <Digest row={props.row} node={props.node} nth={props.nth} dev={props.dev} />
         </span>
         <span class="metrics">
-          <span class="ms">{secs(c().ms)}</span> · {fmt(u().input)} in → {fmt(u().output)} out
+          <span class="ms">{secs(c().ms)}</span> ·{" "}
+          {t("inspector.inOut", { input: fmt(u().input), output: fmt(u().output) })}
         </span>
       </summary>
       <Show when={opens()}>
@@ -210,7 +212,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
             <span>{bar()}</span>
             <Show when={props.dev && c().msgs.length > 0}>
               <button class="cp" onClick={copy}>
-                {copied() ? "Copied" : "Copy JSON"}
+                {copied() ? t("common.copied") : t("inspector.copyJson")}
               </button>
             </Show>
           </div>
@@ -221,14 +223,14 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                   {(r, i) => (
                     <button role="tab" aria-selected={shownTab() === i ? "true" : "false"} onClick={() => setTab(i)}>
                       <Show when={r().breakpoint}>
-                        <i class="bp" aria-label="breakpoint" />
+                        <i class="bp" aria-label={t("inspector.breakpoint")} />
                       </Show>
                       {r().name} <span class="chars">{fmt(r().chars)}c</span>
                     </button>
                   )}
                 </For>
                 <button role="tab" aria-selected={shownTab() === null ? "true" : "false"} onClick={() => setTab(null)}>
-                  All
+                  {t("inspector.all")}
                 </button>
               </div>
             </Show>
@@ -243,7 +245,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                             <span class="role">
                               {r().name} · {m().role}
                               <Show when={r().breakpoint && j === r().msgs.length - 1}>
-                                <span class="bptag">breakpoint</span>
+                                <span class="bptag">{t("inspector.breakpoint")}</span>
                               </Show>
                             </span>
                             <div class="txt">
@@ -258,7 +260,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
               </Show>
               <div class="answer">
                 <span class="role">
-                  answer <span class="chars">{fmt(u().output)} out</span>
+                  {t("inspector.answer")} <span class="chars">{t("inspector.outN", { n: fmt(u().output) })}</span>
                 </span>
                 <Show
                   when={typeof c().out === "string"}
@@ -335,12 +337,12 @@ export const Inspect = (props: { id: Id }) => {
   return (
     <div class="inspect" data-pane={pane()}>
       <header class="top">
-        <button class="icon" aria-label="Back to story" onClick={() => registry.set(page, "reader")}>
+        <button class="icon" aria-label={t("common.backToStory")} onClick={() => registry.set(page, "reader")}>
           <Back />
         </button>
         <h1>{view()?.title}</h1>
         <span class="nodenav">
-          <button class="icon" aria-label="Previous node" disabled={at() <= 0} onClick={() => go(-1)}>
+          <button class="icon" aria-label={t("inspector.prevNode")} disabled={at() <= 0} onClick={() => go(-1)}>
             <Prev />
           </button>
           <span class="n">
@@ -353,7 +355,7 @@ export const Inspect = (props: { id: Id }) => {
           </span>
           <button
             class="icon"
-            aria-label="Next node"
+            aria-label={t("inspector.nextNode")}
             disabled={at() < 0 || at() === line().length - 1}
             onClick={() => go(1)}
           >
@@ -363,41 +365,45 @@ export const Inspect = (props: { id: Id }) => {
         <span class="spacer" />
         <Show when={sums().calls}>
           <span class="sums">
-            {sums().calls} calls · {secs(sums().ms)} · {compact.format(sums().input)} in
-            <Show when={sums().cacheRead}> · {compact.format(sums().cacheRead)} cached</Show> ·{" "}
-            {compact.format(sums().output)} out
+            {t("inspector.sumCalls", {
+              calls: sums().calls,
+              secs: secs(sums().ms),
+              input: compact.format(sums().input),
+            })}
+            <Show when={sums().cacheRead}>{t("inspector.sumCached", { n: compact.format(sums().cacheRead) })}</Show>
+            {t("inspector.sumOut", { n: compact.format(sums().output) })}
           </span>
         </Show>
-        <span class="seg" role="tablist" aria-label="View">
+        <span class="seg" role="tablist" aria-label={t("common.view")}>
           <button
             role="tab"
             aria-selected={pane() === "pipeline" ? "true" : "false"}
             onClick={() => setPane("pipeline")}
           >
-            Pipeline
+            {t("inspector.pipeline")}
           </button>
           <button role="tab" aria-selected={pane() === "node" ? "true" : "false"} onClick={() => setPane("node")}>
-            Node
+            {t("common.node")}
             <Show when={node()?.readable.length}>{(n) => <span class="v">{n()}</span>}</Show>
           </button>
         </span>
       </header>
-      <Show when={node()} fallback={<p class="dim">No such node</p>}>
+      <Show when={node()} fallback={<p class="dim">{t("inspector.noSuchNode")}</p>}>
         {(x) => (
           <div class="cols">
-            <section class="pane pipeline" aria-label="Pipeline">
+            <section class="pane pipeline" aria-label={t("inspector.pipeline")}>
               <div class="sechead">
-                <span class="lbl">Pipeline</span>
+                <span class="lbl">{t("inspector.pipeline")}</span>
                 <Show when={absent().length}>
-                  <span class="meta">no {absent().join(", ")}</span>
+                  <span class="meta">{t("inspector.absent", { stages: absent().join(", ") })}</span>
                 </Show>
                 <Show when={dev()}>
                   <label class="search">
                     <Clue aria-hidden="true" />
                     <input
                       type="search"
-                      aria-label="Search request text"
-                      placeholder="Search prompts…"
+                      aria-label={t("inspector.searchLabel")}
+                      placeholder={t("inspector.searchPlaceholder")}
                       autocomplete="off"
                       value={q()}
                       onInput={(e) => setQ(e.currentTarget.value.trim())}
@@ -405,7 +411,7 @@ export const Inspect = (props: { id: Id }) => {
                   </label>
                 </Show>
               </div>
-              <Show when={mine().length} fallback={<p class="dim">No calls kept for this node</p>}>
+              <Show when={mine().length} fallback={<p class="dim">{t("inspector.noCalls")}</p>}>
                 <div class="spine">
                   <For each={grouped()} keyed={false}>
                     {(g) => (
@@ -417,22 +423,23 @@ export const Inspect = (props: { id: Id }) => {
                           </div>
                         }
                       >
-                        {(t) => (
-                          <div class={{ knot: true, tray: true, bad: t().failed, discarded: t().failed }}>
+                        {(tray) => (
+                          <div class={{ knot: true, tray: true, bad: tray().failed, discarded: tray().failed }}>
                             <div class="thead">
                               <span>
-                                Draft {t().draft} · {t().failed ? "Discarded" : "Final"}
+                                {t("common.draft")} {tray().draft} ·{" "}
+                                {tray().failed ? t("inspector.discarded") : t("inspector.final")}
                               </span>
                               <span class="meta">
-                                {secs(t().rows.reduce((n, r) => n + r.call.ms, 0))} ·{" "}
-                                {t().rows.some((r) => r.status === "stopped")
-                                  ? "stopped"
-                                  : t().failed
-                                    ? "check failed"
-                                    : "check passed"}
+                                {secs(tray().rows.reduce((n, r) => n + r.call.ms, 0))} ·{" "}
+                                {tray().rows.some((r) => r.status === "stopped")
+                                  ? t("common.stopped")
+                                  : tray().failed
+                                    ? t("inspector.checkFailed")
+                                    : t("inspector.checkPassed")}
                               </span>
                             </div>
-                            <For each={t().rows} keyed={false}>
+                            <For each={tray().rows} keyed={false}>
                               {(r) => <One row={r()} />}
                             </For>
                           </div>
@@ -443,9 +450,9 @@ export const Inspect = (props: { id: Id }) => {
                 </div>
               </Show>
             </section>
-            <aside class="pane node" aria-label="Node">
+            <aside class="pane node" aria-label={t("common.node")}>
               <div class="sechead">
-                <span class="lbl">Input</span>
+                <span class="lbl">{t("inspector.input")}</span>
                 <span class="meta">
                   {[x().turn.input.text ? "act" : "", x().turn.input.note ? "note" : ""].filter(Boolean).join(" + ") ||
                     "greeting"}
@@ -461,7 +468,11 @@ export const Inspect = (props: { id: Id }) => {
                     <Show when={x().turn.input.pin}>
                       {(p) => (
                         <span class={{ pill: true, ok: x().turn.fired.some((d) => d.id === p()) }}>
-                          pin: {p()} ({x().turn.fired.some((d) => d.id === p()) ? "told" : "untold"})
+                          pin: {p()} (
+                          {x().turn.fired.some((d) => d.id === p())
+                            ? t("inspector.toldState")
+                            : t("inspector.untoldState")}
+                          )
                         </span>
                       )}
                     </Show>
@@ -469,9 +480,11 @@ export const Inspect = (props: { id: Id }) => {
                 </Show>
               </div>
               <div class="sechead">
-                <span class="lbl">Untold</span>
+                <span class="lbl">{t("inspector.untold")}</span>
                 <span class="meta">
-                  {x().readable.length ? `${x().readable.length} readable · pin for next turn` : "nothing left to tell"}
+                  {x().readable.length
+                    ? t("inspector.readable", { n: x().readable.length })
+                    : t("inspector.nothingLeft")}
                 </span>
               </div>
               <div class="hooks">
@@ -481,7 +494,7 @@ export const Inspect = (props: { id: Id }) => {
                       <span class="hb">
                         <span class="hid">
                           {r().id}
-                          {pinned() === r().id ? " · armed for the next send" : ""}
+                          {pinned() === r().id ? t("inspector.armed") : ""}
                         </span>
                         <span class="ht">{r().hook}</span>
                       </span>
@@ -491,15 +504,15 @@ export const Inspect = (props: { id: Id }) => {
                 </For>
               </div>
               <div class="sechead">
-                <span class="lbl">State</span>
+                <span class="lbl">{t("inspector.state")}</span>
                 <span class="meta">
-                  <Show when={parent()} fallback="after this node">
-                    {(p) => <>vs {turnOf(line(), p().turn.id)}</>}
+                  <Show when={parent()} fallback={t("inspector.afterThisNode")}>
+                    {(p) => <>{t("inspector.vsTurn", { turn: turnOf(line(), p().turn.id) })}</>}
                   </Show>
                   <Show when={x().events.length}> · {x().events.join(", ")}</Show>
                 </span>
               </div>
-              <Show when={fields().length} fallback={<p class="dim">No field changed</p>}>
+              <Show when={fields().length} fallback={<p class="dim">{t("inspector.noFieldChanged")}</p>}>
                 <div class="record">
                   <For each={fields()} keyed={false}>
                     {(el) => <Reading el={el()} />}
@@ -507,8 +520,8 @@ export const Inspect = (props: { id: Id }) => {
                 </div>
               </Show>
               <div class="sechead">
-                <span class="lbl">Products</span>
-                <span class="meta">record</span>
+                <span class="lbl">{t("inspector.products")}</span>
+                <span class="meta">{t("inspector.recordMeta")}</span>
               </div>
               <For each={Object.entries(x().turn.products)} keyed={([k]) => k}>
                 {(e) => (
@@ -522,7 +535,7 @@ export const Inspect = (props: { id: Id }) => {
               </For>
               <Show when={Object.keys(x().turn.answers).length}>
                 <div class="prod">
-                  <span class="pid">answers</span>
+                  <span class="pid">{t("inspector.answers")}</span>
                   <KeyValues of={x().turn.answers} />
                 </div>
               </Show>

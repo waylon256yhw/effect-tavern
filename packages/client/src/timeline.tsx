@@ -17,6 +17,7 @@ import { plain, Prose } from "./prose.tsx"
 import { heading } from "./record.ts"
 import { card, draft, type Id, log, page, path, prose, registry, working } from "./store.ts"
 import { dropNodes, fetchCalls, send } from "./wire.ts"
+import { t } from "./i18n.ts"
 
 // px: a station's width (its height is the CSS's), the gap between lanes, the row step, the turn ruler, the padding, a thread's
 // band, and where the knot sits in the station
@@ -36,13 +37,13 @@ const textOf = (n: Node) => lineOf(n) || plain(prose(n))
 const Kind = (props: { of: Node["turn"]["sibling"] }) => (
   <Switch>
     <Match when={props.of === "swipe"}>
-      <Swipe aria-label="Swipe" />
+      <Swipe aria-label={t("common.swipe")} />
     </Match>
     <Match when={props.of === "reword"}>
-      <Reword aria-label="Reword" />
+      <Reword aria-label={t("common.reword")} />
     </Match>
     <Match when={props.of === "edit"}>
-      <Edit aria-label="Edit" />
+      <Edit aria-label={t("common.edit")} />
     </Match>
   </Switch>
 )
@@ -156,13 +157,13 @@ export const Timeline = () => {
               <span class="badge target">→leaf</span>
             </Match>
             <Match when={n().turn.end === "stopped"}>
-              <span class="badge stop">stop</span>
+              <span class="badge stop">{t("timeline.stopBadge")}</span>
             </Match>
           </Switch>
         </div>
         <div class="row2">
           <Show when={n().turn.input.note && n().turn.input.text}>
-            <span class="pill">note</span>
+            <span class="pill">{t("timeline.notePill")}</span>
           </Show>
           {textOf(n())}
         </div>
@@ -207,42 +208,42 @@ export const Timeline = () => {
     <div
       class="cell draft"
       style={{ left: `${xy(p.c).x}px`, top: `${xy(p.c).y}px`, width: `${LANE}px` }}
-      aria-label="The turn being written"
+      aria-label={t("timeline.draftLabel")}
     >
       <div class="row1">
-        <span class="nid">Draft</span>
+        <span class="nid">{t("common.draft")}</span>
         <span class="where">{p.c.parent === null ? "root" : `#${p.c.parent}`}</span>
       </div>
-      <div class="row2">{d()?.input.text || d()?.input.note || plain(d()?.text ?? "") || "Writing…"}</div>
+      <div class="row2">{d()?.input.text || d()?.input.note || plain(d()?.text ?? "") || t("timeline.writing")}</div>
     </div>
   )
 
   return (
     <div class="inspect timeline" data-pane={pane()}>
       <header class="top">
-        <button class="icon" aria-label="Back to story" onClick={close}>
+        <button class="icon" aria-label={t("common.backToStory")} onClick={close}>
           <Back />
         </button>
         <h1>{view()?.title}</h1>
         <span class="spacer" />
         <span class="sums">
-          {all().nodes.size} nodes · head {all().head === null ? "null" : `#${all().head}`}
+          {t("timeline.sums", { nodes: all().nodes.size, head: all().head === null ? "null" : `#${all().head}` })}
         </span>
-        <span class="seg" role="tablist" aria-label="View">
+        <span class="seg" role="tablist" aria-label={t("common.view")}>
           <button
             role="tab"
             aria-selected={pane() === "pipeline" ? "true" : "false"}
             onClick={() => setPane("pipeline")}
           >
-            Timeline
+            {t("common.timeline")}
           </button>
           <button role="tab" aria-selected={pane() === "node" ? "true" : "false"} onClick={() => setPane("node")}>
-            Node <span class="v">{selected() === null ? "—" : `#${selected()}`}</span>
+            {t("common.node")} <span class="v">{selected() === null ? "—" : `#${selected()}`}</span>
           </button>
         </span>
       </header>
       <div class="cols">
-        <section class="pane pipeline graph" aria-label="Timeline">
+        <section class="pane pipeline graph" aria-label={t("common.timeline")}>
           <div class="stage" style={{ width: `${geo().width}px`, height: `${geo().height}px` }}>
             <svg width={geo().width} height={geo().height} aria-hidden="true">
               {/* each station: the rail up to its parent's knot (an elbow into a new lane just above the child), then its knot */}
@@ -283,29 +284,29 @@ export const Timeline = () => {
                 }}
               </For>
             </svg>
-            <For each={laid().threads} keyed={(t) => t.root ?? DRAFT}>
-              {(t, i) => (
+            <For each={laid().threads} keyed={(th) => th.root ?? DRAFT}>
+              {(th, i) => (
                 <>
                   <div
-                    class={{ band: true, active: t().root !== null && onLine().has(t().root!) }}
+                    class={{ band: true, active: th().root !== null && onLine().has(th().root!) }}
                     style={{
                       left: `${RULER + PAD}px`,
                       top: `${geo().threads[i()]!.top}px`,
-                      width: `${Math.max(260, t().lanes * (LANE + GAP) - GAP)}px`,
+                      width: `${Math.max(260, th().lanes * (LANE + GAP) - GAP)}px`,
                     }}
                   >
-                    <span>Root {t().root === null ? "draft" : `#${t().root}`}</span>
+                    <span>{t("timeline.root", { id: th().root === null ? t("common.draft") : `#${th().root}` })}</span>
                     <span class="dim">
-                      {t().root === null ? 1 : L.below(all(), t().root!) + 1} nodes
-                      <Show when={t().root !== null && heading(view()?.heading, node(t().root!)!)}>
+                      {t("timeline.nodesN", { n: th().root === null ? 1 : L.below(all(), th().root!) + 1 })}
+                      <Show when={th().root !== null && heading(view()?.heading, node(th().root!)!)}>
                         {(h) => <> · {h()}</>}
                       </Show>
                     </span>
                   </div>
-                  <For each={Array.from({ length: t().rows }, (_, r) => r)} keyed={false}>
+                  <For each={Array.from({ length: th().rows }, (_, r) => r)} keyed={false}>
                     {(r) => (
                       <span
-                        class={{ tick: true, line: line()[0]?.id === t().root && r() < line().length }}
+                        class={{ tick: true, line: line()[0]?.id === th().root && r() < line().length }}
                         style={{ top: `${geo().threads[i()]!.rows + r() * STEP}px` }}
                       >
                         T{r() + 1}
@@ -329,47 +330,55 @@ export const Timeline = () => {
             </For>
           </div>
         </section>
-        <section class="pane node" aria-label="Node">
-          <Show when={sel()} fallback={<p class="dim">No node selected.</p>}>
+        <section class="pane node" aria-label={t("common.node")}>
+          <Show when={sel()} fallback={<p class="dim">{t("timeline.noneSelected")}</p>}>
             {(n) => (
               <>
                 <div class="nodehead">
                   <div class="bar">
                     <h2>
-                      Turn {depth(n().id)} <span class="v">· #{n().id}</span>
+                      {t("timeline.turnN", { n: depth(n().id) })} <span class="v">· #{n().id}</span>
                       <Show when={isHead(n().id)}>
                         <span class="pill solid">HEAD</span>
                       </Show>
                       <Show when={!isHead(n().id) && onLine().has(n().id)}>
-                        <span class="pill ok">on line</span>
+                        <span class="pill ok">{t("timeline.onLine")}</span>
                       </Show>
                       <Show when={n().turn.end === "stopped"}>
-                        <span class="pill bad">stopped</span>
+                        <span class="pill bad">{t("common.stopped")}</span>
                       </Show>
                     </h2>
                     <span class="acts">
-                      <Show when={all().head !== target()} fallback={<span class="at">at #{target()}</span>}>
+                      <Show
+                        when={all().head !== target()}
+                        fallback={<span class="at">{t("timeline.atNode", { id: target() ?? "" })}</span>}
+                      >
                         <button type="button" class="checkout" disabled={busy()} onClick={() => checkout(n().id)}>
                           <Checkout aria-hidden="true" />
-                          Checkout #{target()}
+                          {t("timeline.checkoutNode", { id: target() ?? "" })}
                         </button>
                       </Show>
                       <button
                         type="button"
                         class="icon"
-                        aria-label="Open in reader"
+                        aria-label={t("timeline.openInReader")}
                         disabled={busy() && !onLine().has(n().id)}
                         onClick={() => openInReader(n().id)}
                       >
                         <Notes />
                       </button>
-                      <button type="button" class="icon" aria-label="Inspect" onClick={() => inspect(n().id)}>
+                      <button
+                        type="button"
+                        class="icon"
+                        aria-label={t("timeline.inspect")}
+                        onClick={() => inspect(n().id)}
+                      >
                         <Clue />
                       </button>
                       <button
                         type="button"
                         class="icon danger"
-                        aria-label="Drop subtree"
+                        aria-label={t("timeline.dropSubtree")}
                         disabled={busy()}
                         onClick={() => confirm.showModal()}
                       >
@@ -379,7 +388,7 @@ export const Timeline = () => {
                   </div>
                   <div class="facts">
                     <span>
-                      parent <b>{n().parent === null ? "none" : `#${n().parent}`}</b>
+                      {t("timeline.parent")} <b>{n().parent === null ? t("timeline.noParent") : `#${n().parent}`}</b>
                     </span>
                     <span>
                       <b>{n().turn.sibling ?? (n().parent === null ? "root" : "act")}</b>
@@ -390,16 +399,16 @@ export const Timeline = () => {
                     </span>
                     <Show when={heading(view()?.heading, n())}>{(h) => <span>{h()}</span>}</Show>
                     <span>
-                      <b>{L.below(all(), n().id)}</b> below
-                      <Show when={target() !== n().id}>
-                        {" "}
-                        (leaf <b>#{target()}</b>)
-                      </Show>
+                      {t("timeline.belowN", { n: L.below(all(), n().id) })}
+                      <Show when={target() !== n().id}> {t("timeline.leafN", { id: target() ?? "" })}</Show>
                     </span>
                   </div>
                 </div>
                 {/* the reader's line block (App.tsx Said), without its actions: this page is a view */}
-                <Show when={n().turn.input.text || n().turn.input.note} fallback={<span class="dim">(opening)</span>}>
+                <Show
+                  when={n().turn.input.text || n().turn.input.note}
+                  fallback={<span class="dim">{t("timeline.openingOnly")}</span>}
+                >
                   <div class="spoke">
                     <Show when={n().turn.input.text}>
                       <div class="said">
@@ -419,7 +428,7 @@ export const Timeline = () => {
                 <Show when={siblings().length > 1}>
                   <div class="vlist">
                     <div class="sechead">
-                      <span class="lbl">Versions under #{n().parent}</span>
+                      <span class="lbl">{t("timeline.versionsUnder", { id: n().parent ?? "" })}</span>
                       <span class="meta">
                         {version()}/{siblings().length}
                       </span>
@@ -452,21 +461,19 @@ export const Timeline = () => {
         <Show when={sel()}>
           {(n) => (
             <p>
-              Drop #{n().id} and the {L.below(all(), n().id)} nodes under it? Every turn in this subtree is gone for
-              good;{" "}
+              {t("timeline.dropConfirm", { id: n().id, n: L.below(all(), n().id) })}{" "}
               {L.chain(all(), all().head).some((x) => x.id === n().id)
-                ? "head falls to the newest surviving node"
-                : "head stays"}
-              .
+                ? t("timeline.headFalls")
+                : t("timeline.headStays")}
             </p>
           )}
         </Show>
         <div class="row">
           <button type="button" class="chip state" onClick={() => confirm.close()}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button type="button" class="chip danger" disabled={busy()} onClick={() => void drop()}>
-            Delete
+            {t("common.delete")}
           </button>
         </div>
       </dialog>

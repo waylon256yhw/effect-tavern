@@ -10,6 +10,7 @@ import { Family } from "./family.tsx"
 import { Back, Caret, Check, Close } from "./icons.tsx"
 import { roam } from "./side.tsx"
 import { names } from "./store.ts"
+import { t } from "./i18n.ts"
 
 export const FORMATS: Format[] = ["openai-compatible", "anthropic", "gemini"]
 export const FORMAT: Record<Format, string> = {
@@ -22,7 +23,8 @@ let made = 0
 export const newId = (kind: string) => `${kind}-${Date.now().toString(36)}${(made++).toString(36)}`
 /** A model's group: its owner when the name table knows it (`meta`, `anthropic`), else its id up to the first `-`, `/`
  *  or `_` (the prototype's grouping). Tracked: the table arrives after the lists. */
-const groupOf = (id: string) => lookup(names(), id)?.owner ?? (id.split(/[-/_]/)[0]!.toLowerCase() || "默认")
+const groupOf = (id: string) =>
+  lookup(names(), id)?.owner ?? (id.split(/[-/_]/)[0]!.toLowerCase() || t("common.default"))
 export const grouped = (ids: readonly string[]): [string, string[]][] => {
   const by = new Map<string, string[]>()
   for (const id of ids) by.set(groupOf(id), [...(by.get(groupOf(id)) ?? []), id])
@@ -150,7 +152,7 @@ export const Name = (props: { value: string; label: string; onCommit: (v: string
 )
 /** The phone's way from a detail back to its list (hidden on desktop, where both show). */
 export const ToList = (props: { onBack: () => void }) => (
-  <button type="button" class="icon back-pane" aria-label="返回列表" onClick={() => props.onBack()}>
+  <button type="button" class="icon back-pane" aria-label={t("controls.backToList")} onClick={() => props.onBack()}>
     <Back />
   </button>
 )
@@ -206,7 +208,7 @@ export const Modal = (props: {
     >
       <div class="modal-head">
         <h3>{props.title}</h3>
-        <button type="button" class="icon sm" aria-label="关闭" onClick={() => el.close()}>
+        <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => el.close()}>
           <Close />
         </button>
       </div>
@@ -233,10 +235,10 @@ export const Confirm = () => {
       <p>{asking()?.text}</p>
       <div class="row">
         <button type="button" class="chip state" onClick={() => el.close()}>
-          取消
+          {t("common.cancel")}
         </button>
         <button type="button" class="chip danger" onClick={() => (el.close(), asking()?.run())}>
-          删除
+          {t("common.delete")}
         </button>
       </div>
     </dialog>

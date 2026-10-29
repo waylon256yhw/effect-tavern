@@ -36,11 +36,11 @@ const ri = view({
   },
 })
 assert.deepEqual(specs(ri), [
-  { key: "Setting", items: ["理"] },
-  { key: "Mode", items: ["participant"] },
-  { key: "State", items: ["好感度"] },
+  { key: "card.specSetting", items: ["理"] },
+  { key: "card.specMode", items: ["参与者"] },
+  { key: "card.specState", items: ["好感度"] },
 ])
-assert.deepEqual(specs(view({ input: "note" })), [{ key: "Mode", items: ["author"] }]) // nothing named, nothing tracked
+assert.deepEqual(specs(view({ input: "note" })), [{ key: "card.specMode", items: ["作者"] }]) // nothing named, nothing tracked
 const yandao = view({
   rules: {
     fields: [
@@ -61,5 +61,7 @@ assert.equal(openingTag(yandao, { text: "x", do: [{ path: "局势", set: 7 }] })
 assert.equal(openingTag(yandao, { text: "x" }), undefined)
 assert.equal(firstLine("  黄昏。盐津镇的石板街上\r\n第二段"), "黄昏。盐津镇的石板街上")
 assert.equal(firstLine("**午后的阳光**从彩绘玻璃窗渗入\n\n*第二段*"), "午后的阳光从彩绘玻璃窗渗入")
-assert.ok(specs(view({ rules: full.rules, fiction: [] })).some((r) => r.key === "State" && r.items.includes("体力")))
+assert.ok(
+  specs(view({ rules: full.rules, fiction: [] })).some((r) => r.key === "card.specState" && r.items.includes("体力")),
+)
 console.log("manifest ok")

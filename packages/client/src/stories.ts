@@ -2,6 +2,7 @@
 // the card's four rows; the manager's search over the title here and over the turns on the server (its hits by
 // story id), the quick picks of the cleanup (#75), the preview a row carries. Pure over the rows the wire holds.
 import type { StoryRow } from "./store.ts"
+import { locale as current, t } from "./i18n.ts"
 
 /** A search hit as the server answers it (server data.ts `Hit`): the earliest turn on the head's line whose player
  *  line, note or prose holds the query (turn 0 is the greeting), a snippet of that field, and how many nodes hit. */
@@ -23,7 +24,7 @@ const units: [Intl.RelativeTimeFormatUnit, number][] = [
 ]
 const formats = new Map<string, Intl.RelativeTimeFormat>()
 /** "2 hours ago", "yesterday", "now" in the locale given (the card's rows are English, the manager Chinese). */
-export const ago = (at: number, locale = "en", now = Date.now()): string => {
+export const ago = (at: number, locale: string = current(), now = Date.now()): string => {
   let rel = formats.get(locale)
   if (!rel) formats.set(locale, (rel = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })))
   const d = at - now
@@ -51,7 +52,7 @@ export const preview = (row: StoryRow): string | null => {
   const text = row.last.text.trim()
   if (text) return text
   const note = row.last.note?.trim()
-  return note ? `（场外指导）${note}` : null
+  return note ? t("stories.notePreview", { note: note }) : null
 }
 /** Whether a row stays under the search: no search, its title holds the query, or the server's hits name it. */
 export const matches = (row: StoryRow, q: string, hits: ReadonlyMap<number, Hit>): boolean => {
@@ -77,8 +78,10 @@ export const pieces = (text: string, q: string): { text: string; hit: boolean }[
 export const empty = (row: StoryRow): boolean => row.turns === 0
 export const unnamed = (row: StoryRow): boolean => row.title === null && !row.starred
 /** A hit's place: the greeting, or the turn by number. */
-export const turnLabel = (hit: Hit): string => (hit.turn === 0 ? "开场白" : `第 ${hit.turn} 轮`)
-export const kindLabel: Record<Hit["kind"], string> = { input: "玩家台词", note: "场外指导", reply: "正文" }
+export const turnLabel = (hit: Hit): string =>
+  hit.turn === 0 ? t("stories.opening") : t("stories.turnN", { n: hit.turn })
+export const kindLabel = (kind: Hit["kind"]): string =>
+  kind === "input" ? t("stories.kindInput") : kind === "note" ? t("stories.kindNote") : t("stories.kindReply")
 
 /** After a delete answered `next` as the story to be on: whether the client stays where it is (its reader, draft and
  *  place kept). Only when the story it was on was not among those deleted and is still the one named; the id alone
