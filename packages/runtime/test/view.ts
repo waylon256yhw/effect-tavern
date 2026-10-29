@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Card } from "../src/card.ts"
 import { makeSession } from "../src/session.ts"
-import { view } from "../src/view.ts"
+import { openings, view } from "../src/view.ts"
 import { cardNames, loadCard, player } from "./cards/index.ts"
 
 // A real turn on 盐道 from its second greeting, with 局势 set on the greeting node: every call's messages kept.
@@ -80,6 +80,16 @@ assert.deepEqual(sent("record").slice(0, -1), quiet.slice(0, -1))
 
 // the band ↔ readout section puts the band on 局势 directly above the readout that moves it
 assert.match(n.sections[3]!.text, /^tension moves 局势\n {2}band tense [^]*\n {2}readout: [^]*\n {4}worse: /)
+// openings: one line per greeting with what its `do` puts in play. ri's third opening sits on the confession threshold:
+// the window is open and the readout is asked on turn 1, before the player has said a word (#83, read here, not live).
+assert.deepEqual(openings(await loadCard("ri"), player), [
+  "greeting 0  好感度=15 恋人=false 哥哥=false  bands: band--100  windows: -  readouts: affinity",
+  "greeting 1  好感度=0 恋人=false 哥哥=false  bands: band--100  windows: -  readouts: affinity",
+  "greeting 2  好感度=60 恋人=false 哥哥=false  bands: band-60  windows: kokuhaku→2  readouts: affinity, confession",
+])
+assert.deepEqual(openings(await loadCard("banxing"), player), [
+  "greeting 0  (no fields)  bands: -  windows: -  readouts: -",
+])
 assert.throws(() => view(yandao, player, { state: { 起点: "fight" } }))
 assert.throws(() => view(yandao, player, { greeting: 5 }), /greeting 5/)
 
@@ -87,6 +97,7 @@ assert.throws(() => view(yandao, player, { greeting: 5 }), /greeting 5/)
 const bin = new URL("../bin/card.ts", import.meta.url).pathname
 const run = (...args: string[]) => Bun.spawnSync(["bun", bin, ...args], { stdout: "pipe", stderr: "pipe" })
 for (const name of cardNames) assert.equal(run("check", name).exitCode, 0, name)
+assert.match(run("check", "yandao").stdout.toString(), /^greeting 1 {2}局势=7 起点=血案 {2}bands: tense, blood/m)
 const bad: Card = {
   id: "bad",
   frame: [],

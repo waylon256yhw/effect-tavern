@@ -75,6 +75,7 @@ const asks: Record<Ask["stage"], Ask> = {
     known: "Known: N1",
     current: "Current: scene=place: P",
     asks: ["notes: Notes are the record", "options: Four things"],
+    readout: "Answer from what settled.",
     questions: ["warmth: how A treated the player [cold: cold | flat: indifferent]"],
     prose: "PROSE#2",
   },
@@ -155,7 +156,7 @@ assert.deepEqual(line.polish.slice(3).map(text), [
 // record: facts and questions above, the scene as one user message with the player's line marked as theirs
 assert.deepEqual(line.record.slice(3).map(text), [
   "Known: N1\nCurrent: scene=place: P\nnotes: Notes are the record\noptions: Four things",
-  "Questions: warmth: how A treated the player [cold: cold | flat: indifferent]",
+  "Answer from what settled.\nQuestions: warmth: how A treated the player [cold: cold | flat: indifferent]",
   "Player's line: 我拔剑。\n\nPROSE#2",
 ])
 

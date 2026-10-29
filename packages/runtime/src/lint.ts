@@ -4,6 +4,7 @@
 // output formats in the text). Rules are the list at the bottom; there is no plugin system and no config.
 import type { Card, Effect_, Field } from "./card.ts"
 import { type Cond, holds, reads } from "./cond.ts"
+import { SLOTS } from "./fragment.ts"
 import { hook } from "./lore.ts"
 import { type Entry, scan } from "./polish.ts"
 
@@ -194,6 +195,20 @@ const INLINE: Entry[] = [
 const HOOK = 40 // ponytail: characters; a hook is the player's own words for the thing, one short sentence
 
 const rules: Rule[] = [
+  // The frame is the head of every stage's document, the structured ones included, and its ids are the slots the
+  // player's layer meets it on (fragment.ts SLOTS). A frame fragment under any other id is most often a person or a
+  // world put where every stage reads it: ri's npc sat in the frame, and the director wrote the old priest's reaction
+  // in place of the heroine's (#83). A warn, since the mechanism merges any id and a card may open a slot on purpose.
+  (card) =>
+    card.frame
+      .filter((f) => !SLOTS.includes(f.id))
+      .map((f) => ({
+        rule: "unknown-frame-slot",
+        level: "warn" as const,
+        path: `frame.${f.id}`,
+        message: `${f.id} is not a frame slot (${SLOTS.join(", ")}); every stage reads it as part of the frame`,
+        hint: "a person, a cast or a world goes in fiction; keep it in the frame only as a slot the player may fill",
+      })),
   // A path no field declares throws only when evaluation reaches it (holds, apply), and decode never sees it.
   (card) => {
     const known = new Set([

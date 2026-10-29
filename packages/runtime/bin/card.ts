@@ -5,7 +5,7 @@ import { Console, Effect, Exit, FileSystem, Layer, Option, Path, Stdio, Terminal
 import { Argument, Command, Flag } from "effect/cli"
 import { ChildProcessSpawner } from "effect/process"
 import { lint } from "../src/lint.ts"
-import { stages, view } from "../src/view.ts"
+import { openings, stages, view } from "../src/view.ts"
 import { loadCard, player, readCard } from "../test/cards/index.ts"
 
 const card = Argument.String("card").pipe(
@@ -23,13 +23,18 @@ const check = Command.make("check", { card }, ({ card: name }) =>
     const ds = lint(c)
     for (const d of ds)
       yield* Console.log(`${d.level} ${d.rule} ${d.path}: ${d.message}${d.hint ? `\n    hint: ${d.hint}` : ""}`)
+    for (const line of openings(c, player)) yield* Console.log(line)
     const v = view(c, player)
     for (const s of v.sections.filter((s) => s.tokens)) yield* Console.log(`${s.name} ~${s.tokens} tokens`)
     yield* Console.log(`narrate document ~${v.total} tokens`)
     const errors = ds.filter((d) => d.level === "error").length
     if (errors) return yield* Effect.fail(`${errors} error(s)`)
   }),
-).pipe(Command.withDescription("Lint a card and estimate its tokens per section; exit 1 on any error"))
+).pipe(
+  Command.withDescription(
+    "Lint a card, show what each greeting puts in play, and estimate its tokens per section; exit 1 on any error",
+  ),
+)
 
 const show = Command.make(
   "view",
