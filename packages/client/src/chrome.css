@@ -197,12 +197,16 @@
     left var(--dur-4) var(--ease),
     width var(--dur-4) var(--ease);
 }
-/* this turn's change, was → now, drawn like steps' data-new over a fill dimmed to steps' reached */
-.meter .fill:has(~ .new) {
+/* this turn's change, was → now: a gain is drawn like steps' data-new over a fill dimmed to steps' reached; a loss
+   keeps the fill as the value and leaves the lost stretch past it in reached grey */
+.meter .fill:has(~ .new:not([data-loss])) {
   background: var(--alpha-4);
 }
 .meter .new {
   background: var(--ink);
+}
+.meter .new[data-loss] {
+  background: var(--alpha-4);
 }
 .meter .zero {
   width: 1px;
