@@ -1362,7 +1362,7 @@
     padding-inline: var(--space-6);
   }
   .composer {
-    padding: var(--space-4) var(--space-6) var(--space-5);
+    padding: 0 var(--space-6) var(--space-5);
   }
 }
 
