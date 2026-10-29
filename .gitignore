@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .dev/
+.agents/
 
 # agent worktrees (Claude Code)
 .claude/worktrees/
