@@ -1,30 +1,24 @@
 // The session (src/session.ts) on a scripted model, through its interface only: actions in, events out, nodes read
 // back. Every stage's request shape (from `call` events) and the node's contents are asserted. The script answers by
 // phase name and by what the request says; reveals, kills and cuts are queued per turn.
-import { fake, fakeText, type Message } from "@effect-tavern/provider"
+import { fake, fakeText, type FakeCall, type Message } from "@effect-tavern/provider"
 import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import { prose, splitAside } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
+import { readStage } from "./script.ts"
 
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
 const onCheck: Array<() => void> = [] // run inside the next check call, on the session's own path
 let n = 0
-function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; cut?: boolean; delay?: number } {
-  const text = o.prompt.map(fakeText).join("\n")
-  const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
+function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
+  const doc = readStage(o)
+  const { phase, open } = doc
   const last = o.prompt.at(-1)!
   const want = fakeText(last)
-  // `Open: id=text | id=text`: ids off the line (the texts carry spaces and commas)
-  const open =
-    text
-      .match(/^Open: (.*)$/m)?.[1]
-      .split("|")
-      .map((x) => x.split("=")[0].trim())
-      .filter(Boolean) ?? []
   let out: string
   let reason: "stop" | "length" = "stop"
   let delay: number | undefined
@@ -33,16 +27,13 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
       // Index entries are `id=hook` (a lore entry's first sentence, a recall row's key); the script reads "about <id>" or
       // "about <hook>".
       out = JSON.stringify({
-        read: text
-          .match(/Index: (.*)/)![1]
-          .split(", ")
-          .map((e) => e.split("="))
-          .filter(([id, hook]) => [id, hook].some((k) => want.toLowerCase().includes(`about ${k!.toLowerCase()}`)))
+        read: doc.index
+          .filter((e) => e.some((k) => want.toLowerCase().includes(`about ${k.toLowerCase()}`)))
           .map(([id]) => id),
       })
       break
     case "decide": {
-      const k = (text.match(/So far: (.*)/)![1].match(/strike/g) ?? []).length
+      const k = doc.soFar.filter((e) => /strike/.test(e)).length
       out = JSON.stringify({ next: /strike/.test(want) && k < 2 ? "strike" : "end", again: true }) // the script's "strike B" means twice
       break
     }
@@ -58,37 +49,24 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
       break
     }
     case "record": {
-      // Questions arrive as "<id>: <text> [<opt>: <text> | ...]" lines; answer each from the script, else "flat".
-      const qs = [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)]
+      // Each readout question is answered from the script, else "flat"; the script knows the wuxia card's product shapes.
       const answers = Object.fromEntries(
-        qs.map(([, id, opts]) => {
-          const ids = opts.split(" | ").map((o) => o.split(":")[0].trim())
+        doc.questions.map(({ id, options }) => {
           const want = warmths.shift() ?? "flat"
-          return [id, ids.includes(want) ? want : ids[0]]
+          return [id, options.includes(want) ? want : options[0]]
         }),
       )
-      // Products arrive as "<id>: <question>" lines after Known / Current; the script knows the wuxia card's shapes.
-      const asked = [...text.matchAll(/^(\w+): (?!.*\[)/gm)]
-        .map(([, id]) => id!)
-        .filter((id) => !["Known", "Current", "Questions"].includes(id))
       // Notes repeat the first Known item on purpose: the session drops what the path already holds.
       const canned: Record<string, unknown> = {
-        notes: [
-          `NOTE#${n}`,
-          ...(text
-            .match(/^Known: (.*)/m)?.[1]
-            ?.split("; ")
-            .slice(0, 1)
-            .filter(Boolean) ?? []),
-        ],
+        notes: [`NOTE#${n}`, ...doc.known.slice(0, 1)],
         options: ["O1", "O2", "O3", "O4", "O5"], // five: the cap cuts to four
         scene: { place: `P#${n}`, present: [{ name: "B", mood: "calm" }] },
         // "names li" rows Li too, on a line the lookup script does not read from
         people: /^Player's line: (ask about|names) li/im.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
         inner: `INNER#${n}`,
       }
-      const products = Object.fromEntries(asked.map((id) => [id, canned[id]]))
-      out = JSON.stringify(qs.length ? { ...products, answers } : products)
+      const products = Object.fromEntries(doc.asked.map((id) => [id, canned[id]]))
+      out = JSON.stringify(doc.questions.length ? { ...products, answers } : products)
       break
     }
     default: {
@@ -97,7 +75,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
         break
       } // resumed after a cut
       const how = narrations.shift() ?? "plain"
-      const mayReveal = /MAY reveal|MUST reveal/.test(text)
+      const mayReveal = o.prompt.some((m) => /^(MAY|MUST) reveal/.test(fakeText(m)))
       out = `PROSE#${++n}${how === "fire" && mayReveal ? " the sleeve tears, a crane tattoo" : ""}${how === "kill" ? " KILL" : ""}`
       if (how === "cut") {
         out += " partial"
@@ -117,12 +95,7 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
     case "polish":
       // a target that "went" white is rewritten, any other is echoed back unchanged
       out = JSON.stringify(
-        Object.fromEntries(
-          [...want.matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(([, id, s]) => [
-            id,
-            /went/.test(s!) ? "He clenched his fist." : s,
-          ]),
-        ),
+        Object.fromEntries(doc.targets.map(([id, s]) => [id, /went/.test(s) ? "He clenched his fist." : s])),
       )
   }
   return { text: out, cut: reason === "length", delay } // delay: a stop needs the stream to still be running
@@ -394,12 +367,7 @@ const program = Effect.gen(function* () {
   assert.ok(str(lastNarr()).includes(`MAY reveal: ${full.lore[0]!.layers[2]!}`))
   assert.ok(full.lore[0]!.layers.slice(0, 2).every((l) => str(lastNarr()).includes(l)))
   assert.deepEqual(S.node(t9.id).readable, []) // nothing under the window is left unread
-  assert.equal(
-    str(prompts("check").at(-1)!)
-      .match(/^Open: (.*)$/m)![1]!
-      .split("|").length,
-    1,
-  ) // li opened once
+  assert.deepEqual(readStage({ prompt: prompts("check").at(-1)! } as unknown as FakeCall).open, ["li"]) // li opened once
   assert.ok(str(lastNarr()).includes(full.fiction[2]!.text!) && str(lastNarr()).includes("G"))
   // A reword reads t9's read back with the window's layers already in it: delivered once, not twice.
   assert.deepEqual((yield* go(S.reword(t9.id))).read, t9.read)

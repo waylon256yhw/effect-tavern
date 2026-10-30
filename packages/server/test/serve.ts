@@ -4,6 +4,7 @@
 import { fake, fakeText } from "@effect-tavern/provider"
 import type { Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
+import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
 import assert from "node:assert/strict"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { createServer } from "node:http"
@@ -18,21 +19,14 @@ import { tavern } from "../src/tavern.ts"
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
 
+const canned = { notes: ["N1"], options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
 const scripted = {
-  ...fake((o) =>
-    o.responseFormat?.type === "json"
-      ? {
-          text: JSON.stringify({
-            notes: ["N1"],
-            options: ["A", "B", "C", "D"],
-            people: [],
-            scene: { place: "P", present: [] },
-          }),
-        }
-      : /slow/.test(fakeText(o.prompt.at(-1)!))
-        ? { text: "hello world ".repeat(20), delay: 20 }
-        : { text: "hello world" },
-  ),
+  ...fake((o) => {
+    const doc = readStage(o)
+    return doc.phase === "narrate" && /slow/.test(fakeText(o.prompt.at(-1)!))
+      ? { text: "hello world ".repeat(20), delay: 20 }
+      : defaultAnswer(doc, canned)
+  }),
   hat: "h",
 }
 const model = () => scripted
@@ -339,15 +333,17 @@ await run(false)
 // A stop during the correction rewrite, before its first character (#58): the first draft already streamed, so the close
 // stops the turn rather than withdrawing it, and the first draft stands as the `stopped` reply with its verdict.
 {
-  const json = { notes: ["N1"], options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
   const drafts = {
-    ...fake((o) =>
-      o.responseFormat?.type === "json"
-        ? { text: JSON.stringify(o.responseFormat.name === "check" ? { violated: ["R"] } : json) }
-        : o.prompt.some((m) => fakeText(m).includes("Previous draft broke:"))
-          ? { text: "SECOND DRAFT", delay: 300 } // its first character is 600 ms away: the stop lands before it
-          : { text: "FIRST DRAFT" },
-    ),
+    ...fake((o) => {
+      const doc = readStage(o)
+      return doc.phase === "check"
+        ? { text: JSON.stringify({ violated: ["R"] }) }
+        : doc.phase !== "narrate"
+          ? defaultAnswer(doc, canned)
+          : o.prompt.some((m) => fakeText(m).includes("Previous draft broke:"))
+            ? { text: "SECOND DRAFT", delay: 300 } // its first character is 600 ms away: the stop lands before it
+            : { text: "FIRST DRAFT" }
+    }),
     hat: "h",
   }
   const { lib: guarded, handler } = tavern({
