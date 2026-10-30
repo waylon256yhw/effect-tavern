@@ -196,6 +196,7 @@
   margin-top: var(--space-3);
 }
 .inspect .search {
+  margin-inline-start: auto; /* the caption that used to sit before it is gone */
   display: inline-flex;
   align-items: center;
   gap: 6px;
