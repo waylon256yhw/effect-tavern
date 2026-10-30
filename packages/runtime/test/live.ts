@@ -1,4 +1,5 @@
-// The session (src/session.ts) on a real connection, for one card: `node test/live.ts wuxia | banxing | ri | yandao [greeting]`.
+// The session (src/session.ts) on a real connection, for one card: `bun run live wuxia | banxing | ri | yandao [greeting]`.
+// Opt-in like provider's `bun run live`, never in `verify`: it spends money and depends on the key.
 // The optional second argument picks the greeting (default 0): `yandao 1` opens the town after the fight.
 // Printed off the event stream, the way the inspector would show it: the prose as it streams, every stage's request
 // size, output and usage, then the node. No assertions on the prose; the point is judgement quality, request shapes
