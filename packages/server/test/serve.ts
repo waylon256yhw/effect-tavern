@@ -135,7 +135,8 @@ const run = async (inspect: boolean) => {
     assert.deepEqual([refused.status, ((await refused.json()) as { code: string }).code], [409, "busy"])
     assert.equal((await post({ kind: "checkout", node: null })).status, 409)
     assert.equal((await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).status, 409)
-    assert.equal((await fetch(`${base}/stories/${story}`, { method: "DELETE" })).status, 409)
+    // the cleanup skips a busy story: it is still listed after, with its phase
+    await (await fetch(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids: [story] }) })).json()
     const rows = (await (await fetch(`${base}/stories`)).json()) as { stories: { id: number; busy: string | null }[] }
     assert.equal(rows.stories.find((s) => s.id === story)!.busy, "narrate")
     const attached = sse(await (await fetch(`${base}/turn`)).text())
@@ -260,10 +261,9 @@ const run = async (inspect: boolean) => {
       lib.session(first).log.nodes.size,
     )
     assert.equal((await fetch(`${base}/stories/999`, { method: "PUT" })).status, 404)
-    const left = (await (await fetch(`${base}/stories/${opened.current}`, { method: "DELETE" })).json()) as {
-      current: number
-      stories: unknown[]
-    }
+    const left = (await (
+      await fetch(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids: [opened.current] }) })
+    ).json()) as { current: number; stories: unknown[] }
     assert.deepEqual([left.current, left.stories.length], [first, 1])
     // A client still naming the deleted story: its story routes are a 404, and the listing puts it on the newest.
     assert.equal((await globalThis.fetch(`${base}/nodes`, on(opened.current))).status, 404)
@@ -354,7 +354,7 @@ const run = async (inspect: boolean) => {
       ((await (await fetch(`${base}/stories/${first}`, { method: "PUT" })).json()) as { current: number }).current,
       first,
     ) // body-less still opens
-    await fetch(`${base}/stories/${story}`, { method: "DELETE" })
+    await fetch(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids: [story] }) })
     story = first
     assert.deepEqual(await (await persona("monk")).json(), []) // the pick goes with it (test/library.ts)
 

@@ -38,7 +38,7 @@ import { ago, shown } from "./stories.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
 import { openTimeline } from "./timeline.tsx"
-import { deleteStories, deleteStory, newStory, openStory } from "./pages.ts"
+import { deleteStories, newStory, openStory } from "./pages.ts"
 import { exportUrl, nameStory, putPlayer } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
 import { flip as flipLocale, locale, t } from "./i18n.ts"
@@ -125,8 +125,7 @@ export const Session = () => {
   const commitDelete = () => {
     const rows = doomed()
     confirm.close()
-    if (rows.length === 1) void deleteStory(rows[0]!.id)
-    else if (rows.length) void deleteStories(rows.map((s) => s.id))
+    if (rows.length) void deleteStories(rows.map((s) => s.id))
   }
   // the export: the two formats of #75 as links the browser downloads, the server naming the file by the title
   const [exporting, setExporting] = createSignal<StoryRow | null>(null)

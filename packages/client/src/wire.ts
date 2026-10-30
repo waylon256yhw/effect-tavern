@@ -76,9 +76,7 @@ const listing = (res: Promise<Response>) => got(res) as Promise<Listing>
 export const openStory = (id: number): Promise<Listing> => listing(call(`${base}/stories/${id}`, { method: "PUT" }))
 export const newStory = (card: string): Promise<Listing> =>
   listing(call(`${base}/stories`, { method: "POST", body: JSON.stringify({ card }) }))
-export const deleteStory = (id: number): Promise<Listing> =>
-  listing(call(`${base}/stories/${id}`, { method: "DELETE" }))
-/** The cleanup: several at once (`DELETE /stories` with the ids), one listing back. */
+/** The one delete, the cleanup's: the ids at once (`DELETE /stories`), one listing back; a busy story stays. */
 export const deleteStories = (ids: readonly number[]): Promise<Listing> =>
   listing(call(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) }))
 /** A name the player gives the story; blank clears it. Nothing else moves: only the listing comes back. */

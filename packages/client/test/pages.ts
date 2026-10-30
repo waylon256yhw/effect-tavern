@@ -4,7 +4,7 @@
 // the open story open moves nothing; one Escape rule.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
-import { close, deleteStory, escaping, land, open, openStory } from "../src/pages.ts"
+import { close, deleteStories, escaping, land, open, openStory } from "../src/pages.ts"
 import { card, log, page, registry, stories } from "../src/store.ts"
 import { turn } from "../src/turn.ts"
 
@@ -23,7 +23,7 @@ const asked: string[] = [] // every path requested
         ? [{ id: "first", title: "一" }]
         : path.startsWith("/api/cards/")
           ? { id: path.split("/").at(-1), greetings: [] }
-          : path.startsWith("/api/stories/") && init?.method === "DELETE"
+          : path === "/api/stories" && init?.method === "DELETE"
             ? listing(1) // the open story stays the one to be on
             : path.startsWith("/api/stories/")
               ? listing(Number(path.split("/").at(-1)))
@@ -90,9 +90,9 @@ await openStory(2)
 registry.set(stories, listing(1))
 registry.set(log, L.of({ nodes: [node(0, null), node(1, 0)], head: 1 }))
 open("timeline")
-await deleteStory(7)
+await deleteStories([7])
 assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["timeline", 4, 2]) // two more landings above
-await deleteStory(1)
+await deleteStories([1])
 assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["reader", 5, 1])
 
 // Escape: a field that prevents it keeps it; a popover, dialog or drawer takes it; a field is left first; else close

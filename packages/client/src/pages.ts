@@ -96,7 +96,6 @@ export const onDelete = async (listing: Listing, deleted: readonly number[]): Pr
 }
 export const openStory = async (id: number): Promise<void> => land(await wire.openStory(id))
 export const newStory = async (card: string): Promise<void> => land(await wire.newStory(card))
-export const deleteStory = async (id: number): Promise<void> => onDelete(await wire.deleteStory(id), [id])
 export const deleteStories = async (ids: readonly number[]): Promise<void> =>
   onDelete(await wire.deleteStories(ids), ids)
 

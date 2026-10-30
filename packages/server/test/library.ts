@@ -51,9 +51,9 @@ const over = (data: Data, m: () => Model = model) =>
     [solo.session(a).player.persona, solo.session(b).player.persona],
     [{ [chat.id]: "monk" }, { [chat.id]: "monk" }],
   )
-  solo.stories.del(b)
+  solo.stories.delMany([b])
   assert.throws(() => solo.session(b), /no story/)
-  assert.throws(() => solo.stories.del(b), /no story/)
+  solo.stories.delMany([b]) // gone already: nothing to do
   const theirs = solo.stories.create(other.id)
   assert.deepEqual(
     solo.stories.list().map((s) => [s.id, s.card, s.busy]),
@@ -117,8 +117,7 @@ const over = (data: Data, m: () => Model = model) =>
   await Effect.runPromise(Fiber.interrupt(gone))
   assert.equal(lib.stories.list().find((s) => s.id === p)!.busy, "narrate")
   assert.throws(() => t.start(act("again")), /in flight/)
-  assert.throws(() => lib.stories.del(p), /busy/) // its writes would land on nothing
-  lib.stories.delMany([p])
+  lib.stories.delMany([p]) // skipped while busy: its writes would land on nothing
   assert.ok(lib.exists(p))
   const back = t.attach()!
   assert.deepEqual(

@@ -3,8 +3,8 @@
 // POST /, DELETE /nodes/<id>) without the header, or with one naming no story, is a 404. The rest (/stories, /cards,
 // /player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
 // one turn at a time (turn.ts): an action on a story whose turn is in flight, a synchronous one too (greet, checkout,
-// setField, a node dropped), is a 409 {error, code: "busy"}, and so is deleting the story (the batch delete skips it);
-// stories run side by side, with no lock across them.
+// setField, a node dropped), is a 409 {error, code: "busy"}; a delete skips a busy story; stories run side by side,
+// with no lock across them.
 //   POST /      an Action (src/session.ts `Action`, decoded at this boundary) starts the story's turn and answers its
 //                 events as SSE, one `event:` per kind; a failure is an `error` event {message, code?} (code "no-model":
 //                 no routing pair and no environment model, library.ts `NoModel`). The turn is the story's, not the
@@ -25,8 +25,9 @@
 //                 POST /stories {card} makes a new one of that card (400 when there is none) and answers it as
 //                 `current`, PUT /stories/<id> answers that one (404
 //                 when there is none), with a body {title?: string | null, starred?: boolean} names or stars it
-//                 instead (blank = null, `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
-//                 {ids: number[]} removes those among them in one go. Every one answers the listing.
+//                 instead (blank = null, `updated` untouched), DELETE /stories with {ids: number[]} removes those
+//                 among them in one go (a busy one stays; there is no single delete: the cleanup sheet is the one
+//                 place a story is deleted, #117). Every one answers the listing.
 //                 The server opens nothing: the client adopts `current`, sends it from then on, re-reads /nodes, and
 //                 the trace starts over. GET /stories/search?q=… is the manager's search: the stories whose head's
 //                 line holds q in a player line, a note or the prose, each as {id, turn, kind, text, count} (data.ts
@@ -179,19 +180,17 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       return
     }
     const storyAt = /^\/stories\/(\d+)$/.exec(req.url ?? "")
-    if (storyAt && (req.method === "PUT" || req.method === "DELETE")) {
+    if (storyAt && req.method === "PUT") {
       const id = Number(storyAt[1])
       if (!lib.exists(id)) return json(404, { error: `no story ${id}` })
-      if (req.method === "PUT")
-        return reply(async () => {
-          const raw = await body(req)
-          if (raw === "") return stories(id) // a blank body is the switch: this story becomes the current one
-          const b = StoryBody(JSON.parse(raw))
-          if (b.title !== undefined) lib.stories.title(id, b.title)
-          if (b.starred !== undefined) lib.stories.star(id, b.starred)
-          return stories()
-        })
-      return reply(() => (lib.stories.del(id), stories()), 409) // busy: a turn runs on it
+      return reply(async () => {
+        const raw = await body(req)
+        if (raw === "") return stories(id) // a blank body is the switch: this story becomes the current one
+        const b = StoryBody(JSON.parse(raw))
+        if (b.title !== undefined) lib.stories.title(id, b.title)
+        if (b.starred !== undefined) lib.stories.star(id, b.starred)
+        return stories()
+      })
     }
     if (req.method === "GET" && req.url === "/personas") return json(200, lib.personas.list())
     const personaAt = /^\/personas\/([^/]+)$/.exec(req.url ?? "")
