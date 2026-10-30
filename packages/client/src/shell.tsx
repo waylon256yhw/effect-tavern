@@ -113,8 +113,10 @@ export const Shell = (props: { children: JSX.Element }) => {
     closePeek()
   }
   // the stage's left edge: a press without a move folds; a pull sets the width, with the detent and the spring, and
-  // past the thresholds folds or docks
+  // past the thresholds folds or docks. `pressed` is the hand on the edge (one drag may fold and dock again);
+  // `resizing` is only the frames the track follows the hand, when the stage must not ease after it
   let canvas: HTMLDivElement | undefined
+  let pressed = false
   let moved = false
   let downX = 0
   let keep: number = SIDE.default
@@ -122,6 +124,7 @@ export const Shell = (props: { children: JSX.Element }) => {
     if (e.button !== 0) return
     e.preventDefault()
     clearTimeout(resetTimer)
+    pressed = true
     moved = false
     downX = e.clientX
     keep = width()
@@ -129,22 +132,28 @@ export const Shell = (props: { children: JSX.Element }) => {
     setResizing(true)
   }
   const onMove = (e: PointerEvent) => {
-    if (!resizing()) return
+    if (!pressed) return
     if (!moved && Math.abs(e.clientX - downX) < 4) return
     moved = true
     const x = e.clientX - (canvas?.getBoundingClientRect().left ?? 0)
     const d = drag(x, folded())
     switch (d.kind) {
       case "close":
+        // the fold eases from where the track stands (not a jump back to the width before the pull), and the
+        // stage eases shut with it: the hand is still down, but it no longer leads
+        setWidth(Math.round(shown() ?? width()))
         setShown(null)
+        setResizing(false)
         fold()
         return
       case "open":
         setShown(null)
+        setResizing(false) // the stage eases out to the width; the next move takes the lead again
         dock(d.width)
         keep = d.width
         return
       case "width":
+        if (!resizing()) setResizing(true)
         setShown(d.shown)
         keep = d.keep
         return
@@ -153,7 +162,8 @@ export const Shell = (props: { children: JSX.Element }) => {
     }
   }
   const onUp = () => {
-    if (!resizing()) return
+    if (!pressed) return
+    pressed = false
     setResizing(false)
     setShown(null)
     if (!moved) return fold() // a click on the edge folds
@@ -190,15 +200,6 @@ export const Shell = (props: { children: JSX.Element }) => {
   const storyTitle = () => {
     const c = current()
     return c ? (c.title ?? t("stories.newStory")) : ""
-  }
-  const pageName = () => {
-    const p = pg()
-    if (p === "card") return t("card.card")
-    if (p === "timeline") return t("common.timeline")
-    if (p === "settings") return t("common.settings")
-    if (p === "writing") return t("writing.title")
-    if (typeof p === "object") return t("side.inspector")
-    return storyTitle()
   }
   const cardId = () => view()?.id ?? ""
   const persona = () => people().find((p) => p.id === me()?.persona?.[cardId()])?.name ?? t("side.cardDefault")
@@ -247,7 +248,8 @@ export const Shell = (props: { children: JSX.Element }) => {
           >
             <SidebarGlyph />
           </button>
-          {/* the tab: the card and story being read; on a page, the way back to the reader */}
+          {/* the tab: the card and story being read, whatever the stage shows (a page names itself in its own head);
+            on a page it is the way back to that story */}
           <button
             type="button"
             class="shell-tab"
@@ -260,7 +262,7 @@ export const Shell = (props: { children: JSX.Element }) => {
             <span class="sep" aria-hidden="true">
               ›
             </span>
-            <span class={{ s: true, unnamed: pg() === "reader" && current()?.title === null }}>{pageName()}</span>
+            <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
           </button>
         </header>
       </Show>
