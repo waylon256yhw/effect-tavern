@@ -82,11 +82,12 @@ export const showCard = async (id: string): Promise<void> => {
   if (registry.get(card)?.id !== id) await wire.fetchCardOf(id)
   open("card")
 }
-/** A tab clicked: another one is switched to; the active one, on a page over its story, goes back to the reader. */
+/** A tab clicked: another one is switched to; the active one, on a page, goes back to the reader (a tab on another
+ *  card's page takes the open story back, as Escape does). */
 export const pick = (id: number): void => {
   const t = tab()
   if (id !== t.id) void select(id)
-  else if (t.page !== "reader" && t.story !== null) toReader()
+  else if (t.page !== "reader") toReader()
 }
 /** A card picked on the shelf: its workspace, and the stage on its latest story (the open one when it is this card's,
  *  else the newest), or on its page when it has none. */

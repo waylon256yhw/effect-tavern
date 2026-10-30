@@ -7,6 +7,7 @@
 // one. The device remembers the list and which one is active, never the page stacks: a tab comes back on its
 // story's reader, or on its card's page. A story whose turn lands while no active tab is on it is unread until a tab
 // of it is activated (in memory, from the listing's `busy`: nothing new on the server).
+import { untrack } from "solid-js"
 import { registry } from "./atom.ts"
 import * as Atom from "./atom.ts"
 import { reading } from "./reading.ts"
@@ -25,6 +26,7 @@ export const scroll = { get: (): number | undefined => undefined, set: (_top: nu
 export const edit = (patch: Partial<Omit<Tab, "id">>): void => {
   const s = now()
   registry.set(tabs, { ...s, list: s.list.map((t) => (t.id === s.active ? { ...t, ...patch } : t)) })
+  if (patch.story !== undefined) seen(patch.story)
 }
 
 /** On the tab now active, once the switch before it is done: its story in the slots and its card in the view; a story
@@ -32,6 +34,7 @@ export const edit = (patch: Partial<Omit<Tab, "id">>): void => {
 const show = async (id: number): Promise<void> => {
   const t = now().list.find((x) => x.id === id)
   if (!t) return
+  seen(t.story)
   if (t.story !== null) {
     await reading.activate(t.story)
     if (registry.get(card)?.id !== t.card) await wire.fetchCard() // a tab with no story had shown another card
@@ -139,15 +142,21 @@ registry.subscribe(tabs, (s) => {
 })
 
 // The unread marks: a story whose `busy` went from a phase to none in the listing while the active tab was not on it.
-// Kept by this memo between reads (a transition seen at the next read, whenever that is); the active tab's story is
-// never marked, and activating a tab of a marked story clears the mark.
+// Written by the listing's subscriber against the listing before it; the active tab's story is never marked, and a
+// tab of a marked story made active (`show`, or the story entered in the active tab through `edit`) clears it.
+export const unread = Atom.make<ReadonlySet<Id>>(new Set<Id>()).pipe(Atom.keepAlive)
+const seen = (story: Id | null): void => {
+  const m = registry.get(unread)
+  if (story === null || !m.has(story)) return
+  const next = new Set(m)
+  next.delete(story)
+  registry.set(unread, next)
+}
 let running = new Set<Id>()
-const marks = new Set<Id>()
-export const unread = Atom.make((get) => {
-  const on = activeOf(get(tabs)).story
-  const now = new Set(get(stories)?.stories.flatMap((s) => (s.busy === null ? [] : [s.id])))
-  for (const id of running) if (!now.has(id) && id !== on) marks.add(id)
-  if (on !== null) marks.delete(on)
+registry.subscribe(stories, (lib) => {
+  const now = new Set(lib?.stories.flatMap((s) => (s.busy === null ? [] : [s.id])))
+  const on = activeOf(untrack(tabs)).story // read in place: a registry get would flush inside this effect's flush
+  const done = [...running].filter((id) => !now.has(id) && id !== on)
   running = now
-  return new Set(marks) as ReadonlySet<Id>
+  if (done.length) registry.set(unread, new Set([...untrack(unread), ...done]))
 })

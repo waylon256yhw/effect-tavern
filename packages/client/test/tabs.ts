@@ -5,7 +5,7 @@
 // a story whose turn landed elsewhere, until a tab of it is activated.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
-import { browse, onDelete, open, openStory, pick } from "../src/pages.ts"
+import { browse, onDelete, open, openStory, pick, showCard } from "../src/pages.ts"
 import { createReading, reading } from "../src/reading.ts"
 import {
   activeOf,
@@ -75,6 +75,11 @@ pick(A)
 assert.equal(registry.get(page), "reader")
 pick(A) // in the reader: nothing
 assert.equal(registry.get(page), "reader")
+// another card's page browsed from A's tab (no story then): the tab clicked takes A back, as Escape does
+await showCard("b")
+assert.deepEqual([tab().story, registry.get(page)], [null, "card"])
+pick(A)
+assert.deepEqual([tab().story, tab().card, registry.get(page)], [1, "a", "reader"])
 
 // a mirror: another tab on A, then between the two: no activation
 await add()

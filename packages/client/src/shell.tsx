@@ -236,7 +236,7 @@ export const Shell = (props: { children: JSX.Element }) => {
                   <button
                     type="button"
                     class="name"
-                    data-back={on() && (pg() === "reader" || x().story === null) ? "false" : "true"}
+                    data-back={on() && pg() === "reader" ? "false" : "true"}
                     onClick={() => pick(x().id)}
                   >
                     <span class="c">{shelf().find((c) => c.id === x().card)?.title ?? x().card ?? ""}</span>
