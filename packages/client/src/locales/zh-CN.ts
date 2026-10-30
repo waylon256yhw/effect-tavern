@@ -357,6 +357,9 @@ const zh = {
     withCard: "随卡",
     workspace: "单卡工作区",
     writing: "写作",
+    closeTab: "关闭此局",
+    unread: "刚生成完",
+    newTab: "新标签页",
   },
   stories: {
     kindInput: "玩家台词",

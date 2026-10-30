@@ -625,26 +625,65 @@ dialog.drawer[open]::backdrop {
     background: var(--surface-0);
     user-select: none;
   }
+  /* the tabs (tabs.ts): the active one raised on a hairline, the others flat; each shrinks, the names truncating,
+     never wrapping */
   .shell-tab {
     box-sizing: border-box;
     height: 24px;
     max-width: 18rem;
     min-width: 0;
-    padding: 0 9px;
+    flex: 0 1 auto;
+    padding: 0 4px 0 9px;
     border-radius: 6px;
-    background: var(--alpha-1);
-    box-shadow: inset 0 0 0 var(--hairline) var(--line);
     font-size: var(--text-footnote);
     display: inline-flex;
     align-items: center;
     gap: 6px;
     transition: background var(--dur-2) var(--ease);
   }
-  .shell-tab[data-back="false"] {
-    cursor: default; /* in the reader the tab only names what is read */
+  .shell-tab[aria-current="page"] {
+    background: var(--alpha-1);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line);
   }
-  .shell-tab[data-back="true"]:hover:not(:disabled) {
+  .shell-tab:hover:has(.name[data-back="true"]) {
     background: var(--fill);
+  }
+  .shell-tab .name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 100%;
+    cursor: pointer;
+  }
+  .shell-tab .name[data-back="false"] {
+    cursor: default; /* the active tab in its reader only names what is read */
+  }
+  .shell-tab .c {
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .shell-tab .x {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .shell-tab .x:hover {
+    background: var(--alpha-2);
+    color: var(--ink);
+  }
+  .shell-tab .x svg {
+    width: 11px;
+    height: 11px;
+  }
+  .busy-dot.still {
+    animation: none; /* unread: the turn is done, the dot holds */
   }
   .top-end {
     margin-left: auto;

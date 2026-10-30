@@ -1,6 +1,7 @@
 // The shell (#117, docs/sidebar-brief-1.md, the 10-31 spatial decision): three layers on the canvas. The ground is
-// the install's chrome: a thin top strip (the sidebar's fold key at the far left, a tab naming the card › story
-// being read, which is the way back to the reader from any page; at the right end settings, theme and language) and
+// the install's chrome: a thin top strip (the sidebar's fold key at the far left, the tabs (tabs.ts), each naming its
+// card › story, with a dot while its story runs or after it landed unseen, and "+"; at the right end settings, theme
+// and language) and
 // the sidebar (side.tsx) in the left space. On it stands one entity, the stage card, which holds whatever the stage
 // shows: the reader (no strip: three keys, Timeline, Inspector and 读数, float at its top right), or a page that fills
 // it (the card page, Timeline, Inspector, Writing, Settings, 读数; each with its own head, pages.ts). The sidebar
@@ -11,16 +12,17 @@
 // the reader's strip is ☰ (the sidebar as a drawer, whose workspace holds the persona and writing), `card › story`
 // as plain text, and the same three keys.
 import { type JSX } from "@solidjs/web"
-import { createMemo, createSignal, onSettled, Show } from "solid-js"
+import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
-import { List, Probe, Sidebar as SidebarGlyph, Status, Tree } from "./icons.tsx"
+import { Close, List, Probe, Sidebar as SidebarGlyph, Snippets as Plus, Status, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
 import { InstallKeys, Sidebar } from "./side.tsx"
-import { card, cards, page, path, stories } from "./store.ts"
+import { card, cards, page, path, stories, tabs } from "./store.ts"
+import { add, remove, unread } from "./tabs.ts"
 import { openTimeline } from "./timeline.tsx"
-import { close, open, toReader } from "./pages.ts"
+import { close, open, pick } from "./pages.ts"
 import { t } from "./i18n.ts"
 
 const FOLDED = "side-folded"
@@ -47,6 +49,8 @@ export const Shell = (props: { children: JSX.Element }) => {
   const shelf = read(cards)
   const lib = read(stories)
   const line = read(path)
+  const strip = read(tabs)
+  const marked = read(unread)
   // ── the width class: the canvas with its sidebar, or the phone ──
   const [wide, setWide] = createSignal(media?.matches ?? true)
   onSettled(() => {
@@ -221,21 +225,55 @@ export const Shell = (props: { children: JSX.Element }) => {
           >
             <SidebarGlyph />
           </button>
-          {/* the tab: the card and story being read, whatever the stage shows (a page names itself in its own head);
-            on a page it is the way back to that story */}
-          <button
-            type="button"
-            class="shell-tab"
-            disabled={!current()}
-            data-back={pg() === "reader" ? "false" : "true"}
-            aria-label={pg() === "reader" ? undefined : t("common.backToStory")}
-            onClick={() => pg() !== "reader" && toReader()}
-          >
-            <span class="c">{storyCard()}</span>
-            <span class="sep" aria-hidden="true">
-              ›
-            </span>
-            <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
+          {/* the tabs (tabs.ts): each names its card › story, whatever its stage shows (a page names itself in its own
+            head); the active one on a page is the way back to its story, another one is a switch to it */}
+          <For each={strip().list} keyed={(x) => x.id}>
+            {(x) => {
+              const row = () => lib()?.stories.find((s) => s.id === x().story)
+              const on = () => x().id === strip().active
+              return (
+                <div class="shell-tab" aria-current={on() ? "page" : undefined}>
+                  <button
+                    type="button"
+                    class="name"
+                    data-back={on() && (pg() === "reader" || x().story === null) ? "false" : "true"}
+                    onClick={() => pick(x().id)}
+                  >
+                    <span class="c">{shelf().find((c) => c.id === x().card)?.title ?? x().card ?? ""}</span>
+                    <Show when={row()}>
+                      {(r) => (
+                        <>
+                          <span class="sep" aria-hidden="true">
+                            ›
+                          </span>
+                          <span class={{ s: true, unnamed: r().title === null }}>
+                            {r().title ?? t("stories.newStory")}
+                          </span>
+                        </>
+                      )}
+                    </Show>
+                  </button>
+                  <Show
+                    when={row()?.busy}
+                    fallback={
+                      <Show when={x().story !== null && marked().has(x().story!)}>
+                        <i class="busy-dot still" role="status" aria-label={t("side.unread")} />
+                      </Show>
+                    }
+                  >
+                    <i class="busy-dot" role="status" aria-label={t("side.storyBusy")} />
+                  </Show>
+                  <Show when={strip().list.length > 1}>
+                    <button type="button" class="x" aria-label={t("side.closeTab")} onClick={() => void remove(x().id)}>
+                      <Close />
+                    </button>
+                  </Show>
+                </div>
+              )
+            }}
+          </For>
+          <button type="button" class="icon sm" aria-label={t("side.newTab")} onClick={() => void add()}>
+            <Plus />
           </button>
           <span class="top-end">
             <InstallKeys />

@@ -51,6 +51,7 @@ import {
 } from "./store.ts"
 import { turn } from "./turn.ts"
 import { boot, onKey } from "./pages.ts"
+import { scroll } from "./tabs.ts"
 import { type Key, t } from "./i18n.ts"
 
 const waiting: Record<string, Key> = {
@@ -192,6 +193,17 @@ const Latest = () => {
     })
     ro.observe(document.querySelector("main")!)
     ro.observe(scroller())
+    // a tab's scroll (tabs.ts): read when it is left; put back on the way in once the story has rendered (after the
+    // landing's stick), where following holds only when that is within reach of the end
+    scroll.get = () => scroller().scrollTop
+    scroll.set = (top) =>
+      void requestAnimationFrame(() => {
+        follow.landing = false
+        scroller().scrollTop = top
+        follow.ours = scroller().scrollTop
+        follow.on = gap() <= 40
+        setAway(!follow.on && hidden() > 120)
+      })
     const inputs = ["wheel", "touchmove", "keydown", "pointerdown"] as const
     scroller().addEventListener("scroll", onScroll, { passive: true })
     for (const e of inputs) addEventListener(e, onInput, { passive: true })

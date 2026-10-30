@@ -1,4 +1,5 @@
-// The page over the reader (review/architecture-review-2026-10-30.html card 8): the one owner of `page`. Open pushes
+// The page over the reader (review/architecture-review-2026-10-30.html card 8): the one owner of what a page is, over
+// the active tab's page stack (tabs.ts holds the list; a tab switch swaps the stack, #123). Open pushes
 // the page it covers, so close returns there (settings from the card page back to the card page, Inspect from the
 // Timeline back to the Timeline), the reader when nothing is under it; each page's load list runs on open. Landing on a
 // story (first load, a story opened, made or deleted) decides card or reader once: an empty log lands on the card
@@ -10,7 +11,8 @@
 import { layerOf } from "./fold.ts"
 import { latestOf, stays } from "./stories.ts"
 import { reading } from "./reading.ts"
-import { card, focus, layer, log, page, type Page, registry, stories } from "./store.ts"
+import { activeOf, card, layer, log, page, type Page, registry, stories, tabs } from "./store.ts"
+import { edit, forget, load, remembered, select } from "./tabs.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
 
@@ -29,54 +31,62 @@ const loads: Partial<Record<Kind, () => unknown>> = {
       wire.fetchNames(),
     ]),
 }
-let under: Page[] = [] // the pages the current one covers, the reader at the bottom implied
+const tab = () => activeOf(registry.get(tabs)) // the page stack is the active tab's (tabs.ts)
 
 /** A page over the current one. The same page again (the Inspect page walking to another node) replaces it: no
  *  return point, no reload. The reader is under every page, never over one: opening it drops whatever covered it
  *  (Begin on an empty story the player had browsed Settings or Writing from). */
 export const open = (p: Page): void => {
-  const at = registry.get(page)
-  if (p === "reader") {
-    under = []
-    return registry.set(page, p)
-  }
-  if (kindOf(at) === kindOf(p)) return registry.set(page, p)
-  if (at !== "reader") under.push(at)
-  registry.set(page, p)
+  if (p === "reader") return toReader()
+  const { page: at, under } = tab()
+  if (kindOf(at) === kindOf(p)) return edit({ page: p })
+  edit({ page: p, under: at === "reader" ? under : [...under, at] })
   void loads[kindOf(p)]?.()
 }
 /** Back to the page this one covered, the reader when none. */
-export const close = (): void => registry.set(page, under.pop() ?? "reader")
+export const close = (): void => {
+  const { under } = tab()
+  if (!under.length) return toReader()
+  edit({ page: under.at(-1)!, under: under.slice(0, -1) })
+}
 /** The open story's row, when the listing names one. */
 const current = () => {
   const lib = registry.get(stories)
   return lib?.stories.find((s) => s.id === lib.current)
 }
-/** On the story as if just opened: an empty log lands on the card page (pick an opening, or begin), a story in
- *  progress in the reader; nothing to go back to. The sidebar is on the story's card (its workspace), on the shelf
- *  when there is no story at all. */
+/** On the story as if just opened, in the active tab: an empty log lands on the card page (pick an opening, or
+ *  begin), a story in progress in the reader; nothing to go back to. The sidebar is on the story's card (its
+ *  workspace), on the shelf when there is no story at all. */
 const arrive = () => {
-  under = []
-  registry.set(page, registry.get(log).nodes.size ? "reader" : "card")
   const cur = current()
-  registry.set(focus, cur?.card ?? registry.get(card)?.id ?? null)
+  edit({
+    story: cur?.id ?? null,
+    card: cur?.card ?? registry.get(card)?.id ?? null,
+    page: registry.get(log).nodes.size ? "reader" : "card",
+    under: [],
+  })
   registry.set(layer, layerOf(cur?.id))
 }
 /** Back to the reader from any page: what covered it is dropped, and the card view is the open story's again (a card
- *  browsed from the shelf had replaced it), as is the sidebar's workspace. */
+ *  browsed from the shelf had replaced it), as is the sidebar's workspace; a tab with no story takes the open one. */
 export const toReader = (): void => {
-  open("reader")
   const cur = current()
-  if (!cur) return
-  registry.set(focus, cur.card)
-  if (registry.get(card)?.id !== cur.card) void wire.fetchCard()
+  edit({ page: "reader", under: [], ...(cur && { story: cur.id, card: cur.card }) })
+  if (cur && registry.get(card)?.id !== cur.card) void wire.fetchCard()
 }
 /** A card's page, by id: the open story's card as the view holds it, another read by id (no story of it needed). The
- *  sidebar's workspace follows. Where "新建故事" and a card's head go: no story is made until Begin (#116). */
+ *  sidebar's workspace follows; another card's page is a tab with no story (Escape takes the open story back). Where
+ *  "新建故事" and a card's head go: no story is made until Begin (#116). */
 export const showCard = async (id: string): Promise<void> => {
-  registry.set(focus, id)
+  if (tab().card !== id) edit({ story: null, card: id })
   if (registry.get(card)?.id !== id) await wire.fetchCardOf(id)
   open("card")
+}
+/** A tab clicked: another one is switched to; the active one, on a page over its story, goes back to the reader. */
+export const pick = (id: number): void => {
+  const t = tab()
+  if (id !== t.id) void select(id)
+  else if (t.page !== "reader" && t.story !== null) toReader()
 }
 /** A card picked on the shelf: its workspace, and the stage on its latest story (the open one when it is this card's,
  *  else the newest), or on its page when it has none. */
@@ -93,15 +103,17 @@ export const browse = async (id: string): Promise<void> => {
  *  player's layer; the routing is the card page's Model row. With no story at all, the first card's page: a story
  *  begins there. A turn already in flight on the story is picked up (turn.ts `attach`). */
 export const boot = async (): Promise<void> => {
-  await wire.fetchStories()
+  await Promise.all([wire.fetchStories(), wire.fetchCards()])
+  const kept = remembered() // the tabs the device holds, on stories and cards still there (tabs.ts)
+  const on = kept && activeOf(kept).story
   await Promise.all([
-    reading.activate(registry.get(stories)?.current ?? null),
-    wire.fetchCards(),
+    reading.activate(on ?? registry.get(stories)?.current ?? null),
     wire.fetchPersonas(),
     wire.fetchPlayer(),
     wire.fetchRouting(),
   ])
-  arrive()
+  if (kept) await load(kept)
+  else arrive()
 }
 /** A story call answered: the client is on the story the listing names, as just opened (reading.ts: the old story
  *  out of the slots, this one in). */
@@ -115,6 +127,7 @@ export const land = async (listing: Listing): Promise<void> => {
  *  (stories.ts `stays`: the id alone cannot tell a placeholder from the story it replaced). */
 export const onDelete = async (listing: Listing, deleted: readonly number[]): Promise<void> => {
   reading.drop(deleted) // no record of a dead story; its id named again is read afresh
+  forget(deleted) // a tab on one stays, on its card's page
   if (stays(registry.get(stories)?.current, deleted, listing.current)) registry.set(stories, listing)
   else await land(listing)
 }
