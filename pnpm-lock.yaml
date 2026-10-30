@@ -185,6 +185,9 @@ importers:
 
   packages/client:
     dependencies:
+      '@chenglou/pretext':
+        specifier: 1.0.0
+        version: 1.0.0
       '@effect-tavern/provider':
         specifier: workspace:*
         version: link:../provider
@@ -452,6 +455,9 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@chenglou/pretext@1.0.0':
+    resolution: {integrity: sha512-BxKiDMxWJhyzL8asvcgg3T9YnUU7OUFsKO8oRaR2SYAPX4Sh2wM9gqTBjrBaZ4fnl84cEQ8czC0Q1M83z3chsA==}
 
   '@copilotkit/aimock@1.46.0':
     resolution: {integrity: sha512-53x0HL1o2z0MHVF+RovjiLois9giU03QUbyBzKkOHUSHXLaq4RDhwIqLO2UWxMMDYYeawm2QKCEdLKTg+o5m6g==}
@@ -2978,6 +2984,8 @@ snapshots:
     dependencies:
       hashery: 1.5.1
       keyv: 5.6.0
+
+  '@chenglou/pretext@1.0.0': {}
 
   '@copilotkit/aimock@1.46.0(vitest@5.0.5)':
     optionalDependencies:

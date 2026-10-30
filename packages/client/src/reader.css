@@ -322,7 +322,9 @@ section:has(> .editor) > .actions {
 }
 
 /* the reader's line: a sunken block, the only framed thing in the flow, and plain (#101): its text on its tint, nothing
-   in it to click; the text runs the bubble's whole inner width */
+   in it to click. The block (.spoke) is as wide as its text wants and no wider than the column: a short line is a
+   short bubble, and a wrapped one is shrink-wrapped to its tightest even wrap by shrinkwrap.ts (an inline width);
+   the keys under it end at the bubble's own right edge either way */
 .said {
   background: var(--alpha-1);
   border-radius: var(--radius-card);
@@ -336,6 +338,9 @@ section:has(> .editor) > .actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  align-self: flex-start;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 /* the note to the narrator is not speech: no bubble, its words on the bubble's own text axis (14px in), smaller and
    lighter; the prose under it starts at the margin, so the indent alone parts them */

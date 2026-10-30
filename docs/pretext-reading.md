@@ -38,3 +38,7 @@
 ## 4. 要求
 
 对协议：无。对客户端：无新项；"只载入最近的节"按 `content-visibility` 做，pretext 等节数真到需要精确虚拟化的量级再回来看。流式阶段不要指望任何布局库，播出缓冲和对齐方式才是流式手感的变量。
+
+## 5. 一处用上了（2026-10-31）
+
+玩家气泡的 shrink-wrap（`packages/client/src/shrinkwrap.ts`，`test/shrinkwrap.ts`）。一句话排满一行、两个字掉到第二行时，气泡右边是一大片空白；pretext 不碰 DOM 就能量出"保持行数不变的最窄宽度"：`prepare` 一次（`pre-wrap`，字体串从气泡的 computed style 拼出，和 CSS 画的是同一套），`measureLineStats` 做探针，对宽度二分找到行数刚好不再增加的那个点，取那一版最宽的一行加一像素的余量，赋给 `.spoke` 的 inline width。两行还是两行，变成 12 + 12，`<p>` 一个都没改。列宽只在 reader 的 `main` 上读一次（一个 ResizeObserver），每个块从它重算；字体晚到时再算一遍。这正是 §0 说的"落地之后的布局层"：量的是已经落地的玩家台词（草稿里的那句也是静态的），正文流式阶段仍然不碰它。

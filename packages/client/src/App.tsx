@@ -27,6 +27,7 @@ import { WritingPage } from "./writing.tsx"
 import { RecordSheet, Rewrite, SiblingKind } from "./readings.tsx"
 import { lineOf, versions } from "./record.ts"
 import { Shell } from "./shell.tsx"
+import { shrinkwrap } from "./shrinkwrap.ts"
 import {
   compose,
   dismiss,
@@ -317,10 +318,14 @@ const Said = (props: {
     })
   // one block: the line's bubble, close under it the note as a marginal line (a word on the side, not a second
   // speech), then the row; the block keeps the turn's gap to the prose. An opening has no input: no block at all, so
-  // no row of keys hangs over prose the player never wrote
+  // no row of keys hangs over prose the player never wrote. The block is shrink-wrapped (shrinkwrap.ts): as wide as
+  // the tightest wrap that keeps its rows, so a line that spills two characters onto a second row is two even rows,
+  // not a bubble wide open at its right
+  let block: HTMLDivElement | undefined
+  onSettled(() => (block ? shrinkwrap(block) : undefined))
   return (
     <Show when={props.input.text || props.input.note}>
-      <div class="spoke">
+      <div class="spoke" ref={(el) => (block = el)}>
         <Show when={props.input.text}>
           <Bubble field="text" text={props.input.text} />
         </Show>
