@@ -58,6 +58,8 @@ _不用_："导演"来指作者视角（director 是 harness 的阶段）、"小
 
 **日志树（log）**：节点的树，`src/log.ts`，自包含、对节点内容泛型，runtime、server、client 用同一份。**head** 是唯一的"在哪"：一个叶子，或 null（空线，等第一句）；阅读线就是根到 head 的链；新节点成为 head，`checkout` 把 head 移到某个版本最新的叶子，drop 删到 head 就落到最新存活的叶子。Log 是值，写只决定一个 **Change**（落下的节点、删掉的 id、head），`apply` 是唯一变更，副本按序 apply 等于权威方。_不用_："active"、"当前兄弟"来指 head。**兄弟（sibling）**是同父节点：`swipe` 从 lookup 起跑，`reword` 从 narrate 起跑，`edit` 带着玩家的正文、或修订过的输入（正文留着）、或两者，只重跑 check 与 record；节点记下自己是哪种兄弟（`sibling`），`reword` 可带一句给叙述者的话，并入这个兄弟的 note。_不用_："分支"来指 swipe、"重roll"。
 
+**派生（derived）**：沿一条路径由代码折叠出、从不存储的事实：状态与事件、每回合的 pre / post、门控状态（计数与地板）、未讲名单、折叠边界与摘要、Known / Current 行、账本、节点投影。`src/derived.ts` 一处算，session 的 turn / project / setField / demand 都是它的调用方。_不用_："快照"、"缓存"来指它（memo 是实现，不是概念）。
+
 **折叠（fold）**：压缩作为派生视图。对一段回合的 notes 与已送入的 lore 按代码折叠，按区间缓存，跨分支共享，节点不动。_不用_："摘要"来指机制（摘要是折叠的内容之一）。
 
 **转录稿（transcript）**：叙事者看到的历史视图：过去的输入、正文、当轮揭示的 lore。从不存储，按阶段渲染。
