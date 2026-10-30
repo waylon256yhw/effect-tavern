@@ -43,7 +43,9 @@ body {
 main {
   max-width: var(--measure);
   margin: 0 auto;
-  padding: var(--fade) var(--space-4);
+  /* 40px at the foot (fade + space-4): the turn's 24px action row (40..64px, glyphs 44..60px) sits clear of a
+     two-row box (32..34px) and hides whole under a three-row box (66px), with the last prose line (78px+) untouched */
+  padding: var(--fade) var(--space-4) calc(var(--fade) + var(--space-4));
   display: flex;
   flex-direction: column;
   gap: var(--gap-turn);
@@ -65,7 +67,7 @@ main > section:not(:last-of-type) {
 /* the latest section fills the column: scrolled to its start, the blank under it is where the prose grows, and
    the column holds still while it does */
 main > section:last-of-type {
-  min-height: calc(100cqh - 2 * var(--fade));
+  min-height: calc(100cqh - 2 * var(--fade) - var(--space-4)); /* the column's head and foot paddings */
 }
 .cursor {
   display: inline-block;
@@ -308,7 +310,7 @@ section:has(> .editor) > .actions {
 .editkeys {
   display: flex;
   justify-content: flex-end;
-  min-height: var(--control);
+  min-height: var(--control-sm);
   gap: var(--space-1);
 }
 
@@ -414,12 +416,12 @@ main > section:has(+ .draft) > .actions .acts,
 }
 /* the keys: Record-pill tall, the glyph small, the row's end hanging 4px over the text's edge so the glyph sits on it.
    The line's row sits close under its bubble and ends on the bubble's own text axis (14px in) */
-:is(.spoke, .actions) .acts .icon {
+:is(.spoke .acts, .actions, .editkeys) .icon {
   width: var(--control-sm);
   height: var(--control-sm);
   color: var(--ink-3);
 }
-:is(.spoke, .actions) .acts .icon svg {
+:is(.spoke .acts, .actions, .editkeys) .icon svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
 }
@@ -446,7 +448,7 @@ main > section:has(+ .draft) > .actions .acts,
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: var(--control);
+  min-height: var(--control-sm);
   font-size: var(--text-body);
   color: var(--ink-3);
 }
@@ -536,6 +538,7 @@ main > section:has(+ .draft) > .actions .acts,
   flex: 1;
   min-width: 0;
   height: var(--control);
+  margin-block: calc(-1 * var(--space-1)); /* hangs 4px over the 24px row, so opening it adds nothing under the prose */
   padding: 0 var(--space-3);
   border: 0;
   border-radius: var(--radius);
@@ -618,13 +621,18 @@ button:focus-visible {
   height: var(--icon);
 }
 
-/* the composer: the one raised object, under the column, one line at rest (#117). No padding above the box: the
-   column's mask fades the prose out over its last 24px and the box's top edge sits exactly where that fade ends, so
-   the prose reads as going under the box; padding there was a blank band between the two */
+/* the composer: the one raised object, under the column, one line at rest (#117). Its slot in the frame is that one
+   line and never changes: the box hangs from the slot's foot and grows upward over the column (the keys row, a note,
+   a revision, the words) instead of pushing it, so the prose never moves for anything the composer does. No padding
+   above the box: the column's mask fades the prose out over its last 24px and the box's top edge sits exactly where
+   that fade ends at rest, so the prose reads as going under the box */
 .composer {
-  padding: 0 var(--space-3) calc(var(--space-4) + var(--safe-bottom));
+  position: relative;
+  height: calc(var(--control) + 2 * var(--space-1) + var(--composer-foot));
 }
 .composer .box {
+  position: absolute;
+  inset: auto var(--composer-side) var(--composer-foot);
   max-width: var(--measure);
   margin: 0 auto;
   background: var(--surface-3);
@@ -633,8 +641,33 @@ button:focus-visible {
   padding: var(--space-1);
   display: flex;
   flex-direction: column;
-  gap: 2px;
   transition: box-shadow var(--dur-3) var(--ease);
+}
+/* what hangs over the row (a strip, the keys) opens and closes by height, 0 to its own, over a card's duration: the
+   box grows with it and the rise reads as one motion. Chrome interpolates to auto (interpolate-size, app.css); a
+   browser that does not snaps. A closed strip stays in the tree, inert, so the close has the same motion */
+.composer .attach,
+.composer .format {
+  margin-bottom: 2px;
+  height: auto;
+  overflow: hidden; /* not clip: a scroll container gets its own layer, and the masked textarea inside is not repainted each frame of the motion */
+  transition:
+    height var(--dur-3) var(--ease),
+    margin var(--dur-3) var(--ease),
+    padding var(--dur-3) var(--ease),
+    opacity var(--dur-2) var(--ease),
+    visibility var(--dur-3); /* closed, it is out of the tab order too: hidden from the end of the close to the start of the open */
+  @starting-style {
+    height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+  }
+}
+.composer .attach.closed {
+  height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  visibility: hidden;
 }
 .composer .box:focus-within {
   box-shadow: var(--shadow-composer-focus);
@@ -758,18 +791,22 @@ button:focus-visible {
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
   color: var(--ink);
 }
-/* the format keys: a row of glyph chips right over the text (SillyTavern's bar), there while the hand is in a box
-   (the line's or the note's: a key's own press keeps the focus there) or words are in the line; at rest the box is
-   its one line. The focus is the textarea's, not the box's: the menu key, or a menu item once it opens, must not
-   bring the keys out by themselves */
+/* the format keys: a row of glyph chips right over the text (SillyTavern's bar). They serve the line's box only, so
+   they are there while the hand is in that box or words are in it, and while the menu holds the focus (opened from the
+   keyboard with the hand in the line). The note's box, the + key under a pointer and a note opened empty do not bring
+   them out: a note alone is two rows, never three */
 .format {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: var(--space-1) var(--space-1) 2px;
 }
-.box:not(:has(textarea:focus)):has(textarea:not(.note):placeholder-shown) .format {
-  display: none;
+.box:has(textarea:not(.note):placeholder-shown):not(:has(textarea:not(.note):focus, .item:focus)) .format {
+  height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  padding-block: 0;
+  visibility: hidden;
 }
 .format .chip {
   min-width: 3.5em; /* the same width whatever the pair's glyphs weigh */

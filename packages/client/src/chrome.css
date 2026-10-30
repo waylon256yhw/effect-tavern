@@ -1357,7 +1357,8 @@
     padding-inline: var(--space-6);
   }
   .composer {
-    padding: 0 var(--space-6) var(--space-5);
+    --composer-side: var(--space-6);
+    --composer-foot: var(--space-5);
   }
 }
 

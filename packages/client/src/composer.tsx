@@ -63,18 +63,20 @@ export const Composer = () => {
   let menu: HTMLDivElement | undefined
   /** What a send carries: the main box, and the note box when it is there. */
   const filled = () => !!(text().trim() || (acting() && noteText().trim()))
-  // The caret lands after what went in. A note with words leaves the hand in the line's box (the line is what is being
-  // written, the note a word on the side); the bare one only opens the note box, so the hand goes there to write it.
-  const put = (value: string, caret: number, note = false, there = false) => {
+  // The caret lands after what went in, and the hand with it: a note snippet puts the hand in the note's box, where
+  // its words are (sent as they stand, or finished there), and the line's box, with the keys that serve it, waits for
+  // a tap of its own.
+  const put = (value: string, caret: number, note = false) => {
     registry.set(note ? noted : compose, value)
     requestAnimationFrame(() => {
-      ;(note ? noteBox : box)?.setSelectionRange(caret, caret)
-      ;(there ? noteBox : box)?.focus()
+      const el = note ? noteBox : box
+      el?.setSelectionRange(caret, caret)
+      el?.focus()
     })
   }
   // An Insert (a format key or a snippet) goes in at the caret and never sends: `text` before the caret, `after`
-  // behind it, the selection between them. A note snippet opens the note box and goes in there (the line's box keeps
-  // the focus); an empty one only opens it.
+  // behind it, the selection between them. A note snippet opens the note box and goes in there; an empty one only
+  // opens it.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
     // a popover closing with the focus inside it gives the focus back to where it was before it opened, after this
     // frame; the blur keeps that from undoing the focus `put` sets
@@ -87,17 +89,19 @@ export const Composer = () => {
     const a = el?.selectionStart ?? v.length
     const b = el?.selectionEnd ?? a
     const inner = v.slice(a, b)
-    put(
-      v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b),
-      a + s.text.length + inner.length,
-      note,
-      note && !s.text,
-    )
+    put(v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b), a + s.text.length + inner.length, note)
   }
   const Items = (p: { of: readonly Snippet[] }) => (
     <For each={p.of} keyed={(s) => s.name}>
       {(s) => (
-        <button type="button" role="menuitem" class="item" tabindex="-1" onClick={() => insert(s())}>
+        <button
+          type="button"
+          role="menuitem"
+          class="item"
+          tabindex="-1"
+          onPointerDown={keep} // a press does not focus the item: the keys row that follows a focused item would move the menu under the pointer
+          onClick={() => insert(s())}
+        >
           <span class="name">{s().name}</span>
           <span class="hint">{s().hint}</span>
           {/* a snippet with words fills the box, like an Options row; a mark or the bare channel switch does not */}
@@ -170,8 +174,8 @@ export const Composer = () => {
             </div>
           )}
         </Show>
-        <Show when={acting() && toNarratorOn()}>
-          <div class="attach note">
+        <Show when={acting()}>
+          <div class={{ attach: true, note: true, closed: !toNarratorOn() }} inert={!toNarratorOn()}>
             <span class="tag">{t("composer.noteTag")}</span>
             <textarea
               ref={(el) => (noteBox = el)}
@@ -185,8 +189,8 @@ export const Composer = () => {
               onKeyDown={(e) => {
                 if (e.key === "Escape" && revise()) cancelRevise()
                 else if (e.key === "Escape" && !noteText()) {
-                  registry.set(aside, false)
-                  box?.focus()
+                  registry.set(aside, false) // the strip goes inert: the hand leaves it, and returns to the line only if words wait there (as ×)
+                  if (text()) box?.focus()
                 } else noteIme.keyDown(e)
               }}
             />
@@ -195,7 +199,7 @@ export const Composer = () => {
               class="icon"
               aria-label={t("composer.closeNote")}
               onPointerDown={keep}
-              onClick={() => (registry.set(aside, false), registry.set(noted, ""), box?.focus())}
+              onClick={() => (registry.set(aside, false), registry.set(noted, ""), text() && box?.focus())}
             >
               <Close />
             </button>
@@ -222,6 +226,7 @@ export const Composer = () => {
               aria-label={t("composer.snippets")}
               aria-haspopup="menu"
               popovertarget="snippets"
+              onPointerDown={keep}
             >
               <Snippets />
             </button>
@@ -233,9 +238,13 @@ export const Composer = () => {
               ref={(el) => (menu = el)}
               onKeyDown={roam}
               onFocusOut={(e) => !menu?.contains(e.relatedTarget as HTMLElement | null) && menu?.hidePopover()}
+              // the first item takes the focus when the menu opens from the keyboard: Enter on the focused + key here,
+              // "/" in the box below. A pointer never focuses the key (keep), so it leaves the hand where it was: in the
+              // box, where what hangs on it for that hand stays, or nowhere at rest, where the box stays one line
               onToggle={(e) =>
                 e.newState === "open" &&
                 e.currentTarget.matches(":popover-open") && // the event is queued: a pick may already have closed it
+                document.activeElement?.matches("[popovertarget=snippets]") &&
                 e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
               }
             >
@@ -265,6 +274,7 @@ export const Composer = () => {
               if (e.key === "/" && !e.isComposing && text() === "" && menu) {
                 e.preventDefault()
                 menu.showPopover()
+                menu.querySelector<HTMLElement>("[role=menuitem]")?.focus()
               } else if (e.key === "Escape" && revise()) cancelRevise()
               else ime.keyDown(e)
             }}

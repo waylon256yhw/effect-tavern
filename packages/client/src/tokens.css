@@ -71,6 +71,9 @@
   --radius: 8px; /* buttons, inputs, menu rows */
   --radius-card: calc(var(--radius) + 4px);
   --radius-composer: 14px;
+  /* the composer's slot: the box's side gutters and its foot (the room under it); chrome.css widens both on a wide screen */
+  --composer-side: var(--space-3);
+  --composer-foot: calc(var(--space-4) + var(--safe-bottom));
   --radius-dialog: 16px;
   --radius-pill: 999px;
 
@@ -120,6 +123,7 @@
   --dur-4: 300ms; /* sheet */
   --dur-5: 450ms; /* page-level */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  interpolate-size: allow-keywords; /* a height may transition to and from auto (the composer's strips and keys row) */
   --ease-pulse: cubic-bezier(0.4, 0, 0.2, 1);
 }
 :root[data-theme="light"] {
