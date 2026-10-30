@@ -87,6 +87,6 @@ Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp
 
 `bun --bun vp run dev` at the root (`bun --bun vp dev` in packages/client; `--bun` makes the `node` Vite+ launches resolve to Bun) is the whole stack: the session (packages/server/src/dev.ts) runs
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
-effect on the next request. `MODEL=fake` scripts the model, `CARD=<name>` picks the card, the library lives in
+effect on the next request. `MODEL=fake` scripts the model, `CARDS=<dir>` puts a directory of YAML cards on the shelf (default: the four templates), the library lives in
 `.dev/tavern.db` (gitignored; `DATA=<dir>` moves it; delete it to start every story over). The user starts and stops `vp dev` in their own
 terminal; an agent uses it and never starts, restarts or kills it. `bun src/main.ts` in packages/server serves the same session under `/api` on its own port, with the client build (`vp build` in packages/client → dist) under every other path: the one-port form a phone runs.

@@ -7,7 +7,8 @@
 // pick is a sheet with a search (a popover is pinned to the column or hangs out of the card, and a long list is a chore
 // on a phone); making and editing personas is the settings page's. The card shows four stories, the starred first
 // and the open one among them; every story, with the star, the search, the cleanup and the exports, is the manager's
-// sheet (manager.tsx, #75), opened from the row under the four. The dialogs a story needs (rename, the delete
+// sheet (manager.tsx, #75, every card's), opened from the row under the four. A turn in flight holds only this story's
+// rename and delete: another story, or a new one, can be opened while it runs on, on the server. The dialogs a story needs (rename, the delete
 // confirm, the export's two formats) are here, one each, for the card's rows and the manager's cards alike.
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
@@ -54,7 +55,7 @@ export const Session = () => {
   const me = read(player)
   const pinned = read(pin)
   const line = read(path)
-  const busy = read(working) // the story stays put while a turn is in flight
+  const busy = read(working) // a turn in flight holds this story's rename and delete; switching and a new one are free
   /** A pinned entry by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
   const hookOf = (id: string) =>
     line()
@@ -166,8 +167,8 @@ export const Session = () => {
               type="button"
               class="icon"
               aria-label={t("stories.newStory")}
-              disabled={busy()}
-              onClick={(e) => (closeUp(e.currentTarget), void newStory())}
+              disabled={!view()}
+              onClick={(e) => (closeUp(e.currentTarget), void newStory(view()!.id))}
             >
               <Snippets />
             </button>
@@ -192,7 +193,13 @@ export const Session = () => {
           </h2>
           {/* four rows: the starred first, then the newest, the open one among them whatever its rank (stories.ts) */}
           <ul>
-            <For each={shown(lib()?.stories ?? [], lib()?.current)} keyed={(s) => s.id}>
+            <For
+              each={shown(
+                (lib()?.stories ?? []).filter((s) => s.card === view()?.id),
+                lib()?.current,
+              )}
+              keyed={(s) => s.id}
+            >
               {(s) => (
                 <li>
                   {/* the name the player gave, or "New story" (every story of a card opens on the same greeting, so no
@@ -201,7 +208,6 @@ export const Session = () => {
                     type="button"
                     class="story"
                     aria-current={s().id === lib()?.current ? "true" : undefined}
-                    disabled={busy()}
                     onClick={(e) => {
                       closeUp(e.currentTarget) // the open one too: on a phone, back to the reader
                       if (s().id !== lib()?.current) void openStory(s().id)

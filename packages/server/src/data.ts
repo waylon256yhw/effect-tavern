@@ -6,7 +6,8 @@
 // the key vault (provider providers.ts `Secret`), the only table holding key material; `provider`: the player's model
 // providers, each naming a secret by id; `routing`: one row, which (provider, model) each stage runs on; `names`: one row,
 // the model-name table last fetched from models.dev and its ETag (names.ts). Export of cards
-// and stories never reads the three. `card`: a Card as the workshop will write it (the four templates stay TS modules until then).
+// and stories never reads the three. `card`: a Card as the workshop will write it (the YAML templates are a directory beside
+// it, server tavern.ts `shelf`); what the json holds is decoded by the caller.
 // `story`: one log tree of a card, with the log's head and next beside it so an id never comes back after a drop. `node`: a
 // Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
 // node lands or is amended, gone with the node, and kept for a story's last `traced` nodes only. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
@@ -15,7 +16,8 @@
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // A column added after a library was made (`story.starred`) is added to it on open (`migrate`): the schema's create is
 // for a fresh file. The stories' search (`stories.search`) walks each story's line and reads the player's lines and
-// the prose with `instr`, enough for one card's stories on a phone. Ceilings: an FTS5 index over nodes once a
+// the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
+// filter: absent, every card's. Ceilings: an FTS5 index over nodes once a
 // library holds hundreds of long stories; sync between two installs (the Android copy is a copy of this file).
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
@@ -42,7 +44,7 @@ create table if not exists call (seq integer primary key autoincrement, story in
 create index if not exists call_node on call (story, node);
 `
 /** How many nodes of a story keep their calls: the Inspector's trace is for recent turns, and a call holds the whole
- *  request under `inspect`, so an unbounded trace would grow the library by a fold budget per turn. */
+ *  request (the wire strips it for a player client, serve.ts `shown`), so an unbounded trace would grow the library by a fold budget per turn. */
 export const traced = 200
 /** Columns added to a table after libraries were made with it, each applied on open when the table lacks it. */
 const migrations: readonly { table: string; column: string; add: string }[] = [
@@ -59,6 +61,7 @@ export interface Input {
  *  line and the input of the last of them (what the manager previews), the time. */
 export interface StoryRow {
   id: Id
+  card: string
   title: string | null
   starred: boolean
   updated: number
@@ -227,10 +230,14 @@ export const open = (asked: string) => {
       write: (t: { etag: string | null; names: Names }) =>
         void q("insert or replace into names (id, etag, json) values (1, ?, ?)").run(t.etag, JSON.stringify(t.names)),
     },
-    /** The library's cards by id and title, the Card in the json column left unread. */
-    cards: (): { id: string; title: string }[] =>
-      q("select id, title from card order by title").all() as { id: string; title: string }[],
-    /** One card's stories, newest first, each with its title (the player's, or none), its star, its turns and the
+    cards: {
+      /** The library's cards by id and title, the Card in the json column left unread. */
+      list: (): { id: string; title: string }[] =>
+        q("select id, title from card order by title").all() as { id: string; title: string }[],
+      /** One card's json column, parsed (decoded by the caller); none when the table has no such id. */
+      get: (id: string): unknown => parse<unknown>(q("select json from card where id = ?").get(id) as Row | undefined),
+    },
+    /** Stories, a card's or every card's, newest first, each with its title (the player's, or none), its star, its turns and the
      *  last of them. The turns are on the head's line (head, its parent, up to the root): the nodes with a player
      *  input, a line or a note to the narrator (a note-only turn has `text: ""`). So a greeting is not a turn, a
      *  story with only its opening has none, and a swipe (a sibling carrying the same input) is still the one turn.
@@ -238,28 +245,29 @@ export const open = (asked: string) => {
      *  `last` is its input: what the manager previews, since every story of a card opens on the same greeting. Every
      *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
-      /** The card's rows, or the one of them `only` names (none when that is another card's or no story): the walk
-       *  starts from that story's head alone, so one row costs one line. */
-      list: (card: string, only?: Id): StoryRow[] =>
+      /** The card's rows (every card's when `card` is absent), or the one of them `only` names (none when that is
+       *  another card's or no story): the walk starts from that story's head alone, so one row costs one line. */
+      list: (card?: string, only?: Id): StoryRow[] =>
         (
           q(
             `with recursive line(story, id, parent, text, note) as (
                select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
                  from story s join node n on n.story = s.id and n.id = s.head
-                 where s.card = ?1 and (?2 is null or s.id = ?2)
+                 where (?1 is null or s.card = ?1) and (?2 is null or s.id = ?2)
                union all
                select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
                  from node n join line l on n.story = l.story and n.id = l.parent),
              turns as (
                select story, count(*) as turns, max(id) as last from line
                  where text != '' or note is not null group by story)
-             select s.id, s.title, s.starred, s.updated, coalesce(t.turns, 0) as turns,
+             select s.id, s.card, s.title, s.starred, s.updated, coalesce(t.turns, 0) as turns,
                (select json_extract(json, '$.input') from node where story = s.id and id = t.last) as last
              from story s left join turns t on t.story = s.id
-             where s.card = ?1 and (?2 is null or s.id = ?2) order by s.updated desc, s.id desc`,
-          ).all(card, only ?? null) as Row[]
+             where (?1 is null or s.card = ?1) and (?2 is null or s.id = ?2) order by s.updated desc, s.id desc`,
+          ).all(card ?? null, only ?? null) as Row[]
         ).map((r) => ({
           id: r["id"] as Id,
+          card: r["card"] as string,
           title: (r["title"] as string | null) ?? null,
           starred: r["starred"] === 1,
           updated: r["updated"] as number,
@@ -273,17 +281,22 @@ export const open = (asked: string) => {
       create: (card: string): Id =>
         Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
-      /** Several at once, one transaction: the batch cleanup. Only the card's own go; another card's, or no story,
-       *  is skipped. The ids deleted are answered. */
-      delMany: (card: string, ids: readonly Id[]): Id[] =>
-        tx(() => ids.filter((id) => q("delete from story where id = ? and card = ?").run(id, card).changes > 0)),
-      /** The card's stories whose head's line holds `q` in a player's line, a note or the prose (the text parts of
+      /** Several at once, one transaction: the batch cleanup. Only the card's own go (any card's when it is absent);
+       *  another card's, or no story, is skipped. The ids deleted are answered. */
+      delMany: (card: string | undefined, ids: readonly Id[]): Id[] =>
+        tx(() =>
+          ids.filter(
+            (id) =>
+              q("delete from story where id = ?1 and (?2 is null or card = ?2)").run(id, card ?? null).changes > 0,
+          ),
+        ),
+      /** The card's stories (every card's when it is absent) whose head's line holds `q` in a player's line, a note or the prose (the text parts of
        *  the reply), one Hit per story: the earliest hit node on the line (a snippet of the field that hit, the
        *  line first, then the note, then the prose), numbered by the turns up to it, and the count of hit nodes.
        *  ASCII case folds (`fold`, SQLite's lower()); a blank query hits nothing. The prose is gathered from the
        *  reply's parts in SQL (`json_each`), so no node's JSON is parsed here; the turn number is a running count
        *  over the line (a window), one pass. */
-      search: (card: string, query: string): Hit[] => {
+      search: (card: string | undefined, query: string): Hit[] => {
         const needle = fold(query.trim())
         if (!needle) return []
         const rows = q(
@@ -291,7 +304,7 @@ export const open = (asked: string) => {
              select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
                (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
                   where json_extract(p.value, '$.type') = 'text')
-               from story s join node n on n.story = s.id and n.id = s.head where s.card = ?
+               from story s join node n on n.story = s.id and n.id = s.head where (?1 is null or s.card = ?1)
              union all
              select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
                (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
@@ -302,9 +315,9 @@ export const open = (asked: string) => {
                count(*) filter (where text != '' or note is not null) over (partition by story order by id) as turn
              from line)
            select story, id, text, note, prose, turn from numbered
-           where instr(lower(text), ?) > 0 or instr(lower(coalesce(note, '')), ?) > 0 or instr(lower(coalesce(prose, '')), ?) > 0
+           where instr(lower(text), ?2) > 0 or instr(lower(coalesce(note, '')), ?2) > 0 or instr(lower(coalesce(prose, '')), ?2) > 0
            order by story, id`,
-        ).all(card, needle, needle, needle) as Row[]
+        ).all(card ?? null, needle) as Row[]
         const hits = new Map<Id, Hit>()
         for (const r of rows) {
           const id = r["story"] as Id

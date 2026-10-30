@@ -1,15 +1,14 @@
 // The turn in flight (docs: GLOSSARY §二, review/architecture-review-2026-10-30.html card 3): the eight actions by
-// node id, plus stop and abandon. Each one sends through the wire and lets the stream land it (store.ts `apply`); the
-// ones that run the narrator (act, swipe, reword, edit, keep) first put a draft under the node's parent. Stop closes
-// the response: before the first character the turn is withdrawn (the line back in its box), after it the server
-// finishes a `stopped` node the closed response never carries, so the snapshot is read back until it shows up.
-// Abandon is the story switch's: the stream is cut and the draft dropped, nothing goes back anywhere.
+// node id, plus stop, attach and abandon. Each one sends through the wire and lets the stream land it (store.ts
+// `apply`); the ones that run the narrator (act, swipe, reword, edit, keep) first put a draft under the node's parent.
+// The turn is the server's: a stream is only this client reading it. Stop asks the server (`POST /stop`), which
+// decides: before the first character the turn is withdrawn (the line back in its box, the stream ends empty), after
+// it the prose halts and the `stopped` node comes down the same stream. Attach picks up a turn already in flight on a
+// story the client lands on (its draft, then its events). Abandon is the story switch's: the client stops reading and
+// drops the draft; the turn runs on, on the server, and is there to attach to when the player comes back.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action } from "@effect-tavern/runtime/src/session.ts"
-import { t } from "./i18n.ts"
 import {
-  apply,
-  arrived,
   card,
   clear,
   draft,
@@ -24,29 +23,25 @@ import {
   settle,
   stage,
   withdraw,
+  working,
 } from "./store.ts"
 import * as wire from "./wire.ts"
 
 export interface Transport {
-  send: (action: Action) => () => void // returns the abort
-  fetchNodes: () => Promise<void>
-  delay: (ms: number) => Promise<void>
+  send: (action: Action) => () => void // returns what closes the stream
+  attach: () => () => void // the turn in flight, if any; returns what closes the stream
+  stop: () => Promise<"withdrawn" | "halted" | null>
 }
 
-export const createTurn = ({ send, fetchNodes, delay }: Transport) => {
-  let stopper: (() => void) | null = null // the narrating turn's abort: what Stop closes
+export const createTurn = ({ send, attach, stop }: Transport) => {
   let streams: (() => void)[] = [] // every response this story opened: what a story switch closes
-  const go = (action: Action) => {
-    const abort = send(action)
-    streams.push(abort)
-    return abort
-  }
+  const go = (action: Action) => void streams.push(send(action))
   /** A draft under `parent`, then the action. `text`: an edit's draft is the player's prose, shown while check and
    *  record run over it. A fresh line (an act, a revised line) is nowhere else: a failed turn puts it back in the box. */
   const start = (parent: Id | null, input: { text: string; note?: string }, action: Action, text = "") => {
     registry.set(error, null)
     registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
-    stopper = go(action)
+    go(action)
   }
   const node = (id: Id) => L.get(registry.get(log), id)
   /** The revised input (the pin kept, a cleared note gone) and the node it revises. */
@@ -75,7 +70,7 @@ export const createTurn = ({ send, fetchNodes, delay }: Transport) => {
       if (registry.get(card)?.greetings.length) go({ kind: "greet", ...(index !== undefined && { greeting: index }) })
     },
     /** Head to a version's newest leaf (the server moves it), or an empty line. */
-    checkout: (id: Id | null): void => void go({ kind: "checkout", node: id }),
+    checkout: (id: Id | null): void => go({ kind: "checkout", node: id }),
     swipe: (id: Id): void => {
       const n = node(id)
       start(n.parent, n.turn.input, { kind: "swipe", node: id })
@@ -96,31 +91,27 @@ export const createTurn = ({ send, fetchNodes, delay }: Transport) => {
       start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
     },
     setField: (id: Id, effects: Extract<Action, { kind: "setField" }>["effects"]): void =>
-      void go({ kind: "setField", node: id, effects }),
+      go({ kind: "setField", node: id, effects }),
     /** One product asked for over a node's scene: a record call, the answer kept on the node, no turn and no draft. */
-    demand: (id: Id, product: string): void => void go({ kind: "demand", node: id, product }),
+    demand: (id: Id, product: string): void => go({ kind: "demand", node: id, product }),
     stop: async (): Promise<void> => {
-      if (!stopper) return
-      stopper()
-      const was = registry.get(log).nodes.size
-      if (!arrived()) {
+      if (!registry.get(working)) return
+      const how = await stop()
+      if (how === "withdrawn") {
+        for (const close of streams) close() // the turn is gone: nothing late on its stream lands after the clear
+        streams = []
         withdraw()
         return clear() // the revision, if any, stays: its line is back in the box under it
       }
-      registry.set(stage, "record") // what the server is doing with the cut prose; the Record slot waits for it
-      for (let i = 0; i < 100 && registry.get(log).nodes.size === was; i++) {
-        await delay(300)
-        await fetchNodes()
-      }
-      // record failed on the server (the closed response never carried its error): the ghost says so, the line comes back
-      if (registry.get(log).nodes.size === was) return apply({ kind: "error", message: t("app.stoppedNotRecorded") })
-      settle()
+      // halted: what the server is doing with the cut prose; the node (or record's error) comes down the stream
+      if (how === "halted") registry.set(stage, "record")
     },
-    /** Another story: every response this one opened is closed and the draft dropped, nothing withdrawn, no poll. */
+    /** Landing on a story: the turn already in flight there, if any, drawn as it stands and read to its end. */
+    attach: (): void => void streams.push(attach()),
+    /** Another story: this client stops reading the old one's streams and drops its draft, nothing withdrawn. */
     abandon: (): void => {
-      for (const abort of streams) abort()
+      for (const close of streams) close()
       streams = []
-      stopper = null
       settle() // the revision and the error were the old story's too
     },
   }
@@ -129,6 +120,6 @@ export type Turn = ReturnType<typeof createTurn>
 
 export const turn: Turn = createTurn({
   send: wire.send,
-  fetchNodes: wire.fetchNodes,
-  delay: (ms) => new Promise((r) => setTimeout(r, ms)),
+  attach: wire.attach,
+  stop: wire.stop,
 })

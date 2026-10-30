@@ -20,7 +20,6 @@ const zh = {
     reviseNote: "修改这条场外指导",
     session: "会话",
     stopped: "已停止",
-    stoppedNotRecorded: "停止的回合没有记录",
     waiting: "等待中",
   },
   card: {

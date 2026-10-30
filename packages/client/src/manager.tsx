@@ -1,4 +1,4 @@
-// The stories manager (#75): every story of the card in one sheet, the picker's mechanism one step wider. A search
+// The stories manager (#75): every story of every card in one sheet, the picker's mechanism one step wider. A search
 // over the title here and over the turns on the server (the stories are unnamed as a rule, so a title search finds
 // nothing: the hit is a turn's line, note or prose, shown in the card's preview line in place of the last line
 // written), the 全部 / 收藏 toggle, three-line cards (checkbox, star, name and its three actions; the preview; the
@@ -9,7 +9,7 @@ import { read } from "./bridge.ts"
 import { Clue, Edit, Export, Snippets, Star, StarFill, Trash } from "./icons.tsx"
 import { Sheet } from "./readings.tsx"
 import { ago, empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
-import { stories, type StoryRow, working } from "./store.ts"
+import { card, registry, stories, type StoryRow, working } from "./store.ts"
 import { newStory } from "./pages.ts"
 import { searchStories, starStory } from "./wire.ts"
 import { t } from "./i18n.ts"
@@ -96,7 +96,7 @@ export const Manager = (props: {
   const make = () => {
     dialog.close()
     dialog.parentElement?.closest("dialog")?.close() // the phone's session sheet: the new story opens the card page
-    void newStory()
+    void newStory(registry.get(card)!.id)
   }
   return (
     <Sheet
@@ -109,7 +109,7 @@ export const Manager = (props: {
         <>
           <span>{t("manager.allStories")}</span>
           <span class="tag mono">{rows().length}</span>
-          <button type="button" class="btn sm ghost" disabled={busy()} onClick={make}>
+          <button type="button" class="btn sm ghost" onClick={make}>
             <Snippets aria-hidden="true" />
             <span>{t("common.new")}</span>
           </button>
@@ -183,7 +183,7 @@ export const Manager = (props: {
                   aria-current={s().id === lib()?.current ? "true" : undefined}
                   data-checked={picked().has(s().id) ? "" : undefined}
                   title={t("manager.openStory")}
-                  onClick={() => busy() || props.onOpen(s())}
+                  onClick={() => props.onOpen(s())}
                 >
                   <input
                     type="checkbox"

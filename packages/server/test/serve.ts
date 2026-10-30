@@ -1,6 +1,8 @@
 // The adapter on a scripted session over a real socket: an action goes in as JSON, its events come back as SSE in the
 // session's order, a bad body is a 400, a bad action is an `error` event, and `inspect` decides whether `call` events
 // carry the request. `greet` opens a new root, `checkout` moves head, DELETE /nodes/<id> drops a subtree and answers with the Change.
+// The turn is the story's (#116): closing the response stops nothing, GET /turn re-attaches, POST /stop stops, a busy
+// story answers 409; stories of one card and of two run side by side; a story route without its story is a 404.
 import { fake, fakeText } from "@effect-tavern/provider"
 import type { Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
@@ -14,7 +16,7 @@ import { join } from "node:path"
 import { open } from "../src/data.ts"
 import { library } from "../src/library.ts"
 import { app, handle, serve } from "../src/serve.ts"
-import { tavern } from "../src/tavern.ts"
+import { shelf, tavern } from "../src/tavern.ts"
 
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
@@ -30,7 +32,9 @@ const scripted = {
   hat: "h",
 }
 const model = () => scripted
-const lib = library({ data: open(":memory:"), card: { ...chat, greetings: [{ text: "G" }] }, player, model })
+const shared = open(":memory:")
+const chats = shelf([chat], open(":memory:")) // a shelf of one, for the taverns whose card does not matter
+const lib = library({ data: shared, cards: shelf([{ ...chat, greetings: [{ text: "G" }] }], shared), player, model })
 
 const wired = (v: unknown) => JSON.parse(JSON.stringify(v)) as unknown // what JSON keeps: no `undefined` keys
 const sse = (text: string) =>
@@ -45,12 +49,14 @@ const sse = (text: string) =>
 const run = async (inspect: boolean) => {
   const server = serve(lib, { inspect }).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
-  let story: number | undefined // the story this client is on, as the client's `stories.current`: none = the newest
+  // the story this client is on, as the client's `stories.current`: the newest, a new one on the first run
+  let story = lib.stories.list()[0]?.id ?? lib.stories.create(chat.id)
   const fetch = (url: string, init: RequestInit = {}) =>
-    globalThis.fetch(url, story === undefined ? init : { ...init, headers: { "x-tavern-story": String(story) } })
+    globalThis.fetch(url, { ...init, headers: { "x-tavern-story": String(story) } })
   const post = (v: unknown, signal?: AbortSignal) => fetch(base, { method: "POST", body: JSON.stringify(v), signal })
   try {
-    assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(lib.session().snapshot()))
+    assert.equal((await globalThis.fetch(`${base}/nodes`)).status, 404) // a story route names its story
+    assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(lib.session(story).snapshot()))
     const about = (await (await fetch(`${base}/card`)).json()) as Record<string, unknown>
     assert.equal(about["input"], "act") // undeclared = act
     // the card's projection: the openings whole, the fiction without its text, the guard and lore as counts
@@ -95,8 +101,8 @@ const run = async (inspect: boolean) => {
     )
     const node = (evs.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
     assert.equal(node.turn.input.text, "hi")
-    assert.deepEqual(node, wired(lib.session().node(node.id))) // the wire carries the projection whole
-    assert.equal(lib.session().log.head, node.id)
+    assert.deepEqual(node, wired(lib.session(story).node(node.id))) // the wire carries the projection whole
+    assert.equal(lib.session(story).log.head, node.id)
     // the trace stays on the server, by node, stripped the same way as the stream; every call carries its duration
     const trace = (await (await fetch(`${base}/calls`)).json()) as Record<string, Extract<Event, { kind: "call" }>[]>
     assert.deepEqual(trace[node.turn.id], wired(calls))
@@ -109,21 +115,55 @@ const run = async (inspect: boolean) => {
     const picked = sse(await (await post({ kind: "act", parent: node.turn.id, input: { text: "B" } })).text())
     assert.equal((picked.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn.input.text, "B")
 
-    // stop: the client closes the response once the prose streams; the turn finishes into a `stopped` node it reads back.
+    // Closing the response stops nothing: the turn runs on into a normal node. While it runs, every action on the
+    // story is a 409, a synchronous one and a node dropped too, and its row says where it is; GET /turn picks it up
+    // (`attach`: the phase and the draft so far, then the live events to the node) and, once idle, answers 204.
+    const until = async (res: Response, re: RegExp) => {
+      const reader = res.body!.getReader()
+      let got = ""
+      while (!re.test(got)) got += new TextDecoder().decode((await reader.read()).value)
+      return { reader, got }
+    }
+    const rest = async ({ reader, got }: { reader: ReadableStreamDefaultReader<Uint8Array>; got: string }) => {
+      for (let r = await reader.read(); !r.done; r = await reader.read()) got += new TextDecoder().decode(r.value)
+      return sse(got)
+    }
     const ac = new AbortController()
-    const size = lib.session().log.nodes.size
-    const slow = await post({ kind: "act", parent: null, input: { text: "slow" } }, ac.signal)
-    const reader = slow.body!.getReader()
-    let got = ""
-    while (!/event: delta/.test(got)) got += new TextDecoder().decode((await reader.read()).value)
+    await until(await post({ kind: "act", parent: null, input: { text: "slow" } }, ac.signal), /event: delta/)
     ac.abort()
-    while (lib.session().log.nodes.size === size) await new Promise((r) => setTimeout(r, 10))
-    const stopped = [...lib.session().log.nodes.values()].at(-1)!
+    const refused = await post({ kind: "act", input: { text: "no" } })
+    assert.deepEqual([refused.status, ((await refused.json()) as { code: string }).code], [409, "busy"])
+    assert.equal((await post({ kind: "checkout", node: null })).status, 409)
+    assert.equal((await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).status, 409)
+    assert.equal((await fetch(`${base}/stories/${story}`, { method: "DELETE" })).status, 409)
+    const rows = (await (await fetch(`${base}/stories`)).json()) as { stories: { id: number; busy: string | null }[] }
+    assert.equal(rows.stories.find((s) => s.id === story)!.busy, "narrate")
+    const attached = sse(await (await fetch(`${base}/turn`)).text())
+    const snap = attached[0]!.data as unknown as {
+      phase: string
+      draft: { parent: null; input: unknown; text: string }
+    }
+    assert.deepEqual(
+      [attached[0]!.event, snap.phase, snap.draft.parent, snap.draft.input, snap.draft.text.length > 0],
+      ["attach", "narrate", null, { text: "slow" }, true],
+    )
+    const finished = (attached.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
+    assert.deepEqual(
+      [finished.input.text, finished.end, (finished.reply[0] as { text: string }).text.length],
+      ["slow", "end", 240],
+    )
+    assert.equal((await fetch(`${base}/turn`)).status, 204)
+
+    // POST /stop after the first character: the prose halts and the same stream carries the `stopped` node to its end
+    const cut = await until(await post({ kind: "act", parent: null, input: { text: "slow" } }), /event: delta/)
+    assert.deepEqual(await (await fetch(`${base}/stop`, { method: "POST" })).json(), { stopped: "halted" })
+    const stopped = ((await rest(cut)).at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
     const kept = (stopped.reply[0] as { text: string }).text
     assert.deepEqual([stopped.input.text, stopped.end, kept.length > 0 && kept.length < 240], ["slow", "stopped", true])
+    assert.deepEqual(await (await fetch(`${base}/stop`, { method: "POST" })).json(), { stopped: null })
     assert.equal(
       ((await (await fetch(`${base}/nodes`)).json()) as { nodes: unknown[] }).nodes.length,
-      lib.session().log.nodes.size,
+      lib.session(story).log.nodes.size,
     )
 
     const bad = await post({ kind: "fly" })
@@ -145,13 +185,13 @@ const run = async (inspect: boolean) => {
     assert.deepEqual([g.parent, g.input.text, (g.reply[0] as { text: string }).text], [null, "", "G"])
     const noSuch = sse(await (await post({ kind: "greet", greeting: 3 })).text())
     assert.deepEqual([noSuch.length, noSuch[0]!.event], [1, "error"])
-    const tree = [...lib.session().log.nodes.keys()]
+    const tree = [...lib.session(story).log.nodes.keys()]
     // checkout: head to a version's newest leaf (its follow-up comes back); act without a parent lands under head
     const back = sse(await (await post({ kind: "checkout", node: node.id })).text())
     assert.deepEqual(back.at(-1)!.data, { kind: "change", head: node.id + 1 }) // "hi" → its child "B"
     const under = sse(await (await post({ kind: "act", input: { text: "under head" } })).text())
     const u = (under.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
-    assert.deepEqual([u.parent, lib.session().log.head], [node.id + 1, u.id])
+    assert.deepEqual([u.parent, lib.session(story).log.head], [node.id + 1, u.id])
     const hadTrace = Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length
     const c = (await (await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).json()) as {
       dropped: number[]
@@ -170,7 +210,7 @@ const run = async (inspect: boolean) => {
     // the narrator's head (seen when inspecting) from the next request on, an edit of the persona too, no new story;
     // deleting it drops the pick. A new story opens empty; switching back finds the first story's nodes; a story that is
     // not there is a 404.
-    const first = lib.newest()
+    const first = story
     const persona = (id: string, v?: unknown) =>
       fetch(`${base}/personas/${id}`, {
         method: v === undefined ? "DELETE" : "PUT",
@@ -182,7 +222,9 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await (await fetch(`${base}/personas`)).json(), [monk])
     const me = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
     await fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...me, persona: { [chat.id]: "monk" } }) })
-    const opened = (await (await fetch(`${base}/stories`, { method: "POST" })).json()) as {
+    const opened = (await (
+      await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ card: chat.id }) })
+    ).json()) as {
       current: number
       stories: { id: number }[]
     }
@@ -241,7 +283,11 @@ const run = async (inspect: boolean) => {
       updated: number
       last: { text: string; note?: string } | null
     }
-    story = ((await (await fetch(`${base}/stories`, { method: "POST" })).json()) as { current: number }).current
+    story = (
+      (await (await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ card: chat.id }) })).json()) as {
+        current: number
+      }
+    ).current
     const row = async (init?: RequestInit) =>
       (
         (await (await fetch(`${base}/stories${init ? `/${story}` : ""}`, init)).json()) as { stories: Row[] }
@@ -290,7 +336,11 @@ const run = async (inspect: boolean) => {
     assert.equal((await row({ method: "PUT", body: JSON.stringify({ title: "" }) })).title, null)
     {
       const make = async () =>
-        ((await (await fetch(`${base}/stories`, { method: "POST" })).json()) as { current: number }).current
+        (
+          (await (
+            await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ card: chat.id }) })
+          ).json()) as { current: number }
+        ).current
       const [x, y] = [await make(), await make()]
       const batch = (ids: unknown) => fetch(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) })
       assert.equal((await batch("x")).status, 400)
@@ -330,8 +380,8 @@ const run = async (inspect: boolean) => {
 await run(true)
 await run(false)
 
-// A stop during the correction rewrite, before its first character (#58): the first draft already streamed, so the close
-// stops the turn rather than withdrawing it, and the first draft stands as the `stopped` reply with its verdict.
+// A stop during the correction rewrite, before its first character (#58): the first draft already streamed, so the stop
+// halts the turn rather than withdrawing it, and the first draft stands as the `stopped` reply with its verdict.
 {
   const drafts = {
     ...fake((o) => {
@@ -346,32 +396,83 @@ await run(false)
     }),
     hat: "h",
   }
+  const data = open(":memory:")
   const { lib: guarded, handler } = tavern({
-    data: open(":memory:"),
-    card: { ...chat, guard: ["R"] },
+    data,
+    cards: shelf([{ ...chat, guard: ["R"] }], data),
     player,
     model: () => drafts,
   })
+  const story = guarded.stories.create(chat.id)
   const server = createServer(handler).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  const headers = { "x-tavern-story": String(story) }
   try {
-    const ac = new AbortController()
-    const r = await fetch(`http://localhost:${(server.address() as AddressInfo).port}`, {
+    const r = await fetch(base, {
       method: "POST",
+      headers,
       body: JSON.stringify({ kind: "act", parent: null, input: { text: "go" } }),
-      signal: ac.signal,
     })
     const reader = r.body!.getReader()
     let got = ""
     const narrates = () => got.match(/event: stage\ndata: \{"kind":"stage","phase":"narrate"\}/g)?.length ?? 0
     while (narrates() < 2) got += new TextDecoder().decode((await reader.read()).value) // the rewrite has begun
     assert.ok(!/SECOND/.test(got))
-    ac.abort()
-    for (let i = 0; i < 300 && guarded.session().log.nodes.size === 0; i++) await new Promise((f) => setTimeout(f, 10))
-    const stopped = [...guarded.session().log.nodes.values()].at(-1)
-    assert.ok(stopped, "the stopped turn was not recorded")
+    assert.deepEqual(await (await fetch(`${base}/stop`, { method: "POST", headers })).json(), { stopped: "halted" })
+    for (let r = await reader.read(); !r.done; r = await reader.read()) got += new TextDecoder().decode(r.value)
+    const stopped = (sse(got).at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
     assert.deepEqual(
       [stopped.input.text, stopped.end, (stopped.reply[0] as { text: string }).text, stopped.violated],
       ["go", "stopped", "FIRST DRAFT", ["R"]],
+    )
+  } finally {
+    server.close()
+  }
+}
+
+// Many cards, one process (#116). The library binds no card: an empty one lists nothing and names no story; a card's
+// page is served before any story of it; a story is made of a named card (an unknown one is a 400) and its routes
+// answer that card. Stories run side by side, on one card and across two, each to its own node.
+{
+  const data = open(":memory:")
+  const two = { ...chat, id: "two", title: "二", greetings: [{ text: "G2" }] }
+  const slowly = fake((o) => {
+    const doc = readStage(o)
+    return doc.phase === "narrate" ? { text: "hello world ".repeat(5), delay: 20 } : defaultAnswer(doc, canned)
+  })
+  const { handler } = tavern({ data, cards: shelf([chat, two], data), player, model: () => slowly })
+  const server = createServer(handler).listen(0)
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`
+  const on = (id: number, init: RequestInit = {}) => ({ ...init, headers: { "x-tavern-story": String(id) } })
+  try {
+    assert.deepEqual(await (await fetch(`${base}/stories`)).json(), { current: null, stories: [] })
+    assert.deepEqual(await (await fetch(`${base}/cards`)).json(), [
+      { id: chat.id, title: chat.title },
+      { id: "two", title: "二" },
+    ])
+    const page = (await (await fetch(`${base}/cards/two`)).json()) as { id: string; greetings: unknown[] }
+    assert.deepEqual([page.id, page.greetings], ["two", [{ text: "G2" }]])
+    assert.equal((await fetch(`${base}/cards/none`)).status, 404)
+    const make = async (card: string) => {
+      const r = await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ card }) })
+      return ((await r.json()) as { current: number }).current
+    }
+    assert.equal(
+      (await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ card: "none" }) })).status,
+      400,
+    )
+    const [a, b, c] = [await make(chat.id), await make(chat.id), await make("two")]
+    assert.equal(((await (await fetch(`${base}/card`, on(c))).json()) as { id: string }).id, "two")
+    const listed = (await (await fetch(`${base}/stories`)).json()) as { current: number; stories: { card: string }[] }
+    assert.deepEqual([listed.current, listed.stories.map((s) => s.card)], [c, ["two", chat.id, chat.id]])
+    const act = (id: number) =>
+      fetch(base, on(id, { method: "POST", body: JSON.stringify({ kind: "act", input: { text: `on ${id}` } }) })).then(
+        async (r) => sse(await r.text()).at(-1)!,
+      )
+    const ends = await Promise.all([a, b, c].map(act))
+    assert.deepEqual(
+      ends.map((e) => [e.event, (e.data as Extract<Event, { kind: "change" }>).node?.turn.input.text]),
+      [a, b, c].map((id) => ["change", `on ${id}`]),
     )
   } finally {
     server.close()
@@ -386,7 +487,7 @@ await run(false)
   const dead = createServer().listen(0)
   const deadUrl = `http://localhost:${(dead.address() as AddressInfo).port}`
   dead.close()
-  const server = createServer(tavern({ data: open(":memory:"), card: chat, player, model }).handler).listen(0)
+  const server = createServer(tavern({ data: open(":memory:"), cards: chats, player, model }).handler).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const call = async (method: string, path: string, v?: unknown) => {
     const r = await fetch(base + path, { method, body: v === undefined ? undefined : JSON.stringify(v) })
@@ -458,7 +559,7 @@ await run(false)
     ])
     assert.equal((await got("/assets/b.js"))[0], 404)
     assert.deepEqual((await got("/..%2Fassets%2Fa.js")).slice(0, 2), [200, "text/html; charset=utf-8"]) // never above the build
-    assert.equal(((await (await fetch(`${base}/api/card`)).json()) as { id: string }).id, chat.id)
+    assert.equal(((await (await fetch(`${base}/api/cards/${chat.id}`)).json()) as { id: string }).id, chat.id)
     assert.ok(Array.isArray(((await (await fetch(`${base}/api/stories`)).json()) as { stories: unknown[] }).stories))
     assert.equal((await fetch(`${base}/api`)).status, 404) // the session's "/" takes POST only
   } finally {
@@ -470,13 +571,15 @@ await run(false)
 // A tavern with no routing and no environment model still answers GET /nodes (the fold reads no model); the first line
 // it is sent fails with the code the client links to Settings → 默认模型 by (issue #61).
 {
-  const bare = createServer(tavern({ data: open(":memory:"), card: chat, player }).handler).listen(0)
+  const t = tavern({ data: open(":memory:"), cards: chats, player })
+  const headers = { "x-tavern-story": String(t.lib.stories.create(chat.id)) }
+  const bare = createServer(t.handler).listen(0)
   const base = `http://localhost:${(bare.address() as AddressInfo).port}`
   try {
-    assert.equal((await fetch(`${base}/nodes`)).status, 200)
+    assert.equal((await fetch(`${base}/nodes`, { headers })).status, 200)
     const none = sse(
       await (
-        await fetch(base, { method: "POST", body: JSON.stringify({ kind: "act", input: { text: "hi" } }) })
+        await fetch(base, { method: "POST", headers, body: JSON.stringify({ kind: "act", input: { text: "hi" } }) })
       ).text(),
     ).at(-1)!
     assert.deepEqual([none.event, none.data.code], ["error", "no-model"])

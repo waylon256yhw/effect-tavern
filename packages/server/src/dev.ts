@@ -1,12 +1,13 @@
-// The developer's session: one card (CARD, default ri) on the local Anthropic connection, or on a scripted model
-// (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The library (data.ts)
-// is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a runtime/server
-// edit, or a restart, keeps the story; a second process on the same DATA gets a library of its own (data.ts `lock`).
-// Each request names its story; one that names none plays the card's newest, or a new one. An empty story opens on
-// the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
-// picked on the server would stay as an orphan root beside the player's). Which model runs each stage is the library's
-// routing (the settings page); MODEL=fake puts the scripted model over it. This module is the environment's entry: it
-// reads the environment and opens the store, tavern.ts builds the tavern from what it read.
+// The developer's session: every card of the shelf (the YAML files in CARDS, by default the runtime's templates in
+// packages/runtime/test/cards, then the library's `card` table) on the local Anthropic connection, or on a scripted
+// model (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The library
+// (data.ts) is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a
+// runtime/server edit, or a restart, keeps the stories; a second process on the same DATA gets a library of its own
+// (data.ts `lock`). No card is bound: each request names its story and the story its card. An empty story opens on no
+// greeting: the player picks one on the card page (a greet is a root, and one picked on the server would stay as an
+// orphan root beside the player's). Which model runs each stage is the library's routing (the settings page);
+// MODEL=fake puts the scripted model over it. This module is the environment's entry: it reads the environment and
+// opens the store, tavern.ts builds the tavern from what it read.
 import {
   bind,
   fake,
@@ -16,15 +17,15 @@ import {
   type FakeCall,
   type Model,
 } from "@effect-tavern/provider"
-import { cardNames, loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
+import { cardNames, loadCard, player, readCard } from "@effect-tavern/runtime/test/cards/index.ts"
 import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
-import { mkdirSync } from "node:fs"
+import { mkdirSync, readdirSync } from "node:fs"
+import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
 import { refresh } from "./names.ts"
-import { tavern } from "./tavern.ts"
+import { shelf, tavern } from "./tavern.ts"
 
-const name = process.env["CARD"] ?? "ri"
 // a compiled binary (bun build --compile) has no checkout around it: its library lives where it is run
 const dir =
   process.env["DATA"] ??
@@ -94,18 +95,20 @@ const one = scripted ? { ...fake(answer), hat: process.env["HAT"] } : live() // 
 const model = one && (() => one)
 
 const key = localAnthropicKey()
-const greeting = process.env["GREETING"]
-const card = await loadCard(name)
-// the template cards, listed by GET /cards
-const cards = (await Promise.all(cardNames.map(loadCard))).map((c) => ({ id: c.id, title: c.title }))
+// the card files, read once at start: a directory's YAML, or the templates by name (a compiled binary embeds those,
+// where a directory has no listing)
+const at = process.env["CARDS"]
+const files = at
+  ? readdirSync(at)
+      .filter((f) => f.endsWith(".yaml"))
+      .map((f) => readCard(join(at, f)))
+  : await Promise.all(cardNames.map(loadCard))
 export const { handler } = tavern({
   data,
-  card,
-  cards,
+  cards: shelf(files, data),
   player,
   model,
   pinned: scripted, // MODEL=fake scripts every stage, whatever the routing says
   ...(key && { seed: { key } }), // a first start puts the local key in the vault (tavern.ts `seed`)
-  ...(greeting !== undefined && { greeting: Number(greeting) }),
   inspect: true,
 })

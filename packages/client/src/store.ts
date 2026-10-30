@@ -26,7 +26,9 @@ export interface Draft {
 /** A failed turn as the server's `error` event says it: `code` "no-model" (no model to run it on) is the one the ghost
  *  turns into a way into Settings → 默认模型. */
 export type Failure = { message: string; code?: string }
-export type Wire = Event | ({ kind: "error" } & Failure)
+/** The turn in flight as a client that comes back to the story finds it (server GET /turn): its stage and its draft. */
+export type Attach = { kind: "attach"; phase: Phase | null; draft: Draft | null }
+export type Wire = Event | ({ kind: "error" } & Failure) | Attach
 
 export { registry }
 export const log = Atom.make<L.Log<Node>>(L.of<Node>())
@@ -52,10 +54,12 @@ export interface CardView {
   format: readonly Format[]
 }
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
-/** The library (GET /stories, /personas, /player): this card's stories and which is open (a story is one root's tree),
+/** The library (GET /stories, /personas, /player): every card's stories and which is open (a story is one root's tree),
  *  the player's personas, and the player layer the writing switches and the persona pick live in. Read at open. */
 export interface StoryRow {
   id: Id
+  card: string // the card it is of
+  busy: Phase | null // a turn in flight on it, where it stands
   title: string | null // the player's name for it; none (never named), the row reads "New story"
   starred: boolean // the player's star: first on the card and in the manager
   updated: number
@@ -67,7 +71,8 @@ export interface Persona {
   name: string
   text: string
 }
-export const stories = Atom.make<{ current: Id; stories: readonly StoryRow[] } | null>(null).pipe(Atom.keepAlive)
+/** `current` is none on an empty library: the client is on the first card's page, no story yet. */
+export const stories = Atom.make<{ current: Id | null; stories: readonly StoryRow[] } | null>(null).pipe(Atom.keepAlive)
 export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
 export const player = Atom.make<Player | null>(null).pipe(Atom.keepAlive)
 /** The player's settings (GET /providers, /secrets, /routing, /hats): the model providers, the key vault as hints,
@@ -197,9 +202,6 @@ const resetPlay = () => {
     ended: true,
   })
 }
-/** Whether any prose has arrived this turn, shown, still queued, or a first draft a rewrite displaced: what a stop
- *  before it withdraws, and what the server keeps as a stopped node after it. */
-export const arrived = (): boolean => play.total > 0 || !!registry.get(draft)?.prev
 const enqueue = (chunk: string) => {
   const chars = Array.from(segmenter.segment(chunk), (x) => x.segment)
   if (chars.length === 0) return
@@ -276,6 +278,14 @@ const drain = () => {
 }
 const applyNow = (e: Wire): void => {
   switch (e.kind) {
+    case "attach":
+      // the turn as it stands: its prose so far drawn at once, the live deltas playing on from there (the switch here
+      // reset the playout, so the loop is told the prose is still coming). `fresh` is the server's: an act's line that
+      // fails from here goes back in the box, a swipe's or an edit's is already on its node.
+      registry.set(draft, e.draft)
+      registry.set(stage, e.phase)
+      if (e.phase === "narrate") play.ended = false
+      return
     case "stage":
       registry.set(stage, e.phase)
       // Each draft starts over: a narrate after check is the rewrite, the first one greys under it.

@@ -142,7 +142,8 @@ assert.deepEqual(data.stories.search("other", "hello"), [])
   back.commit(L.drop(back.log, 9))
 }
 // A batch delete takes the card's own among the ids given in one go, answering them; another card's and a stranger's
-// are skipped. The listing narrows to one story by id, none for another card's.
+// are skipped. The listing narrows to one story by id, none for another card's. Without a card the listing and the
+// search are every card's, each row naming its card, and one story is found by id alone.
 {
   const [x, y, z] = [data.stories.create("wuxia"), data.stories.create("wuxia"), data.stories.create("other")]
   assert.deepEqual(
@@ -150,6 +151,15 @@ assert.deepEqual(data.stories.search("other", "hello"), [])
     [y],
   )
   assert.deepEqual([data.stories.list("wuxia", z), data.stories.list("wuxia", 9999)], [[], []])
+  assert.deepEqual(
+    data.stories.list(undefined, z).map((s) => [s.id, s.card]),
+    [[z, "other"]],
+  )
+  assert.deepEqual(
+    data.stories.list().map((s) => s.card),
+    ["other", "wuxia", "wuxia", "wuxia", "wuxia"],
+  )
+  assert.deepEqual(data.stories.search(undefined, "hello"), data.stories.search("wuxia", "hello")) // "other" has none
   // the one row, its line walked alone, equal to its row in the whole listing
   assert.deepEqual(
     data.stories.list("wuxia", story)[0],

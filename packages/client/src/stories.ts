@@ -36,10 +36,10 @@ export const ranked = (rows: readonly StoryRow[]): StoryRow[] =>
   [...rows].sort((a, b) => Number(b.starred) - Number(a.starred))
 /** The left card's rows: the first `n` of the ranked list, and the open story among them whatever its rank (it takes
  *  the last place), so the row on the tint is never below the cut. */
-export const shown = (rows: readonly StoryRow[], current: number | undefined, n = 4): StoryRow[] => {
+export const shown = (rows: readonly StoryRow[], current: number | null | undefined, n = 4): StoryRow[] => {
   const all = ranked(rows)
   const top = all.slice(0, n)
-  if (all.length > n && current !== undefined && !top.some((s) => s.id === current)) {
+  if (all.length > n && current != null && !top.some((s) => s.id === current)) {
     const open = all.find((s) => s.id === current)
     if (open) top[n - 1] = open
   }
@@ -86,5 +86,5 @@ export const kindLabel = (kind: Hit["kind"]): string =>
 /** After a delete answered `next` as the story to be on: whether the client stays where it is (its reader, draft and
  *  place kept). Only when the story it was on was not among those deleted and is still the one named; the id alone
  *  does not tell, since a library made before story ids were autoincrement hands a deleted id to the next story made. */
-export const stays = (open: number | undefined, deleted: readonly number[], next: number): boolean =>
-  open !== undefined && !deleted.includes(open) && next === open
+export const stays = (open: number | null | undefined, deleted: readonly number[], next: number | null): boolean =>
+  open != null && !deleted.includes(open) && next === open

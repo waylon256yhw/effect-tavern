@@ -2,10 +2,13 @@
 // the page it covers, so close returns there (settings from the card page back to the card page, Inspect from the
 // Timeline back to the Timeline), the reader when nothing is under it; each page's load list runs on open. Landing on a
 // story (first load, a story opened, made or deleted) decides card or reader once: an empty log lands on the card
-// page. One Escape rule for every page, mounted once by the App. The reader stays mounted under all of it, so a turn
-// in flight keeps streaming; only another story abandons it.
+// page, and no story at all lands on the first card's page. Landing reads the story's card (stories of every card
+// share one listing) and picks up a turn in flight there. One Escape rule for every page, mounted once by the App. The
+// reader stays mounted under all of it, so a turn in flight keeps streaming; another story only stops reading it.
+import * as L from "@effect-tavern/runtime/src/log.ts"
+import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { stays } from "./stories.ts"
-import { calls, editing, log, page, type Page, pin, registry, stories } from "./store.ts"
+import { calls, cards, editing, log, page, type Page, pin, registry, stories } from "./store.ts"
 import { turn } from "./turn.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
@@ -51,28 +54,37 @@ const arrive = () => {
 }
 
 /** First load: the listing first (it names the story every request after is on), then the card, the nodes and the
- *  player's layer; the routing is the card page's Model row. */
+ *  player's layer; the routing is the card page's Model row. With no story at all, the first card's page: a story
+ *  begins there. A turn already in flight on the story is picked up (turn.ts `attach`). */
 export const boot = async (): Promise<void> => {
   await wire.fetchStories()
-  await Promise.all([
-    wire.fetchCard(),
-    wire.fetchNodes(),
-    wire.fetchPersonas(),
-    wire.fetchPlayer(),
-    wire.fetchRouting(),
-  ])
+  await Promise.all([on(), wire.fetchPersonas(), wire.fetchPlayer(), wire.fetchRouting()])
   arrive()
 }
+/** The story the listing names, read: its card, its nodes, its turn in flight; with none, the first card's page over
+ *  an empty log. */
+const on = async (): Promise<void> => {
+  if (registry.get(stories)?.current == null) {
+    registry.set(log, L.of<Node>())
+    await wire.fetchCards()
+    const first = registry.get(cards)[0]
+    if (first) await wire.fetchCardOf(first.id)
+    return
+  }
+  await Promise.all([wire.fetchCard(), wire.fetchNodes()])
+  turn.attach()
+}
 
-/** A story call answered: the client is on the story the listing names, as just opened. The old story's stream is
- *  closed (its events must not land on this log), its draft, pin, editor and calls gone. */
+/** A story call answered: the client is on the story the listing names, as just opened. The old story's streams are
+ *  closed (its events must not land on this log; its turn runs on, on the server), its draft, pin, editor and calls
+ *  gone; a turn in flight on the new one is picked up. */
 export const land = async (listing: Listing): Promise<void> => {
   registry.set(stories, listing)
   turn.abandon()
   registry.set(pin, null)
   registry.set(editing, null)
   registry.set(calls, new Map())
-  await wire.fetchNodes()
+  await on()
   arrive()
 }
 /** A delete answered: when the open story was not among the deleted and is still the one to be on, only the listing
@@ -83,7 +95,7 @@ export const onDelete = async (listing: Listing, deleted: readonly number[]): Pr
   else await land(listing)
 }
 export const openStory = async (id: number): Promise<void> => land(await wire.openStory(id))
-export const newStory = async (): Promise<void> => land(await wire.newStory())
+export const newStory = async (card: string): Promise<void> => land(await wire.newStory(card))
 export const deleteStory = async (id: number): Promise<void> => onDelete(await wire.deleteStory(id), [id])
 export const deleteStories = async (ids: readonly number[]): Promise<void> =>
   onDelete(await wire.deleteStories(ids), ids)

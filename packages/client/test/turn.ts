@@ -1,11 +1,10 @@
-// The turn in flight (src/turn.ts) on a scripted wire: an act lands; a stop before the first character withdraws the
-// line into its box, after it reads the snapshot back until the stopped node shows up (or says it never did); a failed
+// The turn in flight (src/turn.ts) on a scripted wire: an act lands; a stop the server withdraws puts the line back in
+// its box, one it halts waits on the same stream for the stopped node (or record's error, the line back); a failed
 // revision keeps the revision and gives the line back; a story switch drops the stream without withdrawing; a demand
-// holds the composer with no draft.
+// holds the composer with no draft; an attach draws the turn as it stands and plays on to its node or its failure.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action } from "@effect-tavern/runtime/src/session.ts"
 import assert from "node:assert/strict"
-import { t } from "../src/i18n.ts"
 import {
   apply,
   boxes,
@@ -44,25 +43,22 @@ const node = (id: number, parent: number | null, text: string, input = `in${id}`
   ({ id, parent, turn: { id, parent, input: { text: input }, reply: [{ type: "text", text }], end: "end" } }) as any
 const delta = (text: string): Wire => ({ kind: "delta", part: { type: "text-delta", id: "0", text } }) as Wire
 
-// the scripted wire: each send is a stream the test feeds; an aborted one applies nothing more
-type Stream = { action: Action; aborted: boolean; emit: (...es: Wire[]) => void }
+// the scripted wire: each send or attach is a stream the test feeds; an aborted one applies nothing more. A stop
+// answers what the server would decide (`stopping`).
+type Stream = { action?: Action; aborted: boolean; emit: (...es: Wire[]) => void }
 const streams: Stream[] = []
 const last = () => streams.at(-1)!
-let grows = true // whether the stopped node ever shows up in the snapshot
-let polls = 0
+const open = (action?: Action) => {
+  const s: Stream = { action, aborted: false, emit: (...es) => es.forEach((e) => !s.aborted && apply(e)) }
+  streams.push(s)
+  return () => void (s.aborted = true)
+}
+let stopping: "withdrawn" | "halted" | null = null
+let stops = 0
 const turn = createTurn({
-  send: (action) => {
-    const s: Stream = { action, aborted: false, emit: (...es) => es.forEach((e) => !s.aborted && apply(e)) }
-    streams.push(s)
-    return () => void (s.aborted = true)
-  },
-  fetchNodes: async () => {
-    polls++
-    const l = registry.get(log)
-    const id = l.nodes.size
-    if (grows && polls === 3) registry.set(log, L.apply(l, { node: node(id, l.head, "cut"), head: id } as any))
-  },
-  delay: async () => {},
+  send: open,
+  attach: () => open(),
+  stop: async () => (stops++, stopping),
 })
 
 registry.set(card, { input: "act", greetings: [] } as unknown as CardView)
@@ -81,38 +77,39 @@ assert.deepEqual(
 )
 assert.equal(registry.get(log).head, 1)
 
-// (b) stop before the first character: withdrawn, the line and its note back in their boxes
+// (b) the server withdraws the stop (before the first character): the line and its note back in their boxes, the
+// stream closed so nothing late lands; idle, a stop asks nothing
+await turn.stop()
+assert.equal(stops, 0)
 turn.act("line", "note")
 setBoxes({ text: "", note: "", aside: false }) // the composer clears after the send
 last().emit({ kind: "stage", phase: "narrate" })
+stopping = "withdrawn"
 await turn.stop()
 assert.ok(last().aborted)
 assert.deepEqual(boxes(), { text: "line", note: "note", aside: true })
-assert.equal(registry.get(draft), null)
+assert.deepEqual([registry.get(draft), registry.get(stage)], [null, null])
 
-// (c) stop after a character: the Record slot waits while the snapshot is read back, the stopped node lands
+// (c) the server halts it (after a character): the Record slot waits on the same stream, the stopped node lands
 setBoxes({ text: "", note: "", aside: false })
 turn.act("go", "")
 last().emit({ kind: "stage", phase: "narrate" }, delta("abc"))
 playOut()
 const was = registry.get(log).nodes.size
-polls = 0
-const stopping = turn.stop()
-assert.equal(registry.get(stage), "record")
-await stopping
-assert.equal(polls, 3)
+stopping = "halted"
+await turn.stop()
+assert.deepEqual([registry.get(stage), last().aborted], ["record", false])
+last().emit({ kind: "change", node: node(was, 1, "abc", "go"), head: was } as Wire)
 assert.equal(registry.get(log).nodes.size, was + 1)
 assert.deepEqual([registry.get(draft), registry.get(stage), registry.get(error)], [null, null, null])
 
-// (d) the stopped node never shows up: the ghost says so and the line comes back
-grows = false
+// (d) record fails after the halt: its error comes down the stream, the ghost says so and the line comes back
 turn.act("lost", "")
 last().emit({ kind: "stage", phase: "narrate" }, delta("abc"))
 playOut()
-polls = 0
 await turn.stop()
-assert.equal(polls, 100)
-assert.equal(registry.get(error)?.message, t("app.stoppedNotRecorded"))
+last().emit({ kind: "error", message: "record failed" })
+assert.equal(registry.get(error)?.message, "record failed")
 assert.equal(boxes().text, "lost")
 dismiss()
 setBoxes({ text: "", note: "", aside: false })
@@ -150,4 +147,35 @@ last().emit({ kind: "stage", phase: "record" })
 assert.deepEqual([registry.get(draft), registry.get(working)], [null, true])
 last().emit({ kind: "change", head: registry.get(log).head } as Wire)
 assert.equal(registry.get(working), false)
+
+// (h) back on a story whose turn runs on: the attach draws it as it stands (the prose so far at once), the live deltas
+// play on, the node lands; one that failed while nobody listened gives its line back
+turn.attach()
+const draftNow = { parent: 1, input: { text: "back" }, text: "so far " }
+last().emit({ kind: "attach", phase: "narrate", draft: draftNow })
+assert.deepEqual([registry.get(draft)?.text, registry.get(stage), registry.get(working)], ["so far ", "narrate", true])
+last().emit(delta("and more"))
+playOut()
+assert.equal(registry.get(draft)?.text, "so far and more")
+const at = registry.get(log).nodes.size
+last().emit({ kind: "change", node: node(at, 1, "so far and more", "back"), head: at } as Wire)
+playOut()
+assert.deepEqual([registry.get(draft), registry.get(working), registry.get(log).head], [null, false, at])
+turn.attach()
+last().emit(
+  { kind: "attach", phase: null, draft: { ...draftNow, input: { text: "failed" }, fresh: true } },
+  {
+    kind: "error",
+    message: "boom",
+  },
+)
+assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", "failed"])
+// a swipe's line is on its node already (no `fresh` from the server): its failure leaves the box alone
+setBoxes({ text: "", note: "", aside: false })
+turn.attach()
+last().emit(
+  { kind: "attach", phase: null, draft: { ...draftNow, input: { text: "rolled" } } },
+  { kind: "error", message: "boom" },
+)
+assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", ""])
 console.log("ok")

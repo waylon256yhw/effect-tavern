@@ -21,7 +21,6 @@ const en: Dict = {
     reviseNote: "Revise your note",
     session: "Session",
     stopped: "Stopped",
-    stoppedNotRecorded: "The stopped turn was not recorded",
     waiting: "Waiting",
   },
   card: {

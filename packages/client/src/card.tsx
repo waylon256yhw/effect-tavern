@@ -13,7 +13,7 @@ import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { close, newStory, open } from "./pages.ts"
-import { card, log, personas, player, routing, working } from "./store.ts"
+import { card, log, personas, player, registry, routing, stories, working } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
@@ -56,7 +56,8 @@ export const CardPage = () => {
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const begin = async () => {
-    if (inStory()) await newStory() // lands on the new, empty story: the card page, nothing under it
+    // a story in progress, or none yet (an empty library): a new, empty one of this card, landing on the card page
+    if (inStory() || registry.get(stories)?.current == null) await newStory(view()!.id)
     turn.greet(at())
     open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
   }

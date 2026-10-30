@@ -1,11 +1,14 @@
 // The seam to packages/server: `GET /card`, `GET /nodes` (nodes and head) and the library (`/stories`, `/personas`,
 // `/player`) are the snapshot, `POST /` is one action whose events come back as SSE. A story call (open, new, delete)
-// answers the listing with the story to be on (`current`): the client names it on every request after, and pages.ts
-// lands on it (nodes, calls, the draft and the pin gone; a delete that leaves the open story open only replaces the
-// listing). The manager's search (`GET /stories/search`) and the exports (`/stories/<id>/export.md|json`, plain links the browser
-// downloads) are the manager's (stories.ts, side.tsx).
+// answers the listing with the story to be on (`current`, none on an empty library): the client names it on every
+// request after, and pages.ts lands on it (nodes, calls, the draft and the pin gone; a delete that leaves the open
+// story open only replaces the listing). A new story is of a card (`POST /stories {card}`); a card's page is readable
+// before any story of it (`GET /cards/<id>`). The manager's search (`GET /stories/search`) and the exports
+// (`/stories/<id>/export.md|json`, plain links the browser downloads) are the manager's (stories.ts, side.tsx).
 // `DELETE /nodes/<id>` drops a node and everything under it (the reply is the Change): the Timeline's branch delete.
-// Closing the response is the stop (before the first delta it withdraws the turn, after it the prose halts).
+// The turn is the server's, not the response's: closing a stream only stops reading it. `POST /stop` is the stop
+// (before the first character the turn is withdrawn, after it the prose halts and the node comes down the same
+// stream); `GET /turn` picks up the turn in flight on a story the client lands on (204 when there is none).
 import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
 import type { Hat, Player } from "@effect-tavern/runtime/src/fragment.ts"
@@ -37,10 +40,11 @@ import {
 
 const base = "/api"
 /** Every request names the story this client is on (`x-tavern-story`): the server keeps no open story, so two tabs on
- *  two stories never move each other. Before the listing arrives it names none, and the server takes the newest. */
+ *  two stories never move each other. Before the listing arrives, or with no story at all, it names none: the
+ *  install's routes answer, a story's are a 404. */
 const call = (url: string, init: RequestInit = {}): Promise<Response> => {
   const id = registry.get(stories)?.current
-  if (id === undefined) return fetch(url, init)
+  if (id == null) return fetch(url, init)
   const headers = new Headers(init.headers)
   headers.set("x-tavern-story", String(id))
   return fetch(url, { ...init, headers })
@@ -50,6 +54,9 @@ const got = async (res: Promise<Response>) => (await res).json()
 export const fetchNodes = async (): Promise<void> =>
   registry.set(log, L.of((await got(call(`${base}/nodes`))) as L.Snapshot<Node>))
 export const fetchCard = async (): Promise<void> => registry.set(card, (await got(call(`${base}/card`))) as CardView)
+/** A card's page by id, no story needed: where an empty library lands. */
+export const fetchCardOf = async (id: string): Promise<void> =>
+  registry.set(card, (await got(call(`${base}/cards/${encodeURIComponent(id)}`))) as CardView)
 export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(call(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
   registry.update(log, (l) => L.apply(l, c))
@@ -63,11 +70,12 @@ export const fetchStories = async (): Promise<void> => registry.set(stories, awa
 export const fetchPersonas = async (): Promise<void> => registry.set(personas, await got(call(`${base}/personas`)))
 export const fetchPlayer = async (): Promise<void> => registry.set(player, await got(call(`${base}/player`)))
 
-export type Listing = { current: number; stories: readonly StoryRow[] }
+export type Listing = { current: number | null; stories: readonly StoryRow[] }
 const listing = (res: Promise<Response>) => got(res) as Promise<Listing>
 // The story calls answer the listing with the story to be on; what the client does with it is pages.ts's (`land`).
 export const openStory = (id: number): Promise<Listing> => listing(call(`${base}/stories/${id}`, { method: "PUT" }))
-export const newStory = (): Promise<Listing> => listing(call(`${base}/stories`, { method: "POST" }))
+export const newStory = (card: string): Promise<Listing> =>
+  listing(call(`${base}/stories`, { method: "POST", body: JSON.stringify({ card }) }))
 export const deleteStory = (id: number): Promise<Listing> =>
   listing(call(`${base}/stories/${id}`, { method: "DELETE" }))
 /** The cleanup: several at once (`DELETE /stories` with the ids), one listing back. */
@@ -79,7 +87,7 @@ export const nameStory = async (id: number, title: string): Promise<void> =>
 /** Starred or not: the same write as a name, only the listing comes back. */
 export const starStory = async (id: number, starred: boolean): Promise<void> =>
   registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ starred }) })))
-/** The manager's search: this card's stories whose turns hold `q`, as hits by story (stories.ts `Hit`). */
+/** The manager's search: the stories whose turns hold `q`, as hits by story (stories.ts `Hit`). */
 export const searchStories = (q: string): Promise<Hit[]> =>
   got(call(`${base}/stories/search?q=${encodeURIComponent(q)}`)) as Promise<Hit[]>
 /** Where a story's export is: a link the browser downloads (the server names the file by the title). */
@@ -155,12 +163,21 @@ export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
 export const deleteHat = async (id: string): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
 
-/** Sends one action; returns the stop. */
-export const send = (action: Action): (() => void) => {
+/** Sends one action; returns what closes its stream (the turn goes on on the server). */
+export const send = (action: Action): (() => void) =>
+  listen((signal) => call(base, { method: "POST", body: JSON.stringify(action), signal }))
+/** The turn in flight on this story, if any (`GET /turn`): its `attach` then its events; returns what closes it. */
+export const attach = (): (() => void) => listen((signal) => call(`${base}/turn`, { signal }))
+/** The player's stop (`POST /stop`): "withdrawn" before the first character, "halted" after it, null when idle. */
+export const stop = async (): Promise<"withdrawn" | "halted" | null> =>
+  ((await got(call(`${base}/stop`, { method: "POST" }))) as { stopped: "withdrawn" | "halted" | null }).stopped
+/** Reads an SSE response into `apply` until it ends or is closed; a 204 is nothing to read. */
+const listen = (open: (signal: AbortSignal) => Promise<Response>): (() => void) => {
   const ac = new AbortController()
   void (async () => {
     try {
-      const res = await call(base, { method: "POST", body: JSON.stringify(action), signal: ac.signal })
+      const res = await open(ac.signal)
+      if (res.status === 204) return
       if (!res.ok || !res.body) return apply({ kind: "error", message: `${res.status} ${await res.text()}` })
       const reader = res.body.getReader()
       const dec = new TextDecoder()
