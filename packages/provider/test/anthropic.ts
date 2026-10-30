@@ -1,4 +1,7 @@
-// Live check against the real Anthropic API: the things no mock can verify (cache tiers, prefill, signed reasoning).
+// Live check against the real Anthropic API, opt-in (`bun run live`), not in `verify`: it spends money and depends on
+// the key, so it never gates the other packages. Run it when the provider layer changes. What it alone can verify is
+// that the real API ACCEPTS what we send: cache write then read on identical heads (4), signed reasoning sent back (5);
+// the rest is covered by the aimock tests, which check what we send.
 // Key: ANTHROPIC_API_KEY, else the "api_key" profile pointed at api.anthropic.com in ~/.deckled. Skips without one.
 // Proxy: https_proxy, passed as the connection's explicit `proxy`, so the per-request path is what runs, not Bun's env fallback.
 // Runs on Haiku with tiny outputs; well under a cent per pass.
