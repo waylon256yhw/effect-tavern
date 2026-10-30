@@ -309,8 +309,7 @@ section:has(> .editor) > .actions {
   gap: var(--space-1);
 }
 
-/* a dot in the corner of a key: on the Record pill when this turn moved the state (the strip's keys carry the same,
-   shell.css) */
+/* a dot in the corner of a key: on the Record pill when this turn moved the state */
 .record-pill .dot {
   position: absolute;
   top: 2px; /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */

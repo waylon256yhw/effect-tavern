@@ -1,10 +1,10 @@
 /* ───────── The shell (shell.tsx, side.tsx; #117, docs/sidebar-brief-1.md) ─────────
-   Phone first: the stage card is the screen, its strip the reader's head (☰, card › story ▾, Status), the sidebar a
-   drawer and the readings a card mounted over the reader. From 72rem the canvas appears: a thin strip on top (the
-   fold key, the card › story tab), the sidebar standing in the left space (ground), the stage card raised on the
-   rest (figure), the mounted card over that. The sidebar folds to nothing and, folded, floats over the stage when
-   the pointer touches the screen's left edge; the stage's left edge drags its width. Every page (.inspect, .settings)
-   fills the stage card, not the screen, so the ground stays in view. */
+   Phone first: the stage card is the screen, its strip the reader's head (☰, card › story ▾, 读数), the sidebar a
+   drawer. From 72rem the canvas appears: a thin strip on top (the fold key, the card › story tab, the install's
+   keys), the sidebar standing in the left space (ground), the stage card raised on the rest (figure), the reader's
+   keys in its corner. The sidebar folds to nothing and, folded, floats over the stage when the pointer touches the
+   screen's left edge; the stage's left edge drags its width. Every page (.inspect, .settings, .status-page) fills
+   the stage card, not the screen, so the ground stays in view. */
 #root {
   height: 100dvh;
   display: flex;
@@ -41,6 +41,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--surface-1);
+  container: stage / inline-size; /* the 读数 page's columns follow the stage card, which the sidebar narrows */
 }
 /* a page fills the stage card (its own position is the screen's: inspector.css, settings.css) */
 .stage-card > .inspect,
@@ -61,9 +62,6 @@
   font-size: var(--text-body);
   line-height: var(--leading-body);
   box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
-}
-:is(.strip, .stage-keys) .icon {
-  position: relative;
 }
 /* the crumb: the card in ink-2, the story in ink, the story alone truncating */
 .strip .crumb-key {
@@ -106,28 +104,14 @@
   color: var(--ink-2);
   font-weight: 500;
 }
-/* the dot in the corner of the 读数 key: this turn moved the state */
-:is(.strip, .stage-keys) .dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
-}
-:is(.strip, .stage-keys) .icon.sm .dot {
-  top: 2px;
-  right: 2px;
-}
 
 /* ── small keys, shared by the shell's parts ── */
-:is(.shell-top, .sidebar, .stage-keys, .mount) .icon.sm {
+:is(.shell-top, .sidebar, .stage-keys) .icon.sm {
   width: 26px;
   height: 26px;
   border-radius: 6px;
 }
-:is(.shell-top, .sidebar, .stage-keys, .mount) .icon.sm svg {
+:is(.shell-top, .sidebar, .stage-keys) .icon.sm svg {
   width: 15px;
   height: 15px;
 }
@@ -462,79 +446,78 @@
   color: var(--ink);
 }
 
-/* ── the mounted card: the readings over the reader, its scrim blurring the prose ── */
-.mount-scrim {
+/* ── 读数 (readings.tsx `StatusPage`): a page over the reader, the world's standing slice at the left (the pin,
+   Status), this turn's change at the right (its Record, 小剧场). Each column bounded to 22–26rem and scrolling on its
+   own; one column over the other when the stage card has no room for two ── */
+.status-page {
   position: absolute;
   inset: 0;
-  z-index: 6;
-  background: var(--scrim);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-3) var(--ease);
-}
-.mount-scrim[data-open="true"] {
-  opacity: 1;
-  pointer-events: auto;
-}
-.mount {
-  position: absolute;
-  inset: var(--space-3) var(--space-3) var(--space-3) auto;
-  z-index: 7;
-  box-sizing: border-box;
-  width: min(var(--mount-w), calc(100% - 2 * var(--space-3)));
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border-radius: var(--radius-dialog);
-  background: var(--surface-3);
-  box-shadow: var(--shadow-pop);
+  background: var(--surface-1);
+  color: var(--ink);
   font-size: var(--text-body);
   line-height: var(--leading-body);
-  translate: calc(100% + var(--space-4)) 0;
-  visibility: hidden;
-  transition:
-    translate var(--dur-3) var(--ease),
-    visibility var(--dur-3) allow-discrete;
 }
-.mount[data-open="true"] {
-  translate: 0 0;
-  visibility: visible;
-}
-.mount-head {
+.status-page > header {
   flex: none;
   box-sizing: border-box;
-  height: 48px;
-  padding: 0 var(--space-3) 0 var(--space-4);
+  height: calc(var(--topbar) + var(--safe-top));
+  padding: var(--safe-top) var(--space-3) 0 var(--space-2);
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
 }
-.mount-head h2 {
+.status-page h1 {
   margin: 0;
   font-size: var(--text-heading);
   font-weight: 600;
 }
-.mount-body {
+.status-body {
   flex: 1;
   min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(22rem, 26rem));
+  grid-template-rows: minmax(0, 1fr);
+  justify-content: center;
+  gap: var(--space-6);
+  padding: 0 var(--space-5);
+}
+.status-body > div {
+  min-height: 0;
   overflow-y: auto;
-  padding: var(--space-4) var(--space-4) var(--fade);
+  padding-bottom: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
 }
-.mount-body section {
-  display: flex;
-  flex-direction: column;
+/* a left block with nothing in it (a card without rules, no pin) is not drawn: the right one alone, centred */
+.status-body:not(:has(> .still :is(.pinned, .group))) {
+  grid-template-columns: minmax(0, 26rem);
+}
+.status-body:not(:has(> .still :is(.pinned, .group))) > .still {
+  display: none;
+}
+/* no room for two (2 × 22rem, the gap and the paddings): one column, the left block on top, scrolled as one */
+@container stage (width < 49rem) {
+  .status-body {
+    grid-template-columns: minmax(0, 26rem);
+    grid-template-rows: none;
+    align-content: start;
+    overflow-y: auto;
+    padding-bottom: var(--space-5);
+  }
+  .status-body > div {
+    overflow: visible;
+    padding-bottom: 0;
+  }
+}
+.status-page section {
   gap: var(--space-2);
 }
 /* a section head is a word in its place: no nameplate in the components layer, so a card's own layer may add one */
-.mount-body h2 {
+.status-page h2 {
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -543,9 +526,6 @@
   font-size: var(--text-body);
   font-weight: 600;
   color: var(--ink-2);
-}
-.mount > .actions {
-  padding: var(--space-2) var(--space-4) var(--space-3);
 }
 
 /* ── the phone's drawer: the sidebar sliding in from the left ── */

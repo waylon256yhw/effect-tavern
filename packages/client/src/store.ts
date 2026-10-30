@@ -135,7 +135,7 @@ export const error = Atom.make<Failure | null>(null)
 export const working = Atom.make((get) => (get(draft) !== null && get(error) === null) || get(stage) !== null)
 /** The page over the reader: none, the card page, the Timeline, the settings, the Writing page (writing.tsx) or the
  *  Inspect page on one node. The reader stays mounted under it, so a turn in flight keeps streaming. */
-export type Page = "reader" | "card" | "timeline" | "settings" | "writing" | { inspect: Id }
+export type Page = "reader" | "card" | "timeline" | "settings" | "writing" | "status" | { inspect: Id }
 export const page = Atom.make<Page>("reader")
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())

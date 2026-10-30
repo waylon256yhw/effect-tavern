@@ -116,7 +116,6 @@
   --strip: 44px; /* the stage card's strip (the reader's head), and the sidebar's top row beside it */
   --shell-top: 38px; /* the thin strip over the canvas: the fold key, the card › story tab */
   --side-w: 260px; /* the sidebar's width; shell.tsx sets it on the canvas as the hand moves it (fold.ts) */
-  --mount-w: 18.5rem; /* the mounted card of readings */
   --peek-dim: light-dark(rgb(15 15 15 / 0.14), rgb(0 0 0 / 0.42)); /* the stage under a floating sidebar */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);

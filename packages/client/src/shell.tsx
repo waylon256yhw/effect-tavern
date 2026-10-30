@@ -3,27 +3,24 @@
 // being read, which is the way back to the reader from any page; at the right end settings, theme and language) and
 // the sidebar (side.tsx) in the left space. On it stands one entity, the stage card, which holds whatever the stage
 // shows: the reader (no strip: three keys, Timeline, Inspector and 读数, float at its top right), or a page that fills
-// it (the card page, Timeline, Inspector, Writing, Settings; each with its own head, pages.ts). Over it, on demand, the mounted
-// card: the story's readings (Status, this turn's Record, 小剧场, the pinned hook) sliding in from the right under a
-// blurred scrim; it is the reader's, so a page closes it. The sidebar folds to nothing (no icon rail): the key, a
-// click on the stage's left edge, or a pull past the threshold; folded, the pointer at the screen's left edge floats
-// it over the stage (ground turned figure), and the key docks it in place. The stage's edge drags the width inside a
-// band with a detent under its floor (shell.ts); a fold forgets the width. The device remembers the fold and the
-// width. Under 72rem there is no canvas: the stage card is the screen, the reader's strip is ☰ (the sidebar as a
+// it (the card page, Timeline, Inspector, Writing, Settings, 读数; each with its own head, pages.ts). The sidebar
+// folds to nothing (no icon rail): the key, a click on the stage's left edge, or a pull past the threshold; folded,
+// the pointer at the screen's left edge floats it over the stage (ground turned figure), and the key docks it in
+// place. The stage's edge drags the width inside a band with a detent under its floor (shell.ts); a fold forgets the
+// width. The device remembers the fold and the width. Under 72rem there is no canvas: the stage card is the screen,
+// the reader's strip is ☰ (the sidebar as a drawer), `card › story ▾` (the story's sheet: Timeline, Inspector) and 读数.
 import { type JSX } from "@solidjs/web"
-// drawer), `card › story ▾` (the story's sheet: Timeline, Inspector) and Status (the mounted card).
-import { createEffect, createMemo, createSignal, onSettled, Show } from "solid-js"
+import { createMemo, createSignal, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
-import { Close, List, Pin, Probe, Sidebar as SidebarGlyph, Status, Tree } from "./icons.tsx"
+import { List, Probe, Sidebar as SidebarGlyph, Status, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
-import { Demand, demandable, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
-import { fieldChanged } from "./record.ts"
+import { Pinned, Sheet } from "./readings.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
 import { InstallKeys, Sidebar } from "./side.tsx"
-import { card, cards, latest, page, path, pin, stories } from "./store.ts"
+import { card, cards, page, path, stories } from "./store.ts"
 import { openTimeline } from "./timeline.tsx"
-import { toReader } from "./pages.ts"
+import { close, open, toReader } from "./pages.ts"
 import { t } from "./i18n.ts"
 
 const FOLDED = "side-folded"
@@ -50,8 +47,6 @@ export const Shell = (props: { children: JSX.Element }) => {
   const shelf = read(cards)
   const lib = read(stories)
   const line = read(path)
-  const last = read(latest)
-  const pinned = read(pin)
   // ── the width class: the canvas with its sidebar, or the phone ──
   const [wide, setWide] = createSignal(media?.matches ?? true)
   onSettled(() => {
@@ -168,25 +163,8 @@ export const Shell = (props: { children: JSX.Element }) => {
       store(WIDTH, String(keep))
     }
   }
-  // ── the mounted card: the readings, the reader's alone ──
-  const [mount, setMount] = createSignal(false)
-  createEffect(
-    () => pg(),
-    (p) => {
-      if (p !== "reader") setMount(false)
-    },
-  )
-  onSettled(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && mount() && !document.querySelector(":popover-open, dialog[open]")) setMount(false)
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  })
-  const changed = createMemo(() => {
-    const l = last()
-    return l !== null && fieldChanged(view()?.rules, l.node, l.prev)
-  })
+  /** 读数: a page like the others (readings.tsx `StatusPage`); the key again closes it. */
+  const readings = () => (pg() === "status" ? close() : open("status"))
   // ── what the strips name ──
   const current = createMemo(() => lib()?.stories.find((s) => s.id === lib()?.current))
   const storyCard = () => {
@@ -197,11 +175,6 @@ export const Shell = (props: { children: JSX.Element }) => {
     const c = current()
     return c ? (c.title ?? t("stories.newStory")) : ""
   }
-  /** A pinned entry by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
-  const hookOf = (id: string) =>
-    line()
-      .flatMap((n) => n.readable)
-      .find((e) => e.id === id)?.hook ?? id
   // ── the phone's drawer and story sheet ──
   let drawer: HTMLDialogElement | undefined
   let sheet: HTMLDialogElement | undefined
@@ -210,19 +183,6 @@ export const Shell = (props: { children: JSX.Element }) => {
     sheet?.close()
     go()
   }
-  const Pinned = () => (
-    <Show when={pinned()}>
-      {(p) => (
-        <section class="pinned">
-          <h2>{t("side.pinned")}</h2>
-          <p>
-            <Pin aria-hidden="true" />
-            <span>{hookOf(p())}</span>
-          </p>
-        </section>
-      )}
-    </Show>
-  )
   /** The reader's three keys: Timeline, Inspector, 读数; small on the canvas. */
   const Keys = () => (
     <>
@@ -242,13 +202,10 @@ export const Shell = (props: { children: JSX.Element }) => {
         type="button"
         class="icon sm"
         aria-label={t("side.readings")}
-        aria-pressed={mount() ? "true" : "false"}
-        onClick={() => setMount(!mount())}
+        aria-pressed={pg() === "status" ? "true" : "false"}
+        onClick={readings}
       >
         <Status />
-        <Show when={changed()}>
-          <i class="dot" />
-        </Show>
       </button>
     </>
   )
@@ -352,14 +309,11 @@ export const Shell = (props: { children: JSX.Element }) => {
                   <button
                     type="button"
                     class="icon"
-                    aria-label={t("common.status")}
-                    aria-pressed={mount() ? "true" : "false"}
-                    onClick={() => setMount(!mount())}
+                    aria-label={t("side.readings")}
+                    aria-pressed={pg() === "status" ? "true" : "false"}
+                    onClick={readings}
                   >
                     <Status />
-                    <Show when={changed()}>
-                      <i class="dot" />
-                    </Show>
                   </button>
                 </header>
               }
@@ -378,44 +332,6 @@ export const Shell = (props: { children: JSX.Element }) => {
             </Show>
             {props.children}
             <div class="peek-scrim" aria-hidden="true" />
-            {/* the mounted card: the readings of the story being read, over the reader, its scrim blurring it */}
-            <div class="mount-scrim" data-open={mount() ? "true" : "false"} onClick={() => setMount(false)} />
-            <aside
-              class="mount"
-              data-open={mount() ? "true" : "false"}
-              aria-label={t("side.readings")}
-              inert={!mount()}
-            >
-              <div class="mount-head">
-                <h2>{t("side.readings")}</h2>
-                <button
-                  type="button"
-                  class="icon sm"
-                  aria-label={t("side.closeReadings")}
-                  onClick={() => setMount(false)}
-                >
-                  <Close />
-                </button>
-              </div>
-              <div class="mount-body scroller">
-                <Pinned />
-                <section class="status">
-                  <h2>{t("common.status")}</h2>
-                  <StatusTable />
-                </section>
-                <Show when={last()}>
-                  {(l) => (
-                    <section>
-                      <h2>{t("common.record")}</h2>
-                      <TurnRecord node={l().node} prev={l().prev} />
-                    </section>
-                  )}
-                </Show>
-              </div>
-              <Show when={last()}>
-                {(l) => <Demand node={l().node.id} demands={demandable(view()?.products ?? [], l().node)} />}
-              </Show>
-            </aside>
           </section>
         </div>
       </div>

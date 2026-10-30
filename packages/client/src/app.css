@@ -3,8 +3,8 @@
    source order: reader.css (the flow, the composer), chrome.css (the Record pill and sheet, the readings, Options, the
    snippets menu, the manager, the picker), inspector.css (the Inspect page), timeline.css (the Timeline page), card.css
    (the card page), settings.css (the settings page), writing.css (the Writing page), shell.css (the shell: the canvas,
-   the sidebar, the stage card and its strip, the mounted card, the phone's drawer; #117). Structure names (.said,
-   .prose, .actions, .composer, .send, .strip, .canvas, .panel, .scroll, .side, .stage, .mount, .status, .pinned,
+   the sidebar, the stage card and its keys, the 读数 page, the phone's drawer; #117). Structure names (.said,
+   .prose, .actions, .composer, .send, .strip, .canvas, .panel, .scroll, .side, .stage, .status-page, .status, .pinned,
    .snippets) are the public surface a card or a reader styles against: rename with care.
    Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the canvas in docs/client-canvas/. */
 @layer tokens, components, card, user;

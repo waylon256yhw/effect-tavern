@@ -3,9 +3,9 @@
 // Record pill, which opens a full-page sheet of that turn's readings, src/record.ts projecting them, 小剧场 at its
 // foot; the version count; Swipe / Reword / Edit); the last section carries the Options container, whose rows fill
 // the composer and never send. The frame around it is the shell's (shell.tsx, #117): the sidebar of cards and
-// stories, the reader's strip (card › story, the persona and writing chips, Timeline, Inspector, 读数), the mounted
-// card of readings (Status, this turn's Record, 小剧场), and under 72rem the phone's drawer and sheets. The pages
-// (card, Timeline, Settings, Writing, Inspect) fill the stage card over the reader, which stays mounted under them so
+// stories with the persona and writing rows, the reader's keys (Timeline, Inspector, 读数), and under 72rem the
+// phone's drawer and sheets. The pages (card, Timeline, Settings, Writing, 读数: Status, this turn's Record, 小剧场;
+// Inspect) fill the stage card over the reader, which stays mounted under them so
 // a turn in flight keeps streaming. Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the
 // canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet menu a popover anchored to its button:
 // the platform is the component library. This file is the reader: the flow and the column; readings.tsx draws the
@@ -24,7 +24,7 @@ import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { RecordSheet, Rewrite, SiblingKind } from "./readings.tsx"
+import { RecordSheet, Rewrite, SiblingKind, StatusPage } from "./readings.tsx"
 import { lineOf, versions } from "./record.ts"
 import { Shell } from "./shell.tsx"
 import { shrinkwrap } from "./shrinkwrap.ts"
@@ -525,6 +525,9 @@ export const App = () => {
         </Show>
         <Show when={pg() === "writing"}>
           <WritingPage />
+        </Show>
+        <Show when={pg() === "status"}>
+          <StatusPage />
         </Show>
         <Show when={typeof pg() === "object"}>
           <Inspect id={(pg() as { inspect: Id }).inspect} />

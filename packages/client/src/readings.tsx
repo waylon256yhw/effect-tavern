@@ -1,15 +1,16 @@
 // The Record's pieces: one renderer per reading element (src/record.ts projects them; this file only draws), the
-// full-page sheet they sit in on the phone, the pin button, the sibling actions a turn's row holds, and the Status
-// table. The reader (App.tsx) and the inspector (inspector.tsx) draw with these.
+// full-page sheet they sit in on the phone, the pin button, the sibling actions a turn's row holds, the Status
+// table, and the 读数 page they make up. The reader (App.tsx) and the inspector (inspector.tsx) draw with these.
 import type { Shape, TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
-import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
+import { Back, Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
+import { close } from "./pages.ts"
 import { heading, marked, parentOf, record, status, whens, type Declared, type Element } from "./record.ts"
-import { card, dismiss, draft, editing, error, type Id, latest, log, pin, registry, working } from "./store.ts"
+import { card, dismiss, draft, editing, error, type Id, latest, log, path, pin, registry, working } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
@@ -554,6 +555,69 @@ export const StatusTable = () => {
           </div>
         )}
       </For>
+    </div>
+  )
+}
+
+/** The pinned entry, by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
+export const Pinned = () => {
+  const pinned = read(pin)
+  const line = read(path)
+  const hookOf = (id: string) =>
+    line()
+      .flatMap((n) => n.readable)
+      .find((e) => e.id === id)?.hook ?? id
+  return (
+    <Show when={pinned()}>
+      {(p) => (
+        <section class="pinned">
+          <h2>{t("side.pinned")}</h2>
+          <p>
+            <Pin aria-hidden="true" />
+            <span>{hookOf(p())}</span>
+          </p>
+        </section>
+      )}
+    </Show>
+  )
+}
+
+/** 读数, a page over the reader: at the left the world's standing slice (the pin, Status), at the right this turn's
+ *  change (its Record, 小剧场 at its foot). Two bounded columns side by side when the stage card has room, else one
+ *  over the other; a left block with nothing in it (a card without rules, no pin) is not drawn (shell.css). */
+export const StatusPage = () => {
+  const view = read(card)
+  const last = read(latest)
+  return (
+    <div class="status-page">
+      <header>
+        <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
+          <Back />
+        </button>
+        <h1>{t("side.readings")}</h1>
+      </header>
+      <div class="status-body">
+        <div class="still">
+          <Pinned />
+          <section class="status">
+            <h2>{t("common.status")}</h2>
+            <StatusTable />
+          </section>
+        </div>
+        <div class="moved">
+          <Show when={last()}>
+            {(l) => (
+              <>
+                <section>
+                  <h2>{t("common.record")}</h2>
+                  <TurnRecord node={l().node} prev={l().prev} />
+                </section>
+                <Demand node={l().node.id} demands={demandable(view()?.products ?? [], l().node)} />
+              </>
+            )}
+          </Show>
+        </div>
+      </div>
     </div>
   )
 }

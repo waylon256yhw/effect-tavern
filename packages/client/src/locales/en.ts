@@ -320,7 +320,6 @@ const en: Dict = {
     cardBusy: "A story of this card is running",
     cardDefault: "Card default",
     cardPersonaBio: "The player's role as this card writes it",
-    closeReadings: "Close the readings",
     collapse: "Collapse the sidebar",
     confirmDeleteMany: "Delete the {n} selected stories? Every turn in them is gone for good.",
     confirmDeleteOne: "Delete “{title}”? Every turn in it is gone for good.",
