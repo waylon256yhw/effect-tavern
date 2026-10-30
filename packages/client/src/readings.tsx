@@ -560,7 +560,7 @@ export const StatusTable = () => {
 }
 
 /** The pinned entry, by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
-export const Pinned = () => {
+const Pinned = () => {
   const pinned = read(pin)
   const line = read(path)
   const hookOf = (id: string) =>

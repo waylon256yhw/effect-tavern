@@ -63,20 +63,19 @@
   line-height: var(--leading-body);
   box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
 }
-/* the crumb: the card in ink-2, the story in ink, the story alone truncating */
-.strip .crumb-key {
-  display: inline-flex;
+/* the crumb, a name and not a key: the card in ink-2, the story in ink, the story alone truncating; the keys keep
+   their size */
+.strip .crumb {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-  height: var(--control);
-  padding: 0 var(--space-2);
-  border-radius: var(--radius);
   justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
-.strip .crumb-key:hover:not(:disabled) {
-  background: var(--ghost-hover);
+.strip .icon {
+  flex: none;
 }
 .strip .c,
 .shell-tab .c {
@@ -343,6 +342,42 @@
   background: var(--alpha-2);
   color: var(--ink);
 }
+/* a row (the workspace's persona and writing): a glyph and a word, the setting in force at the right */
+.workspace .row {
+  box-sizing: border-box;
+  flex: none;
+  width: 100%;
+  height: var(--control);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.workspace .row:hover:not(:disabled) {
+  background: var(--fill);
+}
+.workspace .lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
+}
+.workspace .lbl svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-2);
+}
+.workspace .val {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* a story: its name (or "New story" in ink-2), a dot while its turn runs; under a search, the line that hit */
 .story-row {
   box-sizing: border-box;
@@ -568,59 +603,6 @@ dialog.drawer[open]::backdrop {
   dialog.drawer[open]::backdrop {
     opacity: 0;
   }
-}
-/* the story's sheet (the strip's crumb): two rows and the pin */
-.storysheet {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
-  font-size: var(--text-body);
-}
-/* a row (the workspace's persona and writing): a glyph and a word, the setting in force at the right */
-:is(.storysheet, .workspace) .row {
-  box-sizing: border-box;
-  flex: none;
-  width: 100%;
-  height: var(--control);
-  padding: 0 var(--space-3);
-  border-radius: var(--radius);
-  background: var(--alpha-1);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-:is(.storysheet, .workspace) .row:hover:not(:disabled) {
-  background: var(--fill);
-}
-:is(.storysheet, .workspace) .lbl {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 500;
-}
-:is(.storysheet, .workspace) .lbl svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  color: var(--ink-2);
-}
-:is(.storysheet, .workspace) .val {
-  min-width: 0;
-  color: var(--ink-2);
-  font-size: var(--text-footnote);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.storysheet .pinned {
-  padding: var(--space-2) var(--space-1) 0;
-}
-.storysheet .pinned h2 {
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-footnote);
-  font-weight: 600;
-  color: var(--ink-3);
 }
 
 /* ── from 72rem: the canvas, the sidebar in its space, the stage card raised ── */

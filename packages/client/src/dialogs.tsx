@@ -1,7 +1,7 @@
 // The dialogs the library needs, mounted once by the shell and opened from anywhere (#117): a story's rename, the
 // delete confirm (one story, or the manager's checked set), the export's two formats, the card's story manager
 // (manager.tsx) and the persona picker. The sidebar's rows carry none of these (a row only switches the story); the
-// manager's cards and the reader's strip call them. Each opener is a module function like `openSettings`, bound to
+// manager's cards and the workspace's persona row call them. Each opener is a module function like `openSettings`, bound to
 // its dialog when the component mounts; before that it does nothing.
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
@@ -37,7 +37,7 @@ export const StoryDialogs = () => {
   const cardId = read(focus)
   // the persona in force on the focused card, and the pick: a change of the player's own layer, nothing of the story's
   const current = () => people().find((p) => p.id === me()?.persona?.[cardId() ?? ""])
-  // the picker: the search over name and text, the rows it leaves; opened from the strip's chip, closed by a pick
+  // the picker: the search over name and text, the rows it leaves; opened from the workspace's row, closed by a pick
   const [q, setQ] = createSignal("")
   const hits = createMemo(() => {
     const t = q().trim().toLowerCase()

@@ -8,14 +8,14 @@
 // the pointer at the screen's left edge floats it over the stage (ground turned figure), and the key docks it in
 // place. The stage's edge drags the width inside a band with a detent under its floor (shell.ts); a fold forgets the
 // width. The device remembers the fold and the width. Under 72rem there is no canvas: the stage card is the screen,
-// the reader's strip is ☰ (the sidebar as a drawer), `card › story ▾` (the story's sheet: Timeline, Inspector) and 读数.
+// the reader's strip is ☰ (the sidebar as a drawer, whose workspace holds the persona and writing), `card › story`
+// as plain text, and the same three keys.
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
 import { List, Probe, Sidebar as SidebarGlyph, Status, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
-import { Pinned, Sheet } from "./readings.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
 import { InstallKeys, Sidebar } from "./side.tsx"
 import { card, cards, page, path, stories } from "./store.ts"
@@ -175,23 +175,18 @@ export const Shell = (props: { children: JSX.Element }) => {
     const c = current()
     return c ? (c.title ?? t("stories.newStory")) : ""
   }
-  // ── the phone's drawer and story sheet ──
+  // ── the phone's drawer ──
   let drawer: HTMLDialogElement | undefined
-  let sheet: HTMLDialogElement | undefined
   const leaveDrawer = () => drawer?.close()
-  const fromSheet = (go: () => void) => {
-    sheet?.close()
-    go()
-  }
-  /** The reader's three keys: Timeline, Inspector, 读数; small on the canvas. */
+  /** The reader's three keys: Timeline, Inspector, 读数; small on the canvas, the strip's size on the phone. */
   const Keys = () => (
     <>
-      <button type="button" class="icon sm" aria-label={t("common.timeline")} onClick={openTimeline}>
+      <button type="button" class={{ icon: true, sm: wide() }} aria-label={t("common.timeline")} onClick={openTimeline}>
         <Tree />
       </button>
       <button
         type="button"
-        class="icon sm"
+        class={{ icon: true, sm: wide() }}
         aria-label={t("side.inspector")}
         disabled={line().length === 0}
         onClick={openInspector}
@@ -200,7 +195,7 @@ export const Shell = (props: { children: JSX.Element }) => {
       </button>
       <button
         type="button"
-        class="icon sm"
+        class={{ icon: true, sm: wide() }}
         aria-label={t("side.readings")}
         aria-pressed={pg() === "status" ? "true" : "false"}
         onClick={readings}
@@ -284,7 +279,8 @@ export const Shell = (props: { children: JSX.Element }) => {
             <Show
               when={wide()}
               fallback={
-                /* the phone's strip: a page covers it with its own head */
+                /* the phone's strip: the drawer, what is read (a name, not a key), the reader's keys; a page covers it
+                  with its own head */
                 <header class="strip">
                   <button
                     type="button"
@@ -294,27 +290,14 @@ export const Shell = (props: { children: JSX.Element }) => {
                   >
                     <List />
                   </button>
-                  <button type="button" class="crumb-key" disabled={!current()} onClick={() => sheet?.showModal()}>
+                  <div class="crumb">
                     <span class="c">{storyCard()}</span>
                     <span class="sep" aria-hidden="true">
                       ›
                     </span>
                     <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
-                    <Show when={current()}>
-                      <span class="sep" aria-hidden="true">
-                        ▾
-                      </span>
-                    </Show>
-                  </button>
-                  <button
-                    type="button"
-                    class="icon"
-                    aria-label={t("side.readings")}
-                    aria-pressed={pg() === "status" ? "true" : "false"}
-                    onClick={readings}
-                  >
-                    <Status />
-                  </button>
+                  </div>
+                  <Keys />
                 </header>
               }
             >
@@ -336,34 +319,10 @@ export const Shell = (props: { children: JSX.Element }) => {
         </div>
       </div>
       <Show when={!wide()}>
-        {/* the phone: the sidebar as a drawer from the left, and the story's sheet from the strip's crumb */}
+        {/* the phone: the sidebar as a drawer from the left */}
         <dialog class="drawer" ref={(el) => (drawer = el)} closedby="any" aria-label={t("side.navigation")}>
           <Sidebar inDrawer onLeave={leaveDrawer} />
         </dialog>
-        <Sheet
-          dialog={(el) => (sheet = el)}
-          heading={
-            <>
-              <span class="c">{storyCard()}</span> › {storyTitle()}
-            </>
-          }
-        >
-          <div class="storysheet">
-            <button type="button" class="row" onClick={() => fromSheet(openTimeline)}>
-              <span class="lbl">
-                <Tree aria-hidden="true" />
-                <span>{t("common.timeline")}</span>
-              </span>
-            </button>
-            <button type="button" class="row" disabled={line().length === 0} onClick={() => fromSheet(openInspector)}>
-              <span class="lbl">
-                <Probe aria-hidden="true" />
-                <span>{t("side.inspector")}</span>
-              </span>
-            </button>
-            <Pinned />
-          </div>
-        </Sheet>
       </Show>
       <StoryDialogs />
     </>
