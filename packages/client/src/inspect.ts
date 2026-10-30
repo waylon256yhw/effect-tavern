@@ -125,6 +125,9 @@ export const totals = (calls: readonly Call[]): Totals => {
 /** Each region's matches of the query. */
 export const regionHits = (rs: readonly Region[], q: string): number[] =>
   rs.map((r) => r.msgs.reduce((n, m) => n + count(textOf(m), q), 0))
+/** A row's matches of the query: its request's messages and its answer when that is prose (marked in the well too). */
+export const rowHits = (r: Row, q: string): number =>
+  r.call.msgs.reduce((n, m) => n + count(textOf(m), q), 0) + (typeof r.call.out === "string" ? count(r.call.out, q) : 0)
 /** The tab a well opens on: with a query the first region with hits; otherwise (or when none hits) the last region. */
 export const defaultTab = (hits: readonly number[], q: string): number => {
   const first = q ? hits.findIndex((h) => h > 0) : -1

@@ -1,15 +1,15 @@
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
-import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch, untrack } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Check, Clue, Copy, Next, Prev, Record } from "./icons.tsx"
 import {
-  count,
   defaultTab,
   groups,
   isTray,
   pattern,
   regionHits,
   regions,
+  rowHits,
   rows,
   textOf,
   totals,
@@ -31,11 +31,11 @@ const CHANNEL = { act: "act", note: "note", both: "act + note", greeting: "greet
 // docs/inspector-prototype.html: two cards on the canvas. Left, the pipeline: only the calls that ran, each row's
 // head carrying what the stage decided (the beat and its roll, the brief's must, the prose's first line, what check
 // fired or missed, the readout answers), its time and tokens at the end; a two-draft turn folds each draft into a tray.
-// A row opens into the request by cache region (tabs over one bounded scroller, so a long head never pushes the
-// pipeline apart) and the answer. Right, the node: the input, the untold hooks (pinned from here: this is the only
-// place the list shows), the state against the parent, the products by their declared shape. Without `inspect` on the
-// server no call carries a request body: the rows keep their heads, time and tokens, open to their answers (the brief
-// stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
+// One row at a time opens into the request by cache region (tabs over one scroller that fills what the card has
+// left, so a long head never pushes the pipeline apart) and the answer. Right, the node: the input, the untold hooks
+// (pinned from here: this is the only place the list shows), the state against the parent, the products by their
+// declared shape. Without `inspect` on the server no call carries a request body: the rows keep their heads, time and
+// tokens, open to their answers (the brief stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
 // path, `[` `]` too, Escape goes back (pages.ts). src/inspect.ts projects; this draws.
 export const openInspector = () => {
   const id = registry.get(path).at(-1)?.turn.id
@@ -171,14 +171,19 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
 }
 
 /** One call: the head (stage, digest, time and tokens), opening to the request by region and the answer. */
-const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: string; open: boolean }) => {
+const Step = (props: {
+  row: Row
+  node: Node
+  nth: number
+  dev: boolean
+  q: string
+  open: boolean
+  onToggle: () => void
+}) => {
   const c = () => props.row.call
   const regs = createMemo(() => regions(c().msgs))
   const rhits = createMemo(() => regionHits(regs(), props.q))
-  // the request's hits and the answer's (marked too)
-  const hits = createMemo(
-    () => rhits().reduce((a, b) => a + b, 0) + (typeof c().out === "string" ? count(c().out as string, props.q) : 0),
-  )
+  const hits = createMemo(() => rowHits(props.row, props.q))
   // the brief is the one answer that stays closed without `inspect`; a stage without a body or an answer has nothing to open
   const opens = () => (props.dev && c().msgs.length > 0) || props.row.phase !== "direct"
   // the reader's pick (a region, or null for all) holds only under the query it was made with: a new query reopens
@@ -216,9 +221,15 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
   return (
     <details
       class={{ step: true, flat: !opens(), bad: props.row.status !== "ok" }}
-      open={(opens() && (props.open || hits() > 0)) || undefined}
+      open={(opens() && props.open) || undefined}
     >
-      <summary onClick={(e) => !opens() && e.preventDefault()}>
+      {/* Solid owns the attribute: the browser's own toggle never runs, the page's one open step is the state */}
+      <summary
+        onClick={(e) => {
+          e.preventDefault()
+          if (opens()) props.onToggle()
+        }}
+      >
         <span class="stage">
           <Next class="chev" aria-hidden="true" />
           <span class="nm">{props.row.phase}</span>
@@ -327,6 +338,29 @@ export const Inspect = (props: { id: Id }) => {
       .slice(0, trows().indexOf(r))
       .filter((x) => x.phase === r.phase).length
   const lastNarrate = () => trows().findLast((r) => r.phase === "narrate")
+  // the one open step, by its index in trows(): the reader's pick holds on the node it was made on; elsewhere the
+  // last narrate is open. undefined: every step closed
+  const [picked, setPicked] = createSignal<{ id: Id; index: number | undefined }>()
+  const openAt = (): number | undefined => {
+    const p = picked()
+    if (p && p.id === props.id) return p.index
+    const l = lastNarrate()
+    return l && trows().indexOf(l)
+  }
+  const toggle = (i: number) => setPicked({ id: props.id, index: openAt() === i ? undefined : i })
+  // a query (or a node under one) keeps the open step when it has hits, else opens the first step that has
+  createEffect(
+    () => [q(), props.id] as const,
+    ([q]) => {
+      if (!q) return
+      untrack(() => {
+        const hits = trows().map((r) => rowHits(r, q))
+        const at = openAt()
+        const first = hits.findIndex((h) => h > 0)
+        if ((at === undefined || !hits[at]) && first >= 0) setPicked({ id: props.id, index: first })
+      })
+    },
+  )
   // the node's readings, drawn by the Record's own elements; only the fields here (checks and clues sit in the pipeline)
   const changes = createMemo(() => {
     const r = view()?.rules
@@ -335,7 +369,15 @@ export const Inspect = (props: { id: Id }) => {
   })
   const shapeOf = (id: string) => view()?.products.find((p) => p.id === id)?.shape
   const One = (p: { row: Row }) => (
-    <Step row={p.row} node={node()!} nth={nth(p.row)} dev={dev()} q={q()} open={p.row === lastNarrate()} />
+    <Step
+      row={p.row}
+      node={node()!}
+      nth={nth(p.row)}
+      dev={dev()}
+      q={q()}
+      open={trows().indexOf(p.row) === openAt()}
+      onToggle={() => toggle(trows().indexOf(p.row))}
+    />
   )
   onSettled(() => {
     const onKey = (e: KeyboardEvent) => {
