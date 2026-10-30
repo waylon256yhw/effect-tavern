@@ -4,23 +4,18 @@
   font-size: var(--text-prose);
   line-height: var(--leading-prose);
   color: var(--ink);
-  background: var(--surface-1);
+  background: var(--surface-0);
 }
 body {
   margin: 0;
 }
-/* the frame holds still: the bar, the column and the composer fill the viewport, and only the column scrolls */
-.canvas,
-.panel {
-  display: flex;
-  flex-direction: column;
-}
-.canvas {
-  height: 100dvh;
-}
+/* the frame holds still: the strip, the column and the composer fill the stage card (shell.css), and only the
+   column scrolls */
 .panel {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .scroll {
   flex: 1;
@@ -314,52 +309,16 @@ section:has(> .editor) > .actions {
   gap: var(--space-1);
 }
 
-/* the bar on top (phone): the card's title (a tap opens the session sheet), and Status with a dot when this turn
-   moved the state */
-.topbar {
-  box-sizing: border-box;
-  height: calc(var(--topbar) + var(--safe-top));
-  padding: var(--safe-top) var(--space-2) 0 var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--surface-1);
-}
-.topbar .title {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-}
-.topbar h1 {
-  margin: 0;
-  font-size: var(--text-heading);
-  font-weight: 600;
-  line-height: var(--leading-tight);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.topbar .icon {
-  position: relative;
-}
-.topbar .dot,
+/* a dot in the corner of a key: on the Record pill when this turn moved the state (the strip's keys carry the same,
+   shell.css) */
 .record-pill .dot {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 2px; /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */
+  right: 2px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--ink);
-}
-.record-pill .dot {
-  /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */
-  top: 2px;
-  right: 2px;
-}
-/* the side cards exist on desktop only */
-.side {
-  display: none;
 }
 
 /* the reader's line: a sunken block, the only framed thing in the flow, and plain (#101): its text on its tint, nothing

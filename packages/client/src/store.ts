@@ -83,8 +83,15 @@ export interface Routing {
   stages?: Partial<Record<Phase, Pair>>
 }
 export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
-/** Every card the install knows (GET /cards), by id and title: what a persona's picks are named by. */
-export const cards = Atom.make<readonly { id: string; title: string }[]>([]).pipe(Atom.keepAlive)
+/** Every card the install knows (GET /cards), by id and title, with its one-line summary when it has one: the
+ *  sidebar's shelf (side.tsx), and what a persona's picks are named by. */
+export const cards = Atom.make<readonly { id: string; title: string; summary?: string }[]>([]).pipe(Atom.keepAlive)
+/** The card the sidebar's workspace layer is on (#117): the open story's card, or one browsed from the shelf (its
+ *  page shown, no story of it yet). Back in the reader, it is the story's card again (pages.ts). */
+export const focus = Atom.make<string | null>(null).pipe(Atom.keepAlive)
+/** Which of the sidebar's two layers shows: the shelf (every card) or the workspace (one card's stories). Arriving at
+ *  a story lands on its workspace, an empty library on the shelf (pages.ts); the back button and a card's row move it. */
+export const layer = Atom.make<"shelf" | "workspace">("workspace").pipe(Atom.keepAlive)
 export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
 /** The model-name table (GET /models/names), read through provider names.ts `lookup`: a model id's name, owner, family. */
 export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)

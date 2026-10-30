@@ -1,4 +1,5 @@
-/* The Record pill and sheet, the readings, the scene list, Options, the snippets menu, the desktop cards. */
+/* The Record pill and sheet, the readings, the scene list, Options, the snippets menu, the manager, the picker; the
+   sheet's desktop shape. The frame around the reader is shell.css's (#117). */
 /* the Record pill under each section: one glyph in a pill (the icon-only rule of brief 3, as the bar's Status), every
    section the same; the icon sits centered, and the draft's waiting dots widen it */
 .record-pill {
@@ -609,175 +610,6 @@
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 
-/* the session (side.tsx): the card, this card's stories, the persona, the writing chips, the pin, the pages; the left card on
-   desktop, the sheet the title opens on a phone. Nothing here wraps but a persona's text in its form. */
-.session {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-.sheet .session {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
-}
-.session h1 {
-  margin: 0;
-  font-size: var(--text-title);
-  font-weight: 600;
-  line-height: var(--leading-tight);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* a section head is a word in its place (settings' .block-title): no nameplate (uppercase, tracked) in the components
-   layer, so a card's own layer may add one */
-.side h2,
-.session h2 {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin: 0;
-  min-height: var(--control-sm);
-  font-size: var(--text-body);
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.session h2 .icon {
-  width: var(--control-sm);
-  height: var(--control-sm);
-}
-.session h2 .icon svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-}
-.session h2 .icon:first-of-type {
-  margin-left: auto;
-}
-.side section,
-.session section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-/* the card: its name with the way in beside it, and its line to three rows; one button to the card page */
-.cardhead {
-  display: grid;
-  gap: 6px;
-  margin: calc(-1 * var(--space-2));
-  padding: var(--space-2);
-  border-radius: var(--radius-card);
-  text-align: left;
-}
-.cardhead:hover {
-  background: var(--ghost-hover);
-}
-.cardhead .top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-width: 0;
-}
-/* the way in: a small badge at rest, so the head reads as a button without the pointer on it; it leans in on hover */
-.cardhead .enter {
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: var(--alpha-1);
-  color: var(--ink-3);
-  transition:
-    background var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    translate var(--dur-2) var(--ease);
-}
-.cardhead .enter svg {
-  width: 11px;
-  height: 11px;
-}
-.cardhead:hover .enter {
-  background: var(--alpha-2);
-  color: var(--ink);
-  translate: 1px 0;
-}
-/* the line: three rows at most (about 39 characters: the opening sentence whole), then clipped */
-.cardhead p {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: var(--text-footnote);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-/* a story row: the player's name for it, and under it the turns and the time; the open one sits on a tint */
-.stories ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 2px;
-  max-height: 11rem; /* four rows; the list is unbounded, the card is not */
-  overflow-y: auto;
-}
-.story {
-  display: grid;
-  /* the column can shrink under its text: a long line clips, never widens the list */
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  box-sizing: border-box;
-  width: 100%;
-  padding: var(--space-1) var(--space-2);
-  text-align: left;
-}
-.story:hover:not(:disabled) {
-  background: var(--ghost-hover);
-}
-.story[aria-current] {
-  background: var(--alpha-1);
-}
-.story .first,
-.story .meta {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* a story never named */
-.story .first.unnamed {
-  color: var(--ink-2);
-}
-.story .meta {
-  font-size: var(--text-footnote);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-/* under the four rows, the way to every story: the manager */
-.stories .all {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1);
-  box-sizing: border-box;
-  width: 100%;
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--text-footnote);
-  color: var(--ink-2);
-  text-align: left;
-}
-.stories .all:hover:not(:disabled) {
-  background: var(--ghost-hover);
-  color: var(--ink);
-}
-.stories .all .chev {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--ink-3);
-}
 /* the stories manager (manager.tsx): the picker's sheet one step wider (32rem on desktop), a search over the turns
    beside the 全部 / 收藏 toggle, three-line cards (checkbox, star, name and its actions; the preview or the search's
    hit; turns and time), and the cleanup's footer; the list alone scrolls */
@@ -1033,8 +865,8 @@
 .confirm a.chip {
   text-decoration: none;
 }
-/* the persona picker (side.tsx): a sheet (rising on a phone over the session sheet; on desktop a centred card of
-   25rem) with a search over the player's personas and two-line rows, the card's own first; the list alone scrolls */
+/* the persona picker (dialogs.tsx): a sheet (rising on a phone; on desktop a centred card of 25rem) with a search
+   over the player's personas and two-line rows, the card's own first; the list alone scrolls */
 .picker {
   flex: 1;
   min-height: 0;
@@ -1149,62 +981,6 @@
 .snippets [aria-checked="true"] .name {
   color: var(--primary);
 }
-/* the setting in force (persona, writing): its chips, the way in at the right; the persona's menu anchor, the
-   Writing page's button. The chips are a size down from the reader's and wrap: three four-character chips fill the
-   176px beside the chevron, longer words (the English) or more chips take a second line; the chevron stays on the
-   first. A chip never widens the row: a long name ends in an ellipsis inside it */
-.session .chosen {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-1);
-  width: 100%;
-  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
-  padding: var(--space-1) var(--space-2);
-  box-sizing: content-box;
-}
-.session .chosen:hover:not(:disabled) {
-  background: var(--ghost-hover);
-}
-.session .chosen .chips {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3.5px;
-}
-.session .chosen .chip {
-  flex: none;
-  box-sizing: border-box; /* max-width counts the padding: the chip never passes the row's edge */
-  max-width: 100%;
-  min-width: 0;
-  height: 22px;
-  padding: 0 5.5px;
-  font-size: var(--text-caption);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block; /* inline-flex would not ellipsize its text */
-  line-height: 22px;
-}
-.session .chosen .chev {
-  flex: none;
-  margin-top: 5px; /* (22px chip − 12px glyph) / 2: centred on the first line */
-  width: 12px;
-  height: 12px;
-  color: var(--ink-3);
-  opacity: 0.75;
-  transition:
-    translate var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    opacity var(--dur-2) var(--ease);
-}
-.session .chosen:hover:not(:disabled) .chev {
-  color: var(--ink);
-  opacity: 1;
-  translate: 1px 0;
-}
 .pinned p {
   display: flex;
   align-items: center;
@@ -1224,33 +1000,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the keys at the bottom: the two pages that look at the story, the two device flips (theme, language) and the
-   settings, spread evenly: five fill the row, so a grouping gap would only read as a hole; the flips show their
-   state as pressed keys */
-.tools {
-  display: flex;
-  justify-content: space-between;
-  margin-top: auto;
-}
-
-/* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold. From
-   72rem (#66): the fixed sides and the gaps take 40rem, so at 64rem the reading was left about 384px, narrower than a
-   phone; the one-column reader with its sheets serves the tablet and half-screen band instead */
+/* desktop (from 72rem, #66; the frame itself is shell.css's): a past turn's Record is a centred card, closed on
+   every side, as tall as its content up to most of the viewport, fading in where the phone's panel rose */
 @media (min-width: 72rem) {
-  :root {
-    background: var(--surface-0);
-  }
-  .topbar {
-    display: none;
-  }
-  /* the latest turn's Record and 小剧场 sit in the right card: its pill would open the same thing twice (the draft's
-     pill is the only sign of check and record running: it stays); its actions stay in its row, where every turn's are */
-  main > section:last-of-type:not(.draft) .record-pill,
-  main > section:has(+ .draft) .record-pill {
-    display: none;
-  }
-  /* a past turn's Record is a centred card: closed on every side, as tall as its content up to most of the viewport,
-     fading in where the phone's panel rose */
   .sheet {
     inset: 0;
     width: min(36rem, calc(100% - 2 * var(--space-5)));
@@ -1282,83 +1034,6 @@
   }
   .sheet:has(> .manager) {
     width: min(32rem, calc(100% - 2 * var(--space-5)));
-  }
-  .canvas {
-    box-sizing: border-box;
-    display: grid;
-    grid-template-columns: 15rem minmax(0, 1fr) 19rem;
-    grid-template-rows: minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-5);
-    padding: var(--space-5);
-  }
-  .side {
-    box-sizing: border-box;
-    max-height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden; /* nothing in the card is wider than it; a shown hint at its edge must not add a bar */
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    padding: var(--space-5);
-    border-radius: var(--radius-dialog);
-    background: var(--surface-1);
-    box-shadow: var(--shadow-1);
-    font-size: var(--text-body);
-    line-height: var(--leading-body);
-    /* the reader's bar: thin, visible only under the pointer (no end fade: the card is its own scroller, a mask would
-       fade the card's edges too) */
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color var(--dur-3) var(--ease);
-  }
-  .side:hover,
-  .glance .scrolls:hover {
-    scrollbar-color: var(--alpha-2) transparent;
-  }
-  .side {
-    align-self: stretch;
-  }
-  .side .session {
-    flex: 1;
-  }
-  /* the one zone that grows sits in the card's spare height; the settings under it stay compact */
-  .side .stories {
-    margin-block: auto;
-  }
-  .glance {
-    overflow: hidden;
-    padding-inline: 0;
-  }
-  .glance .scrolls {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    padding-inline: var(--space-5);
-    padding-bottom: var(--fade);
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color var(--dur-3) var(--ease);
-    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
-  }
-  .glance > .actions {
-    padding-inline: var(--space-5);
-  }
-  .panel {
-    align-self: stretch;
-    border-radius: var(--radius-dialog);
-    background: var(--surface-1);
-    box-shadow: var(--shadow-2);
-  }
-  main {
-    padding-inline: var(--space-6);
-  }
-  .composer {
-    --composer-side: var(--space-6);
-    --composer-foot: var(--space-5);
   }
 }
 

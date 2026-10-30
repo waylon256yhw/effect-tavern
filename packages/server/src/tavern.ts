@@ -13,7 +13,11 @@ export const shelf = (files: readonly Card[], data: Data): Cards => ({
   list: () =>
     [...files, ...data.cards.list()]
       .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
-      .map((c) => ({ id: c.id, title: c.title ?? c.id })),
+      .map((c) => ({
+        id: c.id,
+        title: c.title ?? c.id,
+        ...("summary" in c && c.summary ? { summary: c.summary } : {}), // a YAML card's line; the table lists none
+      })),
   get: (id) => {
     const file = files.find((c) => c.id === id)
     if (file) return file

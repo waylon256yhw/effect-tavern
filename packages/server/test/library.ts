@@ -405,9 +405,11 @@ const over = (data: Data, m: () => Model = model) =>
     .run("mine", "我的", JSON.stringify(body), chat.id, "dup", "broken", "坏的")
   const lib = library({ data, cards: shelf([chat, { ...chat, id: "bare", title: undefined }], data), player, model })
   try {
+    // a YAML card's summary rides on its row (the client's shelf shows it); the table's rows carry none
+    const line = chat.summary ? { summary: chat.summary } : {}
     assert.deepEqual(lib.cards(), [
-      { id: chat.id, title: chat.title ?? chat.id },
-      { id: "bare", title: "bare" },
+      { id: chat.id, title: chat.title ?? chat.id, ...line },
+      { id: "bare", title: "bare", ...line },
       { id: "broken", title: "坏的" },
       { id: "mine", title: "我的" },
     ])

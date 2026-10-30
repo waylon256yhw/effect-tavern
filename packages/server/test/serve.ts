@@ -446,9 +446,10 @@ await run(false)
   const on = (id: number, init: RequestInit = {}) => ({ ...init, headers: { "x-tavern-story": String(id) } })
   try {
     assert.deepEqual(await (await fetch(`${base}/stories`)).json(), { current: null, stories: [] })
+    const line = chat.summary ? { summary: chat.summary } : {} // a YAML card's summary rides on its row
     assert.deepEqual(await (await fetch(`${base}/cards`)).json(), [
-      { id: chat.id, title: chat.title },
-      { id: "two", title: "二" },
+      { id: chat.id, title: chat.title, ...line },
+      { id: "two", title: "二", ...line },
     ])
     const page = (await (await fetch(`${base}/cards/two`)).json()) as { id: string; greetings: unknown[] }
     assert.deepEqual([page.id, page.greetings], ["two", [{ text: "G2" }]])

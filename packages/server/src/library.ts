@@ -68,10 +68,11 @@ export class NoModel extends Error {
   }
 }
 
-/** Where cards come from (tavern.ts `shelf`: a directory of YAML and the library's table): every one by id and title,
- *  and one whole by id (throws when there is none). */
+/** Where cards come from (tavern.ts `shelf`: a directory of YAML and the library's table): every one by id and title
+ *  (and its one-line summary when it has one: the client's shelf shows it), and one whole by id (throws when there
+ *  is none). */
 export interface Cards {
-  list(): { id: string; title: string }[]
+  list(): { id: string; title: string; summary?: string }[]
   get(id: string): Card
 }
 

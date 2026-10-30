@@ -34,6 +34,18 @@ export const ago = (at: number, locale: string = current(), now = Date.now()): s
 /** Starred first; within each, the listing's own order (newest first). */
 export const ranked = (rows: readonly StoryRow[]): StoryRow[] =>
   [...rows].sort((a, b) => Number(b.starred) - Number(a.starred))
+/** The sidebar's rows (#117): starred first, then the most recently touched first, whatever order the listing came in. */
+export const arranged = (rows: readonly StoryRow[]): StoryRow[] =>
+  [...rows].sort((a, b) => Number(b.starred) - Number(a.starred) || b.updated - a.updated)
+/** The story most recently touched among `rows`: what a card picked on the shelf opens on. */
+export const latestOf = (rows: readonly StoryRow[]): StoryRow | undefined =>
+  rows.reduce<StoryRow | undefined>((best, s) => (!best || s.updated > best.updated ? s : best), undefined)
+/** Whether a card has a turn in flight on any of its stories (the dot on its shelf row, and beside the back button
+ *  for every other card). */
+export const busyOn = (rows: readonly StoryRow[], card: string): boolean =>
+  rows.some((s) => s.card === card && s.busy !== null)
+export const busyElsewhere = (rows: readonly StoryRow[], card: string): boolean =>
+  rows.some((s) => s.card !== card && s.busy !== null)
 /** The left card's rows: the first `n` of the ranked list, and the open story among them whatever its rank (it takes
  *  the last place), so the row on the tint is never below the cut. */
 export const shown = (rows: readonly StoryRow[], current: number | null | undefined, n = 4): StoryRow[] => {

@@ -13,7 +13,7 @@ import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { close, newStory, open } from "./pages.ts"
-import { card, log, personas, player, registry, routing, stories, working } from "./store.ts"
+import { card, log, personas, player, routing, stories, working } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
@@ -46,6 +46,7 @@ export const CardPage = () => {
   const me = read(player)
   const people = read(personas)
   const route = read(routing)
+  const lib = read(stories)
   /** The persona the player is on this card: the player's pick by name, none when the card's own holds. */
   const persona = () => {
     const id = me()?.persona?.[view()?.id ?? ""]
@@ -53,11 +54,19 @@ export const CardPage = () => {
   }
   const [at, setAt] = createSignal(0)
   const inStory = () => all().nodes.size > 0
+  /** Begin lands in the open story: it is empty and of this card. Otherwise (a story in progress, none yet, an empty
+   *  story of another card: this one was browsed from the shelf) Begin makes a new story of this card first. */
+  const fresh = () => {
+    const l = lib()
+    const cur = l?.stories.find((s) => s.id === l.current)
+    return !inStory() && cur !== undefined && cur.card === view()?.id
+  }
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const begin = async () => {
-    // a story in progress, or none yet (an empty library): a new, empty one of this card, landing on the card page
-    if (inStory() || registry.get(stories)?.current == null) await newStory(view()!.id)
+    // a story in progress, none yet (an empty library), or an empty story of another card (this one was browsed from
+    // the shelf): a new, empty one of this card, landing on the card page
+    if (!fresh()) await newStory(view()!.id)
     turn.greet(at())
     open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
   }
@@ -201,11 +210,11 @@ export const CardPage = () => {
                 </Show>
                 <button
                   type="button"
-                  class={{ begin: true, primary: !inStory() }}
+                  class={{ begin: true, primary: fresh() }}
                   disabled={busy()}
                   onClick={() => void begin()}
                 >
-                  {inStory() ? t("stories.newStory") : t("card.begin")}
+                  {fresh() ? t("card.begin") : t("stories.newStory")}
                   <Change />
                 </button>
               </footer>

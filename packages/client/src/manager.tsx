@@ -1,16 +1,17 @@
-// The stories manager (#75): every story of every card in one sheet, the picker's mechanism one step wider. A search
+// The stories manager (#75): every story of one card (the sidebar's workspace, #117) in one sheet, the picker's
+// mechanism one step wider. A search
 // over the title here and over the turns on the server (the stories are unnamed as a rule, so a title search finds
 // nothing: the hit is a turn's line, note or prose, shown in the card's preview line in place of the last line
 // written), the 全部 / 收藏 toggle, three-line cards (checkbox, star, name and its three actions; the preview; the
 // turns and the time), and the cleanup's footer: the issue's two quick picks and 删除选中. Opening, renaming, deleting
-// and exporting a story are the session's (side.tsx holds the dialogs); this file holds the list and what is checked.
+// and exporting a story are the library's dialogs (dialogs.tsx); this file holds the list and what is checked.
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Clue, Edit, Export, Snippets, Star, StarFill, Trash } from "./icons.tsx"
 import { Sheet } from "./readings.tsx"
 import { ago, empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
-import { card, registry, stories, type StoryRow, working } from "./store.ts"
-import { newStory } from "./pages.ts"
+import { focus, registry, stories, type StoryRow, working } from "./store.ts"
+import { showCard } from "./pages.ts"
 import { searchStories, starStory } from "./wire.ts"
 import { t } from "./i18n.ts"
 
@@ -35,7 +36,8 @@ export const Manager = (props: {
 }) => {
   const lib = read(stories)
   const busy = read(working)
-  const rows = () => lib()?.stories ?? []
+  const at = read(focus)
+  const rows = () => (lib()?.stories ?? []).filter((s) => s.card === at()) // this card's (#117: the manager is the workspace's)
   const [q, setQ] = createSignal("")
   const [hits, setHits] = createSignal<ReadonlyMap<number, Hit>>(new Map())
   const [filter, setFilter] = createSignal<"all" | "starred">("all")
@@ -93,10 +95,11 @@ export const Manager = (props: {
     setPicked(new Set<number>())
     search.focus()
   }
+  /** The card's page, where Begin makes the story (#116: nothing is made before that moment). */
   const make = () => {
     dialog.close()
-    dialog.parentElement?.closest("dialog")?.close() // the phone's session sheet: the new story opens the card page
-    void newStory(registry.get(card)!.id)
+    const id = registry.get(focus)
+    if (id !== null) void showCard(id)
   }
   return (
     <Sheet
