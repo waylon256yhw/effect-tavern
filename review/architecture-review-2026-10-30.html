@@ -702,7 +702,7 @@ flowchart TB
           <li><strong>C9</strong>: only the pure half: <code>requestOf</code>/<code>applied</code>, <code>stale</code>/<code>correct</code>, <code>addModels</code>, <code>pairOf</code> as tested functions. The key-in-flight threading stays as it is (about fifteen lines inside one detail view).</li>
           <li><strong>bridge.ts</strong>: left alone; 23 import edits for no behaviour.</li>
         </ul>
-        <p class="text-sm text-slate-700">Order, each step a commit on its own: C1 → C3 + C8 → C2 + C6 + the library test → C7, C9's pure half, C4's module, <code>roam</code> and the five doc fixes. Landed 2026-10-30 as #104, #105 + #106, #107 + #108 + #109, #110; C7 in flight. C9's pure module is <code>connections.ts</code>, not <code>models.ts</code>: a <code>.ts</code> beside a <code>.tsx</code> of the same name drops the <code>.tsx</code> from the type-check program.</p>
+        <p class="text-sm text-slate-700">Order, each step a commit on its own: C1 → C3 + C8 → C2 + C6 + the library test → C7, C9's pure half, C4's module, <code>roam</code> and the five doc fixes. Landed 2026-10-30 as #104, #105 + #106, #107 + #108 + #109, #110, #111 (C7): all nine cards. Left open on purpose: the two <code>ponytail:</code> defects in <code>derived.ts</code>, the <code>cost</code> memo going stale after a <code>demand</code> amend, and the key-in-flight threading in <code>providers.tsx</code>. C9's pure module is <code>connections.ts</code>, not <code>models.ts</code>: a <code>.ts</code> beside a <code>.tsx</code> of the same name drops the <code>.tsx</code> from the type-check program.</p>
       </section>
 
       <!-- Top -->
