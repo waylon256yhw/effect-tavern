@@ -1,9 +1,9 @@
 // The shell (#117, docs/sidebar-brief-1.md, the 10-31 spatial decision): three layers on the canvas. The ground is
-// the install's chrome: a thin top strip (the sidebar's fold key at the far left, and a tab naming the card › story
-// being read, which is the way back to the reader from any page) and the sidebar (side.tsx) in the left space. On
-// it stands one entity, the stage card, which holds whatever the stage shows: the reader (its strip on top: card ›
-// story, the persona chip, one writing chip, Timeline and Inspector, the 读数 key), or a page that fills it (the card
-// page, Timeline, Inspector, Writing, Settings; each with its own head, pages.ts). Over it, on demand, the mounted
+// the install's chrome: a thin top strip (the sidebar's fold key at the far left, a tab naming the card › story
+// being read, which is the way back to the reader from any page; at the right end settings, theme and language) and
+// the sidebar (side.tsx) in the left space. On it stands one entity, the stage card, which holds whatever the stage
+// shows: the reader (no strip: three keys, Timeline, Inspector and 读数, float at its top right), or a page that fills
+// it (the card page, Timeline, Inspector, Writing, Settings; each with its own head, pages.ts). Over it, on demand, the mounted
 // card: the story's readings (Status, this turn's Record, 小剧场, the pinned hook) sliding in from the right under a
 // blurred scrim; it is the reader's, so a page closes it. The sidebar folds to nothing (no icon rail): the key, a
 // click on the stage's left edge, or a pull past the threshold; folded, the pointer at the screen's left edge floats
@@ -11,21 +11,19 @@
 // band with a detent under its floor (shell.ts); a fold forgets the width. The device remembers the fold and the
 // width. Under 72rem there is no canvas: the stage card is the screen, the reader's strip is ☰ (the sidebar as a
 import { type JSX } from "@solidjs/web"
-// drawer), `card › story ▾` (the story's sheet: persona, writing, Timeline, Inspector) and Status (the mounted card).
+// drawer), `card › story ▾` (the story's sheet: Timeline, Inspector) and Status (the mounted card).
 import { createEffect, createMemo, createSignal, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { openPicker, StoryDialogs } from "./dialogs.tsx"
-import { Close, Edit, List, Pin, Probe, Sidebar as SidebarGlyph, Status, Tree, User } from "./icons.tsx"
+import { StoryDialogs } from "./dialogs.tsx"
+import { Close, List, Pin, Probe, Sidebar as SidebarGlyph, Status, Tree } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { Demand, demandable, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
 import { fieldChanged } from "./record.ts"
 import { drag, remembered, SIDE } from "./fold.ts"
-import { Sidebar } from "./side.tsx"
-import { card, cards, latest, page, path, personas, pin, player, stories } from "./store.ts"
-import { chosen } from "./switches.ts"
+import { InstallKeys, Sidebar } from "./side.tsx"
+import { card, cards, latest, page, path, pin, stories } from "./store.ts"
 import { openTimeline } from "./timeline.tsx"
 import { toReader } from "./pages.ts"
-import { openWriting } from "./writing.tsx"
 import { t } from "./i18n.ts"
 
 const FOLDED = "side-folded"
@@ -53,8 +51,6 @@ export const Shell = (props: { children: JSX.Element }) => {
   const lib = read(stories)
   const line = read(path)
   const last = read(latest)
-  const me = read(player)
-  const people = read(personas)
   const pinned = read(pin)
   // ── the width class: the canvas with its sidebar, or the phone ──
   const [wide, setWide] = createSignal(media?.matches ?? true)
@@ -201,11 +197,6 @@ export const Shell = (props: { children: JSX.Element }) => {
     const c = current()
     return c ? (c.title ?? t("stories.newStory")) : ""
   }
-  const cardId = () => view()?.id ?? ""
-  const persona = () => people().find((p) => p.id === me()?.persona?.[cardId()])?.name ?? t("side.cardDefault")
-  const writing = createMemo(
-    () => chosen(me()?.writing, !!me()?.forCard[cardId()]?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard"),
-  )
   /** A pinned entry by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
   const hookOf = (id: string) =>
     line()
@@ -231,6 +222,35 @@ export const Shell = (props: { children: JSX.Element }) => {
         </section>
       )}
     </Show>
+  )
+  /** The reader's three keys: Timeline, Inspector, 读数; small on the canvas. */
+  const Keys = () => (
+    <>
+      <button type="button" class="icon sm" aria-label={t("common.timeline")} onClick={openTimeline}>
+        <Tree />
+      </button>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label={t("side.inspector")}
+        disabled={line().length === 0}
+        onClick={openInspector}
+      >
+        <Probe />
+      </button>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label={t("side.readings")}
+        aria-pressed={mount() ? "true" : "false"}
+        onClick={() => setMount(!mount())}
+      >
+        <Status />
+        <Show when={changed()}>
+          <i class="dot" />
+        </Show>
+      </button>
+    </>
   )
   return (
     <>
@@ -264,6 +284,9 @@ export const Shell = (props: { children: JSX.Element }) => {
             </span>
             <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
           </button>
+          <span class="top-end">
+            <InstallKeys />
+          </span>
         </header>
       </Show>
       <div
@@ -301,105 +324,58 @@ export const Shell = (props: { children: JSX.Element }) => {
             />
           </Show>
           <section class="stage-card" aria-label={t("side.stage")}>
-            {/* the reader's strip: a page covers it with its own head */}
-            <header class="strip">
-              <Show
-                when={wide()}
-                fallback={
-                  <>
-                    <button
-                      type="button"
-                      class="icon"
-                      aria-label={t("side.navigation")}
-                      onClick={() => drawer?.showModal()}
-                    >
-                      <List />
-                    </button>
-                    <button type="button" class="crumb-key" disabled={!current()} onClick={() => sheet?.showModal()}>
-                      <span class="c">{storyCard()}</span>
-                      <span class="sep" aria-hidden="true">
-                        ›
-                      </span>
-                      <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
-                      <Show when={current()}>
-                        <span class="sep" aria-hidden="true">
-                          ▾
-                        </span>
-                      </Show>
-                    </button>
-                    <button
-                      type="button"
-                      class="icon"
-                      aria-label={t("common.status")}
-                      aria-pressed={mount() ? "true" : "false"}
-                      onClick={() => setMount(!mount())}
-                    >
-                      <Status />
-                      <Show when={changed()}>
-                        <i class="dot" />
-                      </Show>
-                    </button>
-                  </>
-                }
-              >
-                <div class="crumb">
-                  <span class="c">{storyCard()}</span>
-                  <span class="sep" aria-hidden="true">
-                    ›
-                  </span>
-                  <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
-                </div>
-                {/* who the player is on this card, and the writing in force: one chip each, head text, never a
-                  turn's. A change rewrites the cached prefix, no new story */}
-                <button
-                  type="button"
-                  class="chip"
-                  aria-label={t("common.persona")}
-                  disabled={!me()}
-                  onClick={openPicker}
-                >
-                  <User aria-hidden="true" />
-                  <span>{persona()}</span>
-                </button>
-                <button
-                  type="button"
-                  class="chip"
-                  aria-label={t("side.writing")}
-                  disabled={!me()}
-                  onClick={openWriting}
-                >
-                  <Edit aria-hidden="true" />
-                  <span>{writing()}</span>
-                </button>
-                <div class="strip-right">
-                  <button type="button" class="icon sm" aria-label={t("common.timeline")} onClick={openTimeline}>
-                    <Tree />
-                  </button>
+            <Show
+              when={wide()}
+              fallback={
+                /* the phone's strip: a page covers it with its own head */
+                <header class="strip">
                   <button
                     type="button"
-                    class="icon sm"
-                    aria-label={t("side.inspector")}
-                    disabled={line().length === 0}
-                    onClick={openInspector}
+                    class="icon"
+                    aria-label={t("side.navigation")}
+                    onClick={() => drawer?.showModal()}
                   >
-                    <Probe />
+                    <List />
+                  </button>
+                  <button type="button" class="crumb-key" disabled={!current()} onClick={() => sheet?.showModal()}>
+                    <span class="c">{storyCard()}</span>
+                    <span class="sep" aria-hidden="true">
+                      ›
+                    </span>
+                    <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
+                    <Show when={current()}>
+                      <span class="sep" aria-hidden="true">
+                        ▾
+                      </span>
+                    </Show>
                   </button>
                   <button
                     type="button"
-                    class="chip"
-                    data-active={mount() ? "true" : "false"}
+                    class="icon"
+                    aria-label={t("common.status")}
                     aria-pressed={mount() ? "true" : "false"}
                     onClick={() => setMount(!mount())}
                   >
-                    <Status aria-hidden="true" />
-                    <span>{t("side.readings")}</span>
+                    <Status />
                     <Show when={changed()}>
                       <i class="dot" />
                     </Show>
                   </button>
+                </header>
+              }
+            >
+              {/* no strip: the reader's three keys float in the stage card's top right corner, over the blank beside
+                the prose column, and go with the reader when a page covers it. Their footprint is bounded: at 72rem
+                with the sidebar dragged to its 320px ceiling the stage card is about 824px, `main` clamps to 672px,
+                76px of blank plus main's own inline padding is about 100px a side; so three 26px keys, two 4px gaps
+                and the 12px right inset are 98px, the ceiling. The column's head (reader.css `--head`) is the row's
+                height, so the first line starts under them and the prose passes under them in the top fade */}
+              <Show when={pg() === "reader"}>
+                <div class="stage-keys">
+                  <Keys />
                 </div>
               </Show>
-            </header>
+            </Show>
             {props.children}
             <div class="peek-scrim" aria-hidden="true" />
             {/* the mounted card: the readings of the story being read, over the reader, its scrim blurring it */}
@@ -457,20 +433,6 @@ export const Shell = (props: { children: JSX.Element }) => {
           }
         >
           <div class="storysheet">
-            <button type="button" class="row" disabled={!me()} onClick={() => fromSheet(openPicker)}>
-              <span class="lbl">
-                <User aria-hidden="true" />
-                <span>{t("common.persona")}</span>
-              </span>
-              <span class="val">{persona()}</span>
-            </button>
-            <button type="button" class="row" disabled={!me()} onClick={() => fromSheet(openWriting)}>
-              <span class="lbl">
-                <Edit aria-hidden="true" />
-                <span>{t("side.writing")}</span>
-              </span>
-              <span class="val">{writing()}</span>
-            </button>
             <button type="button" class="row" onClick={() => fromSheet(openTimeline)}>
               <span class="lbl">
                 <Tree aria-hidden="true" />

@@ -36,6 +36,7 @@ export { default as Shade } from "~icons/ph/circle-half"
 export { default as Translate } from "~icons/ph/translate" // the locale flip (i18n.ts)
 export { default as Plugs } from "~icons/ph/plugs"
 export { default as Sliders } from "~icons/ph/sliders-horizontal"
+export { default as Archive } from "~icons/ph/archive" // a card's story manager (side.tsx)
 export { default as Template } from "~icons/ph/brackets-curly"
 export { default as User } from "~icons/ph/user"
 export { default as Minus } from "~icons/ph/minus"

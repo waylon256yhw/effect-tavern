@@ -48,7 +48,7 @@
   position: absolute;
 }
 
-/* ── the strip: the reader's head, inside the stage card ── */
+/* ── the phone's strip: the reader's head, inside the stage card ── */
 .strip {
   box-sizing: border-box;
   height: calc(var(--strip) + var(--safe-top));
@@ -62,19 +62,15 @@
   line-height: var(--leading-body);
   box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
 }
-.strip .icon,
-.strip .chip {
+:is(.strip, .stage-keys) .icon {
   position: relative;
 }
 /* the crumb: the card in ink-2, the story in ink, the story alone truncating */
-.strip .crumb,
 .strip .crumb-key {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-}
-.strip .crumb-key {
   flex: 1;
   height: var(--control);
   padding: 0 var(--space-2);
@@ -110,48 +106,8 @@
   color: var(--ink-2);
   font-weight: 500;
 }
-/* the chips on the strip (the persona, the writing, 读数): a glyph and a word, a pressed one in ink */
-.strip .chip {
-  height: var(--control-sm);
-  padding: 0 10px;
-  gap: 5px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex: none;
-  transition:
-    background var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease);
-}
-.strip .chip:hover:not(:disabled) {
-  background: var(--fill);
-  color: var(--ink);
-}
-.strip .chip svg {
-  width: 14px;
-  height: 14px;
-  color: var(--ink-3);
-}
-.strip .chip[data-active="true"] {
-  background: var(--ink);
-  color: var(--surface-1);
-}
-.strip .chip[data-active="true"] svg {
-  color: var(--surface-1);
-}
-.strip .chip > span {
-  max-width: 10rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.strip-right {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-/* the dot in the corner of the Status key and the 读数 chip: this turn moved the state */
-.strip .dot {
+/* the dot in the corner of the 读数 key: this turn moved the state */
+:is(.strip, .stage-keys) .dot {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -160,21 +116,18 @@
   border-radius: 50%;
   background: var(--ink);
 }
-.strip .chip .dot {
+:is(.strip, .stage-keys) .icon.sm .dot {
   top: 2px;
   right: 2px;
 }
-.strip .chip[data-active="true"] .dot {
-  background: var(--surface-1);
-}
 
 /* ── small keys, shared by the shell's parts ── */
-:is(.shell-top, .sidebar, .strip, .mount) .icon.sm {
+:is(.shell-top, .sidebar, .stage-keys, .mount) .icon.sm {
   width: 26px;
   height: 26px;
   border-radius: 6px;
 }
-:is(.shell-top, .sidebar, .strip, .mount) .icon.sm svg {
+:is(.shell-top, .sidebar, .stage-keys, .mount) .icon.sm svg {
   width: 15px;
   height: 15px;
 }
@@ -488,7 +441,8 @@
   width: 14px;
   height: 14px;
 }
-/* the foot: settings, theme, language at the left; this card's manager at the right (the workspace alone) */
+/* the foot: this card's manager at the right (the workspace alone); in the phone's drawer the install's keys at the
+   left */
 .side-foot {
   box-sizing: border-box;
   height: calc(40px + var(--safe-bottom));
@@ -503,7 +457,7 @@
   align-items: center;
   gap: 2px;
 }
-.side-foot .icon[aria-pressed="true"] {
+:is(.shell-top, .side-foot) .icon[aria-pressed="true"] {
   background: var(--alpha-1);
   color: var(--ink);
 }
@@ -635,7 +589,7 @@ dialog.drawer[open]::backdrop {
     opacity: 0;
   }
 }
-/* the story's sheet (the strip's crumb): four rows, the setting in force at the right of its row */
+/* the story's sheet (the strip's crumb): two rows and the pin */
 .storysheet {
   display: flex;
   flex-direction: column;
@@ -643,8 +597,10 @@ dialog.drawer[open]::backdrop {
   padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
   font-size: var(--text-body);
 }
-.storysheet .row {
+/* a row (the workspace's persona and writing): a glyph and a word, the setting in force at the right */
+:is(.storysheet, .workspace) .row {
   box-sizing: border-box;
+  flex: none;
   width: 100%;
   height: var(--control);
   padding: 0 var(--space-3);
@@ -655,21 +611,21 @@ dialog.drawer[open]::backdrop {
   justify-content: space-between;
   gap: var(--space-2);
 }
-.storysheet .row:hover:not(:disabled) {
+:is(.storysheet, .workspace) .row:hover:not(:disabled) {
   background: var(--fill);
 }
-.storysheet .lbl {
+:is(.storysheet, .workspace) .lbl {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   font-weight: 500;
 }
-.storysheet .lbl svg {
+:is(.storysheet, .workspace) .lbl svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
   color: var(--ink-2);
 }
-.storysheet .val {
+:is(.storysheet, .workspace) .val {
   min-width: 0;
   color: var(--ink-2);
   font-size: var(--text-footnote);
@@ -689,7 +645,8 @@ dialog.drawer[open]::backdrop {
 
 /* ── from 72rem: the canvas, the sidebar in its space, the stage card raised ── */
 @media (min-width: 72rem) {
-  /* the strip over the canvas: the fold key at the far left, the tab naming what is read */
+  /* the strip over the canvas: the fold key at the far left, the tab naming what is read; the install's keys at the
+     right end, there whether the sidebar is folded or not */
   .shell-top {
     box-sizing: border-box;
     height: calc(var(--shell-top) + var(--safe-top));
@@ -721,6 +678,24 @@ dialog.drawer[open]::backdrop {
   }
   .shell-tab[data-back="true"]:hover:not(:disabled) {
     background: var(--fill);
+  }
+  .top-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  /* the reader's keys in the stage card's corner (shell.tsx for the 98px ceiling); the column's head is their row */
+  .stage-card {
+    --head: calc(2 * var(--space-2) + 26px);
+  }
+  .stage-keys {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-3);
+    z-index: 4;
+    display: flex;
+    gap: 4px;
   }
   .canvas {
     padding: 0 8px 8px 0;
@@ -794,9 +769,6 @@ dialog.drawer[open]::backdrop {
   .stage-card {
     border-radius: var(--radius-dialog);
     box-shadow: var(--shadow-2);
-  }
-  .strip {
-    padding-inline: var(--space-4);
   }
   /* the stage under a floating sidebar */
   .peek-scrim {
