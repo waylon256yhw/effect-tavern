@@ -7,25 +7,38 @@ import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { roam } from "./side.tsx"
-import { aside, card, compose, noted, path, pin, registry, revising, turnOf } from "./store.ts"
+import {
+  acting,
+  aside,
+  cancelRevise,
+  card,
+  compose,
+  noted,
+  path,
+  pin,
+  registry,
+  revising,
+  setBoxes,
+  settling,
+  stage,
+  turnOf,
+  working,
+} from "./store.ts"
+import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
-export const Composer = (props: {
-  busy: boolean
-  stoppable: boolean // the prose can still be halted: before and during narrate, not while the turn settles
-  onSend: (text: string, note: string) => void // the main box and the note box (empty when closed or in author mode)
-  onKeep: (text: string, note: string) => void // revising: the input sent as a sibling that keeps the prose
-  onCancel: () => void // revising: the line put back, the displaced draft restored
-  onStop: () => void
-}) => {
+export const Composer = () => {
+  const busy = read(working)
+  const phase = read(stage)
+  // the prose can still be halted: before and during narrate, not while the turn settles
+  const stoppable = () => !settling(phase())
   const text = read(compose)
   const noteText = read(noted)
   const pinned = read(pin)
   const view = read(card)
   // The card's default channel is the mode for the whole session (GET /card `input`): in participant mode the box is the
   // character's line, a thought is this turn's deviation inside it, and a note to the narrator is a second box under it
-  // that goes with the line or alone; in author mode every input is direction and neither exists.
-  const acting = () => view()?.input === "act"
+  // that goes with the line or alone; in author mode every input is direction and neither exists (store.ts `acting`).
   const quick = () => view()?.snippets ?? []
   // The snippets menu groups by meaning: a note snippet is a word to the narrator, the rest stay in the story.
   const inStory = () => quick().filter((s) => !s.note)
@@ -95,14 +108,12 @@ export const Composer = (props: {
     </For>
   )
   const submit = (keep = false) => {
-    if (!filled() || props.busy || waiting()) return false
+    if (!filled() || busy() || waiting()) return false
     const t = text().trim()
     const n = acting() ? noteText().trim() : ""
-    if (keep) props.onKeep(t, n)
-    else props.onSend(t, n)
-    registry.set(compose, "")
-    registry.set(noted, "")
-    registry.set(aside, false)
+    if (keep) turn.keep(t, n)
+    else turn.act(t, n)
+    setBoxes({ text: "", note: "", aside: false })
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
@@ -159,7 +170,7 @@ export const Composer = (props: {
             if (e.key === "/" && !e.isComposing && text() === "" && menu) {
               e.preventDefault()
               menu.showPopover()
-            } else if (e.key === "Escape" && revise()) props.onCancel()
+            } else if (e.key === "Escape" && revise()) cancelRevise()
             else ime.keyDown(e)
           }}
         />
@@ -178,7 +189,7 @@ export const Composer = (props: {
               onCompositionStart={noteIme.compositionStart}
               onCompositionEnd={noteIme.compositionEnd}
               onKeyDown={(e) => {
-                if (e.key === "Escape" && revise()) props.onCancel()
+                if (e.key === "Escape" && revise()) cancelRevise()
                 else if (e.key === "Escape" && !noteText()) {
                   registry.set(aside, false)
                   box?.focus()
@@ -245,7 +256,7 @@ export const Composer = (props: {
                   class="bare"
                   aria-label={t("common.cancel")}
                   onPointerDown={keep}
-                  onClick={props.onCancel}
+                  onClick={cancelRevise}
                 >
                   <Close />
                 </button>
@@ -263,7 +274,7 @@ export const Composer = (props: {
               type="button"
               class="icon"
               aria-label={t("composer.keepProse")}
-              disabled={!filled() || props.busy}
+              disabled={!filled() || busy()}
               onPointerDown={keep}
               onClick={() => submit(true)}
             >
@@ -271,13 +282,13 @@ export const Composer = (props: {
             </button>
           </Show>
           <Show
-            when={props.busy && props.stoppable}
+            when={busy() && stoppable()}
             fallback={
               <button
                 type="submit"
                 class="send"
                 aria-label={t("composer.send")}
-                disabled={!filled() || props.busy || waiting()}
+                disabled={!filled() || busy() || waiting()}
                 onPointerDown={keep}
               >
                 <Send />
@@ -289,7 +300,7 @@ export const Composer = (props: {
               class="send"
               aria-label={t("composer.stop")}
               onPointerDown={keep}
-              onClick={() => props.onStop()}
+              onClick={() => void turn.stop()}
             >
               <Stop />
             </button>

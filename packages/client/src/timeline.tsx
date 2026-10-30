@@ -16,7 +16,8 @@ import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { plain, Prose } from "./prose.tsx"
 import { heading } from "./record.ts"
 import { card, draft, type Id, log, page, path, prose, registry, working } from "./store.ts"
-import { dropNodes, fetchCalls, send } from "./wire.ts"
+import { turn } from "./turn.ts"
+import { dropNodes, fetchCalls } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 // px: a station's width (its height is the CSS's), the gap between lanes, the row step, the turn ruler, the padding, a thread's
@@ -94,7 +95,7 @@ export const Timeline = () => {
   const scrollTo = (id: Id) => document.getElementById(`node-${id}`)?.scrollIntoView({ block: "start" })
   const checkout = (id: Id) => {
     setSelected(L.leaf(all(), id))
-    send({ kind: "checkout", node: id })
+    turn.checkout(id)
   }
   // in the reader: a node on the line is scrolled to; one off it is checked out first, scrolled to once it is there
   const openInReader = (id: Id) => {
@@ -105,7 +106,7 @@ export const Timeline = () => {
       unsub()
       requestAnimationFrame(() => scrollTo(id))
     })
-    send({ kind: "checkout", node: id })
+    turn.checkout(id)
   }
   const inspect = (id: Id) => {
     close()

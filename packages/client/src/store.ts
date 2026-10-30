@@ -91,12 +91,25 @@ export const noted = Atom.make("") // the note box under the line: a word to the
 export const aside = Atom.make(false) // the note box is open (participant mode's deviation); clears after the send
 /** Participant mode: the main box is the character's line and a note may go with it. Author mode: every input is a
  *  direction, the main box is the note and there is no line. One mapping at the edges (send, revise, withdraw). */
-export const acting = (): boolean => registry.get(card)?.input === "act"
+export const acting = (): boolean => card()?.input === "act" // tracked: the composer draws by it
 export const boxesOf = (i: { text: string; note?: string }): { text: string; note: string } =>
   acting() ? { text: i.text, note: i.note ?? "" } : { text: i.note ?? "", note: "" }
 export const inputOf = (text: string, note: string): { text: string; note?: string } =>
   acting() ? { text, ...(note && { note }) } : { text: "", note: text }
+/** What the composer's boxes hold: the line, the note, whether the note box is open. One write for the three. */
+export const boxes = (): { text: string; note: string; aside: boolean } => ({
+  text: registry.get(compose),
+  note: registry.get(noted),
+  aside: registry.get(aside),
+})
+export const setBoxes = (b: { text: string; note: string; aside: boolean }): void => {
+  registry.set(compose, b.text)
+  registry.set(noted, b.note)
+  registry.set(aside, b.aside)
+}
 export const stage = Atom.make<Phase | null>(null)
+/** The prose is done and the turn settles (check, polish, record): the queue plays out, nothing halts it any more. */
+export const settling = (phase: Phase | null): boolean => phase === "check" || phase === "polish" || phase === "record"
 export const editing = Atom.make<Id | null>(null) // the node whose prose is a textarea in place (Edit), until sent or cancelled
 /** The player's own line back in the composer (Revise): which node and field, and the draft it displaced, restored on cancel. */
 export const revising = Atom.make<{
@@ -105,8 +118,9 @@ export const revising = Atom.make<{
   previous: { text: string; note: string; aside: boolean }
 } | null>(null)
 export const error = Atom.make<Failure | null>(null)
-/** A turn in flight: a draft that is not the ghost of a failed one. What holds the composer, the story and a new root. */
-export const working = Atom.make((get) => get(draft) !== null && get(error) === null)
+/** A turn in flight: a draft that is not the ghost of a failed one, or any stage running (a demand runs one with no
+ *  draft, and two streams would interleave into one `apply` queue). What holds the composer, the story and a new root. */
+export const working = Atom.make((get) => (get(draft) !== null && get(error) === null) || get(stage) !== null)
 /** The page over the reader: none, the card page, the Timeline, the settings, the Writing page (writing.tsx) or the
  *  Inspect page on one node. The reader stays mounted under it, so a turn in flight keeps streaming. */
 export type Page = "reader" | "card" | "timeline" | "settings" | "writing" | { inspect: Id }
@@ -270,7 +284,7 @@ const applyNow = (e: Wire): void => {
         play.ended = false
         registry.update(draft, (d) => (d ? { ...d, text: "", prev: d.text || d.prev } : d))
       }
-      if (e.phase === "check" || e.phase === "polish" || e.phase === "record") play.ended = true // the prose is complete: the queue plays out
+      if (settling(e.phase)) play.ended = true // the prose is complete: the queue plays out
       return
     case "delta":
       if (e.part.type === "text-delta") enqueue(e.part.text)
@@ -320,7 +334,22 @@ export const withdraw = (): void => {
   const d = registry.get(draft)
   if (!d?.fresh || registry.get(compose) || registry.get(noted)) return
   const b = boxesOf(d.input)
-  registry.set(compose, b.text)
-  registry.set(noted, b.note)
-  registry.set(aside, !!b.note)
+  setBoxes({ ...b, aside: !!b.note })
+}
+
+// Revise: the bubble puts the turn's input in the composer, line and note in their boxes (what was there is stashed,
+// back on cancel); Send makes a new turn beside it (turn.ts `act`), Keep a sibling with the prose kept (`keep`).
+// Revising ends when the node lands (`settle`), so a failed send puts the input back under the same revision.
+export const revise = (n: Node, field: "text" | "note"): void => {
+  const previous = registry.get(revising)?.previous ?? boxes()
+  registry.set(revising, { node: n.id, field, previous })
+  const b = boxesOf(n.turn.input)
+  setBoxes({ ...b, aside: acting() && (!!b.note || field === "note") })
+}
+/** Revising given up: the line put back, the displaced draft restored. */
+export const cancelRevise = (): void => {
+  const r = registry.get(revising)
+  if (!r) return
+  registry.set(revising, null)
+  setBoxes(r.previous)
 }
