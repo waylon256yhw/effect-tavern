@@ -232,12 +232,12 @@
   gap: 10px;
   padding-left: 18px;
 }
-.inspect .spine::before {
+.inspect .knot:not(:last-child)::after {
   content: "";
   position: absolute;
-  left: 5px;
-  top: 14px;
-  bottom: 14px;
+  left: -13px;
+  top: 15px;
+  bottom: -28px; /* across the spine's gap into the next knot's dot, which paints over it */
   width: 1.5px;
   background: var(--alpha-2);
 }
@@ -403,7 +403,7 @@
   box-shadow:
     inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
     inset 0 0 0 var(--hairline) var(--line);
-  overflow: hidden;
+  overflow: clip; /* not a scroll container: its minimum stays its content's, so the floor below holds */
 }
 .inspect .rtabs {
   flex: none;
@@ -462,16 +462,25 @@
   gap: 10px;
 }
 /* and bounded by the card: an open step's well takes what the card has left, so one open step never makes the card
-   scroll on a short window. Every layer from the card down to the well may shrink; everything beside the well may not.
-   Several open steps shrink together down to the well's floor, then the card scrolls as before. */
+   scroll on a short window. Every layer from the card down to the scroller is a flex column that may shrink to
+   nothing (nested flex passes shrink only through min-height: 0); the one floor is on the open step's knot (on the
+   step itself the knots would shrink under their steps and the cards overlap), so nothing inside is ever clipped,
+   and the floors of several open steps add up past the card, which then scrolls.
+   A tray never shrinks (its steps stay at the 50dvh ceiling). Everything beside the well keeps its size. */
 .inspect .pane > :not(.spine),
 .inspect .knot:not(:has(.step[open])),
-.inspect .tray .thead,
+.inspect .tray,
 .inspect .step:not([open]),
 .inspect .step > summary,
 .inspect .body > :not(.well),
 .inspect .rtabs {
   flex: none;
+}
+.inspect .knot,
+.inspect .step,
+.inspect .step::details-content {
+  display: flex;
+  flex-direction: column;
 }
 .inspect .spine,
 .inspect .knot,
@@ -481,14 +490,8 @@
 .inspect .well {
   min-height: 0;
 }
-.inspect .knot,
-.inspect .step,
-.inspect .step::details-content {
-  display: flex;
-  flex-direction: column;
-}
-.inspect .wscroll {
-  min-height: 8rem;
+.inspect .knot:has(.step[open]) {
+  min-height: 15rem; /* the floor: the step's head, paddings and tab bar, and a few lines of the scroller */
 }
 .inspect .msg {
   padding-left: 9px;
