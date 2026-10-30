@@ -18,7 +18,8 @@ export interface Summary {
   to: number
   text: string
 }
-export const makeSummaries = <B>(loreText: (d: Disclosure) => string) => {
+// `loreText` gets the range being folded: a recall row's text is looked up on the turns it was delivered along.
+export const makeSummaries = <B>(loreText: (d: Disclosure, range: readonly Turn<B>[]) => string) => {
   // Keyed by range, kept with the turns it was folded from. Ids name a range but not its content: `Log.amend` (setField,
   // demand) replaces a node in place under the same id, as a new object. An entry is served only while every turn it
   // covers is still that same object; an amended one refolds the range and replaces the entry. Checking identity rather
@@ -34,7 +35,7 @@ export const makeSummaries = <B>(loreText: (d: Disclosure) => string) => {
       const k = `${range[0].id}-${range[range.length - 1].id}`
       const hit = table.get(k)
       if (hit && current(hit.over, range)) return hit.sum
-      const facts = range.flatMap((t) => [...notesOf(t), ...deliveredIn(t).map(loreText)])
+      const facts = range.flatMap((t) => [...notesOf(t), ...deliveredIn(t).map((d) => loreText(d, range))])
       const s: Summary = { from: range[0].id, to: range[range.length - 1].id, text: `Summary: ${facts.join(" ")}` }
       table.set(k, { sum: s, over: range })
       return s

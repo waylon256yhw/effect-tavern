@@ -47,8 +47,9 @@ import {
 } from "@effect-tavern/provider"
 import { Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
-import { Effect_, makeCard, type Answers, type Beat, type Card, type Check, type Greeting, type State } from "./card.ts"
-import { holds, type Cond, type State as Paths } from "./cond.ts"
+import { Effect_, makeCard, type Answers, type Beat, type Card, type Greeting, type State } from "./card.ts"
+import { holds, type State as Paths } from "./cond.ts"
+import { gateOf, makeDerived, type Node } from "./derived.ts"
 import {
   decodeFragments as frags,
   frame,
@@ -58,48 +59,17 @@ import {
   type Player,
   type Snippet,
 } from "./fragment.ts"
-import { folded, ledger, makeSummaries, narratorHistory, policyFor, type Policy } from "./history.ts"
-import {
-  deliveredIn,
-  deliveredOn,
-  notesOf,
-  splitAside,
-  textOf as proseOf,
-  type Brief,
-  type Input,
-  type Turn as TurnOf,
-} from "./journal.ts"
+import { narratorHistory, policyFor, type Policy } from "./history.ts"
+import { deliveredOn, splitAside, textOf as proseOf, type Brief, type Input, type Turn as TurnOf } from "./journal.ts"
 import * as Log from "./log.ts"
 import { key, makeLore, type Disclosure } from "./lore.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
-import {
-  cap,
-  decodeProducts,
-  entryRef,
-  fold,
-  itemText,
-  recallEntries,
-  render,
-  resolve,
-  shapeSchema,
-  type Product,
-} from "./product.ts"
+import { cap, decodeProducts, entryRef, fold, resolve, shapeSchema, type Product } from "./product.ts"
 
 export type Turn = TurnOf<Beat>
 export type Phase = "lookup" | "decide" | "direct" | "narrate" | "check" | "polish" | "record"
-/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `readable` is what the
- *  path could still be told (hooks, not bodies): the client's untold list, where a pin is picked from. */
-export interface Node {
-  id: number
-  parent: number | null
-  turn: Turn
-  state: State
-  events: readonly string[]
-  checks: readonly Check[] // this turn's judged beats, in order; what the Record's check track draws
-  delivered: readonly (Disclosure & { text: string })[]
-  readable: readonly { id: string; hook: string }[]
-}
+export type { Node } from "./derived.ts" // the node projection lives with the facts it carries; the client imports it here
 export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part }
@@ -235,13 +205,6 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       : Schema.Struct(violated)
 }
 
-/** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
-export const floorAt = (unlock: Cond | readonly Cond[], s: State) => {
-  const cs = Array.isArray(unlock) ? unlock : [unlock]
-  let n = 0
-  while (n < cs.length && holds(cs[n]!, s)) n++
-  return n
-}
 /** An ask's wording: the player's, then the card's, then the session's own. */
 export const wordingOf = (player: Player, card: Card, id: string) =>
   [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
@@ -306,35 +269,12 @@ export const makeSession = ({
         }
   }
   const rpg = makeCard(card.rules)
-  // The lock reads its floor off the gate state (`gated` below), never the instant; the window reads the instant.
-  const gate = (id: string, offer: Cond) => ({
-    unlock: (s: Paths) => (s.lore as Record<string, { floor: number }> | undefined)?.[id]?.floor ?? 0,
-    offer: (s: Paths, ev: readonly string[]) => holds(offer, s, ev),
-  })
   const L = makeLore<Paths, readonly string[]>(
-    card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gate(e.id, e.offer) })),
+    card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) })),
   )
   const held = Log.hold<Turn>(store)
   const chain = (id: number | null) => Log.chain(held.log, id)
   const turnOf = (id: number) => Log.get(held.log, id)
-  /** What a disclosure says: a lore layer, or one item of a recall product stored on a node (`<product>@<node>#<i>`). */
-  const textOf = (d: Disclosure): string => {
-    const ref = entryRef(d.id)
-    if (!ref) return L.text(d)
-    return itemText((turnOf(ref.node).products[ref.product] as unknown[])[ref.index])
-  }
-  const summaries = makeSummaries<Beat>(textOf)
-  // A turn's cost in the narrator's transcript (input, prose, the lore delivered with it), memoized: a turn is immutable.
-  const costs = new WeakMap<Turn, number>()
-  const cost = (t: Turn) => {
-    let c = costs.get(t)
-    if (c === undefined)
-      costs.set(t, (c = tokens([t.input.text, proseOf(t.reply), ...deliveredIn(t).map(textOf)].join("\n"))))
-    return c
-  }
-  const foldOf = (path: readonly Turn[]) => folded(path, cost, typeof P === "function" ? P() : P)
-  /** The one summary every view of this path folds to (narrator, ledger), the same cached object. */
-  const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   let seeds = 0
 
   const wording = (id: string) => wordingOf(player, card, id)
@@ -344,114 +284,15 @@ export const makeSession = ({
    *  overrides (the client shows the default while the player has not toggled one, and the card view is read once). */
   const declared = resolve(defaultProducts(card.input ?? "act"), card.products)
   const question = (pr: Product) => questionOf(player, card, pr)
-  /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
-  const known = (path: readonly Turn[]) => {
-    const feed = products.filter((p) => p.feed && p.on)
-    const cur = fold(
-      feed,
-      path.map((t) => t.products),
-    )
-    const rest = feed.filter((p) => p.id !== "notes" && cur[p.id] !== undefined)
-    return {
-      known: `Known: ${path.flatMap(notesOf).join("; ")}`,
-      current: rest.length
-        ? `Current: ${rest.map((p) => `${p.id}=${render(p.shape, cur[p.id])}`).join(" | ")}`
-        : undefined,
-    }
-  }
-
-  // ───────── Derived facts along a path ─────────
-  // A turn's state: the opening (a greeting's effects), then beats before the prose, then readout answers after it. All
-  // code folds over recorded outputs. The player's `adjust` goes last: a correction wins over everything the turn did.
-  // `post` is what this turn emitted that no gate of its own could read: a greeting has no gate and a readout is answered
-  // after the prose, so both open windows on the next turn.
-  // Memoized per turn on the state it was settled from: a path's states are the same objects every time it is folded
-  // (each is the last settle's `s`), so folding a node's path again costs a lookup per turn, not a settle. An amended
-  // turn is a new object and misses; so does a turn under it, whose from-state is new.
-  const settledFrom = new WeakMap<Turn, { from: State; out: ReturnType<typeof settleFresh> }>()
-  const settleTurn = (s: State, t: Turn) => {
-    const hit = settledFrom.get(t)
-    if (hit?.from === s) return hit.out
-    const out = settleFresh(s, t)
-    settledFrom.set(t, { from: s, out })
-    return out
-  }
-  const settleFresh = (s: State, t: Turn) => {
-    const o = t.opening ? rpg.apply(s, t.opening) : { s, events: [] as string[] }
-    const b = rpg.fold(o.s, t.beats)
-    const r = rpg.settleReadouts(b.s, t.answers)
-    const a = t.adjust ? rpg.apply(r.s, t.adjust) : { s: r.s, events: [] as string[] }
-    return {
-      s: a.s,
-      events: [...o.events, ...b.events, ...r.events, ...a.events],
-      checks: b.checks,
-      post: [...o.events, ...r.events, ...a.events],
-      pre: b.s, // after opening and beats, before readouts and adjustments: what the turn's record saw
-    }
-  }
-  const stateAt = (path: readonly Turn[]) => path.reduce((s, t) => settleTurn(s, t).s, rpg.initial)
-  /** The state the lore gate reads: the card state (the path's end, or `s` when the turn has settled past it) plus,
-   *  under `lore.<id>`, each entry's derived counters (since / shown, for `offer`; `extra` is this turn's deliveries,
-   *  counted as shown now) and its floor: the deepest layer `unlock` has held for at ANY state along the path. The
-   *  floor is monotone because knowledge is: what the fiction made available does not become unavailable again. A
-   *  told layer already stayed (lore.ts keeps the deepest delivered); this keeps an untold one too. A card field named
-   *  `lore` would collide, so none may be. */
-  const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): Paths => {
-    const states = [rpg.initial] // pushed, not spread: a spread per turn made one call O(depth²)
-    for (const t of path) states.push(settleTurn(states.at(-1)!, t).s)
-    const at = s ?? states.at(-1)!
-    const counters = L.counters([...path.map(deliveredIn), extra]) // the turn being made is the last, shown now
-    const lore = Object.fromEntries(
-      card.lore.map((e) => [
-        e.id,
-        { ...counters[e.id], floor: Math.max(...[...states, at].map((x) => floorAt(e.unlock, x))) },
-      ]),
-    )
-    return { ...at, lore }
-  }
-  const settledOf = (path: readonly Turn[], t: Turn) => settleTurn(stateAt(path.slice(0, path.indexOf(t))), t)
-  /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
-   *  not yet delivered. The lookup's enum, the node's `readable`, and where `Input.pin` picks from. */
-  const readableOn = (path: readonly Turn[]) => {
-    // ponytail: each call still scans the path (counters, floors, seen, recall), so a snapshot is O(nodes·depth) in cheap
-    // scans; carry those folds parent → child in one id-order pass if a story outgrows it.
-    const s = gated(path)
-    const seen = deliveredOn(path)
-    const seenKeys = new Set(seen.map(key))
-    const prefix = new Set(path.slice(0, foldOf(path)).map((t) => t.id))
-    const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
-    const lore = card.lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
-    // The product's fold decides which rows exist (a keyed table is the newest row per key: a person re-rowed with what
-    // a later scene added is one entry); the seen filter runs after it, so reading the newest row never brings a
-    // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did). The
-    // fold filter runs after it too: a row enters the Index only once its node is folded; in the tail its prose is still
-    // verbatim in the narrator's transcript, and a lookup would tell it again.
-    const recall = products
-      .filter((p) => p.recall !== undefined)
-      .flatMap((p) =>
-        recallEntries(
-          p,
-          path.map((t) => ({ id: t.id, v: t.products[p.id] })),
-        ),
-      )
-      .filter((e) => !seenKeys.has(`${e.id}#1`) && prefix.has(entryRef(e.id)!.node))
-      .map((e) => ({ id: e.id, hook: e.hook }))
-    return [...lore, ...recall]
-  }
-  const project = (t: Turn): Node => {
-    const path = chain(t.id)
-    const settled = settledOf(path, t)
-    return {
-      id: t.id,
-      parent: t.parent,
-      turn: t,
-      state: settled.s, // the fold to t's end: what stateAt(path) would fold again
-      events: settled.events,
-      checks: settled.checks,
-      delivered: deliveredIn(t).map((d) => ({ ...d, text: textOf(d) })),
-      readable: readableOn(path).map(({ id, hook }) => ({ id, hook })),
-    }
-  }
+  // ───────── Derived facts along a path (src/derived.ts) ─────────
+  const derived = makeDerived({
+    rpg,
+    L,
+    lore: card.lore,
+    products: () => products,
+    policy: () => (typeof P === "function" ? P() : P),
+  })
+  const project = (t: Turn): Node => derived.at(chain(t.id)).node()
   /** A committed change, projected for the wire: the node as the client sees it, the dropped ids, head. */
   const change = (c: Log.Change<Turn>): Change => ({
     head: c.head,
@@ -482,8 +323,6 @@ export const makeSession = ({
       { reasoningBack: M.reasoningBack, ttl: M.ttl, ...(worn && { hat: worn }) },
     )
   }
-  const ledgerOf = (path: readonly Turn[]) => ledger(path, (t) => settledOf(path, t).events, summaryOf(path))
-  const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: textOf(d) }))
 
   // ───────── Calls, each announced before and reported after ─────────
   const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(
@@ -525,7 +364,7 @@ export const makeSession = ({
   ) =>
     Effect.gen(function* () {
       if (!asked.length && !qs) return { products: {}, answers: undefined } // nothing to ask
-      const fed = known(path)
+      const fed = derived.at(path).known()
       const msgs = ask(state, scene.input, {
         stage: "record",
         known: fed.known,
@@ -575,8 +414,10 @@ export const makeSession = ({
       if (from !== "check" && !input.text && !input.note)
         throw new Error(base ? `node ${base.id}: nothing to rerun` : "empty input")
       const path = chain(parent)
-      const s0 = stateAt(path)
-      const g0 = gated(path)
+      const here = derived.at(path)
+      const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: here.text(d) }))
+      const s0 = here.state
+      const g0 = here.gated()
       const seen = deliveredOn(path)
       // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the
       // items of recall products stored on the path and not yet delivered (model-written memory walks the same road as
@@ -586,7 +427,7 @@ export const makeSession = ({
       const pinned = input.pin === undefined ? [] : deliver(g0, seen, [input.pin])
       if (input.pin !== undefined && !pinned.length) throw new Error(`${input.pin}: nothing to pin`)
       const forced = pinned.slice(-1)
-      const untold = readableOn(path).filter((e) => e.id !== input.pin)
+      const untold = here.readable().filter((e) => e.id !== input.pin)
       const idx = untold.map((e) => e.id)
       const looked =
         from !== "lookup"
@@ -632,7 +473,7 @@ export const makeSession = ({
             rpg.decideSchema(s),
             ask(s, input, {
               stage: "decide",
-              ledger: ledgerOf(path),
+              ledger: here.ledger(),
               question: q,
               state: JSON.stringify(s),
               menu: rpg.menu(s),
@@ -652,29 +493,17 @@ export const makeSession = ({
         }
       }
       const { s: s1, events } = rpg.fold(s0, beats)
-      // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate (readout
-      // events; a greeting's opening events). Without the carry a readout-only card never opened a window at all (found
-      // by the yandao card: no beat events). Director only if the card has one and something is open.
-      const prev = path.at(-1)
-      const carried = prev ? settleTurn(stateAt(path.slice(0, -1)), prev).post : []
-      const gateEvents = [...events, ...carried]
-      // One delivery per layer per turn: a sibling's base.read already holds the pin's and the window's lower layers.
-      const once = (ds: readonly Disclosure[]) => [...new Map(ds.map((d) => [key(d), d])).values()]
-      const before = once([...looked, ...pinned.slice(0, -1)])
-      const g1 = gated(path, before, s1)
-      const ds1 = deliveredOn(path, before)
-      const offered = L.offers(g1, ds1, gateEvents).map(({ id, layer }) => ({ id, layer }))
-      // A window opens current+1; the unseen layers under it are read this turn, told like a lookup's (issue #9).
-      // ponytail: a sibling's gate counts those lower layers as shown this turn (they are in base.read), the fresh
-      // turn's did not, so a since/shown-gated window over unread layers can close on a reword; store the gate's own
-      // deliveries on the turn if a card hits it.
-      const disclosures = once([
-        ...before,
-        ...offered.filter((d) => !forced.some((f) => f.id === d.id)).flatMap((d) => L.read(g1, ds1, d.id) ?? []),
-      ])
-      // The pinned entry is open with its forced layer and MUST be told, director or not: check verifies it, a miss is
-      // the one correction rewrite, and an entry still unfired after that stays untold.
-      const open: Disclosure[] = [...forced, ...offered.filter((d) => !forced.some((f) => f.id === d.id))]
+      // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate
+      // (derived.ts `gate`). Director only if the card has one and something is open. The pinned entry is open with its
+      // forced layer and MUST be told, director or not: check verifies it, a miss is the one correction rewrite, and an
+      // entry still unfired after that stays untold.
+      const gateEvents = [...events, ...here.post]
+      const { offered, disclosures, open } = here.gate({
+        state: s1,
+        events,
+        before: [...looked, ...pinned.slice(0, -1)],
+        forced,
+      })
       const openIds = [...new Set(open.map((d) => d.id))] // Literals(openIds) below: a duplicate must never reach it
       const mustIds = forced.map((d) => d.id)
       const briefed: Brief =
@@ -687,7 +516,7 @@ export const makeSession = ({
                 BriefOf(openIds),
                 ask(s1, input, {
                   stage: "direct",
-                  ledger: ledgerOf(path),
+                  ledger: here.ledger(),
                   rules: card.guard,
                   open: told(open),
                   events: gateEvents,
@@ -700,8 +529,8 @@ export const makeSession = ({
         may: briefed.may.filter((id) => !mustIds.includes(id)),
       }
       // narrate, streamed, with truncation recovery and at most one correction rewrite
-      const fed = known(path)
-      const sum = summaryOf(path)
+      const fed = here.known()
+      const sum = here.summary()
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
@@ -738,9 +567,9 @@ export const makeSession = ({
           const msgs = ask(s1, input, {
             stage: "narrate",
             fiction: headOf(card.fiction, { state: s1 }),
-            history: narratorHistory(path, textOf, sum),
+            history: narratorHistory(path, here.text, sum),
             summarized: sum !== undefined,
-            told: disclosures.map(textOf),
+            told: disclosures.map(here.text),
             outcome: events,
             current: fed.current, // feed products other than notes: where the scene stands, as data
             must: told(open.filter((d) => brief.must.includes(d.id))),
@@ -977,7 +806,7 @@ export const makeSession = ({
     setField: (nodeId: number, effects: readonly (typeof Effect_.Type)[]): Change => {
       const t = turnOf(nodeId)
       const adjust = [...(t.adjust ?? []), ...effects]
-      settleTurn(stateAt(chain(t.parent)), { ...t, adjust })
+      derived.at(chain(t.parent)).settle({ ...t, adjust })
       return change(held.commit(Log.amend(held.log, nodeId, { adjust })))
     },
     /** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
@@ -989,7 +818,8 @@ export const makeSession = ({
       if (!p) throw new Error(`${productId}: not a product of this card`)
       return emitting((emit) =>
         Effect.gen(function* () {
-          const rec = yield* record(emit, [p], chain(t.parent), settleTurn(stateAt(chain(t.parent)), t).pre, t)
+          const up = chain(t.parent)
+          const rec = yield* record(emit, [p], up, derived.at(up).settle(t).pre, t)
           const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...rec.products } })
           yield* emit({ kind: "change", ...change(held.commit(amended)) })
         }),
