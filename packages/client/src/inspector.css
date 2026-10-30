@@ -482,6 +482,35 @@
   flex-direction: column;
   gap: 10px;
 }
+/* and bounded by the card: an open step's well takes what the card has left, so one open step never makes the card
+   scroll on a short window. Every layer from the card down to the well may shrink; everything beside the well may not.
+   Several open steps shrink together down to the well's floor, then the card scrolls as before. */
+.inspect .pane > :not(.spine),
+.inspect .knot:not(:has(.step[open])),
+.inspect .tray .thead,
+.inspect .step:not([open]),
+.inspect .step > summary,
+.inspect .body > :not(.well),
+.inspect .rtabs {
+  flex: none;
+}
+.inspect .spine,
+.inspect .knot,
+.inspect .step,
+.inspect .step::details-content,
+.inspect .body,
+.inspect .well {
+  min-height: 0;
+}
+.inspect .knot,
+.inspect .step,
+.inspect .step::details-content {
+  display: flex;
+  flex-direction: column;
+}
+.inspect .wscroll {
+  min-height: 8rem;
+}
 .inspect .msg {
   padding-left: 9px;
   border-left: 2px solid var(--alpha-3);
