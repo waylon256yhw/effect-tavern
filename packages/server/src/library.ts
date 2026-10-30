@@ -7,15 +7,14 @@
 // "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens that story's
 // session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
 // the install's: the player layer (a write reaches every open session), personas, hats, providers and routing. A hat is the player's too, named by a
-// connection (`SessionModel.hat`) and read from the table on every request the same way: an edit is in force from the
+// connection (`Model.hat`) and read from the table on every request the same way: an edit is in force from the
 // next request, and a deleted hat leaves the connection bare (the id resolves to nothing).
 // The model each stage runs on is the routing row's (provider, model) pair, the stage's own or the default, resolved
 // from the tables on every call the same way: a routing or provider edit is in force from the next request. A pair
 // that does not resolve (provider gone, disabled, no key, no endpoint) fails that request naming the provider. A stage
 // the row does not name runs on `model`, the environment's (dev.ts); `pinned` puts it over the row (MODEL=fake).
 import {
-  capabilities,
-  compile,
+  bind,
   connection,
   listModels,
   plan,
@@ -24,6 +23,7 @@ import {
   secretView,
   type Connection,
   type Format,
+  type Model,
   type ModelEntry,
   type Probe,
   type Provider,
@@ -34,14 +34,7 @@ import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
-import {
-  makeSession,
-  type Phase,
-  type Session,
-  type SessionModel,
-  type SessionModels,
-  type Turn,
-} from "@effect-tavern/runtime/src/session.ts"
+import { makeSession, phases, type Phase, type Session, type Turn } from "@effect-tavern/runtime/src/session.ts"
 import { Effect, Schema } from "effect"
 import type { Data } from "./data.ts"
 import type { Exported } from "./export.ts"
@@ -51,7 +44,6 @@ import { names } from "./names.ts"
  *  16), still a fraction of a cent on any model. */
 const PROBE_TOKENS = 16
 const Pair = Schema.Struct({ provider: Schema.String, model: Schema.String })
-const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const satisfies Phase[]
 export const Routing = Schema.Struct({
   default: Schema.optionalKey(Pair),
   stages: Schema.optionalKey(Schema.Struct(Object.fromEntries(phases.map((p) => [p, Schema.optionalKey(Pair)])))),
@@ -79,7 +71,7 @@ export const library = ({
   /** The cards besides the library's own: the TS template modules, by id and title. */
   cards?: readonly { id: string; title?: string }[]
   player: Player
-  model?: SessionModels
+  model?: (phase: Phase) => Model
   pinned?: boolean
 }) => {
   const routing = (): Routing => (data.routing.read() as Routing | undefined) ?? {}
@@ -89,30 +81,19 @@ export const library = ({
     return p
   }
   const secretOf = (p: Provider) => data.secrets.list().find((s) => s.id === p.secret)
-  /** A pair as the session runs it: dev.ts's `live()` over the flattened connection. */
-  const resolve = (pair: typeof Pair.Type): SessionModel => {
+  /** A pair as the session runs it: the flattened connection, bound. */
+  const resolve = (pair: typeof Pair.Type): Model => {
     const p = providerOf(pair.provider)
     const m = p.models.find((x) => x.id === pair.model)
     if (!m) throw new Error(`provider "${p.name}": no model ${pair.model}`)
-    const c = connection(p, m, secretOf(p))
-    const caps = capabilities(c)
-    return {
-      format: c.format,
-      model: compile(c),
-      prefill: caps.prefill,
-      reasoningBack: caps.reasoningBack,
-      effort: m.effort,
-      maxOutputTokens: m.maxOutputTokens,
-      ttl: c.cacheTtl,
-      hat: c.hat,
-    }
+    return bind(connection(p, m, secretOf(p)))
   }
-  const model = (phase: Phase): SessionModel => {
+  const model = (phase: Phase): Model => {
     const r = pinned ? {} : routing()
     const pair = r.stages?.[phase] ?? r.default
     if (pair) return resolve(pair)
     if (!env) throw new NoModel()
-    return typeof env === "function" ? env(phase) : "default" in env ? (env[phase] ?? env.default) : env
+    return env(phase)
   }
   /** The fold policy off the narrate pair's model entry (the one stage that reads the unfolded tail), never throwing:
    *  `GET /nodes` folds before any model is needed, on a fresh install too. No pair, no entry, or pinned → 8000. */
@@ -344,9 +325,8 @@ export const library = ({
           const c = probe(id, p.models.find((m) => m.id === model) ?? { id: model })
           return [
             await probed([c.format], c, plan(c.format, c.endpoint, c.model).generate, async (onTrace) => {
-              const m = { format: c.format, model: compile(c, { onTrace }), prefill: capabilities(c).prefill }
               const failed = await Effect.runPromise(
-                text(m, [{ role: "user", content: "Hi" }], { maxOutputTokens: PROBE_TOKENS }).pipe(
+                text(bind(c, { onTrace }), [{ role: "user", content: "Hi" }], { maxOutputTokens: PROBE_TOKENS }).pipe(
                   Effect.match({ onFailure: (e) => e, onSuccess: () => undefined }),
                 ),
               )

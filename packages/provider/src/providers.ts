@@ -104,5 +104,7 @@ export const connection = (p: Provider, m: ModelEntry, s: Secret | undefined): C
     ...(p.headers && { headers: p.headers }),
     ...(p.proxy !== undefined && { proxy: p.proxy }),
     ...(m.hat !== undefined && { hat: m.hat }),
+    ...(m.effort !== undefined && { effort: m.effort }),
+    ...(m.maxOutputTokens !== undefined && { maxOutputTokens: m.maxOutputTokens }),
   }
 }

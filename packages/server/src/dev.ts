@@ -7,15 +7,14 @@
 // picked on the server would stay as an orphan root beside the player's). Which model runs each stage is the library's
 // routing (the settings page); MODEL=fake puts the scripted model over it.
 import {
-  capabilities,
-  compile,
+  bind,
   fake,
   fakeText,
   localAnthropic,
   localAnthropicKey,
   type FakeCall,
+  type Model,
 } from "@effect-tavern/provider"
-import type { SessionModel } from "@effect-tavern/runtime/src/session.ts"
 import { cardNames, loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -112,24 +111,16 @@ const answer = (o: FakeCall) => {
 
 /** The environment's model, in force for any stage the routing row does not name: the local Anthropic key, when the
  *  machine has one. */
-const live = (): SessionModel | undefined => {
+const live = (): Model | undefined => {
   const conn = localAnthropic()
   if (!conn) return undefined
   // the proxy rides on Bun's fetch (provider connection.ts): on Node a live request goes direct and fails behind one
   if (!("Bun" in globalThis)) throw new Error("live model needs Bun: bun --bun vp run dev, or MODEL=fake")
-  const caps = capabilities(conn)
-  return {
-    format: conn.format,
-    model: compile(conn),
-    prefill: caps.prefill,
-    reasoningBack: caps.reasoningBack,
-    effort: "low",
-    ttl: conn.cacheTtl,
-    hat: process.env["HAT"] ?? conn.hat, // HAT=<id> puts a library hat on the dev connection
-  }
+  return bind({ ...conn, effort: "low", hat: process.env["HAT"] ?? conn.hat }) // HAT=<id> puts a library hat on it
 }
 const scripted = process.env["MODEL"] === "fake"
-const model = scripted ? { ...fake(answer), prefill: false, hat: process.env["HAT"] } : live() // HAT works on the scripted model too
+const one = scripted ? { ...fake(answer), hat: process.env["HAT"] } : live() // HAT works on the scripted model too
+const model = one && (() => one)
 
 // First start on a developer machine: the local Anthropic key becomes the vault's one secret and the library's one
 // provider, its Haiku the default, so the settings page opens on what the dev loop already ran on.

@@ -5,6 +5,7 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { LanguageModel } from "ai"
+import type { Effort, Model } from "./call.ts"
 import { capabilities, type Capabilities } from "./capabilities.ts"
 import { formatsOf, plan, type Endpoint, type Format } from "./url.ts"
 
@@ -39,6 +40,9 @@ export interface Connection {
   /** The hat this connection wears (a library id, `/hats`): what its model needs around the harness's document to
    *  answer in continuation mode. Resolved per request by the library, like the player's persona. */
   hat?: string
+  /** The model entry's call settings (providers.ts `ModelEntry`), carried through to `bind`. */
+  effort?: Effort
+  maxOutputTokens?: number
 }
 
 const secret = (c: Credential) => (c.type === "api_key" ? c.key : c.token)
@@ -133,7 +137,23 @@ export const compile = (c: Connection, o: CompileOptions = {}): LanguageModel =>
   }
 }
 
-/** A listed model: its id, and the formats it is served under when the listing says (`supported_endpoints`, a
+/** A connection bound for calls: compiled once, with the settings a stage reads off it. What the connection leaves
+ *  unset stays unset. */
+export const bind = (c: Connection, o?: CompileOptions): Model => {
+  const caps = capabilities(c)
+  return {
+    format: c.format,
+    model: compile(c, o),
+    prefill: caps.prefill,
+    reasoningBack: caps.reasoningBack,
+    ...(c.effort !== undefined && { effort: c.effort }),
+    ...(c.maxOutputTokens !== undefined && { maxOutputTokens: c.maxOutputTokens }),
+    ...(c.cacheTtl !== undefined && { ttl: c.cacheTtl }),
+    ...(c.hat !== undefined && { hat: c.hat }),
+  }
+}
+
+/** A listed model:its id, and the formats it is served under when the listing says (`supported_endpoints`, a
  *  gateway's field; absent on Anthropic, OpenAI and Gemini, where every model is on the one path). */
 export interface Listed {
   id: string

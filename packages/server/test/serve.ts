@@ -19,7 +19,7 @@ import { app, handle, serve } from "../src/serve.ts"
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
 
-const model = {
+const scripted = {
   ...fake((o) =>
     o.responseFormat?.type === "json"
       ? {
@@ -34,9 +34,9 @@ const model = {
         ? { text: "hello world ".repeat(20), delay: 20 }
         : { text: "hello world" },
   ),
-  prefill: false,
   hat: "h",
 }
+const model = () => scripted
 const lib = library({ data: open(":memory:"), card: { ...chat, greetings: [{ text: "G" }] }, player, model })
 
 const wired = (v: unknown) => JSON.parse(JSON.stringify(v)) as unknown // what JSON keeps: no `undefined` keys
@@ -317,7 +317,7 @@ const run = async (inspect: boolean) => {
     assert.equal(((await (await fetch(`${base}/player`)).json()) as { persona?: object }).persona, undefined) // the pick went with it
     assert.equal((await headOf("who now")).includes(monk.text), false)
 
-    // A hat is a library row the connection names by id (`model.hat` is "h" here): absent, the connection is bare; put,
+    // A hat is a library row the connection names by id (`scripted.hat` is "h" here): absent, the connection is bare; put,
     // its narrate tail ends the next request; deleted, gone again. A bad body is a 400.
     const hat = (v?: unknown) =>
       fetch(`${base}/hats/h`, {
@@ -343,22 +343,17 @@ await run(false)
 // stops the turn rather than withdrawing it, and the first draft stands as the `stopped` reply with its verdict.
 {
   const json = { notes: ["N1"], options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
-  const guarded = library({
-    data: open(":memory:"),
-    card: { ...chat, guard: ["R"] },
-    player,
-    model: {
-      ...fake((o) =>
-        o.responseFormat?.type === "json"
-          ? { text: JSON.stringify(o.responseFormat.name === "check" ? { violated: ["R"] } : json) }
-          : o.prompt.some((m) => fakeText(m).includes("Previous draft broke:"))
-            ? { text: "SECOND DRAFT", delay: 300 } // its first character is 600 ms away: the stop lands before it
-            : { text: "FIRST DRAFT" },
-      ),
-      prefill: false,
-      hat: "h",
-    },
-  })
+  const drafts = {
+    ...fake((o) =>
+      o.responseFormat?.type === "json"
+        ? { text: JSON.stringify(o.responseFormat.name === "check" ? { violated: ["R"] } : json) }
+        : o.prompt.some((m) => fakeText(m).includes("Previous draft broke:"))
+          ? { text: "SECOND DRAFT", delay: 300 } // its first character is 600 ms away: the stop lands before it
+          : { text: "FIRST DRAFT" },
+    ),
+    hat: "h",
+  }
+  const guarded = library({ data: open(":memory:"), card: { ...chat, guard: ["R"] }, player, model: () => drafts })
   const server = serve(guarded).listen(0)
   try {
     const ac = new AbortController()

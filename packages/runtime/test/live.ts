@@ -3,7 +3,7 @@
 // Printed off the event stream, the way the inspector would show it: the prose as it streams, every stage's request
 // size, output and usage, then the node. No assertions on the prose; the point is judgement quality, request shapes
 // and cache behaviour. Skips without a key.
-import { capabilities, compile, localAnthropic, type Message, type Trace } from "@effect-tavern/provider"
+import { bind, localAnthropic, type Message, type Trace } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import type { Card } from "../src/card.ts"
 import { prose } from "../src/journal.ts"
@@ -85,20 +85,10 @@ if (!conn) {
   process.exit(0)
 }
 const traces: Trace[] = []
-const caps = capabilities(conn)
 const { card, turns } = await script()
-const S = makeSession({
-  card,
-  player,
-  model: {
-    format: conn.format,
-    model: compile(conn, { onTrace: (t) => traces.push(t), traceBody: true }),
-    prefill: caps.prefill,
-    reasoningBack: caps.reasoningBack,
-    effort: "low", // narrate thinks, so the reply carries reasoning parts
-    ttl: conn.cacheTtl,
-  },
-})
+// effort low: narrate thinks, so the reply carries reasoning parts
+const model = bind({ ...conn, effort: "low" }, { onTrace: (t) => traces.push(t), traceBody: true })
+const S = makeSession({ card, player, model: () => model })
 const thinkingSent = (t: Trace | undefined) => {
   const body = t?.body ? (JSON.parse(t.body) as { messages?: Array<{ content?: Array<{ type: string }> }> }) : undefined
   return body?.messages?.flatMap((m) => m.content ?? []).filter((c) => c.type === "thinking").length ?? 0
