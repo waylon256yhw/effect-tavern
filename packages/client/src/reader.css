@@ -654,14 +654,14 @@ button:focus-visible {
   min-width: 0;
   box-sizing: border-box;
   /* one line at rest, a control tall, the keys beside it centred on it; it grows with the words to a third of the screen */
-  min-height: calc(1.5 * var(--text-prose) + 2 * var(--space-1));
+  min-height: var(--control);
   max-height: 35dvh;
-  padding: var(--space-1) var(--space-2);
+  padding: 6px var(--space-2);
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--text-prose);
-  line-height: 1.5;
+  font-size: var(--text-field);
+  line-height: 20px;
   color: var(--ink);
   resize: none;
   outline: none;
@@ -684,8 +684,8 @@ button:focus-visible {
   opacity: 1;
 }
 /* an attachment on the box's top edge: a faint inset strip, nothing drawn on it, its small × at the right. The
-   note's holds a tag and the note's own box on the line's text axis, a line at rest at the prose size like every
-   input (iOS zooms anything smaller); the revision's names the turn */
+   note's holds a tag and the note's own box on the line's text axis, a line at rest at the UI field size;
+   the revision's names the turn */
 .composer .attach {
   display: flex;
   align-items: flex-start; /* the × stays at the top right when the note wraps; on one line it is centred all the same */
@@ -705,7 +705,7 @@ button:focus-visible {
   font-weight: 600;
 }
 .composer textarea.note {
-  padding: var(--space-1);
+  padding: 6px var(--space-1);
   color: var(--ink-2);
 }
 .composer .attach .bare {

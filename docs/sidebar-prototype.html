@@ -882,7 +882,8 @@
       flex: 1;
       min-width: 0;
       outline: none;
-      font-size: var(--text-prose);
+      font-size: var(--text-field);
+      line-height: 20px;
       color: var(--ink);
     }
     .composer-attach input::placeholder {
@@ -899,10 +900,10 @@
       min-width: 0;
       resize: none;
       outline: none;
-      font-size: var(--text-prose);
-      line-height: 1.5;
-      min-height: calc(1.5 * var(--text-prose) + 2 * var(--space-1));
-      padding: var(--space-1);
+      font-size: var(--text-field);
+      line-height: 20px;
+      min-height: var(--control);
+      padding: 6px var(--space-1);
     }
     .send-btn {
       width: var(--control);
@@ -2600,7 +2601,6 @@
               <span class="attach-tag">致叙述者</span>
               <input
                 type="text"
-                placeholder="给叙述者的场外指导…"
                 value="${escapeHtml(noteDraftText)}"
                 oninput="noteDraftText = this.value"
               />

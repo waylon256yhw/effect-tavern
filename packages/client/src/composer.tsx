@@ -177,7 +177,6 @@ export const Composer = () => {
               ref={(el) => (noteBox = el)}
               class="note"
               value={noteText()}
-              placeholder={t("composer.toNarrator")}
               enterkeyhint="enter"
               aria-label={t("composer.noteToNarrator")}
               onInput={(e) => registry.set(noted, e.currentTarget.value)}
