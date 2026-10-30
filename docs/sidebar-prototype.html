@@ -3,31 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Harness 侧边栏（卡 → 局）与局级 Strip · 交互原型 (Issue #117)</title>
+  <title>Harness 两态侧边栏（卡架 ↔ 单卡工作区）与紧凑 Composer · 交互原型 (#117)</title>
   <!--
     ═══════════════════════════════════════════════════════════════════════════════
-    HARNESS SIDEBAR (CARD → STORY) & STORY STRIP PROTOTYPE (ISSUE #117 / #68)
+    TWO-STATE SIDEBAR (CARD GALLERY ↔ SINGLE-CARD WORKSPACE) & COMPACT COMPOSER (#117)
     ═══════════════════════════════════════════════════════════════════════════════
-    1. 桌面两层网格 (72rem+):
-       - 外层: 侧边栏 (15rem，可折叠) | 主舞台 (1fr)
-       - 内层:
-         * 主舞台 = 阅读器 (Reader) 时: 阅读列 (1fr) | Status/Record 右栏 (19rem)
-         * 主舞台 = 卡页 (CardPage) / 检查器 (Inspector) / 设置 / 写作 时: 铺满整个主舞台 (1fr)，右栏隐藏
-    2. 常驻侧边栏 (安装级):
-       - 顶部: 搜索框（跨卡搜标题与正文，命中自动展开所在卡组并在行下显示 <mark> 片段）+ 清理菜单按钮 + 折叠按钮
-       - 树 (卡 → 局):
-         * 组头 = 折叠箭头 + 卡名（点击卡名进该卡的卡页，不建 0 轮空局；Begin 时才 POST /stories + greet）
-         * 局行 = 星标在前 + 标题 (或 New story) + busy 进行中圆点 + hover/触屏常显 ⋯ 菜单（改名、星标、导出、删除）
-         * 切局永远可点（working 只锁本局 composer 与版本切换）
-       - 底部: 三个安装级图标（设置 ⚙、主题 ◐、语言 文）
-    3. 阅读区头部 Strip (局级):
-       - [展开侧栏键(仅折叠时)] + 卡名 › 局名 (ellipsis) + [人设 chip] + [叙事体位 chip (chosen()[0])] + 右侧 [Timeline ⧖] [Inspector ⌕]
-       - Pin 不上 Strip：作为待发挂件放在 Composer 输入框正上方，带 ×，发出即消耗
-    4. 手机 (< 72rem, 390×844):
-       - Topbar 左中右: ☰ 拉出侧边栏抽屉 | 卡名 › 局名 ▾ 拉出局级 Sheet（人设、写法、Timeline、Inspector）| Status 图标拉出状态表
+    1. 左栏两层架构：
+       - 层级 A · 总卡片库 (Gallery / shelf)：
+         * 展示客观卡片资产（卡名、简介摘要、后台运行中圆点提示）
+         * 顶部搜索框：搜索卡片
+         * 点击任意卡片进入该卡的「单卡工作区」
+       - 层级 B · 单卡工作区 (Active Card Workspace / session)：
+         * 顶部返回栏：`‹ 所有卡片` + 折叠侧边栏按钮
+         * 卡头区（无多余灰底框，呼吸感排版）：
+           - 大标题 + 简介摘要，点击展开整页级「卡片详情页 (CardPage)」
+           - 卡级设定行：人设 (Persona) 与 写法 (Writing)
+         * 故事区（朴素、同质化列表）：
+           - 整行宽度的搜索框（不再与加号挤在一行）
+           - 故事行只负责切换：去掉外显星标 ★ 与 ⋯ 按钮，所有标题严格左对齐；仅后台运行中的局在右侧显示小圆点
+         * 底部区（重心下沉，视觉均衡）：
+           - 整行宽度的「＋ 新建故事」大按钮
+           - 底部栏：左侧安装级按钮（设置、主题、语言），右侧打开「当前卡的故事管理器」（内含收藏、重命名、导出、删除）
+    2. 卡片详情页 (Page 级展示)：
+       - 点击卡头在主舞台展开整页级 CardPage（双栏大空间，承载丰富设定、模块、规则与开场白）
   -->
   <style>
-    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ───────── */
+    /* ───────── 1. Tokens: aligned with packages/client/src/tokens.css ───────── */
     :root {
       color-scheme: light dark;
 
@@ -60,7 +61,7 @@
       --ok-wash: light-dark(rgb(34 197 94 / 0.12), rgb(187 247 208 / 0.09));
       --warn: light-dark(#b45309, #fbbf24);
       --warn-soft: light-dark(rgb(217 119 6 / 0.12), rgb(251 191 36 / 0.14));
-      --scrim: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.55));
+      --scrim: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.5));
       --ring: var(--alpha-4);
 
       --hairline: 1px;
@@ -102,13 +103,13 @@
         system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
         "Noto Sans SC", sans-serif;
       --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      --text-caption: 0.6875rem; /* 11px */
-      --text-footnote: 0.75rem; /* 12px */
-      --text-body: 0.875rem; /* 14px */
-      --text-heading: 0.9375rem; /* 15px */
-      --text-prose: 1rem; /* 16px */
+      --text-caption: 0.6875rem;
+      --text-footnote: 0.75rem;
+      --text-body: 0.875rem;
+      --text-heading: 0.9375rem;
+      --text-prose: 1rem;
       --text-field: var(--text-body);
-      --text-title: 1.25rem; /* 20px */
+      --text-title: 1.25rem;
       --leading-tight: 1.25;
       --leading-body: 1.45;
       --leading-prose: 1.75;
@@ -125,6 +126,8 @@
       --measure: 42rem;
       --topbar: 48px;
       --fade: 24px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
 
       --dur-1: 60ms;
       --dur-2: 120ms;
@@ -184,7 +187,7 @@
       padding: 0 2px;
     }
 
-    /* ───────── 2. Shared Primitives (.icon, .chip, .btn, .input-box) ───────── */
+    /* ───────── 2. Shared Primitives (.icon, .chip, .input-box, .busy-dot) ───────── */
     .icon {
       width: var(--control);
       height: var(--control);
@@ -215,7 +218,7 @@
     .icon.sm {
       width: var(--control-sm);
       height: var(--control-sm);
-      border-radius: 6px;
+      border-radius: var(--radius);
     }
     .icon.sm svg {
       width: var(--icon-sm);
@@ -228,18 +231,17 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--ok);
+      background: var(--ink);
       box-shadow: 0 0 0 1.5px var(--surface-1);
     }
 
     .chip {
-      height: 24px;
-      padding: 0 8px;
-      border-radius: var(--radius-sm);
-      background: var(--fill);
+      height: var(--control-sm);
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
       color: var(--ink-2);
       font-size: var(--text-footnote);
-      font-weight: 500;
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -247,7 +249,7 @@
       transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
     }
     button.chip:hover:not(:disabled) {
-      background: var(--fill-hover);
+      background: var(--fill);
       color: var(--ink);
     }
     .chip.primary {
@@ -272,7 +274,6 @@
       padding: 0 var(--space-2);
       border-radius: var(--radius);
       background: var(--alpha-1);
-      box-shadow: inset 0 0 0 var(--hairline) var(--line);
       flex: 1;
       min-width: 0;
       transition: box-shadow var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
@@ -291,10 +292,28 @@
       flex: 1;
       min-width: 0;
       outline: none;
-      font-size: var(--text-footnote);
+      font-size: var(--text-field);
     }
     .input-box input::placeholder {
       color: var(--ink-3);
+    }
+
+    .busy-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ink);
+      display: inline-block;
+      flex: none;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .busy-dot {
+        animation: pulseDot 1.4s var(--ease-pulse) infinite;
+      }
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.82); }
     }
 
     /* ───────── 3. Stage Container (Desktop vs Mobile Viewport Switcher) ───────── */
@@ -334,7 +353,7 @@
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-columns: 15rem minmax(0, 1fr);
+      grid-template-columns: 16.5rem minmax(0, 1fr);
       gap: var(--space-5);
       padding: var(--space-5) var(--space-5) calc(var(--space-5) + 48px);
       transition: grid-template-columns var(--dur-3) var(--ease), gap var(--dur-3) var(--ease);
@@ -347,10 +366,9 @@
       opacity: 0;
       pointer-events: none;
       padding-inline: 0;
-      border-width: 0;
     }
 
-    /* ───────── 5. Persistent Left Sidebar (卡 → 局 Tree) ───────── */
+    /* ───────── 5. Two-State Left Sidebar (Gallery ↔ Single-Card Workspace) ───────── */
     .sidebar-card {
       min-width: 0;
       min-height: 0;
@@ -361,31 +379,52 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: opacity var(--dur-2) var(--ease), padding var(--dur-3) var(--ease);
+      transition: opacity var(--dur-2) var(--ease);
     }
     .sidebar {
       flex: 1;
       min-height: 0;
       display: flex;
       flex-direction: column;
-      padding: var(--space-3);
-      gap: var(--space-2);
+      padding: var(--space-4);
+      gap: var(--space-4);
     }
 
-    /* Sidebar Top: Search + Cleanup Menu + Collapse */
     .side-top {
       display: flex;
       align-items: center;
-      gap: var(--space-1);
+      justify-content: space-between;
+      gap: var(--space-2);
       flex: none;
     }
+    .back-shelf-btn {
+      height: var(--control-sm);
+      padding: 0 var(--space-2) 0 4px;
+      margin-left: -4px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      color: var(--ink-2);
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+    }
+    .back-shelf-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .back-shelf-btn svg {
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+    }
 
-    /* Sidebar Tree Scroller */
-    .tree-scroll {
+    /* State A: Card Gallery List */
+    .shelf-scroll {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      overflow-x: hidden;
       margin-inline: calc(-1 * var(--space-1));
       padding-inline: var(--space-1);
       display: flex;
@@ -394,108 +433,135 @@
       scrollbar-width: thin;
       scrollbar-color: transparent transparent;
     }
-    .tree-scroll:hover {
+    .shelf-scroll:hover {
       scrollbar-color: var(--alpha-2) transparent;
     }
-
-    /* Card Group in Tree */
-    .card-group {
+    .shelf-card {
+      width: 100%;
+      text-align: left;
+      padding: var(--space-3);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
+      transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
     }
-    .group-head {
-      display: flex;
-      align-items: center;
-      height: 30px;
-      border-radius: var(--radius);
-      padding-right: var(--space-1);
-      transition: background var(--dur-2) var(--ease);
-    }
-    .group-head:hover {
-      background: var(--ghost-hover);
-    }
-    .group-head[aria-current="page"] {
+    .shelf-card:hover {
       background: var(--fill);
     }
-    .group-toggle {
-      width: 24px;
-      height: 28px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--ink-3);
-      flex: none;
-      border-radius: var(--radius-sm);
+    .shelf-card[aria-current="true"] {
+      background: var(--fill);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
     }
-    .group-toggle:hover {
-      color: var(--ink);
-    }
-    .group-toggle svg {
-      width: 12px;
-      height: 12px;
-      transition: transform var(--dur-2) var(--ease);
-    }
-    .card-group[data-open="false"] .group-toggle svg {
-      transform: rotate(-90deg);
-    }
-    .group-title {
-      flex: 1;
-      min-width: 0;
-      height: 100%;
+    .shelf-card-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: var(--space-1);
-      text-align: left;
-      padding-right: var(--space-1);
-      font-size: var(--text-body);
+      gap: var(--space-2);
+    }
+    .shelf-card-title {
+      font-size: var(--text-heading);
       font-weight: 600;
       color: var(--ink);
     }
-    .group-title .name {
+    .shelf-card-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink-3);
+    }
+    .shelf-card-right svg {
+      width: 14px;
+      height: 14px;
+    }
+    .shelf-card-desc {
+      margin: 0;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* State B: Active Card Workspace Header — Simple, low-density Card Title button (summary & settings live in CardPage) */
+    .cardhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      width: 100%;
+      padding: var(--space-2) var(--space-2);
+      border-radius: var(--radius-card);
+      text-align: left;
+      transition: background var(--dur-2) var(--ease);
+    }
+    .cardhead:hover {
+      background: var(--ghost-hover);
+    }
+    .cardhead[aria-current="page"] {
+      background: var(--fill);
+    }
+    .cardhead .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      width: 100%;
+      min-width: 0;
+    }
+    .cardhead h1 {
+      margin: 0;
+      font-size: var(--text-title);
+      font-weight: 650;
+      line-height: var(--leading-tight);
+      letter-spacing: -0.02em;
+      color: var(--ink);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .group-title .group-meta {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-size: var(--text-caption);
-      font-weight: 400;
-      font-family: var(--font-mono);
+    .cardhead .enter {
+      flex: none;
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: var(--alpha-1);
       color: var(--ink-3);
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), translate var(--dur-2) var(--ease);
     }
-    .group-title .card-enter {
+    .cardhead .enter svg {
       width: 12px;
       height: 12px;
-      color: var(--ink-3);
-      opacity: 0;
-      transition: opacity var(--dur-2) var(--ease), translate var(--dur-2) var(--ease);
     }
-    .group-head:hover .card-enter,
-    .group-head[aria-current="page"] .card-enter {
-      opacity: 0.85;
-    }
-    .group-head:hover .card-enter {
+    .cardhead:hover .enter,
+    .cardhead[aria-current="page"] .enter {
+      background: var(--alpha-2);
+      color: var(--ink);
       translate: 1px 0;
     }
 
-    /* Story Rows inside a Card Group */
+    /* Stories Section: full-width search + uniform, plain story list */
+    .stories-sec {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
     .story-list {
       list-style: none;
       margin: 0;
-      padding: 0 0 0 12px;
+      padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 1px;
-    }
-    .card-group[data-open="false"] .story-list {
-      display: none;
+      gap: 2px;
     }
     .story-item {
-      position: relative;
       display: flex;
       flex-direction: column;
       border-radius: var(--radius);
@@ -508,38 +574,23 @@
       background: var(--fill);
     }
     .story-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      display: flex;
       align-items: center;
-      gap: var(--space-1);
-      min-height: 30px;
-      padding: 4px 6px 4px 10px;
+      justify-content: space-between;
+      gap: var(--space-2);
+      min-height: var(--control);
+      padding: 0 var(--space-2);
       text-align: left;
       width: 100%;
     }
-    .story-main {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      min-width: 0;
-    }
-    .story-star {
-      width: 12px;
-      height: 12px;
-      color: var(--ink-2);
-      flex: none;
-      display: inline-flex;
-    }
-    .story-star svg {
-      width: 12px;
-      height: 12px;
-    }
     .story-name {
-      font-size: var(--text-footnote);
+      font-size: var(--text-body);
       color: var(--ink);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
     }
     .story-item[aria-current="true"] .story-name {
       font-weight: 600;
@@ -547,53 +598,9 @@
     .story-name.unnamed {
       color: var(--ink-2);
     }
-    .story-right {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      height: 20px;
-    }
-    /* Busy dot: indicates an in-flight turn on the server (#116 busy: Phase | null) */
-    .busy-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--ok);
-      display: inline-block;
-      animation: pulseDot 1.4s var(--ease-pulse) infinite;
-    }
-    @keyframes pulseDot {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.35; transform: scale(0.82); }
-    }
-    .story-more {
-      width: 22px;
-      height: 22px;
-      border-radius: var(--radius-sm);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--ink-3);
-      opacity: 0;
-      transition: opacity var(--dur-1) var(--ease), background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-    }
-    .story-item:hover .story-more,
-    .story-more[aria-expanded="true"],
-    .viewport-host[data-device="mobile"] .story-more {
-      opacity: 1;
-    }
-    .story-more:hover {
-      background: var(--alpha-2);
-      color: var(--ink);
-    }
-    .story-more svg {
-      width: 14px;
-      height: 14px;
-    }
 
-    /* Search Hit Snippet Line under Story Row */
     .story-hit {
-      padding: 0 8px 5px 10px;
+      padding: 0 var(--space-2) 6px;
       font-size: var(--text-caption);
       color: var(--ink-3);
       white-space: nowrap;
@@ -607,19 +614,42 @@
       margin-right: 4px;
     }
 
-    .group-empty {
-      padding: 2px 10px 4px 10px;
-      font-size: var(--text-caption);
-      color: var(--ink-3);
+    /* Bottom Action Area: Prominent "New Story" Button + Footer */
+    .side-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      flex: none;
+      margin-top: auto;
+    }
+    .new-story-btn {
+      width: 100%;
+      height: var(--control-lg);
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      color: var(--ink);
+      font-size: var(--text-body);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .new-story-btn:hover {
+      background: var(--fill);
+    }
+    .new-story-btn svg {
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+      color: var(--ink-2);
     }
 
-    /* Sidebar Footer: 3 install-level icons (Settings, Theme, Language) */
     .side-foot {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding-top: var(--space-2);
-      border-top: var(--hairline) solid var(--line);
       flex: none;
     }
     .side-foot-left {
@@ -628,7 +658,7 @@
       gap: 2px;
     }
 
-    /* ───────── 6. Main Stage (Reader + Glance | CardPage | Inspector) ───────── */
+    /* ───────── 6. Main Stage (Reader + Glance | Opening Picker | Page-level CardPage | Inspector) ───────── */
     .stage {
       min-width: 0;
       min-height: 0;
@@ -642,7 +672,7 @@
       grid-template-columns: minmax(0, 1fr) 19rem;
     }
 
-    /* ───────── 7. Reader Column & Story-Level Top Strip ───────── */
+    /* ───────── 7. Reader Column & Clean Story-Level Strip ───────── */
     .reader-card {
       min-width: 0;
       min-height: 0;
@@ -655,42 +685,14 @@
       overflow: hidden;
     }
 
-    /* The new Story-Level Strip at the top of the Reader: slim, borderless, blends into the top of the card */
     .story-strip {
-      height: 36px;
-      padding: 6px var(--space-4) 0;
+      height: calc(var(--control) + var(--space-1));
+      padding: var(--space-1) var(--space-4) 0;
       display: flex;
       align-items: center;
       gap: var(--space-2);
       flex: none;
       min-width: 0;
-    }
-    .strip-crumb {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      min-width: 0;
-      flex: 0 1 auto;
-      overflow: hidden;
-    }
-    .strip-card-btn {
-      font-size: var(--text-body);
-      font-weight: 600;
-      color: var(--ink-2);
-      white-space: nowrap;
-      padding: 2px 5px;
-      margin-left: -5px;
-      border-radius: var(--radius-sm);
-      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
-    }
-    .strip-card-btn:hover {
-      background: var(--ghost-hover);
-      color: var(--ink);
-    }
-    .strip-sep {
-      color: var(--ink-3);
-      font-size: var(--text-footnote);
-      flex: none;
     }
     .strip-story-name {
       font-size: var(--text-body);
@@ -704,20 +706,6 @@
     .strip-story-name.unnamed {
       color: var(--ink-2);
       font-weight: 500;
-    }
-    .strip-chips {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex: none;
-    }
-    .strip-chips .chip {
-      height: 22px;
-      padding: 0 6px;
-      font-size: var(--text-caption);
-      max-width: 7.5rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
     .strip-tools {
       margin-left: auto;
@@ -736,7 +724,7 @@
       display: flex;
       flex-direction: column;
       gap: var(--gap-turn);
-      mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - var(--fade)), transparent);
+      mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
     }
     .reader-main {
       max-width: var(--measure);
@@ -767,12 +755,6 @@
       font-size: var(--text-prose);
       line-height: var(--leading-body);
     }
-    .said.note {
-      background: transparent;
-      border: var(--hairline) dashed var(--line-strong);
-      color: var(--ink-2);
-      font-size: var(--text-footnote);
-    }
     .prose {
       font-size: var(--text-prose);
       line-height: var(--leading-prose);
@@ -792,7 +774,7 @@
       font-size: var(--text-footnote);
     }
     .record-pill {
-      height: 24px;
+      height: var(--control-sm);
       padding: 0 8px;
       border-radius: var(--radius-pill);
       background: var(--alpha-1);
@@ -803,8 +785,8 @@
       gap: 5px;
     }
     .record-pill svg {
-      width: 13px;
-      height: 13px;
+      width: var(--icon-sm);
+      height: var(--icon-sm);
     }
     .dots {
       display: inline-flex;
@@ -825,16 +807,16 @@
       width: 2px;
       height: 1.05em;
       margin-left: 2px;
-      background: var(--ok);
+      background: var(--ink-2);
       animation: blink 1s steps(2, jump-none) infinite;
     }
     @keyframes blink {
       50% { opacity: 0; }
     }
 
-    /* ───────── 8. Composer + Input Helper Attachments above it ───────── */
+    /* ───────── 8. Compact Composer + Input Helper Attachments above it ───────── */
     .composer-wrap {
-      padding: 0 var(--space-6) var(--space-4);
+      padding: 0 var(--space-3) calc(var(--space-4) + var(--safe-bottom));
       flex: none;
     }
     .composer-stack {
@@ -844,31 +826,19 @@
       flex-direction: column;
       gap: 6px;
     }
-    /* Floating helper chips strip right above the composer box */
     .helper-bar {
       display: flex;
       align-items: center;
       gap: 4px;
       flex-wrap: wrap;
-      padding: 0 2px;
-    }
-    .helper-bar .chip {
-      height: 22px;
-      padding: 0 7px;
-      border-radius: var(--radius-pill);
-      background: var(--surface-2);
-      box-shadow: var(--shadow-1), inset 0 0 0 var(--hairline) var(--line);
-      font-size: var(--text-caption);
-      color: var(--ink-2);
-    }
-    .helper-bar .chip:hover {
-      background: var(--fill);
-      color: var(--ink);
+      padding: 0 var(--space-1);
     }
     .helper-bar .chip.glyph {
-      font-family: var(--font-sans);
-      letter-spacing: 0.12em;
-      text-indent: 0.12em;
+      min-width: 3.2em;
+      justify-content: center;
+      font-size: var(--text-body);
+      letter-spacing: 0.15em;
+      text-indent: 0.15em;
       color: var(--ink);
     }
     .helper-bar .sep {
@@ -880,24 +850,24 @@
     .composer-box {
       width: 100%;
       border-radius: var(--radius-composer);
-      background: var(--surface-2);
+      background: var(--surface-3);
       box-shadow: var(--shadow-composer);
-      overflow: hidden;
-      transition: box-shadow var(--dur-2) var(--ease);
+      padding: var(--space-1);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      transition: box-shadow var(--dur-3) var(--ease);
     }
     .composer-box:focus-within {
       box-shadow: var(--shadow-composer-focus);
     }
-    /* Attached tray on top of the composer box (e.g. Note to narrator / Revising turn) */
     .composer-attach {
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      padding: 5px 8px 5px 12px;
+      padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+      border-radius: var(--radius);
       background: var(--alpha-1);
-      border-bottom: var(--hairline) solid var(--line);
-      font-size: var(--text-footnote);
-      color: var(--ink-2);
     }
     .composer-attach .attach-tag {
       font-size: var(--text-caption);
@@ -912,69 +882,48 @@
       flex: 1;
       min-width: 0;
       outline: none;
-      font-size: var(--text-footnote);
+      font-size: var(--text-prose);
       color: var(--ink);
     }
     .composer-attach input::placeholder {
       color: var(--ink-3);
     }
-    .composer-body {
-      padding: 10px 12px 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
     .composer-body.compact {
-      padding: 6px 8px;
-      flex-direction: row;
+      padding: 2px var(--space-1);
+      display: flex;
       align-items: center;
-      gap: 8px;
-    }
-    .composer-body textarea {
-      width: 100%;
-      resize: none;
-      outline: none;
-      font-size: var(--text-body);
-      line-height: 1.5;
-      min-height: 24px;
+      gap: var(--space-1);
     }
     .composer-body.compact textarea {
       flex: 1;
       min-width: 0;
-      min-height: 22px;
-      padding: 2px 0;
-    }
-    .composer-foot {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-2);
-    }
-    .composer-left {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      resize: none;
+      outline: none;
+      font-size: var(--text-prose);
+      line-height: 1.5;
+      min-height: calc(1.5 * var(--text-prose) + 2 * var(--space-1));
+      padding: var(--space-1);
     }
     .send-btn {
-      width: 28px;
-      height: 28px;
+      width: var(--control);
+      height: var(--control);
       border-radius: var(--radius-pill);
       background: var(--primary);
       color: var(--primary-ink);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: grid;
+      place-items: center;
+      flex: none;
     }
     .send-btn.stop {
       background: var(--fill);
       color: var(--ink);
     }
     .send-btn svg {
-      width: 15px;
-      height: 15px;
+      width: var(--icon);
+      height: var(--icon);
     }
 
-    /* ───────── 9. Right Glance Card (Status & Record, only in Reader view) ───────── */
+    /* ───────── 9. Right Glance Card (Status & Record) ───────── */
     .glance-card {
       min-width: 0;
       min-height: 0;
@@ -995,11 +944,9 @@
     }
     .glance-sec h2 {
       margin: 0;
-      font-size: var(--text-caption);
+      font-size: var(--text-body);
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--ink-3);
+      color: var(--ink-2);
     }
     .meter-row {
       display: flex;
@@ -1052,11 +999,11 @@
       color: var(--ink);
     }
     .clue-item button svg {
-      width: 14px;
-      height: 14px;
+      width: var(--icon-sm);
+      height: var(--icon-sm);
     }
 
-    /* ───────── 10. Full-Stage Views: CardPage & Inspector (Right Glance Hidden) ───────── */
+    /* ───────── 10. Full-Stage Views: New-Story Opening Picker, Full-Page Card Dossier & Inspector ───────── */
     .stage-surface {
       min-width: 0;
       min-height: 0;
@@ -1077,96 +1024,523 @@
       justify-content: center;
       padding: var(--space-5);
     }
-    /* CardSheet inside Stage (matches card.css max-width: 56rem two-column) */
-    .cardsheet {
+
+    /* Shared hover-only scrollbar + fade mask (matches inspector.css / card.css .wscroll) */
+    .wscroll {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-2) var(--ease);
+      mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        #000 16px,
+        #000 calc(100% - 16px),
+        transparent
+      );
+    }
+    .wscroll:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    /* Route 1: "New Story" Guide Sheet (Strips out card metadata; dedicated to 40-50 Opening Selection + Persona Pick) */
+    .newstory-sheet {
       width: 100%;
-      max-width: 54rem;
+      max-width: 58rem;
+      height: min(29rem, 100%);
       display: grid;
-      grid-template-columns: minmax(0, 9fr) minmax(0, 13fr);
-      min-height: 24rem;
+      grid-template-columns: minmax(0, 10fr) minmax(0, 13fr);
       border-radius: var(--radius-dialog);
       background: var(--surface-2);
       box-shadow: var(--shadow-2);
-      border: var(--hairline) solid var(--line);
       overflow: hidden;
     }
-    .cardsheet .about {
-      padding: var(--space-6);
-      border-right: var(--hairline) solid var(--line);
+    .phone-frame .newstory-sheet {
+      grid-template-columns: minmax(0, 1fr);
+      height: auto;
+    }
+    .newstory-side {
+      padding: var(--space-5);
+      box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--line);
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
-      gap: var(--space-4);
+      gap: var(--space-3);
+      min-height: 0;
     }
-    .cardsheet h1 {
+    .phone-frame .newstory-side {
+      box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+      max-height: 15rem;
+    }
+    .newstory-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      flex: none;
+    }
+    .newstory-title-left {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .newstory-title-left h1 {
       margin: 0;
       font-size: var(--text-title);
       font-weight: 650;
       letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .cardsheet .summary {
-      margin: var(--space-2) 0 0;
-      color: var(--ink-2);
-      line-height: 1.65;
-    }
-    .cardsheet .specs {
-      margin: 0;
-      padding-top: var(--space-3);
-      border-top: var(--hairline) solid var(--line);
+
+    /* Built-in Persona Selector in the New Story step */
+    .newstory-persona-box {
+      flex: none;
+      padding: 10px 12px;
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+    .newstory-persona-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
       font-size: var(--text-footnote);
     }
-    .cardsheet .specs .row {
-      display: flex;
-      justify-content: space-between;
-      gap: var(--space-3);
+    .newstory-persona-top .lbl {
+      color: var(--ink-3);
+      font-weight: 500;
     }
-    .cardsheet .specs dt { color: var(--ink-3); }
-    .cardsheet .specs dd { margin: 0; font-weight: 500; color: var(--ink-2); }
-    .cardsheet .opening {
-      padding: var(--space-6);
+    .newstory-persona-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .persona-pill {
+      height: var(--control-sm);
+      padding: 0 9px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .persona-pill:hover {
+      background: var(--fill);
+      color: var(--ink);
+    }
+    .persona-pill[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+    .newstory-persona-bio {
+      margin: 0;
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 40-50 Openings Directory on Left Pane (Matches production .version row anatomy: .below + .first + .tag) */
+    .opening-dir-head {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .opening-tag-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .opening-tag-filter {
+      flex: none;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      font-weight: 500;
+    }
+    .opening-tag-filter:hover {
+      background: var(--fill);
+      color: var(--ink);
+    }
+    .opening-tag-filter[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+
+    .opening-dir-list {
+      flex: 1;
+      min-height: 0;
+      margin-inline: -4px;
+      padding: 8px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    /* Production .version row (used both in left directory and in bottom upward [popover] .versions) */
+    .version {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: var(--control);
+      padding: 4px var(--space-2);
+      border-radius: var(--radius);
+      text-align: left;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      flex: none;
+    }
+    .version:hover,
+    .version:focus-visible {
+      background: var(--ghost-hover);
+      color: var(--ink);
+      outline: none;
+    }
+    .version[aria-current="true"] {
+      background: var(--active-row);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .version .below {
+      flex: none;
+      width: 1.75em;
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .version[aria-current="true"] .below {
+      color: var(--ink);
+    }
+    .version .first {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .version .tag {
+      flex: none;
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      font-size: var(--text-caption);
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+
+    /* Right Column of New Story Sheet: Production .opening (.well > .wscroll + .foot with .siblings + .versions popover) */
+    .newstory-opening {
+      padding: var(--space-5);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       gap: var(--space-4);
+      min-height: 0;
     }
-    .cardsheet .well {
+    .newstory-opening .well {
       flex: 1;
-      padding: var(--space-4);
+      min-height: 0;
       border-radius: var(--radius-card);
       background: var(--alpha-1);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .phone-frame .newstory-opening .well {
+      height: 15rem;
+    }
+    .newstory-opening .well .wscroll {
+      flex: 1;
+      min-height: 0;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
       font-size: var(--text-prose);
       line-height: var(--leading-prose);
       color: var(--ink);
-      overflow-y: auto;
-      max-height: 16rem;
+      overflow-wrap: anywhere;
     }
-    .cardsheet .foot {
+    .newstory-opening .well .wscroll p {
+      margin: 0;
+      white-space: pre-line;
+    }
+    .newstory-opening .foot {
+      flex: none;
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
       gap: var(--space-3);
     }
+    /* Production .siblings stepper + upward popover trigger */
+    .siblings {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-variant-numeric: tabular-nums;
+    }
+    .siblings .step-icon {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      border-radius: 6px;
+      display: inline-grid;
+      place-items: center;
+      color: var(--ink-2);
+    }
+    .siblings .step-icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .siblings .step-icon:disabled {
+      opacity: 0.32;
+      cursor: default;
+    }
+    .siblings .step-icon svg {
+      width: 13px;
+      height: 13px;
+    }
+    .siblings .count {
+      height: var(--control-sm);
+      padding: 0 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .siblings .count:hover,
+    .siblings .count[aria-expanded="true"] {
+      background: var(--surface-3);
+      box-shadow: var(--shadow-1);
+    }
+    .siblings .count svg {
+      width: 11px;
+      height: 11px;
+      color: var(--ink-3);
+    }
+    /* Upward Popover Menu (.versions) matching production card.css */
+    .versions-popover {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 8px);
+      z-index: 30;
+      width: min(25rem, calc(100vw - 32px));
+      max-height: 16rem;
+      overflow-y: auto;
+      padding: var(--space-1);
+      border-radius: var(--radius-card);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop), inset 0 0 0 var(--hairline) var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .est.mono {
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
     .begin-btn {
+      margin-left: auto;
       height: var(--control);
-      padding: 0 16px;
+      padding: 0 18px;
       border-radius: var(--radius-pill);
       background: var(--primary);
       color: var(--primary-ink);
+      box-shadow: var(--shadow-1);
       font-weight: 600;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      box-shadow: var(--shadow-1);
+    }
+    .begin-btn:hover {
+      opacity: 0.88;
     }
     .begin-btn svg {
       width: 15px;
       height: 15px;
     }
 
-    /* Inspector full-stage mock */
+    /* Route 2: Full-Page Card Dossier (Top Card Header Click → Entire Page Hierarchy for Card Settings & Prompts) */
+    .dossier-layout {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 15.5rem minmax(0, 1fr);
+      overflow: hidden;
+    }
+    .dossier-rail {
+      padding: var(--space-5);
+      box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: var(--space-4);
+      overflow-y: auto;
+    }
+    .dossier-brand h1 {
+      margin: 0;
+      font-size: var(--text-title);
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .dossier-brand p {
+      margin: var(--space-2) 0 0;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      line-height: 1.55;
+    }
+    .dossier-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: var(--space-4);
+    }
+    .dossier-nav-btn {
+      height: var(--control);
+      padding: 0 10px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: var(--text-body);
+      color: var(--ink-2);
+      text-align: left;
+      transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .dossier-nav-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .dossier-nav-btn[aria-current="true"] {
+      background: var(--active-row);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .dossier-nav-btn .badge {
+      font-size: var(--text-caption);
+      font-family: var(--font-mono);
+      color: var(--ink-3);
+    }
+    .dossier-specs {
+      margin: 0;
+      padding-top: var(--space-3);
+      box-shadow: inset 0 var(--hairline) 0 var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: var(--text-caption);
+    }
+    .dossier-specs .row {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .dossier-specs dt { color: var(--ink-3); }
+    .dossier-specs dd { margin: 0; color: var(--ink-2); font-weight: 500; }
+
+    .dossier-main {
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      padding: var(--space-6) var(--space-7);
+    }
+    .dossier-content {
+      max-width: 46rem;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+    }
+    .dossier-sec {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .dossier-sec-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .dossier-sec-head h2 {
+      margin: 0;
+      font-size: var(--text-heading);
+      font-weight: 600;
+    }
+    .dossier-sec-head .tag {
+      font-size: var(--text-caption);
+      font-family: var(--font-mono);
+      color: var(--ink-3);
+    }
+    .dossier-block {
+      padding: var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .dossier-block h3 {
+      margin: 0;
+      font-size: var(--text-body);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .dossier-block p {
+      margin: 0;
+      font-size: var(--text-body);
+      line-height: 1.65;
+      color: var(--ink-2);
+    }
+    .dossier-prompt {
+      margin: 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      font-family: var(--font-mono);
+      font-size: var(--text-footnote);
+      line-height: 1.65;
+      color: var(--ink-2);
+      white-space: pre-wrap;
+    }
+    .dossier-kv-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+
     .inspect-grid {
       flex: 1;
       min-height: 0;
@@ -1197,7 +1571,6 @@
     .mobile-topbar {
       height: var(--topbar);
       padding: 0 var(--space-2);
-      border-bottom: var(--hairline) solid var(--line);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1207,12 +1580,12 @@
     .mobile-title-btn {
       flex: 1;
       min-width: 0;
-      height: 36px;
+      height: var(--control);
       padding: 0 var(--space-2);
       border-radius: var(--radius);
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       gap: 4px;
     }
     .mobile-title-btn:hover {
@@ -1237,18 +1610,16 @@
       flex: none;
     }
 
-    /* Mobile Overlay Scrim + Left Drawer + Bottom Sheet */
     .mobile-overlay {
       position: absolute;
       inset: 0;
       z-index: 20;
       background: var(--scrim);
       display: flex;
-      animation: fadeIn var(--dur-2) var(--ease);
     }
     .mobile-drawer {
-      width: 268px;
-      max-width: 82%;
+      width: 276px;
+      max-width: 84%;
       height: 100%;
       background: var(--surface-1);
       box-shadow: var(--shadow-3);
@@ -1259,7 +1630,7 @@
       margin-top: auto;
       width: 100%;
       max-height: 82%;
-      border-radius: 20px 20px 0 0;
+      border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
       background: var(--surface-1);
       box-shadow: var(--shadow-3);
       padding: var(--space-4);
@@ -1278,89 +1649,8 @@
       font-size: var(--text-heading);
       font-weight: 600;
     }
-    .session-cardhead {
-      padding: var(--space-3);
-      border-radius: var(--radius-card);
-      background: var(--alpha-1);
-      text-align: left;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .session-cardhead .top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: 600;
-    }
-    .session-cardhead p {
-      margin: 0;
-      font-size: var(--text-footnote);
-      color: var(--ink-2);
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .session-row {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .session-row .lbl {
-      font-size: var(--text-caption);
-      font-weight: 600;
-      color: var(--ink-3);
-      text-transform: uppercase;
-    }
-    .session-chosen {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 10px;
-      border-radius: var(--radius);
-      background: var(--alpha-1);
-    }
 
-    /* ───────── 12. Floating Menus & Modal Sheets (⋯ Row Menu, Cleanup Sheet, Persona Picker) ───────── */
-    .pop-menu {
-      position: fixed;
-      z-index: 60;
-      min-width: 148px;
-      padding: 4px;
-      border-radius: var(--radius-card);
-      background: var(--surface-3);
-      box-shadow: var(--shadow-pop);
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-    .pop-item {
-      height: 30px;
-      padding: 0 10px;
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: var(--text-footnote);
-      color: var(--ink);
-      text-align: left;
-    }
-    .pop-item:hover {
-      background: var(--ghost-hover);
-    }
-    .pop-item.danger {
-      color: var(--danger);
-    }
-    .pop-item svg {
-      width: 14px;
-      height: 14px;
-      color: var(--ink-3);
-    }
-    .pop-item.danger svg {
-      color: var(--danger);
-    }
-
+    /* ───────── 12. Modal Sheets (Current Card's Story Manager, Persona Picker) ───────── */
     dialog.modal-sheet {
       border: 0;
       padding: 0;
@@ -1368,8 +1658,8 @@
       background: var(--surface-2);
       color: var(--ink);
       box-shadow: var(--shadow-pop);
-      width: min(30rem, calc(100vw - 32px));
-      max-height: 78vh;
+      width: min(32rem, calc(100vw - 32px));
+      max-height: 80vh;
     }
     dialog.modal-sheet::backdrop {
       background: var(--scrim);
@@ -1377,11 +1667,10 @@
     .modal-inner {
       display: flex;
       flex-direction: column;
-      max-height: 78vh;
+      max-height: 80vh;
     }
     .modal-head {
-      padding: var(--space-4) var(--space-5);
-      border-bottom: var(--hairline) solid var(--line);
+      padding: var(--space-4) var(--space-5) var(--space-2);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1396,26 +1685,100 @@
       gap: 8px;
     }
     .modal-body {
-      padding: var(--space-3) var(--space-5);
+      padding: var(--space-2) var(--space-5) var(--space-4);
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: var(--space-2);
     }
     .modal-foot {
-      padding: var(--space-3) var(--space-5);
-      border-top: var(--hairline) solid var(--line);
+      padding: var(--space-2) var(--space-5) var(--space-4);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: var(--space-2);
       font-size: var(--text-footnote);
     }
+
+    /* Story Manager Card Rows (Matches production manager.tsx) */
+    .mgr-toolbar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding-bottom: var(--space-1);
+    }
+    .mgr-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 10px 12px;
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .mgr-row[aria-current="true"] {
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+    .mgr-row-top {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .mgr-star {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      display: inline-grid;
+      place-items: center;
+      color: var(--ink-3);
+      border-radius: var(--radius-sm);
+    }
+    .mgr-star[aria-pressed="true"] {
+      color: var(--ink);
+    }
+    .mgr-star svg {
+      width: 14px;
+      height: 14px;
+    }
+    .mgr-title {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      font-weight: 600;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mgr-title.unnamed {
+      font-weight: 400;
+      color: var(--ink-2);
+    }
+    .mgr-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .mgr-preview {
+      margin: 0;
+      padding-left: 24px;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mgr-meta {
+      padding-left: 24px;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      font-family: var(--font-mono);
+    }
+
     .cleanup-row {
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      padding: 7px 10px;
+      padding: 8px 10px;
       border-radius: var(--radius);
       background: var(--alpha-1);
       font-size: var(--text-footnote);
@@ -1448,7 +1811,7 @@
       overflow-x: auto;
     }
     .proto-dock button {
-      height: 24px;
+      height: var(--control-sm);
       padding: 0 9px;
       border-radius: var(--radius-pill);
       color: var(--ink-2);
@@ -1499,12 +1862,9 @@
   <!-- Main Viewport Host (Desktop Harness or Phone 390px Frame) -->
   <div id="viewport" class="viewport-host" data-device="desktop"></div>
 
-  <!-- Floating ⋯ Story Action Menu -->
-  <div id="story-menu" class="pop-menu" hidden></div>
-
-  <!-- Cleanup Sheet (#75 retained cleanup dialog, opened from sidebar top menu) -->
-  <dialog id="cleanup-dialog" class="modal-sheet" onclick="if(event.target===this)this.close()">
-    <div class="modal-inner" id="cleanup-content"></div>
+  <!-- Current Card's Story Manager Sheet (Matches production manager.tsx, scoped to the current card!) -->
+  <dialog id="manager-dialog" class="modal-sheet" onclick="if(event.target===this)this.close()">
+    <div class="modal-inner" id="manager-content"></div>
   </dialog>
 
   <!-- Persona Picker Sheet -->
@@ -1514,20 +1874,19 @@
 
   <!-- Interactive Prototype Control Dock -->
   <nav class="proto-dock" aria-label="原型状态切换">
-    <button type="button" id="dock-desktop" aria-pressed="true" onclick="setDevice('desktop')">桌面 (72rem+)</button>
-    <button type="button" id="dock-mobile" aria-pressed="false" onclick="setDevice('mobile')">手机 (390px)</button>
+    <button type="button" id="dock-desktop" aria-pressed="true" onclick="setDevice('desktop')">桌面</button>
+    <button type="button" id="dock-mobile" aria-pressed="false" onclick="setDevice('mobile')">手机</button>
     <span class="sep"></span>
-    <button type="button" id="dock-view-reader" aria-pressed="true" onclick="setStageView('reader')">舞台: 阅读器+右栏</button>
-    <button type="button" id="dock-view-card" aria-pressed="false" onclick="openCardInStage(currentCardId())">舞台: 卡页铺满</button>
-    <button type="button" id="dock-view-inspect" aria-pressed="false" onclick="setStageView('inspect')">舞台: Inspector铺满</button>
+    <button type="button" id="dock-side-shelf" aria-pressed="false" onclick="setSidebarMode('shelf')">左栏: 总卡片库</button>
+    <button type="button" id="dock-side-session" aria-pressed="true" onclick="setSidebarMode('session')">左栏: 单卡工作区</button>
     <span class="sep"></span>
-    <button type="button" id="dock-collapse" aria-pressed="false" onclick="toggleSidebarCollapse()">折叠侧栏</button>
+    <button type="button" id="dock-view-reader" aria-pressed="true" onclick="setStageView('reader')">舞台: 阅读器</button>
+    <button type="button" id="dock-view-new" aria-pressed="false" onclick="openNewStoryPicker(currentCardId())">舞台: 新建故事 (挑开场)</button>
+    <button type="button" id="dock-view-card" aria-pressed="false" onclick="openCardPageInStage(currentCardId())">舞台: 卡片档案页 (设定/Prompt)</button>
+    <span class="sep"></span>
+    <button type="button" onclick="openCardStoryManager()">当前卡故事管理器</button>
     <button type="button" id="dock-helpers" aria-pressed="true" onclick="toggleHelperBar()">输入助手附件</button>
     <button type="button" id="dock-note" aria-pressed="true" onclick="toggleNoteAttach()">场外附言挂件</button>
-    <button type="button" id="dock-search" aria-pressed="false" onclick="demoSearch()">搜:「短剑」</button>
-    <button type="button" id="dock-busy" aria-pressed="true" onclick="toggleBusyDemo()">并发 busy 点</button>
-    <button type="button" id="dock-clean" onclick="openCleanupModal()">管理与删除</button>
-    <span class="sep"></span>
     <button type="button" onclick="toggleTheme()">浅/深</button>
   </nav>
 
@@ -1536,16 +1895,18 @@
     const ICONS = {
       search: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
       caretDown: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>`,
+      caretUp: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,165.66a8,8,0,0,1-11.32,0L128,91.31,53.66,165.66a8,8,0,0,1-11.32-11.32l80-80a8,8,0,0,1,11.32,0l80,80A8,8,0,0,1,213.66,165.66Z"/></svg>`,
       caretRight: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`,
+      caretLeft: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z"/></svg>`,
       sidebar: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H80V200H40ZM216,200H96V56H216Z"/></svg>`,
       list: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z"/></svg>`,
-      dots: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></svg>`,
       plus: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,128a8,8,0,0,1-8,8H136v64a8,8,0,0,1-16,0V136H56a8,8,0,0,1,0-16h64V56a8,8,0,0,1,16,0v64h64A8,8,0,0,1,208,128Z"/></svg>`,
       sliders: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H183a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h81a32,32,0,0,0,62,0h33a8,8,0,0,0,0-16Zm-64,24a16,16,0,1,1,16-16A16,16,0,0,1,152,192Z"/></svg>`,
       star: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M239.18,97.26A16.38,16.38,0,0,0,224.92,86l-59-4.76L143.14,26.15a16.36,16.36,0,0,0-30.27,0L90.11,81.23,31.08,86a16.46,16.46,0,0,0-9.37,28.86l45,38.83L53,211.75a16.38,16.38,0,0,0,24.5,17.82L128,198.49l50.53,31.08A16.4,16.4,0,0,0,203,211.75l-13.76-58.07,45-38.83A16.43,16.43,0,0,0,239.18,97.26Z"/></svg>`,
       starFill: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>`,
       pencil: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120Z"/></svg>`,
       export: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></svg>`,
+      trash: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg>`,
       gear: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Z"/></svg>`,
       shade: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM40,128a88.1,88.1,0,0,1,88-88V216A88.1,88.1,0,0,1,40,128Z"/></svg>`,
       translate: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M247.15,212.42l-56-112a8,8,0,0,0-14.31,0l-21.71,43.43A88,88,0,0,1,108,126.93,103.65,103.65,0,0,0,135.69,64H160a8,8,0,0,0,0-16H104V32a8,8,0,0,0-16,0V48H32a8,8,0,0,0,0,16h87.63A87.76,87.76,0,0,1,96,116.35a87.74,87.74,0,0,1-19-31,8,8,0,1,0-15.08,5.34A103.63,103.63,0,0,0,84,127a87.55,87.55,0,0,1-52,17,8,8,0,0,0,0,16,103.46,103.46,0,0,0,64-22.08,104.18,104.18,0,0,0,51.44,21.31l-26.6,53.19a8,8,0,0,0,14.31,7.16L148.94,192h70.11l13.79,27.58A8,8,0,0,0,240,224a8,8,0,0,0,7.15-11.58ZM156.94,176,184,121.89,211.05,176Z"/></svg>`,
@@ -1573,11 +1934,41 @@
         lore: "7 条设定 · 14 层",
         tokens: "2.4K",
         stance: "第二人称",
+        modules: ["越州风物", "裴青舟剑法", "旧剑来历", "唐门暗桩"],
         writingAll: ["第二人称", "转述言行", "仅限输入"],
+        openingTitles: ["雨歇荒亭 · 孤坟冷茶", "夜雨如注 · 竹骨风灯"],
         openings: [
           "暮春的山雨刚歇，苦竹岭上的雾气还缠在竹梢。你踩着湿滑的青石阶走到半山荒亭外，亭中一人青衫皂靴，正垂眼擦拭一柄乌木剑鞘。亭外新立着一座无碑孤坟，坟前石桌上搁着半碗冷茶。",
           "夜雨如注，苦竹岭茶亭里只点了一盏快要燃尽的竹骨风灯。裴青舟背对你站在亭檐下，听见脚步声也未回头：「苦竹岭不迎外客，若是避雨，天亮便下山去。」",
         ],
+        background:
+          "越州城外三十里的苦竹岭终年云雾缭绕。三年前「惊鸿剑」李鹤在太湖渡口与川中唐门死战后不知所踪，江湖传言他携唐门秘匣隐入越州群山。如今苦竹岭半山荒亭旁多了一座无名新坟，昔日与李鹤齐名的裴青舟在此结庐守墓，外人莫知就里。",
+        character: {
+          name: "裴青舟 · 守墓剑客",
+          role: "前吴中剑派弃徒 / 李鹤生前挚友",
+          traits: "寡言内敛、重诺护短、剑路稳若山岳，对探听李鹤旧事之人抱有极高戒备。",
+          bio: "年约二十八九，常着洗得发白的青布直裰，佩一柄乌木鞘长剑「断水」。三年前太湖一役迟到半日，未能救下李鹤，自此隐居苦竹岭守着衣冠冢，暗中追查当年出卖李鹤行踪的内鬼。",
+          defaultPersona: "未绑定时默认为「携故人旧短剑上山的远客」，不预设武功高低与立场。",
+        },
+        loreEntries: [
+          { title: "越州苦竹岭地形", keys: "苦竹岭, 荒亭, 石阶, 后山", depth: "常驻 (L0)", body: "半山仅有一座八角石亭供行旅避雨；亭后竹林深处有山涧断崖，唯一一条小径通往裴青舟搭的竹庐与孤坟。" },
+          { title: "乌木剑「断水」与旧短剑", keys: "短剑, 鹤纹, 乌木剑, 剑穗", depth: "触发 (L1)", body: "来客所持短剑乃李鹤早年贴身之物，剑柄内侧刻有极浅的独足鹤纹；裴青舟剑穗上的半枚崇宁通宝与李鹤遗物恰好合拢。" },
+          { title: "太湖渡口旧案", keys: "太湖, 唐门, 李鹤, 三年前", depth: "触发 (L2)", body: "三年前八月十五，李鹤原约裴青舟在太湖渡口交接唐门暗桩名册，却遭十二名唐门高手伏击，重伤坠湖。" },
+          { title: "唐门越州暗桩", keys: "暗桩, 毒镖, 越州城, 茶客", depth: "深层 (L3)", body: "唐门至今怀疑名册仍在李鹤亲友手中，常派伪装成行商或采茶人的耳目在苦竹岭脚下窥探。" },
+        ],
+        ruleDetails: [
+          { name: "戒心 (0 ~ 10，初始 7)", desc: "裴青舟对来客的防备程度。出示信物、坦诚相告可降低戒心；强行试探武功或谎称李鹤死讯会令戒心飙升，满 10 拔剑逐客。" },
+          { name: "关系阶段", desc: "「试探来意」→「核验故物」→「深夜长谈」→「同赴越州」。当戒心降至 4 以下且提及太湖旧案时推进。" },
+          { name: "动作检定 (4 项)", desc: "包含【出示短剑】【察看孤坟】【试探剑路】【提及内鬼】，由 decide 节点根据玩家输入自动判定是否触发。" },
+        ],
+        prompts: {
+          frame:
+            "写暮春江南山野的湿冷与剑客之间的试探。笔触冷峻克制，多用环境细节（竹叶滴水、风灯明灭、指节松紧）映衬人物心绪，避免直白抒情。",
+          characterGuard:
+            "裴青舟绝不主动提及孤坟实为衣冠冢，除非「戒心」降至 3 以下或玩家直接指出坟土松动无棺。禁止替玩家角色决定其与李鹤的过往交情。",
+          recordRule:
+            "每回合提炼场上新揭露的器物细节、人物承诺或破绽为简短中文线索（不超过 28 字），供后续回合钉选召回。",
+        },
         clues: [
           { id: "c1", hook: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫" },
           { id: "c2", hook: "裴青舟剑穗上系着半枚与你手中完全契合的旧铜钱" },
@@ -1592,10 +1983,34 @@
         lore: "9 条设定 · 19 层",
         tokens: "3.1K",
         stance: "第二人称",
+        modules: ["白露号舱段图", "木卫二潮汐", "林栖值守日志"],
         writingAll: ["第二人称", "直接反应", "适中"],
+        openingTitles: ["气闸舱隔门通话 · 供氧倒计时"],
         openings: [
           "气闸舱观察窗上结着一层薄霜，应急灯每隔四秒闪过一次暗红。耳机里传来一阵干燥的电流声，随后是林栖沙哑的嗓音：「B 区主供氧管路还剩四十分钟，你那边拿到手动泄压阀了吗？」",
         ],
+        background:
+          "木卫二极轨深空站「白露号」在一次冰下海声呐深潜试验后遭遇强磁暴与内部通信静默。主反应堆进入低功耗保护，A 区与 B 区之间的三号气闸因压差锁死。",
+        character: {
+          name: "林栖 · 值守轮机工程师",
+          role: "白露号 B 区唯一幸存值守员",
+          traits: "冷静务实、略带长期失眠的疲惫感，掌握反应堆配电权限但隐瞒了信标被改写的真相。",
+          bio: "驻站十四个月的高级轮机师，熟悉每一条管线走向。三天前发现地球方向下达了静默废弃指令，为防止恐慌独自锁闭了主控日志。",
+          defaultPersona: "刚从低温睡眠舱被紧急唤醒的舱外维保技术员。",
+        },
+        loreEntries: [
+          { title: "白露号舱段拓扑", keys: "A区, B区, 气闸舱, 供氧", depth: "常驻 (L0)", body: "A 区为乘员睡眠与外勤整备舱，B 区为主控与反应堆舱，中间仅靠三号气闸与一条狭窄的电缆检修井相连。" },
+          { title: "木卫二潮汐辐射窗", keys: "辐射, 木卫二, 轨道, 通信", depth: "触发 (L1)", body: "每 85 分钟经过一次木星磁层高辐射带，期间一切舱外活动与长波通信都会受到严重干扰。" },
+        ],
+        ruleDetails: [
+          { name: "备用电力 (0 ~ 100%)", desc: "每次开启气闸加热或调阅深层日志都会消耗电力；低于 20% 时生命维持系统将关闭次要舱段。" },
+          { name: "信任度", desc: "林栖是否愿意交出主控室最高日志权限与逃生舱坐标。" },
+        ],
+        prompts: {
+          frame: "硬科幻封闭空间叙事。注重仪表读数、气流声、金属热胀冷缩与无线电延迟的真实质感。",
+          characterGuard: "林栖在隔着气闸舱门时只能通过防爆玻璃与无线电与玩家交流，注意物理隔离限制。",
+          recordRule: "记录舱段设备状态变更、剩余供氧时间与已解锁的日志编号。",
+        },
         clues: [
           { id: "c3", hook: "三天前发往地球的求救信标被人为改写成了静默指令" },
         ],
@@ -1609,10 +2024,32 @@
         lore: "5 条设定 · 11 层",
         tokens: "1.9K",
         stance: "第二人称",
+        modules: ["旧公寓日常", "镰仓暑假相册", "京都车票"],
         writingAll: ["第二人称", "转述言行", "仅限输入", "本卡补充"],
+        openingTitles: ["梅雨午后 · 麦茶与旧相册"],
         openings: [
           "窗外的紫阳花被雨水打得低垂下来。理把冰镇好的麦茶推到你面前，指尖还沾着一点水珠：「你看这张照片，去年海边烟火大会的时候，你是不是有什么话没说完？」",
         ],
+        background:
+          "六月中旬的连绵梅雨季，高三升学志愿表提交前的最后一个周末。木造二层公寓的走廊里摆着两把滴水的长柄伞。",
+        character: {
+          name: "佐藤理 · 青梅竹马",
+          role: "同班邻座 / 美术部成员",
+          traits: "敏锐温和、习惯用玩笑掩饰不安，对即将到来的毕业去向分歧格外在意。",
+          bio: "自幼住在隔壁栋的老友，喜欢收集胶片照片与旧车票。夹在相册末页的京都车票是她一直没敢问出口的心事。",
+          defaultPersona: "住在隔壁的同班同学，放学后常来公寓一起温习功课。",
+        },
+        loreEntries: [
+          { title: "镰仓海边烟火大会", keys: "烟火, 去年, 海边, 照片", depth: "常驻 (L0)", body: "去年八月两人搭江之电去看的烟火，回程电车停运时曾在站台躲雨。" },
+        ],
+        ruleDetails: [
+          { name: "心绪与距离感", desc: "随对话中的坦诚度微调，影响理是否主动翻到相册最后一页。" },
+        ],
+        prompts: {
+          frame: "日常空气系笔触，聚焦光线、雨声、冰块撞击玻璃杯等细微生活感。",
+          characterGuard: "保持含蓄克制，不直接点破升学离别，除非玩家主动提起志愿表或京都车票。",
+          recordRule: "记录双方提及的共同回忆与对未来去向的约定。",
+        },
         clues: [
           { id: "c4", hook: "相册最后一页夹着一张未寄出的京都车票" },
         ],
@@ -1626,10 +2063,32 @@
         lore: "6 条设定 · 12 层",
         tokens: "2.2K",
         stance: "无主角",
+        modules: ["沱江盐帮", "巡盐官署", "水路暗哨"],
         writingAll: ["无主角", "详尽", "本卡补充"],
+        openingTitles: ["五更沱江渡口 · 堰闸对峙"],
         openings: [
           "五更天的沱江渡口雾气弥漫，十二艘满载青盐的乌篷船横在堰闸前。新任盐运判官带着二十名佩刀差役立在石牌坊下，而盐帮三当家沈二正蹲在船头慢条斯理地装一袋叶子烟。",
         ],
+        background:
+          "川南沱江水路要冲，官府新设盐引查验卡，试图截断川滇私盐水路；地方盐帮、巡盐官署与本地豪绅三方角力。",
+        character: {
+          name: "群像剧 · 无固定主角",
+          role: "沈二（盐帮三当家）/ 周判官（新任巡盐官）/ 船工与暗哨",
+          traits: "各方人物皆按自身利益与江湖规矩行事，无单一视角滤镜。",
+          bio: "本卡采用导演指令模式（note 通道），用户输入直接作为叙事调度指令。",
+          defaultPersona: "无主角模式（不注入玩家人设）。",
+        },
+        loreEntries: [
+          { title: "沱江堰闸规矩", keys: "堰闸, 乌篷船, 青盐, 查验", depth: "常驻 (L0)", body: "每日卯时开闸放船，逾期滞留将导致上游百船拥堵。" },
+        ],
+        ruleDetails: [
+          { name: "局势紧张度 (0 ~ 10)", desc: "官帮双方冲突烈度，超过 8 将引发渡口火并。" },
+        ],
+        prompts: {
+          frame: "群像白描，多视角切换，突出川南码头方言韵味与江湖市井气。",
+          characterGuard: "无第二人称「你」，严格遵循导演指令推进群像博弈。",
+          recordRule: "记录各方势力筹码让步与关键人物伤亡行踪。",
+        },
         clues: [
           { id: "c5", hook: "三天前货栈门口打伤差役的驼夫已被沈二藏在十里渡口" },
         ],
@@ -1655,7 +2114,7 @@
         starred: false,
         turns: 3,
         ago: "2h",
-        busy: "narrate", // Running in background on the same card!
+        busy: "narrate",
         hitText: "荒亭外竹叶被疾风卷起，裴青舟目光落在牛皮鞘旧短剑末端那道浅刻的鹤纹上。",
         hitTurn: 3,
       },
@@ -1677,7 +2136,7 @@
         starred: true,
         turns: 6,
         ago: "35m",
-        busy: "record", // Running in background on another card!
+        busy: "record",
         hitText: "「林栖，把主控室的日志权限切给我，哪怕外面像装了短剑一样冷我也得出去。」",
         hitTurn: 4,
       },
@@ -1686,11 +2145,11 @@
         card: "banxing",
         title: null,
         starred: false,
-        turns: 0,
+        turns: 2,
         ago: "3d",
         busy: null,
-        hitText: "",
-        hitTurn: 0,
+        hitText: "检查 B 区备用氧舱的手动阀门密封圈。",
+        hitTurn: 2,
       },
       {
         id: 301,
@@ -1724,17 +2183,25 @@
 
     // ───────── 3. Interactive State ─────────
     let device = "desktop"; // "desktop" | "mobile"
-    let stageView = "reader"; // "reader" | "card" | "inspect"
+    let sidebarMode = "session"; // "shelf" (all cards gallery) | "session" (active card workspace)
+    let stageView = "reader"; // "reader" | "new-story" (functional opening picker) | "card" (full-page Card Dossier) | "inspect"
+    let dossierTab = "character"; // "character" | "lore" | "rules" | "prompts"
+    let activeCardId = "wuxia";
     let activeStoryId = 101;
-    let stageCardId = "wuxia"; // Which card is shown when stageView === "card"
     let stageOpeningIdx = 0;
+    let openingSearchQuery = ""; // Search filter inside 40-50 openings directory
+    let openingTagFilter = "all"; // Tag filter inside 40-50 openings directory
+    let openingPopoverOpen = false; // Upward .versions popover state in .siblings footer
     let sidebarCollapsed = false;
-    let showHelperBar = true; // Floating format & snippet pills above composer
-    let showNoteAttach = true; // Attached note-to-narrator / revise bar on top of composer
+    let showHelperBar = true;
+    let showNoteAttach = true;
     let noteDraftText = "让裴青舟注意到剑柄末端的浅刻鹤纹，但暂时不动声色";
     let composerDraftText = "";
-    let expandedCards = new Set(["wuxia", "banxing"]);
-    let searchQuery = "";
+    let cardSearchQuery = ""; // Search query in "shelf" mode
+    let storySearchQuery = ""; // Search query in "session" mode
+    let mgrSearchQuery = ""; // Search query inside the current card's Story Manager
+    let mgrFilterStarred = false; // 全部 / 收藏 filter inside the current card's Story Manager
+    let mgrSelected = new Set(); // Checked story IDs for batch delete inside Story Manager
     let busyEnabled = true;
     let pinnedByCard = {
       wuxia: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫",
@@ -1750,15 +2217,12 @@
     };
     let mobileDrawerOpen = false;
     let mobileSheetOpen = false;
-    let menuStoryId = null;
-    let cleanupSelected = new Set();
 
     function currentStory() {
-      return stories.find((s) => s.id === activeStoryId) || stories[0];
+      return stories.find((s) => s.id === activeStoryId) || stories.find((s) => s.card === activeCardId) || stories[0];
     }
     function currentCardId() {
-      if (stageView === "card") return stageCardId;
-      return currentStory()?.card || "wuxia";
+      return activeCardId;
     }
     function getCard(id) {
       return CARDS.find((c) => c.id === id) || CARDS[0];
@@ -1767,7 +2231,59 @@
       return busyEnabled ? s.busy : null;
     }
 
-    // ───────── 4. Helpers & Search Matching ─────────
+    // Scale-resilient 45-opening dataset generator (matches production greetings: { text, do } -> firstLine & openingTag)
+    const WUXIA_EXTRA_SEEDS = [
+      { first: "暮春的山雨刚歇，苦竹岭上的雾气还缠在竹梢。", rest: "你踩着湿滑的青石阶走到半山荒亭外，亭中一人青衫皂靴，正垂眼擦拭一柄乌木剑鞘。亭外新立着一座无碑孤坟，坟前石桌上搁着半碗冷茶。\n\n山风穿亭而过，竹叶上的积水簌簌落下。那人头也未抬，手指轻轻按在剑柄缠绳上：「苦竹岭的茶已经凉了三日，阁下既然背着关外的泥水上来，不妨先把腰间的东西亮出来。」", tag: "起点 = 荒亭", tokens: 380 },
+      { first: "夜雨如注，苦竹岭茶亭里只点了一盏快要燃尽的竹骨风灯。", rest: "裴青舟背对你站在亭檐下，听见脚步声也未回头：「苦竹岭不迎外客，若是避雨，天亮便下山去。」\n\n风灯火苗剧烈摇晃了一下，映出石桌上那道深逾寸许的旧剑痕。你在亭口站定，雨水顺着笠檐成串滴落。", tag: "戒心 = 9", tokens: 340 },
+      { first: "五更天，越州城外的山道上大雾弥漫，十步之外不见人影。", rest: "破庙的半扇木门虚掩着，里面传来枯枝燃烧的噼啪声。裴青舟靠在断壁旁包扎左臂的暗器擦伤，身旁的地面上摆着三枚乌黑的唐门毒蒺藜。\n\n听见门槛响动，乌木剑鞘已在瞬间横在胸前：「来得倒快。唐门在越州城里一共埋了多少桩子？」", tag: "路线 = 破庙", tokens: 410 },
+      { first: "清明前一日，苦竹岭下的野渡口停着一艘无人看管的乌篷船。", rest: "船舱里放着一坛未开封的绍兴女儿红和一只油布包裹的长匣。裴青舟立在渡口芦苇丛边，目光紧锁着你从船头拾起的那半枚旧铜钱。", tag: "路线 = 野渡", tokens: 360 },
+      { first: "正午的阳光穿过密密匝匝的竹梢，在孤坟前的青石板上投下细碎光斑。", rest: "坟头的泥土显然昨夜被人翻动过，一把沾满红泥的铁锹斜靠在竹根下。裴青舟蹲在坟前，指尖捻着一片不属于江南的关外白桦树皮。", tag: "起点 = 掘坟", tokens: 420 },
+      { first: "越州城南「听雨楼」二楼靠窗的雅座里，茶博士刚添上第三道龙井。", rest: "街面上巡城兵丁的铜锣声由远及近。裴青舟把斗笠压得很低，隔着方桌将一张折得四四方方的字条推到你手边：「城门已经落锁，你手里那柄短剑最好别露白。」", tag: "路线 = 越州城", tokens: 390 },
+      { first: "山涧断崖边的独木桥被山洪冲断了一半，水声如雷。", rest: "裴青舟站在对岸的竹庐廊下，脚边放着一只刚从水里捞上来的旧药箱。他看了一眼你湿透的衣摆：「李鹤生前常提起关外有一位医者，没想到你会从后山断崖摸上来。」", tag: "交情 +4", tokens: 370 },
+      { first: "子时将过，苦竹岭后山的竹林里惊起一片夜鸟。", rest: "两名黑衣暗桩倒在石阶下的泥水里，咽喉处各有一道极细的剑痕。裴青舟缓缓收剑入鞘，转头看向从竹影里走出的你：「这两人跟踪了你一路，你当真毫无察觉？」", tag: "暗桩 = 惊动", tokens: 440 },
+      { first: "秋霜初降，苦竹岭上的老竹叶黄了大半。", rest: "你在荒亭里等了整整两个时辰，才见裴青舟提着一尾山溪草鱼从后山缓步走来。他看见石桌上那柄熟悉的旧短剑，脚步顿时钉在原地。", tag: "起点 = 荒亭", tokens: 350 },
+      { first: "太湖渡口的旧栈桥早已荒废三年，木桩在水面下腐朽发黑。", rest: "裴青舟独自站在当年李鹤坠湖的栈桥尽头，手里攥着那份缺了最后两页的唐门暗桩名册。身后传来你的脚步声。", tag: "路线 = 太湖", tokens: 400 },
+    ];
+
+    function getCardOpenings(c) {
+      if (c._cachedOpenings) return c._cachedOpenings;
+      const list = [];
+      const targetCount = c.id === "wuxia" ? 45 : c.id === "yandao" ? 28 : c.id === "ri" ? 18 : 14;
+      for (let i = 0; i < targetCount; i++) {
+        if (c.id === "wuxia") {
+          const seed = WUXIA_EXTRA_SEEDS[i % WUXIA_EXTRA_SEEDS.length];
+          const suffix = i >= WUXIA_EXTRA_SEEDS.length ? `（第 ${Math.floor(i / WUXIA_EXTRA_SEEDS.length) + 1} 幕变体 · 苦竹岭第 ${(i % 9) + 1} 桩旧事）` : "";
+          list.push({
+            idx: i,
+            firstLine: seed.first + (i >= WUXIA_EXTRA_SEEDS.length ? ` [${i + 1}]` : ""),
+            text: `${seed.first}${suffix}\n\n${seed.rest}`,
+            tag: seed.tag,
+            tokens: seed.tokens + ((i * 17) % 90),
+          });
+        } else {
+          const baseText = c.openings[i % c.openings.length];
+          const first = baseText.split(/[。！？\n]/)[0] + "。";
+          const tags =
+            c.id === "yandao"
+              ? ["起点 = 平静", "起点 = 血案", "局势 = 7", "路线 = 夜渡", "路线 = 县衙"]
+              : c.id === "ri"
+                ? ["好感度 = 60", "好感度 = 75", "地点 = 教室", "地点 = 镰仓", "天气 = 梅雨"]
+                : ["电力 = 85%", "电力 = 40%", "舱段 = B区", "信标 = 静默"];
+          list.push({
+            idx: i,
+            firstLine: i === 0 ? first : `${first.replace(/。$/, "")}（分线 ${String(i + 1).padStart(2, "0")}）。`,
+            text:
+              i === 0
+                ? baseText
+                : `${baseText}\n\n【开场分线 ${String(i + 1).padStart(2, "0")} · 初始设定：${tags[i % tags.length]}】`,
+            tag: tags[i % tags.length],
+            tokens: 310 + ((i * 23) % 120),
+          });
+        }
+      }
+      c._cachedOpenings = list;
+      return list;
+    }
     function escapeHtml(s) {
       return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
@@ -1793,111 +2309,127 @@
       };
     }
 
-    // ───────── 5. Render Sidebar (Used in Desktop Left Column & Mobile Drawer) ─────────
+    // ───────── 5. Render Two-State Sidebar (Gallery Mode vs Single-Card Workspace Mode) ─────────
     function renderSidebarHTML(inMobileDrawer = false) {
-      const q = searchQuery.trim();
-      const groupsHTML = CARDS.map((c) => {
-        const cardStories = stories
-          .filter((s) => s.card === c.id)
-          .sort((a, b) => Number(b.starred) - Number(a.starred));
+      // STATE A: CARD GALLERY (Browsing / Searching Objective Card Assets)
+      if (sidebarMode === "shelf") {
+        const q = cardSearchQuery.trim().toLowerCase();
+        const filteredCards = CARDS.filter(
+          (c) => !q || c.title.toLowerCase().includes(q) || c.summary.toLowerCase().includes(q)
+        );
 
-        const matchedStories = cardStories
-          .map((s) => ({ s, ...storyMatches(s, q) }))
-          .filter((x) => x.match);
-
-        if (q && matchedStories.length === 0 && !c.title.toLowerCase().includes(q.toLowerCase())) {
-          return "";
-        }
-
-        const isOpen = q ? true : expandedCards.has(c.id);
-        const isCardPageCurrent = stageView === "card" && stageCardId === c.id;
-        const hasBusyChild = cardStories.some((s) => isStoryBusy(s));
-
-        const rowsHTML = matchedStories.length
-          ? matchedStories
-              .map(({ s, snippet }) => {
-                const isCur = stageView !== "card" && s.id === activeStoryId;
-                const b = isStoryBusy(s);
-                const titleText = s.title ?? "New story";
-                return `
-                  <li class="story-item" aria-current="${isCur ? "true" : "false"}">
-                    <div class="story-row" onclick="selectStory(${s.id})">
-                      <span class="story-main">
-                        ${s.starred ? `<span class="story-star" title="已收藏">${ICONS.starFill}</span>` : ""}
-                        <span class="story-name ${s.title === null ? "unnamed" : ""}">
-                          ${highlightMark(titleText, q)}
-                        </span>
-                      </span>
-                      <span class="story-right" onclick="event.stopPropagation()">
-                        ${b ? `<i class="busy-dot" title="后台进行中 (${b})"></i>` : ""}
-                        <button
-                          type="button"
-                          class="story-more"
-                          aria-label="故事操作"
-                          aria-expanded="${menuStoryId === s.id ? "true" : "false"}"
-                          onclick="openStoryMenu(event, ${s.id})"
-                        >
-                          ${ICONS.dots}
-                        </button>
-                      </span>
-                    </div>
-                    ${
-                      snippet
-                        ? `<div class="story-hit" onclick="selectStory(${s.id})">
-                            <span class="turn-tag">第 ${s.hitTurn} 轮 ·</span>${highlightMark(snippet, q)}
-                          </div>`
-                        : ""
-                    }
-                  </li>
-                `;
-              })
-              .join("")
-          : `<li class="group-empty">暂无故事 · 点击卡名开启</li>`;
+        const cardsHTML = filteredCards
+          .map((c) => {
+            const hasBusy = stories.some((s) => s.card === c.id && isStoryBusy(s));
+            const isCur = c.id === activeCardId;
+            return `
+              <button
+                type="button"
+                class="shelf-card"
+                aria-current="${isCur ? "true" : "false"}"
+                onclick="enterCardWorkspace('${c.id}')"
+              >
+                <div class="shelf-card-top">
+                  <span class="shelf-card-title">${highlightMark(c.title, cardSearchQuery)}</span>
+                  <span class="shelf-card-right">
+                    ${hasBusy ? `<i class="busy-dot" title="该卡有正在运行的局"></i>` : ""}
+                    ${ICONS.caretRight}
+                  </span>
+                </div>
+                <p class="shelf-card-desc">${highlightMark(c.summary, cardSearchQuery)}</p>
+              </button>
+            `;
+          })
+          .join("");
 
         return `
-          <section class="card-group" data-open="${isOpen ? "true" : "false"}">
-            <div class="group-head" ${isCardPageCurrent ? 'aria-current="page"' : ""}>
-              <button
-                type="button"
-                class="group-toggle"
-                aria-label="${isOpen ? "收起分组" : "展开分组"}"
-                onclick="toggleCardGroup('${c.id}')"
-              >
-                ${ICONS.caretDown}
-              </button>
-              <button
-                type="button"
-                class="group-title"
-                onclick="openCardInStage('${c.id}')"
-                title="查看「${c.title}」卡片页与开场白（不建空局）"
-              >
-                <span class="name">${escapeHtml(c.title)}</span>
-                <span class="group-meta">
-                  ${!isOpen && hasBusyChild ? `<i class="busy-dot" title="组内有进行中的局"></i>` : ""}
-                  <span>${cardStories.length}</span>
-                  <span class="card-enter">${ICONS.caretRight}</span>
-                </span>
-              </button>
+          <div class="sidebar">
+            <div class="side-top">
+              <div class="input-box">
+                ${ICONS.search}
+                <input
+                  id="shelf-search-input"
+                  type="search"
+                  placeholder="搜索卡片…"
+                  value="${escapeHtml(cardSearchQuery)}"
+                  oninput="onCardSearchInput(this.value)"
+                />
+              </div>
+              ${
+                inMobileDrawer
+                  ? `<button type="button" class="icon sm" aria-label="关闭抽屉" onclick="closeMobileOverlays()">${ICONS.close}</button>`
+                  : `<button type="button" class="icon sm" title="折叠侧边栏" aria-label="折叠侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
+              }
             </div>
-            <ul class="story-list">
-              ${rowsHTML}
-            </ul>
-          </section>
+            <div class="shelf-scroll">
+              ${cardsHTML || `<div style="padding:12px; color:var(--ink-3); font-size:var(--text-footnote);">未找到匹配的卡片</div>`}
+            </div>
+            <footer class="side-foot">
+              <div class="side-foot-left">
+                <button type="button" class="icon sm" title="设置" onclick="showToast('打开 Settings 设置页')">
+                  ${ICONS.gear}
+                </button>
+                <button type="button" class="icon sm" title="切换深浅色主题" onclick="toggleTheme()">
+                  ${ICONS.shade}
+                </button>
+                <button type="button" class="icon sm" title="切换界面语言" onclick="showToast('切换界面语言 zh-CN / en')">
+                  ${ICONS.translate}
+                </button>
+              </div>
+            </footer>
+          </div>
         `;
-      }).join("");
+      }
+
+      // STATE B: SINGLE-CARD WORKSPACE (Clean Card Header + Plain Homogeneous Story List + Bottom New Story Button)
+      const c = getCard(activeCardId);
+      const pid = personaByCard[c.id];
+      const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
+      const otherCardBusy = stories.some((s) => s.card !== c.id && isStoryBusy(s));
+      const q = storySearchQuery.trim();
+
+      const cardStories = stories
+        .filter((s) => s.card === c.id)
+        .sort((a, b) => Number(b.starred) - Number(a.starred));
+
+      const matchedStories = cardStories
+        .map((s) => ({ s, ...storyMatches(s, q) }))
+        .filter((x) => x.match);
+
+      // Plain, homogeneous rows: NO star icons, NO ⋯ menu buttons — strictly left-aligned titles for switching!
+      const rowsHTML = matchedStories
+        .map(({ s, snippet }) => {
+          const isCur = stageView === "reader" && s.id === activeStoryId;
+          const b = isStoryBusy(s);
+          const titleText = s.title ?? "New story";
+          return `
+            <li class="story-item" aria-current="${isCur ? "true" : "false"}">
+              <button type="button" class="story-row" onclick="selectStory(${s.id})">
+                <span class="story-name ${s.title === null ? "unnamed" : ""}">
+                  ${highlightMark(titleText, q)}
+                </span>
+                ${b ? `<i class="busy-dot" title="后台进行中 (${b})"></i>` : ""}
+              </button>
+              ${
+                snippet
+                  ? `<div class="story-hit" onclick="selectStory(${s.id})" style="cursor:pointer">
+                      <span class="turn-tag">#${s.hitTurn}</span>${highlightMark(snippet, q)}
+                    </div>`
+                  : ""
+              }
+            </li>
+          `;
+        })
+        .join("");
 
       return `
         <div class="sidebar">
           <div class="side-top">
-            <div class="input-box">
-              ${ICONS.search}
-              <input
-                type="search"
-                placeholder="搜索故事与回合…"
-                value="${escapeHtml(searchQuery)}"
-                oninput="onSearchInput(this.value)"
-              />
-            </div>
+            <button type="button" class="back-shelf-btn" onclick="setSidebarMode('shelf')" title="返回卡片库">
+              ${ICONS.caretLeft}
+              <span>所有卡片</span>
+              ${otherCardBusy ? `<i class="busy-dot" title="其他卡片有正在运行的局"></i>` : ""}
+            </button>
             ${
               inMobileDrawer
                 ? `<button type="button" class="icon sm" aria-label="关闭抽屉" onclick="closeMobileOverlays()">${ICONS.close}</button>`
@@ -1905,45 +2437,83 @@
             }
           </div>
 
-          <div class="tree-scroll" id="tree-scroller">
-            ${groupsHTML}
-          </div>
+          <!-- Card Header Section: Minimalist title-only button (summary & settings live in CardPage, keeping sidebar clean!) -->
+          <button
+            type="button"
+            class="cardhead"
+            ${stageView === "card" ? 'aria-current="page"' : ""}
+            onclick="openCardPageInStage('${c.id}')"
+            title="查看「${escapeHtml(c.title)}」卡片设定与配置详情"
+          >
+            <span class="top">
+              <h1>${escapeHtml(c.title)}</h1>
+              <span class="enter" aria-hidden="true">${ICONS.caretRight}</span>
+            </span>
+          </button>
 
-          <footer class="side-foot">
-            <div class="side-foot-left">
-              <button type="button" class="icon sm" title="设置 (供应商 / 默认模型 / 人设)" onclick="showToast('打开 Settings 设置页')">
-                ${ICONS.gear}
-              </button>
-              <button type="button" class="icon sm" title="切换深浅色主题 (#70)" onclick="toggleTheme()">
-                ${ICONS.shade}
-              </button>
-              <button type="button" class="icon sm" title="切换界面语言 (#67)" onclick="showToast('切换界面语言 zh-CN / en')">
-                ${ICONS.translate}
-              </button>
+          <!-- Stories Section: Full-width search + homogeneous story list -->
+          <section class="stories-sec" aria-label="故事列表">
+            <div class="input-box" style="flex:none;">
+              ${ICONS.search}
+              <input
+                id="story-search-input"
+                type="search"
+                placeholder="搜索故事…"
+                value="${escapeHtml(storySearchQuery)}"
+                oninput="onStorySearchInput(this.value)"
+              />
             </div>
+            <div class="shelf-scroll">
+              <ul class="story-list">
+                ${rowsHTML || `<li style="padding:8px; color:var(--ink-3); font-size:var(--text-footnote);">无匹配故事</li>`}
+              </ul>
+            </div>
+          </section>
+
+          <!-- Bottom Area: Large "New Story" button + Footer (Right icon opens THIS card's Story Manager) -->
+          <div class="side-bottom">
             <button
               type="button"
-              class="icon sm"
-              title="管理与清理故事"
-              aria-label="管理与清理故事"
-              onclick="openCleanupModal()"
+              class="new-story-btn"
+              onclick="openNewStoryPicker('${c.id}')"
+              title="快速挑一个开场并开始新故事"
             >
-              ${ICONS.sliders}
+              ${ICONS.plus}
+              <span>新建故事</span>
             </button>
-          </footer>
+
+            <footer class="side-foot">
+              <div class="side-foot-left">
+                <button type="button" class="icon sm" title="设置" onclick="showToast('打开 Settings 设置页')">
+                  ${ICONS.gear}
+                </button>
+                <button type="button" class="icon sm" title="切换深浅色主题" onclick="toggleTheme()">
+                  ${ICONS.shade}
+                </button>
+                <button type="button" class="icon sm" title="切换界面语言" onclick="showToast('切换界面语言 zh-CN / en')">
+                  ${ICONS.translate}
+                </button>
+              </div>
+              <button
+                type="button"
+                class="icon sm"
+                title="管理「${escapeHtml(c.title)}」的故事（收藏 / 重命名 / 导出 / 删除）"
+                aria-label="管理当前卡的故事"
+                onclick="openCardStoryManager()"
+              >
+                ${ICONS.sliders}
+              </button>
+            </footer>
+          </div>
         </div>
       `;
     }
 
-    // ───────── 6. Render Main Stage Views (Reader / CardPage / Inspector) ─────────
+    // ───────── 6. Render Main Stage Views (Reader / Full-Page CardPage / Inspector) ─────────
     function renderReaderStageHTML(isMobile = false) {
       const s = currentStory();
-      const c = getCard(s.card);
+      const c = getCard(activeCardId);
       const b = isStoryBusy(s);
-      const pid = personaByCard[c.id];
-      const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
-      const stanceChip = c.stance; // Only chosen()[0] on the strip (#117)
-      const pinHook = pinnedByCard[c.id];
 
       const stripHTML = isMobile
         ? `
@@ -1953,7 +2523,7 @@
             </button>
             <button type="button" class="mobile-title-btn" onclick="openMobileSheet()">
               <span class="c-name">${escapeHtml(c.title)}</span>
-              <span class="strip-sep">›</span>
+              <span style="color:var(--ink-3)">›</span>
               <span class="s-name">${escapeHtml(s.title ?? "New story")}</span>
               ${ICONS.caretDown}
             </button>
@@ -1970,25 +2540,11 @@
                 ? `<button type="button" class="icon sm" title="展开侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
                 : ""
             }
-            <div class="strip-crumb">
-              <button type="button" class="strip-card-btn" onclick="openCardInStage('${c.id}')" title="查看卡片页">
-                ${escapeHtml(c.title)}
-              </button>
-              <span class="strip-sep">›</span>
-              <span class="strip-story-name ${s.title === null ? "unnamed" : ""}">
-                ${escapeHtml(s.title ?? "New story")}
-              </span>
-            </div>
-            <div class="strip-chips">
-              <button type="button" class="chip" onclick="openPersonaModal()" title="切换当前卡的人设">
-                <span>${escapeHtml(pName)}</span>
-              </button>
-              <button type="button" class="chip" onclick="showToast('打开 Writing 写作偏好页（铺满主舞台）')" title="当前叙事体位（点击进入写作页）">
-                <span>${escapeHtml(stanceChip)}</span>
-              </button>
-            </div>
+            <span class="strip-story-name ${s.title === null ? "unnamed" : ""}">
+              ${escapeHtml(s.title ?? "New story")}
+            </span>
             <div class="strip-tools">
-              <button type="button" class="icon sm" title="Timeline 时间线" aria-label="时间线" onclick="showToast('打开 Timeline 时间线页（铺满主舞台）')">
+              <button type="button" class="icon sm" title="Timeline 时间线" aria-label="时间线" onclick="showToast('打开 Timeline 时间线页')">
                 ${ICONS.tree}
               </button>
               <button type="button" class="icon sm" title="Inspector 检查器" aria-label="检查器" onclick="setStageView('inspect')">
@@ -2022,19 +2578,17 @@
           <div class="helper-bar" role="toolbar" aria-label="输入助手">
             <button type="button" class="chip glyph" onclick="insertHelperText('「', '」')" title="插入直角引号">「」</button>
             <button type="button" class="chip glyph" onclick="insertHelperText('『', '』')" title="插入双直角引号">『』</button>
-            ${
-              c.id !== "yandao"
-                ? `<button type="button" class="chip glyph" onclick="insertHelperText('⦅', '⦆')" title="插入角色心声">⦅心声⦆</button>`
-                : ""
-            }
+            <button type="button" class="chip glyph" onclick="insertHelperText('“', '”')" title="插入双引号">“”</button>
+            <button type="button" class="chip glyph" onclick="insertHelperText('（', '）')" title="插入圆括号">（）</button>
             <span class="sep"></span>
             ${
               c.id !== "yandao"
-                ? `<button type="button" class="chip" onclick="openNoteAttach()" title="挂一条给叙述者的场外指导">+ 场外指导</button>`
+                ? `<button type="button" class="chip" onclick="insertHelperText('⦅', '⦆')" title="角色心里的话，不说出口">心声</button>
+                   <button type="button" class="chip" onclick="openNoteAttach()" title="给叙事者的话，不计入正文">+ 场外指导</button>`
                 : ""
             }
-            <button type="button" class="chip" onclick="insertSnippet('继续。', true)">继续</button>
-            <button type="button" class="chip" onclick="insertSnippet('推进剧情到下一幕。', true)">推进剧情</button>
+            <button type="button" class="chip" onclick="insertSnippet('继续。', true)" title="顺着写下去">继续</button>
+            <button type="button" class="chip" onclick="insertSnippet('推进剧情到下一个场景。', true)" title="引入新事件，或切到下一幕">推进剧情</button>
           </div>
         `
         : "";
@@ -2046,7 +2600,7 @@
               <span class="attach-tag">致叙述者</span>
               <input
                 type="text"
-                placeholder="仅作用于下一节的场外指导…"
+                placeholder="给叙述者的场外指导…"
                 value="${escapeHtml(noteDraftText)}"
                 oninput="noteDraftText = this.value"
               />
@@ -2096,7 +2650,7 @@
                     class="icon sm"
                     aria-label="输入助手"
                     aria-pressed="${showHelperBar ? "true" : "false"}"
-                    title="展开/收起上方输入助手小附件"
+                    title="展开/收起输入助手附件"
                     onclick="toggleHelperBar()"
                   >
                     ${ICONS.plus}
@@ -2124,7 +2678,7 @@
       const glanceCard = `
         <aside class="glance-card">
           <section class="glance-sec">
-            <h2>状态 (Status)</h2>
+            <h2>状态</h2>
             <div class="meter-row">
               <div class="meter-top">
                 <span class="label">戒心</span>
@@ -2145,7 +2699,7 @@
             </div>
           </section>
           <section class="glance-sec">
-            <h2>本轮记录与可钉线索 (Record)</h2>
+            <h2>记录与线索</h2>
             ${c.clues
               .map(
                 (cl) => `
@@ -2154,7 +2708,7 @@
                   <button
                     type="button"
                     aria-pressed="${pinnedByCard[c.id] === cl.hook ? "true" : "false"}"
-                    title="钉到输入框上方（随下一轮发送）"
+                    title="钉选线索（下一轮发消息时携带）"
                     onclick="toggleCluePin('${c.id}', '${escapeHtml(cl.hook)}')"
                   >
                     ${ICONS.pin}
@@ -2170,11 +2724,354 @@
       return readerCard + glanceCard;
     }
 
-    function renderCardStageHTML() {
-      const c = getCard(stageCardId);
+    // Route 1 (Bottom "＋ 新建故事" button): Pure Opening & Persona Guide — built for 40~50 openings!
+    // Strips out card metadata (which lives in CardPage) and focuses 100% on:
+    //   1. Card/Story Persona selection
+    //   2. High-capacity 40~50 Opening Directory (.version: 01 + firstLine + .tag) + search/tag filter
+    //   3. Production .well > .wscroll prose preview + .siblings (‹ 01 / 45 ▴ › + upward .versions popover) + Begin
+    function renderNewStoryStageHTML(isMobile = false) {
+      const c = getCard(activeCardId);
+      const allOpenings = getCardOpenings(c);
+      if (stageOpeningIdx >= allOpenings.length) stageOpeningIdx = 0;
+      const currentOp = allOpenings[stageOpeningIdx] || allOpenings[0];
+
       const pid = personaByCard[c.id];
-      const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
-      const openingText = c.openings[stageOpeningIdx] ?? c.openings[0];
+      const activePersona = PERSONAS.find((p) => p.id === pid);
+      const pName = activePersona?.name ?? "卡片默认";
+      const pBio = activePersona ? activePersona.bio : (c.character?.defaultPersona || "使用卡片默认来客设定");
+
+      // Derive distinct tags for quick filtering across 45 openings
+      const uniqueTags = Array.from(new Set(allOpenings.map((o) => o.tag)));
+      const q = openingSearchQuery.trim().toLowerCase();
+      const filteredOpenings = allOpenings.filter((o) => {
+        if (openingTagFilter !== "all" && o.tag !== openingTagFilter) return false;
+        if (!q) return true;
+        return (
+          o.firstLine.toLowerCase().includes(q) ||
+          o.tag.toLowerCase().includes(q) ||
+          String(o.idx + 1).padStart(2, "0").includes(q)
+        );
+      });
+
+      const personaPillsHTML =
+        c.id === "yandao"
+          ? `<span style="font-size:var(--text-footnote); color:var(--ink-2);">无主角模式（导演指令通道，无需绑定玩家人设）</span>`
+          : `
+            <div class="newstory-persona-pills">
+              <button
+                type="button"
+                class="persona-pill"
+                aria-pressed="${pid === undefined ? "true" : "false"}"
+                onclick="selectPersonaForCard('${c.id}', undefined)"
+              >
+                卡片默认
+              </button>
+              ${PERSONAS.map(
+                (p) => `
+                <button
+                  type="button"
+                  class="persona-pill"
+                  aria-pressed="${pid === p.id ? "true" : "false"}"
+                  onclick="selectPersonaForCard('${c.id}', '${p.id}')"
+                >
+                  ${escapeHtml(p.name)}
+                </button>
+              `
+              ).join("")}
+            </div>
+            <p class="newstory-persona-bio" title="${escapeHtml(pBio)}">${escapeHtml(pBio)}</p>
+          `;
+
+      const tagFiltersHTML = [
+        `<button type="button" class="opening-tag-filter" aria-pressed="${openingTagFilter === "all" ? "true" : "false"}" onclick="setOpeningTagFilter('all')">全部 (${allOpenings.length})</button>`,
+        ...uniqueTags.map(
+          (tag) => `
+            <button
+              type="button"
+              class="opening-tag-filter"
+              aria-pressed="${openingTagFilter === tag ? "true" : "false"}"
+              onclick="setOpeningTagFilter('${escapeHtml(tag)}')"
+            >
+              ${escapeHtml(tag)}
+            </button>
+          `
+        ),
+      ].join("");
+
+      const dirRowsHTML = filteredOpenings
+        .map(
+          (o) => `
+          <button
+            type="button"
+            class="version"
+            aria-current="${o.idx === stageOpeningIdx ? "true" : "false"}"
+            onclick="selectOpeningIdx(${o.idx})"
+          >
+            <span class="below">${String(o.idx + 1).padStart(2, "0")}</span>
+            <span class="first">${highlightMark(o.firstLine, openingSearchQuery)}</span>
+            <span class="tag">${escapeHtml(o.tag)}</span>
+          </button>
+        `
+        )
+        .join("");
+
+      const popoverRowsHTML = allOpenings
+        .map(
+          (o) => `
+          <button
+            type="button"
+            role="menuitem"
+            class="version"
+            aria-current="${o.idx === stageOpeningIdx ? "true" : "false"}"
+            onclick="selectOpeningIdx(${o.idx}); openingPopoverOpen = false; renderAll();"
+          >
+            <span class="below">${String(o.idx + 1).padStart(2, "0")}</span>
+            <span class="first">${escapeHtml(o.firstLine)}</span>
+            <span class="tag">${escapeHtml(o.tag)}</span>
+          </button>
+        `
+        )
+        .join("");
+
+      return `
+        <div class="stage-surface">
+          <div class="stage-surface-body">
+            <article class="newstory-sheet" aria-label="新建故事与开场选择">
+              <!-- Left Column: Built-in Persona Picker + High-Capacity 45-Opening Directory -->
+              <section class="newstory-side">
+                <div class="newstory-title-row">
+                  <div class="newstory-title-left">
+                    <button type="button" class="icon sm" title="返回阅读器" aria-label="返回阅读器" onclick="setStageView('reader')">
+                      ${ICONS.back}
+                    </button>
+                    <h1>新建故事 · ${escapeHtml(c.title)}</h1>
+                  </div>
+                  <span class="est mono">${allOpenings.length} 个开场</span>
+                </div>
+
+                <!-- Step 1: Built-in Persona Selection -->
+                <div class="newstory-persona-box">
+                  <div class="newstory-persona-top">
+                    <span class="lbl">上场人设</span>
+                    ${
+                      c.id !== "yandao"
+                        ? `<button type="button" style="font-size:var(--text-caption); color:var(--ink-2);" onclick="openPersonaModal()">详情 ▸</button>`
+                        : ""
+                    }
+                  </div>
+                  ${personaPillsHTML}
+                </div>
+
+                <!-- Step 2: 40-50 Openings Searchable & Filterable Directory -->
+                <div class="opening-dir-head">
+                  <div class="input-box">
+                    ${ICONS.search}
+                    <input
+                      id="opening-search-input"
+                      type="search"
+                      placeholder="筛选 ${allOpenings.length} 个开场（首句 / 序号 / 状态标签）…"
+                      value="${escapeHtml(openingSearchQuery)}"
+                      oninput="onOpeningSearchInput(this.value)"
+                    />
+                  </div>
+                  <div class="opening-tag-bar" role="toolbar" aria-label="按初始状态标签筛选">
+                    ${tagFiltersHTML}
+                  </div>
+                </div>
+
+                <div class="opening-dir-list wscroll" role="listbox" aria-label="开场列表">
+                  ${dirRowsHTML || `<div style="padding:12px; color:var(--ink-3); font-size:var(--text-footnote);">无匹配的开场</div>`}
+                </div>
+              </section>
+
+              <!-- Right Column: Production Opening Prose Well (.well > .wscroll) + Footer (.siblings + ~tokens + Begin) -->
+              <section class="newstory-opening" aria-label="开场正文预览">
+                <div class="well">
+                  <div class="wscroll">
+                    <p>${escapeHtml(currentOp.text)}</p>
+                  </div>
+                </div>
+
+                <footer class="foot">
+                  <span class="siblings">
+                    <button
+                      type="button"
+                      class="step-icon"
+                      aria-label="上一个开场"
+                      ${stageOpeningIdx === 0 ? "disabled" : ""}
+                      onclick="selectOpeningIdx(${stageOpeningIdx - 1})"
+                    >
+                      ${ICONS.caretLeft}
+                    </button>
+                    <button
+                      type="button"
+                      class="count"
+                      aria-expanded="${openingPopoverOpen ? "true" : "false"}"
+                      aria-label="展开开场列表"
+                      onclick="toggleOpeningPopover()"
+                    >
+                      <span>${stageOpeningIdx + 1} / ${allOpenings.length}</span>
+                      ${ICONS.caretUp}
+                    </button>
+                    ${
+                      openingPopoverOpen
+                        ? `<div class="versions-popover" role="menu">${popoverRowsHTML}</div>`
+                        : ""
+                    }
+                    <button
+                      type="button"
+                      class="step-icon"
+                      aria-label="下一个开场"
+                      ${stageOpeningIdx === allOpenings.length - 1 ? "disabled" : ""}
+                      onclick="selectOpeningIdx(${stageOpeningIdx + 1})"
+                    >
+                      ${ICONS.caretRight}
+                    </button>
+                  </span>
+
+                  <span class="chip" style="height:24px; font-size:var(--text-caption);">${escapeHtml(currentOp.tag)}</span>
+                  <span class="est mono">~${currentOp.tokens} tokens</span>
+
+                  <button type="button" class="begin-btn" onclick="beginNewStoryFromCard('${c.id}')">
+                    <span>以此开场开始</span>
+                    ${ICONS.arrowRight}
+                  </button>
+                </footer>
+              </section>
+            </article>
+          </div>
+        </div>
+      `;
+    }
+
+    // Route 2 (Top Card Header Click): Full-Page Card Dossier (Background, Character, Lorebook, Rules, Prompts)
+    function renderCardPageStageHTML() {
+      const c = getCard(activeCardId);
+      const pid = personaByCard[c.id];
+      const activePersona = PERSONAS.find((p) => p.id === pid);
+      const pName = activePersona?.name ?? "卡片默认";
+
+      let mainTabHTML = "";
+      if (dossierTab === "character") {
+        mainTabHTML = `
+          <div class="dossier-content">
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>世界背景设定 (World Frame)</h2>
+                <span class="tag">card.frame · 常驻 Head</span>
+              </div>
+              <div class="dossier-block">
+                <p>${escapeHtml(c.background || c.summary)}</p>
+              </div>
+            </section>
+
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>Character 角色设定</h2>
+                <span class="tag">card.character</span>
+              </div>
+              <div class="dossier-block">
+                <h3>
+                  <span>${escapeHtml(c.character?.name || c.title)}</span>
+                  <span class="chip">${escapeHtml(c.character?.role || "")}</span>
+                </h3>
+                <p><strong>性格与行为准则：</strong>${escapeHtml(c.character?.traits || "")}</p>
+                <p><strong>人物小传与暗线：</strong>${escapeHtml(c.character?.bio || "")}</p>
+              </div>
+            </section>
+
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>来客 / 玩家人设位 (Persona Slot)</h2>
+                <button type="button" class="chip" onclick="openPersonaModal()">切换绑定人设 · ${escapeHtml(pName)}</button>
+              </div>
+              <div class="dossier-kv-grid">
+                <div class="dossier-block">
+                  <h3><span>卡片默认人设</span><span class="tag">fallback</span></h3>
+                  <p>${escapeHtml(c.character?.defaultPersona || "未指定默认人设")}</p>
+                </div>
+                <div class="dossier-block">
+                  <h3><span>当前生效人设：${escapeHtml(pName)}</span><span class="tag">active</span></h3>
+                  <p>${escapeHtml(activePersona ? activePersona.bio : (c.character?.defaultPersona || "使用卡片默认设定"))}</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        `;
+      } else if (dossierTab === "lore") {
+        mainTabHTML = `
+          <div class="dossier-content">
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>世界书与设定词条 (Lorebook)</h2>
+                <span class="tag">${escapeHtml(c.lore)} · lookup 节点按关键词与深度召回</span>
+              </div>
+              ${(c.loreEntries || [])
+                .map(
+                  (entry) => `
+                  <div class="dossier-block">
+                    <h3>
+                      <span>${escapeHtml(entry.title)}</span>
+                      <span class="chip" style="font-family:var(--font-mono)">${escapeHtml(entry.depth)} · 触发词: ${escapeHtml(entry.keys)}</span>
+                    </h3>
+                    <p>${escapeHtml(entry.body)}</p>
+                  </div>
+                `
+                )
+                .join("")}
+            </section>
+          </div>
+        `;
+      } else if (dossierTab === "rules") {
+        mainTabHTML = `
+          <div class="dossier-content">
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>状态表与检定规则 (Status & Decide Rules)</h2>
+                <span class="tag">${escapeHtml(c.rules)}</span>
+              </div>
+              ${(c.ruleDetails || [])
+                .map(
+                  (r) => `
+                  <div class="dossier-block">
+                    <h3><span>${escapeHtml(r.name)}</span></h3>
+                    <p>${escapeHtml(r.desc)}</p>
+                  </div>
+                `
+                )
+                .join("")}
+            </section>
+          </div>
+        `;
+      } else if (dossierTab === "prompts") {
+        mainTabHTML = `
+          <div class="dossier-content">
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>叙事文风与笔触设定 (Narrate Frame Prompt)</h2>
+                <span class="tag">stage: narrate</span>
+              </div>
+              <pre class="dossier-prompt">${escapeHtml(c.prompts?.frame || "")}</pre>
+            </section>
+
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>角色禁令与视角边界 (Character & Stance Guard)</h2>
+                <span class="tag">stage: narrate + check · ${(c.writingAll || []).join(" / ")}</span>
+              </div>
+              <pre class="dossier-prompt">${escapeHtml(c.prompts?.characterGuard || "")}</pre>
+            </section>
+
+            <section class="dossier-sec">
+              <div class="dossier-sec-head">
+                <h2>记忆与线索提取提示词 (Record Extraction Prompt)</h2>
+                <span class="tag">stage: record</span>
+              </div>
+              <pre class="dossier-prompt">${escapeHtml(c.prompts?.recordRule || "")}</pre>
+            </section>
+          </div>
+        `;
+      }
 
       return `
         <div class="stage-surface">
@@ -2184,47 +3081,72 @@
                 ? `<button type="button" class="icon sm" title="展开侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
                 : ""
             }
-            <button type="button" class="icon sm" title="返回当前故事阅读器" onclick="setStageView('reader')">
+            <button type="button" class="icon sm" title="返回阅读器" onclick="setStageView('reader')">
               ${ICONS.back}
             </button>
-            <span class="strip-story-name">${escapeHtml(c.title)}</span>
+            <span class="strip-story-name">${escapeHtml(c.title)} · 卡片设定档案</span>
+            <div class="strip-tools">
+              <button type="button" class="chip" onclick="openNewStoryPicker('${c.id}')">
+                ${ICONS.plus} <span>挑开场新建故事</span>
+              </button>
+            </div>
           </header>
-          <div class="stage-surface-body">
-            <article class="cardsheet">
-              <section class="about">
-                <div>
+          <div class="dossier-layout">
+            <aside class="dossier-rail">
+              <div>
+                <div class="dossier-brand">
                   <h1>${escapeHtml(c.title)}</h1>
-                  <p class="summary">${escapeHtml(c.summary)}</p>
+                  <p>${escapeHtml(c.summary)}</p>
                 </div>
-                <dl class="specs">
-                  <div class="row"><dt>输入通道</dt><dd>${escapeHtml(c.channel)}</dd></div>
-                  <div class="row"><dt>状态与规则</dt><dd>${escapeHtml(c.rules)}</dd></div>
-                  <div class="row"><dt>世界设定</dt><dd>${escapeHtml(c.lore)}</dd></div>
-                  <div class="row"><dt>当前人设</dt><dd>${escapeHtml(pName)}</dd></div>
-                  <div class="row"><dt>Head 估算</dt><dd style="font-family:var(--font-mono)">~${c.tokens} tokens</dd></div>
-                </dl>
-              </section>
-              <section class="opening">
-                <div class="well">
-                  ${escapeHtml(openingText)}
-                </div>
-                <footer class="foot">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    ${
-                      c.openings.length > 1
-                        ? `<button type="button" class="chip" onclick="cycleOpening(${c.openings.length})">
-                            开场 ${stageOpeningIdx + 1} / ${c.openings.length} ▾
-                          </button>`
-                        : `<span style="font-size:var(--text-footnote); color:var(--ink-3);">唯一开场白</span>`
-                    }
-                  </div>
-                  <button type="button" class="begin-btn" onclick="beginNewStoryFromCard('${c.id}')">
-                    <span>开始新故事 (Begin)</span>
-                    ${ICONS.arrowRight}
+                <nav class="dossier-nav" aria-label="卡片设定维度">
+                  <button
+                    type="button"
+                    class="dossier-nav-btn"
+                    aria-current="${dossierTab === "character" ? "true" : "false"}"
+                    onclick="setDossierTab('character')"
+                  >
+                    <span>角色与背景设定</span>
+                    <span class="badge">Character</span>
                   </button>
-                </footer>
-              </section>
-            </article>
+                  <button
+                    type="button"
+                    class="dossier-nav-btn"
+                    aria-current="${dossierTab === "lore" ? "true" : "false"}"
+                    onclick="setDossierTab('lore')"
+                  >
+                    <span>世界书词条</span>
+                    <span class="badge">${(c.loreEntries || []).length} 条</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="dossier-nav-btn"
+                    aria-current="${dossierTab === "rules" ? "true" : "false"}"
+                    onclick="setDossierTab('rules')"
+                  >
+                    <span>状态与检定规则</span>
+                    <span class="badge">${(c.ruleDetails || []).length} 项</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="dossier-nav-btn"
+                    aria-current="${dossierTab === "prompts" ? "true" : "false"}"
+                    onclick="setDossierTab('prompts')"
+                  >
+                    <span>提示词与边界</span>
+                    <span class="badge">Prompts</span>
+                  </button>
+                </nav>
+              </div>
+              <dl class="dossier-specs">
+                <div class="row"><dt>输入通道</dt><dd>${escapeHtml(c.channel)}</dd></div>
+                <div class="row"><dt>默认写法</dt><dd>${escapeHtml((c.writingAll || []).join(" · "))}</dd></div>
+                <div class="row"><dt>预设开场</dt><dd>${c.openings.length} 个</dd></div>
+                <div class="row"><dt>Head 估算</dt><dd style="font-family:var(--font-mono)">~${c.tokens} tok</dd></div>
+              </dl>
+            </aside>
+            <div class="dossier-main">
+              ${mainTabHTML}
+            </div>
           </div>
         </div>
       `;
@@ -2244,20 +3166,20 @@
             <button type="button" class="icon sm" title="返回阅读器" onclick="setStageView('reader')">
               ${ICONS.back}
             </button>
-            <span class="strip-story-name">${escapeHtml(c.title)} › ${escapeHtml(s.title ?? "New story")}</span>
+            <span class="strip-story-name">${escapeHtml(s.title ?? "New story")}</span>
             <span class="chip" style="font-family:var(--font-mono)">第 ${s.turns || 1} 轮</span>
           </header>
           <div class="inspect-grid">
             <div class="inspect-pane">
-              <strong style="font-size:var(--text-caption); color:var(--ink-3); text-transform:uppercase;">Pipeline Calls</strong>
+              <strong style="font-size:var(--text-caption); color:var(--ink-3);">Pipeline Calls</strong>
               <div class="inspect-step"><span>1. lookup</span><span>180ms · 0 hits</span></div>
               <div class="inspect-step"><span>2. decide</span><span>310ms · end</span></div>
-              <div class="inspect-step" style="outline: 1.5px solid var(--ink);"><span>3. narrate</span><span>1.8s · 412 tok</span></div>
+              <div class="inspect-step" style="box-shadow: inset 0 0 0 1.5px var(--ink);"><span>3. narrate</span><span>1.8s · 412 tok</span></div>
               <div class="inspect-step"><span>4. check</span><span>240ms · clean</span></div>
               <div class="inspect-step"><span>5. record</span><span>490ms · ok</span></div>
             </div>
             <div class="inspect-pane">
-              <strong style="font-size:var(--text-caption); color:var(--ink-3); text-transform:uppercase;">Narrate Request & Cache Breakpoints</strong>
+              <strong style="font-size:var(--text-caption); color:var(--ink-3);">Narrate Request & Cache Breakpoints</strong>
               <p style="margin:0; color:var(--ink-2); font-family:var(--font-mono); line-height:1.6;">
                 [Breakpoint 1 · Head 1h TTL] frame + persona (${escapeHtml(PERSONAS.find((p) => p.id === personaByCard[c.id])?.name ?? "卡片默认")}) + fiction<br/>
                 [Breakpoint 2 · Folded Summary] turns 1..8 compressed<br/>
@@ -2270,7 +3192,7 @@
       `;
     }
 
-    // ───────── 7. Render Mobile Overlays (Drawer & Session Sheet) ─────────
+    // ───────── 7. Render Mobile Overlays ─────────
     function renderMobileOverlaysHTML() {
       if (mobileDrawerOpen) {
         return `
@@ -2283,45 +3205,33 @@
       }
       if (mobileSheetOpen) {
         const s = currentStory();
-        const c = getCard(s.card);
+        const c = getCard(activeCardId);
         const pid = personaByCard[c.id];
         const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
         return `
           <div class="mobile-overlay" onclick="if(event.target===this)closeMobileOverlays()">
             <div class="mobile-sheet">
               <div class="sheet-head">
-                <h3>当前局设定 · ${escapeHtml(s.title ?? "New story")}</h3>
+                <h3>${escapeHtml(c.title)} · ${escapeHtml(s.title ?? "New story")}</h3>
                 <button type="button" class="icon sm" onclick="closeMobileOverlays()">${ICONS.close}</button>
               </div>
-              <button type="button" class="session-cardhead" onclick="closeMobileOverlays(); openCardInStage('${c.id}')">
-                <div class="top">
-                  <span>${escapeHtml(c.title)} · 卡片页与开场</span>
-                  <span style="width:14px;height:14px;display:inline-flex">${ICONS.caretRight}</span>
-                </div>
-                <p>${escapeHtml(c.summary)}</p>
-              </button>
-              <div class="session-row">
-                <span class="lbl">人设 (Persona)</span>
-                <button type="button" class="session-chosen" onclick="closeMobileOverlays(); openPersonaModal()">
-                  <span class="chip">${escapeHtml(pName)}</span>
-                  <span style="width:14px;height:14px;display:inline-flex">${ICONS.caretRight}</span>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button type="button" class="chip" onclick="closeMobileOverlays(); openCardPageInStage('${c.id}')">
+                  卡片详情页
+                </button>
+                <button type="button" class="chip" onclick="closeMobileOverlays(); openPersonaModal()">
+                  人设 · ${escapeHtml(pName)}
+                </button>
+                <button type="button" class="chip" onclick="closeMobileOverlays(); showToast('打开 Writing 写作页')">
+                  写法 · ${escapeHtml(c.stance)}
                 </button>
               </div>
-              <div class="session-row">
-                <span class="lbl">写作偏好 (Writing)</span>
-                <button type="button" class="session-chosen" onclick="closeMobileOverlays(); showToast('打开 Writing 写作页')">
-                  <span style="display:flex; gap:4px; flex-wrap:wrap;">
-                    ${c.writingAll.map((w) => `<span class="chip">${escapeHtml(w)}</span>`).join("")}
-                  </span>
-                  <span style="width:14px;height:14px;display:inline-flex">${ICONS.caretRight}</span>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="chip" style="flex:1; justify-content:center; height:var(--control);" onclick="closeMobileOverlays(); showToast('打开 Timeline 时间线')">
+                  ${ICONS.tree} <span>时间线</span>
                 </button>
-              </div>
-              <div style="display:flex; gap:8px; padding-top:4px;">
-                <button type="button" class="chip" style="flex:1; justify-content:center; height:34px;" onclick="closeMobileOverlays(); showToast('打开 Timeline 时间线')">
-                  ${ICONS.tree} <span>时间线 (Timeline)</span>
-                </button>
-                <button type="button" class="chip" style="flex:1; justify-content:center; height:34px;" onclick="closeMobileOverlays(); setStageView('inspect')">
-                  ${ICONS.probe} <span>检查器 (Inspector)</span>
+                <button type="button" class="chip" style="flex:1; justify-content:center; height:var(--control);" onclick="closeMobileOverlays(); setStageView('inspect')">
+                  ${ICONS.probe} <span>检查器</span>
                 </button>
               </div>
             </div>
@@ -2337,9 +3247,10 @@
       host.setAttribute("data-device", device);
 
       let stageContent = "";
-      if (stageView === "reader") stageContent = renderReaderStageHTML(device === "mobile");
-      else if (stageView === "card") stageContent = renderCardStageHTML();
-      else stageContent = renderInspectStageHTML();
+      if (stageView === "card") stageContent = renderCardPageStageHTML();
+      else if (stageView === "new-story") stageContent = renderNewStoryStageHTML(device === "mobile");
+      else if (stageView === "inspect") stageContent = renderInspectStageHTML();
+      else stageContent = renderReaderStageHTML(device === "mobile");
 
       if (device === "mobile") {
         host.innerHTML = `
@@ -2351,7 +3262,7 @@
       } else {
         host.innerHTML = `
           <div class="harness" data-collapsed="${sidebarCollapsed ? "true" : "false"}">
-            <aside class="sidebar-card" aria-label="故事库侧边栏">
+            <aside class="sidebar-card" aria-label="侧边栏">
               ${renderSidebarHTML(false)}
             </aside>
             <div class="stage" data-view="${stageView}">
@@ -2361,27 +3272,90 @@
         `;
       }
 
-      // Sync dock buttons
       document.getElementById("dock-desktop").setAttribute("aria-pressed", String(device === "desktop"));
       document.getElementById("dock-mobile").setAttribute("aria-pressed", String(device === "mobile"));
+      document.getElementById("dock-side-shelf").setAttribute("aria-pressed", String(sidebarMode === "shelf"));
+      document.getElementById("dock-side-session").setAttribute("aria-pressed", String(sidebarMode === "session"));
       document.getElementById("dock-view-reader").setAttribute("aria-pressed", String(stageView === "reader"));
+      document.getElementById("dock-view-new").setAttribute("aria-pressed", String(stageView === "new-story"));
       document.getElementById("dock-view-card").setAttribute("aria-pressed", String(stageView === "card"));
-      document.getElementById("dock-view-inspect").setAttribute("aria-pressed", String(stageView === "inspect"));
-      document.getElementById("dock-collapse").setAttribute("aria-pressed", String(sidebarCollapsed));
       document.getElementById("dock-helpers").setAttribute("aria-pressed", String(showHelperBar));
       document.getElementById("dock-note").setAttribute("aria-pressed", String(showNoteAttach));
-      document.getElementById("dock-search").setAttribute("aria-pressed", String(searchQuery === "短剑"));
-      document.getElementById("dock-busy").setAttribute("aria-pressed", String(busyEnabled));
     }
 
     function setDevice(d) {
       device = d;
-      closeStoryMenu();
+      renderAll();
+    }
+    function setSidebarMode(m) {
+      sidebarMode = m;
+      renderAll();
+    }
+    function enterCardWorkspace(cardId) {
+      activeCardId = cardId;
+      sidebarMode = "session";
+      storySearchQuery = "";
+      const cardStories = stories.filter((s) => s.card === cardId);
+      if (cardStories.length > 0) {
+        if (!cardStories.some((s) => s.id === activeStoryId)) {
+          activeStoryId = cardStories[0].id;
+        }
+        stageView = "reader";
+      } else {
+        stageOpeningIdx = 0;
+        stageView = "new-story";
+      }
       renderAll();
     }
     function setStageView(v) {
       stageView = v;
-      closeStoryMenu();
+      renderAll();
+    }
+    function openNewStoryPicker(cardId) {
+      activeCardId = cardId;
+      stageOpeningIdx = 0;
+      openingSearchQuery = "";
+      openingTagFilter = "all";
+      openingPopoverOpen = false;
+      stageView = "new-story";
+      mobileDrawerOpen = false;
+      renderAll();
+    }
+    function selectOpeningIdx(idx) {
+      const all = getCardOpenings(getCard(activeCardId));
+      if (idx < 0 || idx >= all.length) return;
+      stageOpeningIdx = idx;
+      renderAll();
+    }
+    function onOpeningSearchInput(val) {
+      openingSearchQuery = val;
+      renderAll();
+      const inp = document.getElementById("opening-search-input");
+      if (inp) {
+        inp.focus();
+        inp.setSelectionRange(val.length, val.length);
+      }
+    }
+    function setOpeningTagFilter(tag) {
+      openingTagFilter = tag;
+      renderAll();
+    }
+    function toggleOpeningPopover() {
+      openingPopoverOpen = !openingPopoverOpen;
+      renderAll();
+    }
+    function selectPersonaForCard(cardId, pid) {
+      personaByCard[cardId] = pid;
+      renderAll();
+    }
+    function openCardPageInStage(cardId) {
+      activeCardId = cardId;
+      stageView = "card";
+      mobileDrawerOpen = false;
+      renderAll();
+    }
+    function setDossierTab(tab) {
+      dossierTab = tab;
       renderAll();
     }
     function toggleSidebarCollapse() {
@@ -2430,7 +3404,7 @@
       }
     }
     function insertSnippet(text, isNote) {
-      if (isNote && currentCardId() !== "yandao") {
+      if (isNote && activeCardId !== "yandao") {
         showNoteAttach = true;
         noteDraftText = text;
         renderAll();
@@ -2443,33 +3417,13 @@
         if (nextBox) nextBox.focus();
       }
     }
-    function toggleCardGroup(cardId) {
-      if (expandedCards.has(cardId)) expandedCards.delete(cardId);
-      else expandedCards.add(cardId);
-      renderAll();
-    }
+
     function selectStory(id) {
       activeStoryId = id;
       const s = currentStory();
-      expandedCards.add(s.card);
+      activeCardId = s.card;
       stageView = "reader";
       mobileDrawerOpen = false;
-      closeStoryMenu();
-      const b = isStoryBusy(s);
-      showToast(
-        b
-          ? `切换到「${s.title ?? "New story"}」：GET /turn 接回快照 (${b}) 并续流`
-          : `切换到「${s.title ?? "New story"}」（后台进行中的局继续运行，不中断）`
-      );
-      renderAll();
-    }
-    function openCardInStage(cardId) {
-      stageCardId = cardId;
-      stageOpeningIdx = 0;
-      stageView = "card";
-      expandedCards.add(cardId);
-      mobileDrawerOpen = false;
-      closeStoryMenu();
       renderAll();
     }
     function cycleOpening(total) {
@@ -2477,7 +3431,6 @@
       renderAll();
     }
     function beginNewStoryFromCard(cardId) {
-      const c = getCard(cardId);
       const newId = Math.max(...stories.map((s) => s.id)) + 1;
       stories.unshift({
         id: newId,
@@ -2490,32 +3443,31 @@
         hitText: "",
         hitTurn: 0,
       });
+      activeCardId = cardId;
       activeStoryId = newId;
-      expandedCards.add(cardId);
+      sidebarMode = "session";
       stageView = "reader";
-      showToast(`POST /stories { card: "${cardId}" } + greet(${stageOpeningIdx}) → 建局并进入阅读器`);
+      showToast(`已在「${getCard(cardId).title}」下创建新故事`);
       renderAll();
     }
 
-    function onSearchInput(val) {
-      searchQuery = val;
-      const scroller = document.getElementById("tree-scroller");
-      if (!scroller) return renderAll();
-      // Re-render whole sidebar except keep focus in search input
+    function onCardSearchInput(val) {
+      cardSearchQuery = val;
       renderAll();
-      const inp = document.querySelector(".side-top input[type='search']");
+      const inp = document.getElementById("shelf-search-input");
       if (inp) {
         inp.focus();
         inp.setSelectionRange(val.length, val.length);
       }
     }
-    function demoSearch() {
-      searchQuery = searchQuery === "短剑" ? "" : "短剑";
+    function onStorySearchInput(val) {
+      storySearchQuery = val;
       renderAll();
-    }
-    function toggleBusyDemo() {
-      busyEnabled = !busyEnabled;
-      renderAll();
+      const inp = document.getElementById("story-search-input");
+      if (inp) {
+        inp.focus();
+        inp.setSelectionRange(val.length, val.length);
+      }
     }
     function startStoryTurn(id) {
       const s = stories.find((x) => x.id === id);
@@ -2525,9 +3477,6 @@
       const c = getCard(s.card);
       if (pinnedByCard[c.id]) {
         pinnedByCard[c.id] = null;
-        showToast("已发送回合（Pin 线索已随 Input.pin 带走并消耗；可随时切去别的局）");
-      } else {
-        showToast("已发送回合（后台运行中，你可以随时点击左侧其他局或卡片）");
       }
       renderAll();
     }
@@ -2535,172 +3484,203 @@
       const s = stories.find((x) => x.id === id);
       if (!s) return;
       s.busy = null;
-      showToast("POST /stop：显式停止当前回合");
-      renderAll();
-    }
-
-    function togglePinDemo() {
-      const cid = currentCardId();
-      const c = getCard(cid);
-      pinnedByCard[cid] = pinnedByCard[cid] ? null : c.clues[0].hook;
-      if (stageView !== "reader") stageView = "reader";
       renderAll();
     }
     function toggleCluePin(cid, hook) {
       pinnedByCard[cid] = pinnedByCard[cid] === hook ? null : hook;
       renderAll();
     }
-    function clearPin(cid) {
-      pinnedByCard[cid] = null;
-      renderAll();
-    }
 
-    // ───────── 9. Row ⋯ Popover Menu ─────────
-    function openStoryMenu(ev, id) {
-      ev.stopPropagation();
-      const menu = document.getElementById("story-menu");
-      if (menuStoryId === id && !menu.hidden) {
-        return closeStoryMenu();
-      }
-      menuStoryId = id;
-      const s = stories.find((x) => x.id === id);
-      if (!s) return;
-      const rect = ev.currentTarget.getBoundingClientRect();
-      menu.innerHTML = `
-        <button type="button" class="pop-item" onclick="renameStoryPrompt(${s.id})">
-          ${ICONS.pencil} <span>重命名…</span>
-        </button>
-        <button type="button" class="pop-item" onclick="toggleStarStory(${s.id})">
-          ${s.starred ? ICONS.starFill : ICONS.star} <span>${s.starred ? "取消星标" : "设为星标"}</span>
-        </button>
-        <button type="button" class="pop-item" onclick="exportStoryAction(${s.id})">
-          ${ICONS.export} <span>导出 (.md / .json)</span>
-        </button>
-      `;
-      menu.hidden = false;
-      menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - 150)}px`;
-      menu.style.left = `${Math.min(rect.left, window.innerWidth - 165)}px`;
-      renderAll();
+    // ───────── 9. Current Card's Story Manager (Matches production manager.tsx, scoped to activeCardId!) ─────────
+    function openCardStoryManager() {
+      mgrSearchQuery = "";
+      mgrFilterStarred = false;
+      mgrSelected = new Set();
+      renderCardStoryManagerContent();
+      document.getElementById("manager-dialog").showModal();
     }
-    function closeStoryMenu() {
-      const menu = document.getElementById("story-menu");
-      if (menu) menu.hidden = true;
-      menuStoryId = null;
-    }
-    window.addEventListener("click", () => {
-      if (menuStoryId !== null) {
-        closeStoryMenu();
-        renderAll();
-      }
-    });
+    function renderCardStoryManagerContent() {
+      const c = getCard(activeCardId);
+      const cardStories = stories
+        .filter((s) => s.card === activeCardId)
+        .sort((a, b) => Number(b.starred) - Number(a.starred));
+      const q = mgrSearchQuery.trim();
+      const visible = cardStories.filter((s) => {
+        if (mgrFilterStarred && !s.starred) return false;
+        return storyMatches(s, q).match;
+      });
 
-    function toggleStarStory(id) {
-      const s = stories.find((x) => x.id === id);
-      if (s) s.starred = !s.starred;
-      closeStoryMenu();
-      renderAll();
-    }
-    function renameStoryPrompt(id) {
-      const s = stories.find((x) => x.id === id);
-      closeStoryMenu();
-      if (!s) return;
-      const next = prompt("重命名故事（留空恢复 New story）：", s.title ?? "");
-      if (next !== null) {
-        s.title = next.trim() || null;
-        renderAll();
-      }
-    }
-    function exportStoryAction(id) {
-      const s = stories.find((x) => x.id === id);
-      closeStoryMenu();
-      showToast(`打开导出确认框：「${s?.title ?? "New story"}」(.md 阅读稿 / .json 完整树)`);
-      renderAll();
-    }
-    function deleteStoryAction(id) {
-      closeStoryMenu();
-      stories = stories.filter((s) => s.id !== id);
-      if (activeStoryId === id && stories.length) activeStoryId = stories[0].id;
-      showToast("已删除故事");
-      renderAll();
-    }
-
-    // ───────── 10. Cleanup Sheet (#75 retained batch cleanup) ─────────
-    function openCleanupModal() {
-      cleanupSelected = new Set(stories.filter((s) => s.turns === 0 || (s.title === null && !s.starred)).map((s) => s.id));
-      renderCleanupModalContent();
-      document.getElementById("cleanup-dialog").showModal();
-    }
-    function renderCleanupModalContent() {
-      const el = document.getElementById("cleanup-content");
-      const emptyCount = stories.filter((s) => s.turns === 0).length;
-      const unnamedCount = stories.filter((s) => s.title === null && !s.starred).length;
+      const el = document.getElementById("manager-content");
       el.innerHTML = `
         <div class="modal-head">
-          <h3>批量清理故事 <span class="chip">${stories.length}</span></h3>
-          <button type="button" class="icon sm" onclick="document.getElementById('cleanup-dialog').close()">${ICONS.close}</button>
+          <h3>
+            <span>${escapeHtml(c.title)} · 故事管理</span>
+            <span class="chip">${cardStories.length}</span>
+          </h3>
+          <button type="button" class="icon sm" onclick="document.getElementById('manager-dialog').close()">${ICONS.close}</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex; align-items:center; gap:6px; padding-bottom:4px;">
-            <span style="font-size:var(--text-caption); color:var(--ink-3);">快选：</span>
-            <button type="button" class="chip" onclick="selectCleanupPreset('empty')">空档 (${emptyCount})</button>
-            <button type="button" class="chip" onclick="selectCleanupPreset('unnamed')">未命名未收藏 (${unnamedCount})</button>
-            <button type="button" class="chip" onclick="selectCleanupPreset('clear')">清空</button>
+          <div class="mgr-toolbar">
+            <div class="input-box">
+              ${ICONS.search}
+              <input
+                id="mgr-search-input"
+                type="search"
+                placeholder="搜索「${escapeHtml(c.title)}」的故事与回合…"
+                value="${escapeHtml(mgrSearchQuery)}"
+                oninput="onMgrSearchInput(this.value)"
+              />
+            </div>
+            <button
+              type="button"
+              class="chip ${!mgrFilterStarred ? "primary" : ""}"
+              onclick="setMgrStarFilter(false)"
+            >全部</button>
+            <button
+              type="button"
+              class="chip ${mgrFilterStarred ? "primary" : ""}"
+              onclick="setMgrStarFilter(true)"
+            >收藏</button>
           </div>
-          ${stories
-            .map((s) => {
-              const c = getCard(s.card);
-              const checked = cleanupSelected.has(s.id);
-              return `
-                <label class="cleanup-row" style="cursor:pointer">
-                  <input type="checkbox" ${checked ? "checked" : ""} onchange="toggleCleanupRow(${s.id})" />
-                  <span class="c-tag">${escapeHtml(c.title)}</span>
-                  <span style="flex:1; font-weight:${s.title ? 500 : 400}; color:${s.title ? "var(--ink)" : "var(--ink-2)"}">
-                    ${escapeHtml(s.title ?? "New story")}
-                  </span>
-                  <span style="font-size:var(--text-caption); color:var(--ink-3); font-family:var(--font-mono);">
-                    ${s.turns} 轮 · ${s.ago}
-                  </span>
-                </label>
-              `;
-            })
-            .join("")}
+
+          ${
+            visible.length
+              ? visible
+                  .map((s) => {
+                    const checked = mgrSelected.has(s.id);
+                    const isCur = s.id === activeStoryId;
+                    const b = isStoryBusy(s);
+                    return `
+                      <div class="mgr-row" aria-current="${isCur ? "true" : "false"}">
+                        <div class="mgr-row-top">
+                          <input
+                            type="checkbox"
+                            ${checked ? "checked" : ""}
+                            ${b ? "disabled" : ""}
+                            onchange="toggleMgrSelect(${s.id})"
+                          />
+                          <button
+                            type="button"
+                            class="mgr-star"
+                            aria-pressed="${s.starred ? "true" : "false"}"
+                            title="${s.starred ? "取消收藏" : "收藏"}"
+                            onclick="toggleStarInMgr(${s.id})"
+                          >
+                            ${s.starred ? ICONS.starFill : ICONS.star}
+                          </button>
+                          <button
+                            type="button"
+                            class="mgr-title ${s.title === null ? "unnamed" : ""}"
+                            onclick="document.getElementById('manager-dialog').close(); selectStory(${s.id})"
+                          >
+                            ${highlightMark(s.title ?? "New story", q)}
+                          </button>
+                          <div class="mgr-actions">
+                            <button type="button" class="icon sm" title="重命名" onclick="renameStoryInMgr(${s.id})">
+                              ${ICONS.pencil}
+                            </button>
+                            <button type="button" class="icon sm" title="导出 (.md / .json)" onclick="showToast('导出「${escapeHtml(s.title ?? "New story")}」')">
+                              ${ICONS.export}
+                            </button>
+                            <button type="button" class="icon sm" title="删除" ${b ? "disabled" : ""} onclick="deleteSingleInMgr(${s.id})">
+                              ${ICONS.trash}
+                            </button>
+                          </div>
+                        </div>
+                        ${
+                          s.hitText
+                            ? `<p class="mgr-preview">${highlightMark(s.hitText, q)}</p>`
+                            : ""
+                        }
+                        <div class="mgr-meta">${s.turns} 轮 · ${s.ago}${b ? " · 进行中" : ""}</div>
+                      </div>
+                    `;
+                  })
+                  .join("")
+              : `<div style="padding:16px; text-align:center; color:var(--ink-3); font-size:var(--text-footnote);">暂无匹配的故事</div>`
+          }
         </div>
         <div class="modal-foot">
-          <span style="color:var(--ink-3)">保留 #75 的批量清理 Sheet，从侧栏顶部唤起</span>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="chip" onclick="selectMgrPreset('unnamed')">快选未命名未收藏</button>
+            ${mgrSelected.size > 0 ? `<button type="button" class="chip" onclick="selectMgrPreset('clear')">取消选择</button>` : ""}
+          </div>
           <button
             type="button"
             class="chip danger"
-            ${cleanupSelected.size === 0 ? "disabled" : ""}
-            onclick="commitCleanupDelete()"
+            ${mgrSelected.size === 0 ? "disabled" : ""}
+            onclick="commitMgrBatchDelete()"
           >
-            删除选中 ${cleanupSelected.size || ""}
+            删除选中 ${mgrSelected.size || ""}
           </button>
         </div>
       `;
     }
-    function selectCleanupPreset(kind) {
-      if (kind === "clear") cleanupSelected.clear();
-      if (kind === "empty") stories.filter((s) => s.turns === 0).forEach((s) => cleanupSelected.add(s.id));
-      if (kind === "unnamed") stories.filter((s) => s.title === null && !s.starred).forEach((s) => cleanupSelected.add(s.id));
-      renderCleanupModalContent();
-    }
-    function toggleCleanupRow(id) {
-      if (cleanupSelected.has(id)) cleanupSelected.delete(id);
-      else cleanupSelected.add(id);
-      renderCleanupModalContent();
-    }
-    function commitCleanupDelete() {
-      const n = cleanupSelected.size;
-      stories = stories.filter((s) => !cleanupSelected.has(s.id));
-      if (!stories.some((s) => s.id === activeStoryId) && stories.length) {
-        activeStoryId = stories[0].id;
+    function onMgrSearchInput(val) {
+      mgrSearchQuery = val;
+      renderCardStoryManagerContent();
+      const inp = document.getElementById("mgr-search-input");
+      if (inp) {
+        inp.focus();
+        inp.setSelectionRange(val.length, val.length);
       }
-      document.getElementById("cleanup-dialog").close();
-      showToast(`已批量清理 ${n} 个故事`);
+    }
+    function setMgrStarFilter(starredOnly) {
+      mgrFilterStarred = starredOnly;
+      renderCardStoryManagerContent();
+    }
+    function toggleStarInMgr(id) {
+      const s = stories.find((x) => x.id === id);
+      if (s) s.starred = !s.starred;
+      renderCardStoryManagerContent();
       renderAll();
     }
+    function renameStoryInMgr(id) {
+      const s = stories.find((x) => x.id === id);
+      if (!s) return;
+      const next = prompt("重命名故事（留空恢复 New story）：", s.title ?? "");
+      if (next !== null) {
+        s.title = next.trim() || null;
+        renderCardStoryManagerContent();
+        renderAll();
+      }
+    }
+    function deleteSingleInMgr(id) {
+      stories = stories.filter((s) => s.id !== id);
+      mgrSelected.delete(id);
+      const remaining = stories.filter((s) => s.card === activeCardId);
+      if (activeStoryId === id && remaining.length) activeStoryId = remaining[0].id;
+      renderCardStoryManagerContent();
+      renderAll();
+    }
+    function toggleMgrSelect(id) {
+      if (mgrSelected.has(id)) mgrSelected.delete(id);
+      else mgrSelected.add(id);
+      renderCardStoryManagerContent();
+    }
+    function selectMgrPreset(kind) {
+      if (kind === "clear") mgrSelected.clear();
+      if (kind === "unnamed") {
+        stories
+          .filter((s) => s.card === activeCardId && s.title === null && !s.starred && !isStoryBusy(s))
+          .forEach((s) => mgrSelected.add(s.id));
+      }
+      renderCardStoryManagerContent();
+    }
+    function commitMgrBatchDelete() {
+      const n = mgrSelected.size;
+      stories = stories.filter((s) => !mgrSelected.has(s.id));
+      mgrSelected.clear();
+      const remaining = stories.filter((s) => s.card === activeCardId);
+      if (!remaining.some((s) => s.id === activeStoryId) && remaining.length) {
+        activeStoryId = remaining[0].id;
+      }
+      renderCardStoryManagerContent();
+      renderAll();
+      showToast(`已删除 ${n} 个故事`);
+    }
 
-    // ───────── 11. Persona Picker Sheet ─────────
+    // ───────── 10. Persona Picker Sheet ─────────
     function openPersonaModal() {
       const cid = currentCardId();
       const c = getCard(cid);
@@ -2747,11 +3727,10 @@
     function pickPersonaForCard(cid, pid) {
       personaByCard[cid] = pid;
       document.getElementById("persona-dialog").close();
-      showToast(`已切换「${getCard(cid).title}」人设（下一轮请求立即生效）`);
       renderAll();
     }
 
-    // ───────── 12. Mobile Overlays & Theme ─────────
+    // ───────── 11. Mobile Overlays & Theme ─────────
     function openMobileDrawer() {
       mobileDrawerOpen = true;
       mobileSheetOpen = false;
