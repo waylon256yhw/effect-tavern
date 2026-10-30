@@ -231,16 +231,18 @@ export const Shell = (props: { children: JSX.Element }) => {
             {(x) => {
               const row = () => lib()?.stories.find((s) => s.id === x().story)
               const on = () => x().id === strip().active
+              // the story is named only while the tab is on its card: another card browsed names that card alone
+              const named = () => (row()?.card === x().card ? row() : undefined)
               return (
                 <div class="shell-tab" aria-current={on() ? "page" : undefined}>
                   <button
                     type="button"
                     class="name"
-                    data-back={on() && pg() === "reader" ? "false" : "true"}
+                    data-back={!on() || (x().story !== null && pg() !== "reader") ? "true" : "false"}
                     onClick={() => pick(x().id)}
                   >
                     <span class="c">{shelf().find((c) => c.id === x().card)?.title ?? x().card ?? ""}</span>
-                    <Show when={row()}>
+                    <Show when={named()}>
                       {(r) => (
                         <>
                           <span class="sep" aria-hidden="true">

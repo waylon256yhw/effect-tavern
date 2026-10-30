@@ -1,8 +1,9 @@
 // The tabs on the top strip (docs/shell-brief-2.md, #123), Cherry Studio's model: views many, data one. A tab is an
 // address (store.ts `Tab`: a story or none, its card, its page stack, the reader's scroll); every tab reads the one
 // Reading in the slots (reading.ts), so a switch swaps the page stack and the scroll and then activates the tab's
-// story (the same story again is nothing; a tab with no story only swaps). Two tabs on one story are two windows on
-// it, never refused. This module is the one writer of the list; pages.ts says what a page is and writes the active
+// story (the same story again is nothing). A tab with no story is a card's page and nothing else: under it the slots
+// are empty and the listing names no story, so nothing typed or begun there lands in another tab's story. Two tabs on
+// one story are two windows on it, never refused. This module is the one writer of the list; pages.ts says what a page is and writes the active
 // tab's page and story through `edit`. Bounded at eight: a "+" on a full strip drops the oldest tab but the active
 // one. The device remembers the list and which one is active, never the page stacks: a tab comes back on its
 // story's reader, or on its card's page. A story whose turn lands while no active tab is on it is unread until a tab
@@ -35,10 +36,11 @@ const show = async (id: number): Promise<void> => {
   const t = now().list.find((x) => x.id === id)
   if (!t) return
   seen(t.story)
-  if (t.story !== null) {
-    await reading.activate(t.story)
-    if (registry.get(card)?.id !== t.card) await wire.fetchCard() // a tab with no story had shown another card
-  } else if (t.card !== null && registry.get(card)?.id !== t.card) await wire.fetchCardOf(t.card)
+  await reading.activate(t.story) // none: the slots empty, no story named
+  if (t.card !== null && registry.get(card)?.id !== t.card) {
+    const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
+    await (own ? wire.fetchCard() : wire.fetchCardOf(t.card)) // the story's card, or one browsed on this tab
+  }
   if (now().active !== id) return
   if (t.page === "reader" && t.story !== null && !registry.get(log).nodes.size) edit({ page: "card" })
   if (t.scroll !== undefined) scroll.set(t.scroll)
@@ -80,7 +82,7 @@ export const remove = (id: number): Promise<void> => {
   registry.set(tabs, { list, active: (s.list[i + 1] ?? s.list[i - 1])!.id }) // the closed tab's scroll goes with it
   return (last = last.catch(() => {}).then(() => show(now().active)))
 }
-/** Deleted stories: a tab on one stays, on its card's page with no story (pages.ts lands the active one after). */
+/** Deleted stories: a tab on one stays, on its card's page with no story. */
 export const forget = (ids: readonly Id[]): void => {
   const s = now()
   registry.set(tabs, {

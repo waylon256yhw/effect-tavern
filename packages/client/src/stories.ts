@@ -94,9 +94,3 @@ export const turnLabel = (hit: Hit): string =>
   hit.turn === 0 ? t("stories.opening") : t("common.turnN", { n: hit.turn })
 export const kindLabel = (kind: Hit["kind"]): string =>
   kind === "input" ? t("stories.kindInput") : kind === "note" ? t("stories.kindNote") : t("stories.kindReply")
-
-/** After a delete answered `next` as the story to be on: whether the client stays where it is (its reader, draft and
- *  place kept). Only when the story it was on was not among those deleted and is still the one named; the id alone
- *  does not tell, since a library made before story ids were autoincrement hands a deleted id to the next story made. */
-export const stays = (open: number | null | undefined, deleted: readonly number[], next: number | null): boolean =>
-  open != null && !deleted.includes(open) && next === open

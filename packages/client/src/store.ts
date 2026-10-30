@@ -303,6 +303,15 @@ export const apply = (e: Wire): void => {
 const drain = () => {
   while (held.length && (play.queue.length === 0 || held[0]!.kind === "delta")) applyNow(held.shift()!)
 }
+/** The open story's row in the listing as its stream says (a stage, or the turn over): the server writes `busy` too,
+ *  but the client reads it again only at a stream's end or the sidebar's poll, and a tab's dot must not wait. A story
+ *  left mid-turn keeps its row as it was until the next listing. */
+const running = (phase: Phase | null): void =>
+  registry.update(stories, (l) =>
+    l?.current == null
+      ? l
+      : { ...l, stories: l.stories.map((s) => (s.id === l.current && s.busy !== phase ? { ...s, busy: phase } : s)) },
+  )
 const applyNow = (e: Wire): void => {
   switch (e.kind) {
     case "attach":
@@ -311,10 +320,12 @@ const applyNow = (e: Wire): void => {
       // fails from here goes back in the box, a swipe's or an edit's is already on its node.
       registry.set(draft, e.draft)
       registry.set(stage, e.phase)
+      running(e.phase)
       if (e.phase === "narrate") play.ended = false
       return
     case "stage":
       registry.set(stage, e.phase)
+      running(e.phase)
       // Each draft starts over: a narrate after check is the rewrite, the first one greys under it.
       if (e.phase === "narrate") {
         resetPlay()
@@ -333,7 +344,10 @@ const applyNow = (e: Wire): void => {
       registry.update(log, (l) => L.apply(l, e))
       const id = e.node?.id
       if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made]))
-      if (id !== undefined || !registry.get(draft)) settle() // a checkout while a turn streams moves head, not the draft
+      if (id !== undefined || !registry.get(draft)) {
+        settle() // a checkout while a turn streams moves head, not the draft
+        running(null)
+      }
       return
     }
     case "error":
@@ -341,6 +355,7 @@ const applyNow = (e: Wire): void => {
       resetPlay()
       registry.set(error, { message: e.message, ...(e.code && { code: e.code }) })
       registry.set(stage, null)
+      running(null)
       withdraw()
       return
   }

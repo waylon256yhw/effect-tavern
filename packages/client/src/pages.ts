@@ -9,9 +9,9 @@
 // share one listing) and picks up a turn in flight there. One Escape rule for every page, mounted once by the App. The
 // reader stays mounted under all of it, so a turn in flight keeps streaming; another story only stops reading it.
 import { layerOf } from "./fold.ts"
-import { latestOf, stays } from "./stories.ts"
+import { latestOf } from "./stories.ts"
 import { reading } from "./reading.ts"
-import { activeOf, card, layer, log, page, type Page, registry, stories, tabs } from "./store.ts"
+import { activeOf, card, cards, layer, log, page, type Page, registry, stories, tabs } from "./store.ts"
 import { edit, forget, load, remembered, select } from "./tabs.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
@@ -56,34 +56,34 @@ const current = () => {
 }
 /** On the story as if just opened, in the active tab: an empty log lands on the card page (pick an opening, or
  *  begin), a story in progress in the reader; nothing to go back to. The sidebar is on the story's card (its
- *  workspace), on the shelf when there is no story at all. */
-const arrive = () => {
+ *  workspace). No story at all (an empty library) is the first card's page, the sidebar on the shelf. */
+const arrive = async (): Promise<void> => {
   const cur = current()
-  edit({
-    story: cur?.id ?? null,
-    card: cur?.card ?? registry.get(card)?.id ?? null,
-    page: registry.get(log).nodes.size ? "reader" : "card",
-    under: [],
-  })
+  if (!cur && !registry.get(cards).length) await wire.fetchCards()
+  const id = cur?.card ?? registry.get(cards)[0]?.id ?? null
+  edit({ story: cur?.id ?? null, card: id, page: cur && registry.get(log).nodes.size ? "reader" : "card", under: [] })
   registry.set(layer, layerOf(cur?.id))
+  if (!cur && id !== null && registry.get(card)?.id !== id) await wire.fetchCardOf(id)
 }
-/** Back to the reader from any page: what covered it is dropped, and the card view is the open story's again (a card
- *  browsed from the shelf had replaced it), as is the sidebar's workspace; a tab with no story takes the open one. */
+/** Back to the reader from any page: what covered it is dropped, and the card view is the tab's story's again (a card
+ *  browsed from the shelf had replaced it), as is the sidebar's workspace. A tab with no story has no reader: its
+ *  card page is the bottom of its stack, and this does nothing there. */
 export const toReader = (): void => {
-  const cur = current()
-  edit({ page: "reader", under: [], ...(cur && { story: cur.id, card: cur.card }) })
-  if (cur && registry.get(card)?.id !== cur.card) void wire.fetchCard()
+  const cur = current() // the tab's story: a tab with one has it in the slots
+  if (tab().story === null || !cur) return
+  edit({ page: "reader", under: [], card: cur.card })
+  if (registry.get(card)?.id !== cur.card) void wire.fetchCard()
 }
 /** A card's page, by id: the open story's card as the view holds it, another read by id (no story of it needed). The
- *  sidebar's workspace follows; another card's page is a tab with no story (Escape takes the open story back). Where
- *  "新建故事" and a card's head go: no story is made until Begin (#116). */
+ *  tab keeps its story (Escape takes it back); the sidebar's workspace follows the card. Where "新建故事" and a card's
+ *  head go: no story is made until Begin (#116). */
 export const showCard = async (id: string): Promise<void> => {
-  if (tab().card !== id) edit({ story: null, card: id })
+  if (tab().card !== id) edit({ card: id })
   if (registry.get(card)?.id !== id) await wire.fetchCardOf(id)
   open("card")
 }
-/** A tab clicked: another one is switched to; the active one, on a page, goes back to the reader (a tab on another
- *  card's page takes the open story back, as Escape does). */
+/** A tab clicked: another one is switched to; the active one, on a page over its story, goes back to the reader (a
+ *  tab with no story stays on its card page). */
 export const pick = (id: number): void => {
   const t = tab()
   if (id !== t.id) void select(id)
@@ -106,35 +106,34 @@ export const browse = async (id: string): Promise<void> => {
 export const boot = async (): Promise<void> => {
   await Promise.all([wire.fetchStories(), wire.fetchCards()])
   const kept = remembered() // the tabs the device holds, on stories and cards still there (tabs.ts)
-  const on = kept && activeOf(kept).story
   await Promise.all([
-    reading.activate(on ?? registry.get(stories)?.current ?? null),
+    reading.activate(kept ? activeOf(kept).story : (registry.get(stories)?.current ?? null)),
     wire.fetchPersonas(),
     wire.fetchPlayer(),
     wire.fetchRouting(),
   ])
   if (kept) await load(kept)
-  else arrive()
+  else await arrive()
 }
-/** A story call answered: the client is on the story the listing names, as just opened (reading.ts: the old story
- *  out of the slots, this one in). */
+/** A story made: the client is on the story the listing names, as just opened (reading.ts: the old story out of the
+ *  slots, this one in). */
 export const land = async (listing: Listing): Promise<void> => {
-  registry.set(stories, listing) // the newest listing, also when it names no story (the last one deleted)
+  registry.set(stories, listing)
   await reading.activate(listing.current)
-  arrive()
+  await arrive()
 }
-/** A delete answered: when the open story was not among the deleted and is still the one to be on, only the listing
- *  moves (the reader keeps its draft and its place); otherwise the client lands on the story the listing names
- *  (stories.ts `stays`: the id alone cannot tell a placeholder from the story it replaced). */
+/** A delete answered: nothing lands. A tab on a deleted story stays, on its card's page with no story; when that is
+ *  the active tab, the slots empty under it. Every other tab, the active one included, stays where it is. */
 export const onDelete = async (listing: Listing, deleted: readonly number[]): Promise<void> => {
+  const was = tab().story
   reading.drop(deleted) // no record of a dead story; its id named again is read afresh
-  forget(deleted) // a tab on one stays, on its card's page
-  if (stays(registry.get(stories)?.current, deleted, listing.current)) registry.set(stories, listing)
-  else await land(listing)
+  forget(deleted)
+  registry.set(stories, { ...listing, current: tab().story }) // the server's pick is not the tab's
+  if (was !== null && deleted.includes(was)) await reading.activate(null)
 }
 export const openStory = async (id: number): Promise<void> => {
   await reading.activate(id) // its own PUT answers the listing
-  arrive()
+  await arrive()
 }
 export const newStory = async (card: string): Promise<void> => land(await wire.newStory(card))
 export const deleteStory = async (id: number): Promise<void> => onDelete(await wire.deleteStory(id), [id])
