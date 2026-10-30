@@ -1,7 +1,9 @@
-// The composer: the one raised object under the column. The box, the format keys, the snippets menu (+, or / on an
-// empty box), the note box a note snippet opens under the line (a word to the narrator that goes with the line, or
-// alone), Send / Stop. The pin is not here (#117): armed and shown in the Record alone, it rides on the next send
-// (turn.ts). The story's own entries live on the strip above the reading (strip.tsx).
+// The composer: the one raised object under the column, one line at rest (#117): `+` (the snippets menu, or / on an
+// empty box), the box, Send / Stop. What serves the typing hangs on the box's top edge only while it is in use: the
+// format keys, a row of glyph chips over the text while the hand is in the box or words are; the note to the
+// narrator a note snippet opens (a word that goes with the line, or alone), its own box in a thin strip; the line
+// being revised, a strip naming its turn. The pin is not here: armed and shown in the Record alone, it rides on the
+// next send (turn.ts). The story's own entries live on the strip above the reading (strip.tsx).
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
@@ -130,53 +132,47 @@ export const Composer = () => {
     >
       <div
         class="box"
-        // The whole box is the input: a press on its padding or the keys row lands in the text, never blurs it.
+        // The whole box is the input: a press on its padding, an attachment's strip or the keys row lands in the
+        // text, never blurs it.
         onPointerDown={(e) => {
           const t = e.target as HTMLElement
           if (t.closest("button, textarea, [popover]")) return
           e.preventDefault()
-          ;(t.closest(".tray") ? noteBox : box)?.focus()
+          ;(t.closest(".attach.note") ? noteBox : box)?.focus()
         }}
       >
-        <Show when={keys().length > 0}>
-          <div class="format" aria-label={t("composer.formatKeys")}>
-            <For each={keys()} keyed={(k) => k.label}>
-              {(k) => (
-                <button type="button" class="chip" onPointerDown={keep} onClick={() => insert(k())}>
-                  {k().label}
-                </button>
-              )}
-            </For>
-          </div>
+        {/* the attachments on the box's top edge, each a thin strip that is there only while it is in use (#117): the
+            line being revised (a tap scrolls to its turn, × cancels), and the note to the narrator (its own box, on
+            the line's text axis, × closes it; Escape on an empty one closes it too) */}
+        <Show when={revise()}>
+          {(r) => (
+            <div class="attach revise">
+              <button
+                type="button"
+                class="bare"
+                aria-label={t("composer.showTurn")}
+                onPointerDown={keep}
+                onClick={locate}
+              >
+                <Edit aria-hidden="true" />
+                {t("composer.revising")} {turnOf(line(), r().node)}
+              </button>
+              <span class="spacer" />
+              <button
+                type="button"
+                class="icon"
+                aria-label={t("common.cancel")}
+                onPointerDown={keep}
+                onClick={cancelRevise}
+              >
+                <Close />
+              </button>
+            </div>
+          )}
         </Show>
-        <textarea
-          ref={(el) => (box = el)}
-          value={text()}
-          placeholder={prompt()}
-          enterkeyhint="enter"
-          onInput={(e) => registry.set(compose, e.currentTarget.value)}
-          // a thought's open bracket brings its close: half a pair would leave the model guessing where the thought ends
-          onBeforeInput={(e) => {
-            if (e.inputType !== "insertText" || e.data !== "⦅") return
-            e.preventDefault()
-            const { selectionStart: a, selectionEnd: b, value } = e.currentTarget
-            put(`${value.slice(0, a)}⦅${value.slice(a, b)}⦆${value.slice(b)}`, a + 1)
-          }}
-          onCompositionStart={ime.compositionStart}
-          onCompositionEnd={ime.compositionEnd}
-          onKeyDown={(e) => {
-            // "/" on an empty box opens the snippets menu: the keyboard's way to the same menu, no command grammar.
-            if (e.key === "/" && !e.isComposing && text() === "" && menu) {
-              e.preventDefault()
-              menu.showPopover()
-            } else if (e.key === "Escape" && revise()) cancelRevise()
-            else ime.keyDown(e)
-          }}
-        />
-        {/* the note's block: a faint inset under the line, the note on the line's own text axis, a small × at its
-            right; Escape on an empty box closes it too */}
         <Show when={acting() && toNarratorOn()}>
-          <div class="tray">
+          <div class="attach note">
+            <span class="tag">{t("composer.noteTag")}</span>
             <textarea
               ref={(el) => (noteBox = el)}
               class="note"
@@ -204,6 +200,19 @@ export const Composer = () => {
             >
               <Close />
             </button>
+          </div>
+        </Show>
+        {/* the format keys: a row of glyph chips right over the text, there while the hand is in the box or words are
+            (reader.css); at rest the box is one line */}
+        <Show when={keys().length > 0}>
+          <div class="format" aria-label={t("composer.formatKeys")}>
+            <For each={keys()} keyed={(k) => k.label}>
+              {(k) => (
+                <button type="button" class="chip" onPointerDown={keep} onClick={() => insert(k())}>
+                  {k().label}
+                </button>
+              )}
+            </For>
           </div>
         </Show>
         <div class="row">
@@ -237,32 +246,30 @@ export const Composer = () => {
               <Items of={toNarrator()} />
             </div>
           </Show>
-          <Show when={revise()}>
-            {(r) => (
-              <span class="chip state">
-                <button
-                  type="button"
-                  class="bare"
-                  aria-label={t("composer.showTurn")}
-                  onPointerDown={keep}
-                  onClick={locate}
-                >
-                  <Edit aria-hidden="true" />
-                  {t("composer.revising")} {turnOf(line(), r().node)}
-                </button>
-                <button
-                  type="button"
-                  class="bare"
-                  aria-label={t("common.cancel")}
-                  onPointerDown={keep}
-                  onClick={cancelRevise}
-                >
-                  <Close />
-                </button>
-              </span>
-            )}
-          </Show>
-          <span class="spacer" />
+          <textarea
+            ref={(el) => (box = el)}
+            value={text()}
+            placeholder={prompt()}
+            enterkeyhint="enter"
+            onInput={(e) => registry.set(compose, e.currentTarget.value)}
+            // a thought's open bracket brings its close: half a pair would leave the model guessing where the thought ends
+            onBeforeInput={(e) => {
+              if (e.inputType !== "insertText" || e.data !== "⦅") return
+              e.preventDefault()
+              const { selectionStart: a, selectionEnd: b, value } = e.currentTarget
+              put(`${value.slice(0, a)}⦅${value.slice(a, b)}⦆${value.slice(b)}`, a + 1)
+            }}
+            onCompositionStart={ime.compositionStart}
+            onCompositionEnd={ime.compositionEnd}
+            onKeyDown={(e) => {
+              // "/" on an empty box opens the snippets menu: the keyboard's way to the same menu, no command grammar.
+              if (e.key === "/" && !e.isComposing && text() === "" && menu) {
+                e.preventDefault()
+                menu.showPopover()
+              } else if (e.key === "Escape" && revise()) cancelRevise()
+              else ime.keyDown(e)
+            }}
+          />
           <Show when={revise()}>
             <button
               type="button"

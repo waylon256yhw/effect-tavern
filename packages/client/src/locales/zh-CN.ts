@@ -76,6 +76,7 @@ const zh = {
     closeNote: "收起场外指导",
     formatKeys: "格式键",
     keepProse: "保留正文",
+    noteTag: "致叙事者",
     noteToNarrator: "给叙事者的话",
     pickOpening: "在卡片页选一个开场白…",
     revising: "修改中",

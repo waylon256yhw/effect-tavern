@@ -77,6 +77,7 @@ const en: Dict = {
     closeNote: "Close the note",
     formatKeys: "Format keys",
     keepProse: "Keep the prose",
+    noteTag: "To the narrator",
     noteToNarrator: "Note to the narrator",
     pickOpening: "Pick an opening on the card page…",
     revising: "Revising",
