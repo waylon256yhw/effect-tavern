@@ -7,12 +7,10 @@
 // back from any page, which also puts the open story's card back in the view. Landing reads the story's card (stories of every card
 // share one listing) and picks up a turn in flight there. One Escape rule for every page, mounted once by the App. The
 // reader stays mounted under all of it, so a turn in flight keeps streaming; another story only stops reading it.
-import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { layerOf } from "./fold.ts"
 import { latestOf, stays } from "./stories.ts"
-import { calls, card, cards, editing, focus, layer, log, page, type Page, pin, registry, stories } from "./store.ts"
-import { turn } from "./turn.ts"
+import { reading } from "./reading.ts"
+import { card, focus, layer, log, page, type Page, registry, stories } from "./store.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
 
@@ -96,33 +94,20 @@ export const browse = async (id: string): Promise<void> => {
  *  begins there. A turn already in flight on the story is picked up (turn.ts `attach`). */
 export const boot = async (): Promise<void> => {
   await wire.fetchStories()
-  await Promise.all([on(), wire.fetchCards(), wire.fetchPersonas(), wire.fetchPlayer(), wire.fetchRouting()])
+  await Promise.all([
+    reading.activate(registry.get(stories)?.current ?? null),
+    wire.fetchCards(),
+    wire.fetchPersonas(),
+    wire.fetchPlayer(),
+    wire.fetchRouting(),
+  ])
   arrive()
 }
-/** The story the listing names, read: its card, its nodes, its turn in flight; with none, the first card's page over
- *  an empty log. */
-const on = async (): Promise<void> => {
-  if (registry.get(stories)?.current == null) {
-    registry.set(log, L.of<Node>())
-    if (!registry.get(cards).length) await wire.fetchCards()
-    const first = registry.get(cards)[0]
-    if (first) await wire.fetchCardOf(first.id)
-    return
-  }
-  await Promise.all([wire.fetchCard(), wire.fetchNodes()])
-  turn.attach()
-}
-
-/** A story call answered: the client is on the story the listing names, as just opened. The old story's streams are
- *  closed (its events must not land on this log; its turn runs on, on the server), its draft, pin, editor and calls
- *  gone; a turn in flight on the new one is picked up. */
+/** A story call answered: the client is on the story the listing names, as just opened (reading.ts: the old story
+ *  out of the slots, this one in). */
 export const land = async (listing: Listing): Promise<void> => {
-  registry.set(stories, listing)
-  turn.abandon()
-  registry.set(pin, null)
-  registry.set(editing, null)
-  registry.set(calls, new Map())
-  await on()
+  registry.set(stories, listing) // the newest listing, also when it names no story (the last one deleted)
+  await reading.activate(listing.current)
   arrive()
 }
 /** A delete answered: when the open story was not among the deleted and is still the one to be on, only the listing
@@ -132,7 +117,10 @@ export const onDelete = async (listing: Listing, deleted: readonly number[]): Pr
   if (stays(registry.get(stories)?.current, deleted, listing.current)) registry.set(stories, listing)
   else await land(listing)
 }
-export const openStory = async (id: number): Promise<void> => land(await wire.openStory(id))
+export const openStory = async (id: number): Promise<void> => {
+  await reading.activate(id) // its own PUT answers the listing
+  arrive()
+}
 export const newStory = async (card: string): Promise<void> => land(await wire.newStory(card))
 export const deleteStory = async (id: number): Promise<void> => onDelete(await wire.deleteStory(id), [id])
 export const deleteStories = async (ids: readonly number[]): Promise<void> =>
