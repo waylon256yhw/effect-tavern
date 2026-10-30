@@ -7,7 +7,8 @@ import type { ModelEntry, Provider } from "@effect-tavern/provider/src/providers
 import type { Format } from "@effect-tavern/provider/src/url.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { FORMAT, FORMATS, Menu, Modal, type Opener, Switch } from "./controls.tsx"
+import { FORMAT, Menu, Modal, type Opener, Switch } from "./controls.tsx"
+import { capOf, FORMATS, formatOf, without, withModels, withoutModels } from "./connections.ts"
 import { hats, providers, registry } from "./store.ts"
 import { putProvider, type Listed } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
@@ -19,36 +20,12 @@ const EFFORTS: [Effort, Key][] = [
   ["high", "models.effortHigh"],
   ["max", "models.effortMax"],
 ]
-/** Added as listed: with the format the listing put them under when that is off the provider's default. One already
- *  there with no format of its own takes the listing's too (添加全部 fixes what 更正 would), one the player set stays. */
-export const addModels = (p: Provider, models: readonly Listed[]) =>
-  void putProvider({
-    ...p,
-    models: [
-      ...p.models.map((x) => {
-        const listed = models.find((m) => m.id === x.id)
-        return x.format === undefined && listed?.format ? { ...x, format: listed.format } : x
-      }),
-      ...models
-        .filter((m) => !p.models.some((x) => x.id === m.id))
-        .map(({ id, format }) => ({ id, ...(format && { format }) })),
-    ],
-  })
-export const removeModels = (p: Provider, ids: readonly string[]) =>
-  void putProvider({ ...p, models: p.models.filter((m) => !ids.includes(m.id)) })
+/** Added as listed, one already there with no format of its own taking the listing's too (添加全部 fixes what 更正
+ *  would; connections.ts `withModels`). */
+export const addModels = (p: Provider, models: readonly Listed[]) => void putProvider(withModels(p, models))
+export const removeModels = (p: Provider, ids: readonly string[]) => void putProvider(withoutModels(p, ids))
 
 // ───────── The model dialog: a draft of one entry, written when the dialog closes ─────────
-const formatOf = (p: Provider, m: ModelEntry) => m.format ?? p.defaultFormat
-const capOf = <K extends keyof Capabilities>(p: Provider, m: ModelEntry, k: K): Capabilities[K] =>
-  (m.capabilities?.[k] as Capabilities[K] | undefined) ?? DEFAULTS[formatOf(p, m)][k]
-const without = <K extends Exclude<keyof ModelEntry, "id">>(
-  m: ModelEntry,
-  k: K,
-  v: ModelEntry[K] | undefined,
-): ModelEntry => {
-  const { [k]: _, ...rest } = m
-  return (v === undefined ? rest : { ...rest, [k]: v }) as ModelEntry
-}
 
 export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) => {
   const list = read(providers)

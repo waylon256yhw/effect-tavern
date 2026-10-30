@@ -11,10 +11,11 @@ import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
-import { Back, Checkout, Clue, Edit, Notes, Reword, Swipe, Trash } from "./icons.tsx"
+import { Back, Checkout, Clue, Notes, Trash } from "./icons.tsx"
 import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { plain, Prose } from "./prose.tsx"
-import { heading } from "./record.ts"
+import { SiblingKind } from "./readings.tsx"
+import { heading, lineOf, sceneOf, versions } from "./record.ts"
 import { close, open } from "./pages.ts"
 import { card, draft, type Id, log, path, prose, registry, working } from "./store.ts"
 import { turn } from "./turn.ts"
@@ -33,22 +34,7 @@ const THREAD_GAP = 14
 const KNOT = { x: 7, y: 14 }
 
 export const openTimeline = () => open("timeline")
-const lineOf = (n: Node) => n.turn.input.text || n.turn.input.note || ""
 const textOf = (n: Node) => lineOf(n) || plain(prose(n))
-
-const Kind = (props: { of: Node["turn"]["sibling"] }) => (
-  <Switch>
-    <Match when={props.of === "swipe"}>
-      <Swipe aria-label={t("common.swipe")} />
-    </Match>
-    <Match when={props.of === "reword"}>
-      <Reword aria-label={t("common.reword")} />
-    </Match>
-    <Match when={props.of === "edit"}>
-      <Edit aria-label={t("common.edit")} />
-    </Match>
-  </Switch>
-)
 
 export const Timeline = () => {
   const all = read(log)
@@ -80,14 +66,8 @@ export const Timeline = () => {
   const sel = () => (selected() === null ? undefined : node(selected()!))
   // where checkout(selected) lands: the newest leaf under it
   const target = createMemo(() => (sel() ? L.leaf(all(), sel()!.id) : null)) // read by every station: once per change
-  const scene = (n: Node) => {
-    const h = heading(view()?.heading, n)
-    const p = n.parent === null ? undefined : node(n.parent)
-    return h !== undefined && (!p || heading(view()?.heading, p) !== h) ? h : undefined
-  }
   const depth = (id: Id) => L.chain(all(), id).length
-  const siblings = createMemo(() => (sel() ? L.children(all(), sel()!.parent) : []))
-  const version = () => siblings().findIndex((s) => s.id === sel()!.id) + 1
+  const vs = createMemo(() => (sel() ? versions(all(), sel()!) : { list: [], index: -1, varied: false }))
   const isHead = (id: Id) => all().head === id
   const isTarget = (id: Id) => target() === id && selected() !== id && !isHead(id)
   const lit = (c: Cell) => c.ids[0] !== DRAFT && c.ids.some((i) => onLine().has(i))
@@ -137,10 +117,10 @@ export const Timeline = () => {
           <span class="nid">#{p.id}</span>
           <Show when={n().turn.sibling}>
             <span class="how">
-              <Kind of={n().turn.sibling} />
+              <SiblingKind of={n().turn.sibling} />
             </span>
           </Show>
-          <span class="where">{scene(n()) ?? ""}</span>
+          <span class="where">{sceneOf(view()?.heading, all(), n()) ?? ""}</span>
           <Switch>
             <Match when={isHead(p.id)}>
               <span class="badge head">HEAD</span>
@@ -183,7 +163,7 @@ export const Timeline = () => {
                 aria-label={`Node ${id()}`}
                 onClick={() => setSelected(id())}
               >
-                <Kind of={node(id())!.turn.sibling} />#{id()}
+                <SiblingKind of={node(id())!.turn.sibling} />#{id()}
                 <Show when={node(id())!.turn.input.note}>✦</Show>
                 <Show when={node(id())!.turn.end === "stopped"}>
                   <i class="stopdot" />
@@ -384,9 +364,9 @@ export const Timeline = () => {
                     </span>
                     <span>
                       <b>{n().turn.sibling ?? (n().parent === null ? "root" : "act")}</b>
-                      <Show when={siblings().length > 1}>
+                      <Show when={vs().list.length > 1}>
                         {" "}
-                        {version()}/{siblings().length}
+                        {vs().index + 1}/{vs().list.length}
                       </Show>
                     </span>
                     <Show when={heading(view()?.heading, n())}>{(h) => <span>{h()}</span>}</Show>
@@ -397,10 +377,7 @@ export const Timeline = () => {
                   </div>
                 </div>
                 {/* the reader's line block (App.tsx Said), without its actions: this page is a view */}
-                <Show
-                  when={n().turn.input.text || n().turn.input.note}
-                  fallback={<span class="dim">{t("timeline.openingOnly")}</span>}
-                >
+                <Show when={lineOf(n())} fallback={<span class="dim">{t("timeline.openingOnly")}</span>}>
                   <div class="spoke">
                     <Show when={n().turn.input.text}>
                       <div class="said">
@@ -417,15 +394,15 @@ export const Timeline = () => {
                 <div class="prose">
                   <Prose text={prose(n())} />
                 </div>
-                <Show when={siblings().length > 1}>
+                <Show when={vs().list.length > 1}>
                   <div class="vlist">
                     <div class="sechead">
                       <span class="lbl">{t("timeline.versionsUnder", { id: n().parent ?? "" })}</span>
                       <span class="meta">
-                        {version()}/{siblings().length}
+                        {vs().index + 1}/{vs().list.length}
                       </span>
                     </div>
-                    <For each={siblings()} keyed={(s) => s.id}>
+                    <For each={vs().list} keyed={(s) => s.id}>
                       {(s, i) => (
                         <button
                           type="button"
@@ -434,9 +411,9 @@ export const Timeline = () => {
                           onClick={() => setSelected(s().id)}
                         >
                           <span class="v">
-                            {i() + 1}/{siblings().length} · #{s().id}
+                            {i() + 1}/{vs().list.length} · #{s().id}
                           </span>
-                          <Kind of={s().turn.sibling} />
+                          <SiblingKind of={s().turn.sibling} />
                           <span class="text">{textOf(s())}</span>
                           <span class="meta">{L.below(all(), s().id) ? `+${L.below(all(), s().id)}` : "leaf"}</span>
                         </button>

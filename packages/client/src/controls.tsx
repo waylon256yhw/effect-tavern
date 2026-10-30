@@ -8,11 +8,19 @@ import type { JSX } from "@solidjs/web"
 import { createSignal, For, onSettled, Show } from "solid-js"
 import { Family } from "./family.tsx"
 import { Back, Caret, Check, Close } from "./icons.tsx"
-import { roam } from "./side.tsx"
 import { names } from "./store.ts"
 import { t } from "./i18n.ts"
 
-export const FORMATS: Format[] = ["openai-compatible", "anthropic", "gemini"]
+/** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
+export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role^=menuitem]")]
+  const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
+  const d = { ArrowDown: 1, ArrowUp: -1, Home: -i, End: items.length - 1 - i }[e.key]
+  if (d === undefined) return
+  e.preventDefault()
+  items.at((i + d) % items.length)?.focus()
+}
+
 export const FORMAT: Record<Format, string> = {
   "openai-compatible": "OpenAI",
   anthropic: "Anthropic",

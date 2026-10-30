@@ -13,7 +13,6 @@ import {
   copyKey,
   Drawer,
   FORMAT,
-  FORMATS,
   grouped,
   Menu,
   Modal,
@@ -44,6 +43,7 @@ import {
   Trash,
 } from "./icons.tsx"
 import { AddModelDialog, addModels, ModelDialog, removeModels } from "./models.tsx"
+import { applied, correctedModels, FORMATS, requestOf, staleModels, type Request } from "./connections.ts"
 import { createProbing, IDLE, result, type Slot } from "./probe.ts"
 import { names, providers, registry, secrets } from "./store.ts"
 import { VaultDrawer } from "./vault.tsx"
@@ -615,44 +615,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
   )
 }
 
-// ───────── The request drawer: a draft of the provider's request settings, written on Save ─────────
-interface Request {
-  defaultFormat: Format
-  endpoints: Record<Format, { url: string; exactPrefix: boolean }>
-  ttl: "5m" | "1h"
-  proxy: "env" | "direct" | "custom"
-  proxyUrl: string
-  headers: [string, string][]
-}
-const requestOf = (p: Provider): Request => ({
-  defaultFormat: p.defaultFormat,
-  endpoints: Object.fromEntries(
-    FORMATS.map((f) => [f, { url: p.endpoints[f]?.url ?? "", exactPrefix: !!p.endpoints[f]?.exactPrefix }]),
-  ) as Request["endpoints"],
-  ttl: p.cacheTtl ?? "5m",
-  proxy: p.proxy === undefined ? "env" : p.proxy === false ? "direct" : "custom",
-  proxyUrl: typeof p.proxy === "string" ? p.proxy : "",
-  headers: Object.entries(p.headers ?? {}),
-})
-const applied = (p: Provider, r: Request): Provider => {
-  const headers = Object.fromEntries(r.headers.filter(([k]) => k.trim()).map(([k, v]) => [k.trim(), v]))
-  const { cacheTtl: _t, proxy: _p, headers: _h, ...rest } = p
-  return {
-    ...rest,
-    defaultFormat: r.defaultFormat,
-    endpoints: Object.fromEntries(
-      FORMATS.filter((f) => r.endpoints[f].url.trim()).map((f) => [
-        f,
-        { url: r.endpoints[f].url.trim(), ...(r.endpoints[f].exactPrefix && { exactPrefix: true }) },
-      ]),
-    ),
-    ...(r.ttl === "1h" && { cacheTtl: "1h" as const }),
-    ...(r.proxy === "direct" && { proxy: false as const }),
-    ...(r.proxy === "custom" && r.proxyUrl.trim() && { proxy: r.proxyUrl.trim() }),
-    ...(Object.keys(headers).length && { headers }),
-  }
-}
-
+// ───────── The request drawer: a draft of the provider's request settings (connections.ts `requestOf`), written on Save ─────────
 const RequestDrawer = (props: { id: string; ready: () => Promise<void>; onClose: () => void }) => {
   const start = untrack(() => providerOf(props.id))
   const [r, setR] = createSignal<Request | undefined>(start && requestOf(start))
@@ -853,14 +816,10 @@ const SyncDrawer = (props: { id: string; ready: () => Promise<void>; onClose: ()
     const rows = new Map((remote()?.models ?? []).map((m) => [m.id, m]))
     return ids.map((id) => rows.get(id) ?? { id })
   }
-  /** Models already in the list on the provider's default protocol that the listing puts on another endpoint: their
-   *  format unset (one the player set stays), the listing's set. The only place a stored format is corrected. */
-  const stale = (x: Provider) =>
-    (remote()?.models ?? []).filter((r) => r.format && x.models.some((m) => m.id === r.id && m.format === undefined))
-  const correct = (x: Provider) => {
-    const fix = new Map(stale(x).map((r) => [r.id, r.format!]))
-    void putProvider({ ...x, models: x.models.map((m) => (fix.has(m.id) ? { ...m, format: fix.get(m.id)! } : m)) })
-  }
+  /** Models already in the list on the provider's default protocol that the listing puts on another endpoint
+   *  (connections.ts `staleModels`); 更正 gives them the listing's format. */
+  const stale = (x: Provider) => staleModels(x, remote()?.models ?? [])
+  const correct = (x: Provider) => void putProvider(correctedModels(x, remote()?.models ?? []))
   onSettled(() => {
     void props
       .ready()

@@ -12,35 +12,20 @@
 // page, bridge.ts the atom → accessor read they all use.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
-import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { CardPage } from "./card.tsx"
 import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
-import {
-  Check,
-  Close,
-  Copy,
-  DieFill,
-  Down,
-  Edit,
-  Insert,
-  Next,
-  Prev,
-  Record,
-  Reword,
-  Status,
-  Swipe,
-  Warning,
-} from "./icons.tsx"
+import { Check, Close, Copy, DieFill, Down, Edit, Insert, Next, Prev, Record, Status, Warning } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
 import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { Demand, demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecord } from "./readings.tsx"
-import { record } from "./record.ts"
+import { Demand, demandable, RecordSheet, Rewrite, Sheet, SiblingKind, StatusTable, TurnRecord } from "./readings.tsx"
+import { fieldChanged, lineOf, versions } from "./record.ts"
 import { Session, Side } from "./side.tsx"
 import {
   card,
@@ -375,9 +360,8 @@ const Topbar = () => {
   const view = read(card)
   const last = read(latest)
   const changed = createMemo(() => {
-    const r = view()?.rules
     const l = last()
-    return r !== undefined && l !== null && record(r, l.node, l.prev).some((e) => "path" in e)
+    return l !== null && fieldChanged(view()?.rules, l.node, l.prev)
   })
   return (
     <header class="topbar">
@@ -421,11 +405,11 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
   const all = read(log)
   const edited = read(editing)
   const revised = read(revising)
-  const siblings = createMemo(() => L.children(all(), props.node.parent))
   // versions that differ in the player's line are told apart by it; otherwise by the prose
-  const varied = createMemo(() => new Set(siblings().map((v) => `${v.turn.input.text}\n${v.turn.input.note}`)).size > 1)
+  const vs = createMemo(() => versions(all(), props.node))
+  const siblings = () => vs().list
   let list: HTMLDivElement | undefined
-  const at = () => siblings().findIndex((s) => s.id === props.node.id)
+  const at = () => vs().index
   // the version's whole follow-up comes back: the server moves head to its newest leaf
   const go = (i: number) => turn.checkout(siblings()[i]!.id)
   const options = () => props.node.turn.products.options as readonly string[] | undefined
@@ -479,21 +463,9 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
                     aria-current={s().turn.id === props.node.turn.id ? "true" : undefined}
                     onClick={() => (list?.hidePopover(), go(i()))}
                   >
-                    <Switch fallback={<span class="kind" />}>
-                      <Match when={s().turn.sibling === "swipe"}>
-                        <Swipe class="kind" aria-label={t("common.swipe")} />
-                      </Match>
-                      <Match when={s().turn.sibling === "reword"}>
-                        <Reword class="kind" aria-label={t("common.reword")} />
-                      </Match>
-                      <Match when={s().turn.sibling === "edit"}>
-                        <Edit class="kind" aria-label={t("common.edit")} />
-                      </Match>
-                    </Switch>
+                    <SiblingKind of={s().turn.sibling} class="kind" fallback={<span class="kind" />} />
                     <span class="first">
-                      {varied()
-                        ? `${s().turn.input.text || s().turn.input.note} · ${plain(prose(s()))}`
-                        : plain(prose(s()))}
+                      {vs().varied ? `${lineOf(s())} · ${plain(prose(s()))}` : plain(prose(s()))}
                     </span>
                     <Show when={L.below(all(), s().id)}>{(n) => <span class="below">{n()}</span>}</Show>
                   </button>
@@ -513,7 +485,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
         <Show when={props.node.turn.end === "stopped"}>
           <span class="end">{t("app.stopped")}</span>
         </Show>
-        <Rewrite rerun={!!(props.node.turn.input.text || props.node.turn.input.note)} node={props.node.id} />
+        <Rewrite rerun={!!lineOf(props.node)} node={props.node.id} />
       </footer>
       <Show when={props.last && options()?.length}>
         <Options items={options()!} />

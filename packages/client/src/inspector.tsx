@@ -3,12 +3,14 @@ import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "s
 import { read } from "./bridge.ts"
 import { Back, Clue, Next, Prev, Record } from "./icons.tsx"
 import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type Tray } from "./inspect.ts"
-import { KeyValues, PinButton, Reading, Shaped, whens } from "./readings.tsx"
-import { record } from "./record.ts"
-import * as L from "@effect-tavern/runtime/src/log.ts"
+import { KeyValues, PinButton, Reading, Shaped } from "./readings.tsx"
+import { channelOf, fields, lineOf, parentOf, versions, whens } from "./record.ts"
 import { calls, card, log, path, pin, registry, turnOf, type Id } from "./store.ts"
 import { close, open } from "./pages.ts"
 import { t } from "./i18n.ts"
+
+// the input's channel in the harness's own words (the inspector speaks English like its stage names)
+const CHANNEL = { act: "act", note: "note", both: "act + note", greeting: "greeting" } as const
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
 // A full page over the reader (the reader stays mounted, so a turn in flight keeps streaming under it), shaped by
@@ -286,12 +288,8 @@ export const Inspect = (props: { id: Id }) => {
   const pinned = read(pin)
   const node = () => all().nodes.get(props.id)
   const at = () => line().findIndex((x) => x.turn.id === props.id) // -1: a sibling off the reading line
-  const parent = () => {
-    const p = node()?.turn.parent
-    return p === null || p === undefined ? undefined : all().nodes.get(p)
-  }
-  const siblings = createMemo(() => (node() ? L.children(all(), node()!.parent) : []))
-  const version = () => siblings().findIndex((s) => s.turn.id === props.id) + 1
+  const parent = () => (node() ? parentOf(all(), node()!) : undefined)
+  const vs = createMemo(() => (node() ? versions(all(), node()!) : { list: [], index: -1, varied: false }))
   const go = (d: number) => {
     const x = line()[at() + d]
     if (x) open({ inspect: x.turn.id })
@@ -311,10 +309,10 @@ export const Inspect = (props: { id: Id }) => {
       .filter((x) => x.phase === r.phase).length
   const lastNarrate = () => trows().findLast((r) => r.phase === "narrate")
   // the node's readings, drawn by the Record's own elements; only the fields here (checks and clues sit in the pipeline)
-  const fields = createMemo(() => {
+  const changes = createMemo(() => {
     const r = view()?.rules
     const x = node()
-    return r && x ? record(r, x, parent(), [], whens(view())).filter((e) => "path" in e) : []
+    return r && x ? fields(r, x, parent(), whens(view())) : []
   })
   const shapeOf = (id: string) => view()?.products.find((p) => p.id === id)?.shape
   const One = (p: { row: Row }) => (
@@ -345,9 +343,9 @@ export const Inspect = (props: { id: Id }) => {
           </button>
           <span class="n">
             <b>{at() >= 0 ? t("common.turnN", { n: at() + 1 }) : `#${props.id}`}</b>
-            <Show when={siblings().length > 1}>
+            <Show when={vs().list.length > 1}>
               <span class="v">
-                {version()}/{siblings().length}
+                {vs().index + 1}/{vs().list.length}
               </span>
             </Show>
           </span>
@@ -451,13 +449,10 @@ export const Inspect = (props: { id: Id }) => {
             <aside class="pane node" aria-label={t("common.node")}>
               <div class="sechead">
                 <span class="lbl">{t("inspector.input")}</span>
-                <span class="meta">
-                  {[x().turn.input.text ? "act" : "", x().turn.input.note ? "note" : ""].filter(Boolean).join(" + ") ||
-                    "greeting"}
-                </span>
+                <span class="meta">{CHANNEL[channelOf(x())]}</span>
               </div>
               <div class="inwell">
-                <p class="line">{x().turn.input.text || x().turn.input.note}</p>
+                <p class="line">{lineOf(x())}</p>
                 <Show when={(x().turn.input.text && x().turn.input.note) || x().turn.input.pin}>
                   <div class="pills">
                     <Show when={x().turn.input.text && x().turn.input.note}>
@@ -510,9 +505,9 @@ export const Inspect = (props: { id: Id }) => {
                   <Show when={x().events.length}> · {x().events.join(", ")}</Show>
                 </span>
               </div>
-              <Show when={fields().length} fallback={<p class="dim">{t("inspector.noFieldChanged")}</p>}>
+              <Show when={changes().length} fallback={<p class="dim">{t("inspector.noFieldChanged")}</p>}>
                 <div class="record">
-                  <For each={fields()} keyed={false}>
+                  <For each={changes()} keyed={false}>
                     {(el) => <Reading el={el()} />}
                   </For>
                 </div>
