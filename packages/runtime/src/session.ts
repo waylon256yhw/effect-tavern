@@ -37,8 +37,6 @@
 import {
   object,
   streamed,
-  type CacheTtl,
-  type Effort,
   type Message,
   type Model,
   type ModelError,
@@ -68,7 +66,8 @@ import { request, type Ask, type Told } from "./request.ts"
 import { cap, decodeProducts, entryRef, fold, resolve, shapeSchema, type Product } from "./product.ts"
 
 export type Turn = TurnOf<Beat>
-export type Phase = "lookup" | "decide" | "direct" | "narrate" | "check" | "polish" | "record"
+export const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const
+export type Phase = (typeof phases)[number]
 export type { Node } from "./derived.ts" // the node projection lives with the facts it carries; the client imports it here
 export type Event =
   | { kind: "stage"; phase: Phase }
@@ -80,23 +79,6 @@ export type Change = Log.Change<Node>
 /** A stop signal: completes when the player halts the prose (a Deferred's await on the wire). Only narrate listens. */
 export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
-
-/** The connection as the session sees it: a Model with the settings the session reads off it. */
-export type SessionModel = Model & {
-  prefill: boolean
-  reasoningBack?: boolean
-  effort?: Effort
-  maxOutputTokens?: number
-  ttl?: CacheTtl // the head's cache lifetime; the connection's setting
-  hat?: string // the connection's hat, a library id (`Connection.hat`), read per request through makeSession's `hat`
-}
-/** Stages bound to connections: one SessionModel for every stage, or a default plus the stages named apart. lookup and
- *  check can take a light model; record answers readouts (state judgement), not pure extraction: never route it down by default.
- *  A function is asked on every call, like `hat`: the library's routing, in force from the next request. */
-export type SessionModels =
-  | SessionModel
-  | ({ default: SessionModel } & Partial<Record<Phase, SessionModel>>)
-  | ((phase: Phase) => SessionModel)
 
 // ───────── The session's own words ─────────
 // Every instruction the loop says to the model, as fragments with ids, in the open. Data lines (State:, Actions:,
@@ -234,7 +216,7 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
 export const makeSession = ({
   card,
   player: given,
-  model: models,
+  model: modelFor,
   store,
   players,
   persona,
@@ -243,7 +225,10 @@ export const makeSession = ({
 }: {
   card: Card
   player: Player // the harness default; a stored player wins over it
-  model: SessionModels
+  /** The model each stage runs on (provider `bind`), asked on every call like `hat`: the library's routing, in force
+   *  from the next request. lookup and check can take a light model; record answers readouts (state judgement), not
+   *  pure extraction: never route it down by default. */
+  model: (phase: Phase) => Model
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
   persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
@@ -252,8 +237,6 @@ export const makeSession = ({
   // force from the next request); tests pass a small budget to fold short scripted prose
   policy?: Policy | (() => Policy)
 }) => {
-  const modelFor = (p: Phase): SessionModel =>
-    typeof models === "function" ? models(p) : "default" in models ? (models[p] ?? models.default) : models
   let player = players?.read() ?? given
   /** The player layer as the frame reads it: the persona in force, when there is one, joins the per-card layer last. */
   const layered = (): Player => {

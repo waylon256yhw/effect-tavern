@@ -20,10 +20,10 @@ const answers: Record<string, string> = {
   check: '{"fired":[],"violated":[]}',
   record: '{"notes":[],"options":[],"answers":{"tension":"same"}}',
 }
-const model = {
-  ...fake((o) => ({ text: (o.responseFormat?.type === "json" && answers[o.responseFormat.name!]) || "PROSE" })),
-  prefill: false,
-}
+const scripted = fake((o) => ({
+  text: (o.responseFormat?.type === "json" && answers[o.responseFormat.name!]) || "PROSE",
+}))
+const model = () => scripted
 const S = makeSession({ card: yandao, player, model })
 const root = S.greet(yandao.greetings[1]!).node!.id
 S.setField(root, [{ path: "局势", set: 8 }])

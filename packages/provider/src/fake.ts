@@ -19,6 +19,7 @@ const finish = (cut: boolean | undefined) => ({ unified: cut ? "length" : "stop"
  *  A streamed request gets the same answer in eight-character deltas, `delay` milliseconds apart when set. */
 export const fake = (reply: (o: FakeCall) => { text: string; cut?: boolean; delay?: number }): Model => ({
   format: "openai-compatible",
+  prefill: false, // as on current Claude; a test that continues a cut prose sets it
   model: new MockLanguageModelV4({
     doGenerate: async (o) => {
       const r = reply(o)

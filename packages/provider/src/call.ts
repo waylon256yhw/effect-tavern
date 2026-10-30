@@ -126,7 +126,13 @@ export interface Model {
   format: Format
   model: LanguageModel
   /** The connection's `capabilities.prefill`; false rejects a request ending in an assistant message at the wire. */
-  prefill?: boolean
+  prefill: boolean
+  /** The connection's `capabilities.reasoningBack`: past turns' reasoning parts are sent back. */
+  reasoningBack?: boolean
+  effort?: Effort
+  maxOutputTokens?: number
+  ttl?: CacheTtl // the head's cache lifetime; the connection's setting
+  hat?: string // the connection's hat, a library id (`Connection.hat`), read per request through makeSession's `hat`
 }
 
 export const object = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(

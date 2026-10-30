@@ -129,7 +129,8 @@ function script(o: Parameters<Parameters<typeof fake>[0]>[0]): { text: string; c
 }
 
 // ───────── Through the interface: every event kept, the node read off the end ─────────
-const model = { ...fake((o) => script(o)), prefill: true }
+const scripted = fake((o) => script(o))
+const model = () => scripted
 // Scripted prose is a few tokens a turn, so a budget of 0 folds as early as `keep` and `block` allow: two turns kept,
 // the boundary a block of two behind them.
 const policy = { budget: 0, keep: 2, block: 2 }
@@ -141,7 +142,8 @@ assert.deepEqual(
   N.snippets.map((s) => s.name),
   ["继续", "推进剧情", "时间流逝", "详细描写"],
 ) // author mode: no thought mark, no channel switch
-const C = makeSession({ card: chat, player, model }) // its stripped copy: no actions, no lore, no guard
+// its stripped copy: no actions, no lore, no guard; it takes a prefill, so a cut prose is continued (the `cut` turn)
+const C = makeSession({ card: chat, player, model: () => ({ ...scripted, prefill: true }) })
 // every product off and no readouts: a turn is narrate alone, record has nothing to ask and makes no call
 const Q = makeSession({
   card: chat,
@@ -564,8 +566,8 @@ const program = Effect.gen(function* () {
   )
   // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
   let light = 0
-  const lookup = { ...fake((o) => (light++, script(o))), prefill: true }
-  const B = makeSession({ card: full, player, model: { default: model, lookup } })
+  const lookup = fake((o) => (light++, script(o)))
+  const B = makeSession({ card: full, player, model: (p) => (p === "lookup" ? lookup : scripted) })
   const before = made().length
   yield* go(B.act(null, { text: "about li" }))
   const phases = made()
@@ -578,7 +580,7 @@ const program = Effect.gen(function* () {
   const H = makeSession({
     card: full,
     player: { ...player, global: [...player.global, { id: "taste", text: "TASTE-TAIL", at: "tail" }] },
-    model: { ...model, hat: "h" },
+    model: () => ({ ...scripted, hat: "h" }),
     hat: (id) => (id === "h" ? { id, name: "h", narrate: { tail: [{ role: "user", text: "HAT-TAIL" }] } } : undefined),
   })
   yield* go(H.act(null, { text: "about li" }))

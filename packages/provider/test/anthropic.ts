@@ -48,7 +48,12 @@ const conn: Connection = {
   proxy: process.env["https_proxy"] ?? process.env["HTTPS_PROXY"],
 }
 const traces: Trace[] = []
-const m: Model = { format: "anthropic", model: compile(conn, { onTrace: (t) => traces.push(t), traceBody: true }) }
+// prefill on: the wire guard lets the prefill through, so check 3 hears the API's own refusal
+const m: Model = {
+  format: "anthropic",
+  model: compile(conn, { onTrace: (t) => traces.push(t), traceBody: true }),
+  prefill: true,
+}
 const body = (t: Trace) => JSON.parse(t.body!) as any
 const user = (t: string): Message => ({ role: "user", content: t })
 
