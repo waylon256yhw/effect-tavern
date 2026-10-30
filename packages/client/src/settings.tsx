@@ -12,6 +12,7 @@ import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
 import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
+import { pairKey, pairOf, stalePair } from "./connections.ts"
 import { Providers } from "./providers.tsx"
 import { close, open } from "./pages.ts"
 import { cards, hats, personas, player, providers, routing, type Pair } from "./store.ts"
@@ -120,11 +121,6 @@ const STAGES: [Phase, Key][] = [
   ["check", "settings.stageCheck"],
   ["polish", "settings.stagePolish"],
 ]
-const key = (p: Pair) => `${p.provider}\u0000${p.model}`
-const pairOf = (k: string): Pair => {
-  const [provider, model] = k.split("\u0000") as [string, string]
-  return { provider, model }
-}
 
 const Routing = () => {
   const list = read(providers)
@@ -134,7 +130,7 @@ const Routing = () => {
       .filter((p) => p.enabled)
       .flatMap((p) =>
         p.models.map((m) => ({
-          value: key({ provider: p.id, model: m.id }),
+          value: pairKey({ provider: p.id, model: m.id }),
           label: `${p.name} · ${m.id}`,
           glyph: m.id,
         })),
@@ -143,14 +139,14 @@ const Routing = () => {
   /** A pair the menus cannot offer (its provider off, or it or its model gone) still shows what the row holds, marked;
    *  the next turn on it fails naming the provider, so the trigger must not look unset. */
   const stale = (pair: Pair | undefined) => {
-    if (!pair) return undefined
-    const p = list().find((x) => x.id === pair.provider)
-    const gone = !p || !p.models.some((m) => m.id === pair.model)
-    return {
-      value: key(pair),
-      label: `${p?.name ?? pair.provider} · ${pair.model}（${gone ? t("settings.removed") : t("settings.disabled")}）`,
-      glyph: pair.model,
-    }
+    const s = stalePair(list(), pair)
+    return (
+      s && {
+        value: pairKey(pair!),
+        label: `${s.name} · ${s.model}（${s.reason === "removed" ? t("settings.removed") : t("settings.disabled")}）`,
+        glyph: s.model,
+      }
+    )
   }
   const setStage = (s: Phase, k: string) => {
     const { [s]: _, ...rest } = route().stages ?? {}
@@ -172,7 +168,7 @@ const Routing = () => {
             <Menu
               label={t("settings.mainModel")}
               placeholder={t("settings.unset")}
-              value={route().default && key(route().default!)}
+              value={route().default && pairKey(route().default!)}
               options={pairs()}
               stale={stale(route().default)}
               onPick={(k) => void putRouting({ ...route(), default: pairOf(k) })}
@@ -197,7 +193,7 @@ const Routing = () => {
                     </div>
                     <Menu
                       label={t(s()[1])}
-                      value={route().stages?.[s()[0]] ? key(route().stages![s()[0]]!) : ""}
+                      value={route().stages?.[s()[0]] ? pairKey(route().stages![s()[0]]!) : ""}
                       placeholder={t("settings.followMain")}
                       options={[{ value: "", label: t("settings.followMain") }, ...pairs()]}
                       stale={stale(route().stages?.[s()[0]])}

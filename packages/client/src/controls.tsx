@@ -21,7 +21,6 @@ export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
   items.at((i + d) % items.length)?.focus()
 }
 
-export const FORMATS: Format[] = ["openai-compatible", "anthropic", "gemini"]
 export const FORMAT: Record<Format, string> = {
   "openai-compatible": "OpenAI",
   anthropic: "Anthropic",
