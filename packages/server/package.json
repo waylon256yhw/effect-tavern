@@ -13,7 +13,7 @@
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",
     "@effect-tavern/runtime": "workspace:*",
-    "effect": "4.0.5"
+    "effect": "4.0.6"
   },
   "devDependencies": {
     "@copilotkit/aimock": "1.46.0",
