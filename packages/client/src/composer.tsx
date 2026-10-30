@@ -1,10 +1,11 @@
 // The composer: the one raised object under the column. The box, the format keys, the snippets menu (+, or / on an
 // empty box), the note box a note snippet opens under the line (a word to the narrator that goes with the line, or
-// alone), Send / Stop. The session's own actions live beside the reading (side.tsx).
+// alone), Send / Stop. The pin is not here (#117): armed and shown in the Record alone, it rides on the next send
+// (turn.ts). The story's own entries live on the strip above the reading (strip.tsx).
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Check, Close, Edit, Insert, PinFill, Send, Snippets, Stop } from "./icons.tsx"
+import { Check, Close, Edit, Insert, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { roam } from "./controls.tsx"
 import {
@@ -15,7 +16,6 @@ import {
   compose,
   noted,
   path,
-  pin,
   registry,
   revising,
   setBoxes,
@@ -34,7 +34,6 @@ export const Composer = () => {
   const stoppable = () => !settling(phase())
   const text = read(compose)
   const noteText = read(noted)
-  const pinned = read(pin)
   const view = read(card)
   // The card's default channel is the mode for the whole session (GET /card `input`): in participant mode the box is the
   // character's line, a thought is this turn's deviation inside it, and a note to the narrator is a second box under it
@@ -262,11 +261,6 @@ export const Composer = () => {
                 </button>
               </span>
             )}
-          </Show>
-          <Show when={pinned()}>
-            <button type="button" class="icon" aria-label={t("composer.unpin")} onClick={() => registry.set(pin, null)}>
-              <PinFill />
-            </button>
           </Show>
           <span class="spacer" />
           <Show when={revise()}>

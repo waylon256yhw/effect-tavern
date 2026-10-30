@@ -1,15 +1,17 @@
-// One screen: the reading line as sections, the draft growing at its end, a composer at the bottom, a slim bar on top
-// whose Status button opens the full state table and whose title opens the session sheet (side.tsx: the card, the
-// stories, the persona, the Writing page's chips, the pin, the pages). A turn's actions sit under what they act on
-// (#101): a row under the player's bubble (revise, copy), a row under the prose (the Record pill, which opens a
-// full-page sheet of that turn's readings, src/record.ts projecting them, 小剧场 at its foot; the version count;
-// Swipe / Reword / Edit); the last section carries the Options container, whose rows fill the composer and never
-// send. From 72rem the same pieces sit on three cards: the session on the left, the reading in the middle, Status and
-// this turn's Record inline on the right, 小剧场 at its foot. Shapes follow
-// docs/client-design-brief-3.md and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
+// One screen: the reading line as sections, the draft growing at its end, a composer at the bottom, the story's strip
+// on top (strip.tsx: `card › story`, the persona and writing chips, Timeline and Inspector; on a phone the bar whose
+// ☰ opens the sidebar's drawer, whose crumb opens the story sheet and whose Status opens the state table). A turn's
+// actions sit under what they act on (#101): a row under the player's bubble (revise, copy), a row under the prose
+// (the Record pill, which opens a full-page sheet of that turn's readings, src/record.ts projecting them, 小剧场 at
+// its foot; the version count; Swipe / Reword / Edit); the last section carries the Options container, whose rows
+// fill the composer and never send. From 72rem the harness's two-level grid (#117): the sidebar on the left
+// (side.tsx: the card → story tree, the install's keys), the stage beside it; the stage is the reading in the middle
+// with Status and this turn's Record on the right, 小剧场 at its foot, or a card's page filling it (the reader stays
+// mounted under that page, so a turn in flight keeps streaming). Shapes follow docs/client-design-brief-3.md,
+// docs/sidebar-prototype.html and the canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet
 // menu a popover anchored to its button: the platform is the component library. This file is the reader: the flow,
-// the bar, the side cards; readings.tsx draws the Record's pieces, composer.tsx the box, inspector.tsx the Inspect
-// page, bridge.ts the atom → accessor read they all use.
+// the cards; readings.tsx draws the Record's pieces, composer.tsx the box, inspector.tsx the Inspect page, bridge.ts
+// the atom → accessor read they all use.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js"
@@ -18,15 +20,16 @@ import { CardPage } from "./card.tsx"
 import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
 import { imeController } from "./ime.ts"
-import { Check, Close, Copy, DieFill, Down, Edit, Insert, Next, Prev, Record, Status, Warning } from "./icons.tsx"
+import { Check, Close, Copy, DieFill, Down, Edit, Insert, Next, Prev, Record, Warning } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
 import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { Demand, demandable, RecordSheet, Rewrite, Sheet, SiblingKind, StatusTable, TurnRecord } from "./readings.tsx"
-import { fieldChanged, lineOf, versions } from "./record.ts"
-import { Session, Side } from "./side.tsx"
+import { Demand, demandable, RecordSheet, Rewrite, SiblingKind, StatusTable, TurnRecord } from "./readings.tsx"
+import { lineOf, versions } from "./record.ts"
+import { collapsed, Side } from "./side.tsx"
+import { Strip } from "./strip.tsx"
 import {
   card,
   compose,
@@ -355,35 +358,6 @@ const Said = (props: {
   )
 }
 
-/** The slim bar on top: the card's title (the session sheet) and Status with a dot when this turn changed the state. */
-const Topbar = () => {
-  const view = read(card)
-  const last = read(latest)
-  const changed = createMemo(() => {
-    const l = last()
-    return l !== null && fieldChanged(view()?.rules, l.node, l.prev)
-  })
-  return (
-    <header class="topbar">
-      <button type="button" class="title" commandfor="session" command="show-modal">
-        <h1>{view()?.title}</h1>
-      </button>
-      <Sheet id="session" heading={t("app.session")}>
-        <Session />
-      </Sheet>
-      <button class="icon" aria-label={t("common.status")} commandfor="status" command="show-modal">
-        <Status />
-        <Show when={changed()}>
-          <i class="dot" />
-        </Show>
-      </button>
-      <Sheet id="status" heading={t("common.status")}>
-        <StatusTable />
-      </Sheet>
-    </header>
-  )
-}
-
 /** The raised container of this turn's options: a row fills the composer, never sends. No head: the one raised card
  *  at the flow's end, numbered rows with the insert glyph, says what it is; the name is for the screen reader. */
 const Options = (props: { items: readonly string[] }) => (
@@ -513,6 +487,7 @@ const Reader = () => {
   return (
     <>
       <div class="panel">
+        <Strip />
         <div class="scroll">
           <main>
             {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
@@ -569,14 +544,16 @@ export const App = () => {
   })
   return (
     <>
-      <div class="canvas">
-        <Topbar />
+      <div class="canvas" data-collapsed={collapsed() ? "" : undefined}>
         <Side />
-        <Reader />
+        <div class="stage">
+          <Reader />
+          {/* the stage's other content: a card's page over the reading, which stays mounted under it */}
+          <Show when={typeof pg() === "object" && "card" in (pg() as object)}>
+            <CardPage />
+          </Show>
+        </div>
       </div>
-      <Show when={pg() === "card"}>
-        <CardPage />
-      </Show>
       <Show when={pg() === "timeline"}>
         <Timeline />
       </Show>
@@ -586,7 +563,7 @@ export const App = () => {
       <Show when={pg() === "writing"}>
         <WritingPage />
       </Show>
-      <Show when={typeof pg() === "object"}>
+      <Show when={typeof pg() === "object" && "inspect" in (pg() as object)}>
         <Inspect id={(pg() as { inspect: Id }).inspect} />
       </Show>
       {/* an agent's tab (a driven browser) told apart from the player's at a glance */}

@@ -1,10 +1,12 @@
 // The card page: the card on the player's side (docs/card-page-brief.md, docs/card-page-prototype.html). One bounded
 // sheet: the name and the introduction, three derived rows (manifest.ts), the openings in a well that scrolls, and one
-// action. Landed on when the story is empty; opened from the session's card head any time, Escape or Back returns
-// (the empty reader is a valid place to be: its composer waits for an opening while the card has any).
-// Browsing openings writes nothing: Begin greets the one shown, and it lands as the story's root; mid-story the same
-// pick starts a new story beside the old one. A card with no opening begins on an empty line,
-// the player's first words start it.
+// action. The stage's other content (#117): landed on when the story is empty; opened any time from the sidebar's
+// group head (any card's) or the strip's card name, Escape or Back returns (the empty reader is a valid place to be:
+// its composer waits for an opening while the card has any). The card shown is `viewed` (store.ts), never the story's
+// own atom: the reader under this page keeps reading its story's card.
+// Browsing openings writes nothing: Begin greets the one shown, and it lands as the story's root; mid-story, or on
+// another card than the story's, the same pick starts a new story beside the old one. A card with no opening begins
+// on an empty line, the player's first words start it.
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
@@ -13,12 +15,11 @@ import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { close, newStory, open } from "./pages.ts"
-import { card, log, personas, player, registry, routing, stories, working } from "./store.ts"
+import { card, log, personas, player, registry, routing, stories, viewed, working } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
-export const openCard = () => open("card")
 
 /** A list of names, the first few inline and the rest behind "and N more" (a popover, since a phone cannot hover). */
 let lists = 0
@@ -40,7 +41,7 @@ const Bounded = (props: { items: readonly string[] }) => {
 }
 
 export const CardPage = () => {
-  const view = read(card)
+  const view = read(viewed)
   const all = read(log)
   const busy = read(working) // no new root under a turn in flight
   const me = read(player)
@@ -56,8 +57,10 @@ export const CardPage = () => {
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const begin = async () => {
-    // a story in progress, or none yet (an empty library): a new, empty one of this card, landing on the card page
-    if (inStory() || registry.get(stories)?.current == null) await newStory(view()!.id)
+    // a story in progress, none yet (an empty library), or another card than the open story's: a new, empty story of
+    // this card, landing on its card page; only an empty story of this very card begins in place
+    const own = registry.get(card)?.id
+    if (inStory() || registry.get(stories)?.current == null || own !== view()!.id) await newStory(view()!.id)
     turn.greet(at())
     open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
   }

@@ -1,19 +1,7 @@
-// stories.ts: the card's four rows (starred first, the open one kept in view), the preview a row carries, the search's
+// stories.ts: the sidebar's order (starred first), the preview a row carries, the search's
 // match over title and hits, the marks it cuts, the cleanup's quick picks.
 import assert from "node:assert/strict"
-import {
-  ago,
-  empty,
-  matches,
-  pieces,
-  preview,
-  ranked,
-  shown,
-  stays,
-  turnLabel,
-  unnamed,
-  type Hit,
-} from "../src/stories.ts"
+import { ago, empty, matches, pieces, preview, ranked, stays, turnLabel, unnamed, type Hit } from "../src/stories.ts"
 import type { StoryRow } from "../src/store.ts"
 
 const row = (id: number, p: Partial<StoryRow> = {}): StoryRow => ({
@@ -32,23 +20,6 @@ assert.deepEqual(
   ranked(rows).map((s) => s.id),
   [2, 5, 1, 3, 4, 6],
 ) // starred first, each group newest first
-assert.deepEqual(
-  shown(rows, 1).map((s) => s.id),
-  [2, 5, 1, 3],
-)
-assert.deepEqual(
-  shown(rows, 6).map((s) => s.id),
-  [2, 5, 1, 6],
-) // the open story below the cut takes the last row
-assert.deepEqual(
-  shown(rows, undefined).map((s) => s.id),
-  [2, 5, 1, 3],
-)
-assert.deepEqual(
-  shown(rows.slice(0, 3), 3).map((s) => s.id),
-  [2, 1, 3],
-) // fewer than four: all of them
-
 assert.equal(preview(row(1)), "line 1")
 assert.equal(preview(row(1, { last: { text: "  ", note: "慢一点" } })), "（场外指导）慢一点")
 assert.equal(preview(row(1, { last: { text: "" } })), null)

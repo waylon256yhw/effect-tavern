@@ -1,11 +1,12 @@
 // The page over the reader (src/pages.ts) on a stubbed wire: close returns to the page under, the reader at the
-// bottom; landing on a story decides card or reader, forgets what was under, closes the old story's stream, reads the
+// bottom; the card page is any card's by id (the story's own in hand, another read), and another card replaces it;
+// landing on a story decides card or reader, forgets what was under, closes the old story's stream, reads the
 // story's card and picks up its turn in flight; no story at all lands on the first card's page; a delete that leaves
 // the open story open moves nothing; one Escape rule.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
 import { close, deleteStories, escaping, land, open, openStory } from "../src/pages.ts"
-import { card, log, page, registry, stories } from "../src/store.ts"
+import { log, page, registry, stories, viewed } from "../src/store.ts"
 import { turn } from "../src/turn.ts"
 
 const node = (id: number, parent: number | null) =>
@@ -21,13 +22,15 @@ const asked: string[] = [] // every path requested
       ? { nodes, head: nodes.length ? (nodes.at(-1) as { id: number }).id : null }
       : path === "/api/cards"
         ? [{ id: "first", title: "一" }]
-        : path.startsWith("/api/cards/")
-          ? { id: path.split("/").at(-1), greetings: [] }
-          : path === "/api/stories" && init?.method === "DELETE"
-            ? listing(1) // the open story stays the one to be on
-            : path.startsWith("/api/stories/")
-              ? listing(Number(path.split("/").at(-1)))
-              : [] // the settings' lists
+        : path === "/api/card"
+          ? { id: "own", greetings: [] }
+          : path.startsWith("/api/cards/")
+            ? { id: path.split("/").at(-1), greetings: [] }
+            : path === "/api/stories" && init?.method === "DELETE"
+              ? listing(1) // the open story stays the one to be on
+              : path.startsWith("/api/stories/")
+                ? listing(Number(path.split("/").at(-1)))
+                : [] // the settings' lists
   return new Response(JSON.stringify(body))
 }
 let abandoned = 0
@@ -37,21 +40,30 @@ turn.attach = () => void attached++ // landing picks up a turn in flight (turn.t
 const at = () => registry.get(page)
 
 // the stack: each page returns to the one it covered
-open("card")
+open({ card: "a" })
 open("settings")
 assert.equal(at(), "settings")
 close()
-assert.equal(at(), "card")
+assert.deepEqual(at(), { card: "a" })
 close()
 assert.equal(at(), "reader")
 close()
 assert.equal(at(), "reader") // nothing under the reader
 // the reader is under every page: opening it drops what covered it (Begin after browsing Settings from the card page)
-open("card")
+open({ card: "a" })
 open("settings")
-open("card")
+open({ card: "a" })
 open("reader")
 assert.equal(at(), "reader")
+close()
+assert.equal(at(), "reader")
+// another card's page replaces the card page (no return point) and reads that card
+asked.length = 0
+open({ card: "a" })
+open({ card: "b" })
+assert.deepEqual(at(), { card: "b" })
+await new Promise((f) => setTimeout(f))
+assert.deepEqual([asked, registry.get(viewed)?.id], [["/api/cards/a", "/api/cards/b"], "b"])
 close()
 assert.equal(at(), "reader")
 
@@ -63,10 +75,15 @@ assert.deepEqual(at(), { inspect: 2 })
 close()
 assert.equal(at(), "timeline")
 
-// landing: an empty log lands on the card page with nothing under it, the old stream closed
+// landing: an empty log lands on the story's own card's page with nothing under it, the old stream closed, the card
+// in hand and not read again
 open({ inspect: 1 })
+asked.length = 0
 await land(listing(1))
-assert.deepEqual([at(), abandoned, registry.get(stories)?.current], ["card", 1, 1])
+assert.deepEqual(
+  [at(), abandoned, registry.get(stories)?.current, registry.get(viewed)?.id, asked.includes("/api/cards/own")],
+  [{ card: "own" }, 1, 1, "own", false],
+)
 close()
 assert.equal(at(), "reader")
 
@@ -80,9 +97,10 @@ assert.deepEqual([attached, asked.includes("/api/card")], [2, true]) // the stor
 // no story at all (an empty library): the first card's page over an empty log, no story route asked, nothing attached
 asked.length = 0
 await land(listing(null))
+await new Promise((f) => setTimeout(f))
 assert.deepEqual(
-  [at(), registry.get(card)?.id, registry.get(log).nodes.size, attached, asked.includes("/api/nodes")],
-  ["card", "first", 0, 2, false],
+  [at(), registry.get(viewed)?.id, registry.get(log).nodes.size, attached, asked.includes("/api/nodes")],
+  [{ card: "first" }, "first", 0, 2, false],
 )
 await openStory(2)
 
