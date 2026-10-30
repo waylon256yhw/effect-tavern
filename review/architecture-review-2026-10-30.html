@@ -696,13 +696,13 @@ flowchart TB
         <p class="text-sm text-slate-700">A second reader (Gemini) re-verified every citation against main at e4278e3; all held. Adjustments agreed after re-checking the code:</p>
         <ul class="text-sm space-y-2 list-disc pl-5">
           <li><strong>C1</strong>: the facts at the path's end are read lazily, per fact, with the memo tables; <code>setField</code> needs only the settle, never the readable list or the summary.</li>
-          <li><strong>C2</strong>: the session takes one shape, a function of phase; a one-line helper lifts a single model into it. The bare-model shape is not kept, because the ternary is the duplication.</li>
+          <li><strong>C2</strong>: the session takes one shape, a function of phase; a test with one model writes <code>() =&gt; model</code>, no helper. The bare-model shape is not kept, because the ternary is the duplication. (Landed as #107: <code>bind</code> in provider, <code>Model</code> absorbs the session's five fields, <code>prefill</code> required.)</li>
           <li><strong>C4</strong>: one module, several functions, not one eager object: Timeline draws hundreds of nodes and needs the heading, the channel and the sibling kind, never the field diff. The point is where the knowledge lives, not one call.</li>
           <li><strong>C5</strong>: the library test stands (Strong). The route table is withdrawn: <code>PUT /stories/&lt;id&gt;</code> switches on a blank body and renames on a non-blank one, model listing fails with 502, the story routes answer the wrapped list. A <code>parseBody(req, Schema)</code> plus one guarded call helper removes the 16 try/catch blocks and keeps the control flow readable.</li>
           <li><strong>C9</strong>: only the pure half: <code>requestOf</code>/<code>applied</code>, <code>stale</code>/<code>correct</code>, <code>addModels</code>, <code>pairOf</code> as tested functions. The key-in-flight threading stays as it is (about fifteen lines inside one detail view).</li>
           <li><strong>bridge.ts</strong>: left alone; 23 import edits for no behaviour.</li>
         </ul>
-        <p class="text-sm text-slate-700">Order, each step a commit on its own: C1 → C3 + C8 → C2 + C6 + the library test → C7, C9's pure half, C4's module, <code>roam</code> and the five doc fixes.</p>
+        <p class="text-sm text-slate-700">Order, each step a commit on its own: C1 → C3 + C8 → C2 + C6 + the library test → C7, C9's pure half, C4's module, <code>roam</code> and the five doc fixes. Landed 2026-10-30 as #104, #105 + #106, #107 + #108 + #109, #110; C7 in flight. C9's pure module is <code>connections.ts</code>, not <code>models.ts</code>: a <code>.ts</code> beside a <code>.tsx</code> of the same name drops the <code>.tsx</code> from the type-check program.</p>
       </section>
 
       <!-- Top -->
