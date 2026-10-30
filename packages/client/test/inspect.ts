@@ -1,20 +1,19 @@
 // The pipeline projection: only the calls that ran, the second-draft loop and a stop read off the order, the drafts
 // folded into trays, a request split into regions at its cache breakpoints, one turn's totals.
 import assert from "node:assert/strict"
-import { groups, isTray, missing, regions, rows, totals, type Call } from "../src/inspect.ts"
+import { groups, isTray, regions, rows, totals, type Call } from "../src/inspect.ts"
 
 const usage = { input: 100, output: 10, cacheRead: 50, cacheWrite: 0 }
 const call = (phase: Call["phase"], ms = 1): Call => ({ kind: "call", phase, msgs: [], out: {}, usage, ms })
 const shape = (rs: ReturnType<typeof rows>) =>
   rs.map((r) => [r.phase, r.status, r.draft].filter((x) => x !== undefined))
 
-// a chat card's turn: narrate and record only, two rows; the four other stages are named, not drawn
+// a chat card's turn: narrate and record only, two rows; the other stages are not drawn
 const chat = [call("narrate"), call("record")]
 assert.deepEqual(shape(rows(chat, { end: "end" })), [
   ["narrate", "ok"],
   ["record", "ok"],
 ])
-assert.deepEqual(missing(chat), ["lookup", "decide", "direct", "check", "polish"])
 // the correction rewrite: check fails into a second narrate, both drafts numbered, each draft one tray
 const rewrite = rows(
   [

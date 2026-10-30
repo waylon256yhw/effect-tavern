@@ -1,8 +1,7 @@
 // The Inspect projection (docs/inspector-prototype.html is the page's shape): one turn's calls as the pipeline that
 // ran, a request as its cache regions, a turn's totals. `rows` names each call's place: a check followed by a narrate
 // failed into the second draft, the last narrate of a stopped turn is where the player halted. Stages without a call
-// take no row (`missing` lists them for one grey line: the card declares no actions, nothing to look up, the prose was
-// stopped before check). `groups` folds a two-draft turn's narrate + check pairs into trays, so the first draft reads
+// take no row (the card declares no actions, nothing to look up, the prose was stopped before check). `groups` folds a two-draft turn's narrate + check pairs into trays, so the first draft reads
 // as one discarded thing. `regions` splits a request at its cache breakpoints: the head (byte-stable), the folded
 // summary, recent history, this turn's input; a request without breakpoints is all input. Token counts are per call
 // (what the provider reports); a region's size is its characters.
@@ -18,7 +17,6 @@ export interface Row {
   call: Call
   draft?: number // narrate and check: which draft; set only when the turn had two
 }
-export const PHASES: readonly Phase[] = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"]
 
 export const rows = (calls: readonly Call[], turn: Pick<Turn<unknown>, "end">): Row[] => {
   let draft = 0
@@ -35,8 +33,6 @@ export const rows = (calls: readonly Call[], turn: Pick<Turn<unknown>, "end">): 
     return { phase: c.phase, status, call: c, ...(drafted && { draft }) }
   })
 }
-/** The stages of the fixed pipeline this turn never called, in order. */
-export const missing = (calls: readonly Call[]): Phase[] => PHASES.filter((p) => !calls.some((c) => c.phase === p))
 
 /** A tray: one draft's narrate and check, when the turn had more than one draft. */
 export interface Tray {
