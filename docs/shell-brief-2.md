@@ -21,7 +21,7 @@
 
 **tab 的模型**（读过 Cherry 的 `TabsProvider.tsx` / `TabRouter.tsx`：tab 只存地址，数据在公共池；没有"已打开就拒绝"，重复的 tab 是同一份数据的两个窗口；只能发生一次的副作用用 `useIsActiveTab` 门住）：
 
-- 一枚 tab = `{ id, story: number | null, page: Page, under: Page[], scroll?: number }`。`pages.ts` 今天的模块级 `page` 与 `under` 变成活跃 tab 的字段，`open` / `close` / `toReader` / `escaping` 对活跃 tab 操作；`land` 写活跃 tab 的 `story`。列表与活跃 id 存设备（`fold.ts` 那种读回：不在 listing 里的故事 id 丢掉，页面栈不存，重载后每枚 tab 落在它的故事的阅读器或卡片页）。
+- 一枚 tab = `{ id, story: number | null, card: string | null, page: Page, under: Page[], scroll?: number }`。`card` 是这枚 tab 在看的卡：有故事时就是故事的卡（冗余但省一次查表），无故事时是浏览到的那张（"+"、`showCard`、`browse`）。**"看着的卡"只有一个来源**：store.ts 的 `focus` 不再是自由 atom，而是活跃 tab 的 `card` 的派生；`arrive` / `toReader` / `showCard` / `browse` 写 tab，不写 `focus`。`card` atom（CardView）跟着活跃 tab 取（有故事走 Reading 的 `fetchCard`，无故事 `fetchCardOf(tab.card)`），所以工作区的人设、写法两行（读 `focus`）和 Writing 页（读 `card`）永远是同一张卡；#125 留下的"浏览到别的卡时两处不一致"由此关掉。`pages.ts` 今天的模块级 `page` 与 `under` 变成活跃 tab 的字段，`open` / `close` / `toReader` / `escaping` 对活跃 tab 操作；`land` 写活跃 tab 的 `story`。列表与活跃 id 存设备（`fold.ts` 那种读回：不在 listing 里的故事 id 丢掉，页面栈不存，重载后每枚 tab 落在它的故事的阅读器或卡片页）。
 - 网页里始终一个阅读器，读的是槽位（活跃 Reading）。
 - 切 tab：换页面栈和滚动位置，然后 `reading.activate(story)`：同一局是空操作（阅读器 tab 与 Inspector / 写卡台 tab 之间秒切，不发请求），异局先 `deactivate` 再 activate（总是重取，见 Reading），`story` 为空只换页面栈（设置、卡片页不需要局）。镜像天然成立：两枚 tab 同一个 id 就是同一局。
 - **数据单份靠一个模块，不靠暂存**：今天"正在读的那一局"没有名字，摊在 store.ts 的 log、draft、stage、error、revising、editing、pin、compose / noted / aside、calls、card，apply 的打字机队列，和 turn.ts 的 `streams` 里当单例；哪些 atom 是一局的，这份知识只在 `land()` 清哪几个 atom 的那几行里。tab 要的不是"离开时暂存 boxes 和 pin"（删掉它，editing 和 calls 照丢，下一个一局的 atom 还得记着去 stash），而是生出这个模块，见下节 **Reading**。
