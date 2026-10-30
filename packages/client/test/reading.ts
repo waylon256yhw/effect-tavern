@@ -8,12 +8,14 @@ import { boxes, card, cards, type CardView, log, pin, registry, setBoxes, storie
 
 const opened: number[] = []
 let nodes = 0
+const seen: string[] = []
 let attached = 0
 let abandoned = 0
 const reading = createReading({
   openStory: async (id) => (opened.push(id), { current: id, stories: [] }),
   fetchNodes: async () => {
     nodes++
+    seen.push(boxes().text) // what the composer holds while the story is read
     registry.set(log, L.of({ nodes: [], head: null }))
   },
   fetchCard: async () => registry.set(card, { id: "c", greetings: [] } as unknown as CardView),
@@ -49,6 +51,22 @@ await reading.activate(1) // 9 recorded: nine records, 1 the oldest
 assert.deepEqual(boxes(), line(""))
 await reading.activate(9)
 assert.deepEqual(boxes(), line("l9"))
+
+// a fast switch: on 21 with 20's line recorded, activate 20, then 22 before 20's reads are back, then 20: each waits
+// for the one before, 20's line is never recorded over with the emptied boxes, and 22's read never sees it
+await reading.activate(20)
+setBoxes(line("mine"))
+await reading.activate(21)
+let [n, a] = [nodes, attached]
+await Promise.all([reading.activate(20), reading.activate(22), reading.activate(20)])
+assert.deepEqual([boxes(), seen.slice(-3), nodes - n, attached - a], [line("mine"), ["mine", "", "mine"], 3, 3])
+
+// a deleted story: no record, and its id named again (a pre-autoincrement library) is read afresh
+setBoxes(line("dead"))
+;[n, a] = [nodes, abandoned]
+reading.drop([20])
+await reading.activate(20)
+assert.deepEqual([boxes(), nodes - n, abandoned - a], [line(""), 1, 1]) // a record of 20 would have put "dead" back
 
 // no story at all: the first card's page over an empty log, no story route asked, nothing attached
 const before = [opened.length, attached]

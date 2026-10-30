@@ -2,11 +2,15 @@
 // components draw (the log, the card, the calls, the draft and the typewriter's queue, the pin, the editor, the
 // composer's boxes) and the turn's streams; this module is the one list of which of them are a story's. One Reading is
 // in the slots, the rest are records: what the server does not hold of a story the player left (the half-typed line,
-// its note, the armed pin), by story id, bounded at the tab cap, the oldest dropped. Activate is the way in and always
-// reads the story afresh (open, nodes, card, its turn in flight), then puts its record back; deactivate keeps the
-// record, stops reading the streams (the turn runs on, on the server) and empties the slots. A record never holds the
-// log: caching it would save one millisecond-scale local read and buy an invalidation problem (a turn running when the
-// player left has moved on by the time they come back), so the log, the card and the calls are read again.
+// its note, the armed pin), by story id, bounded at the tab cap, the oldest dropped. Activate is the way in: it puts
+// the story's record back, then always reads the story afresh (open, nodes, card, its turn in flight); deactivate keeps
+// the record, stops reading the streams (the turn runs on, on the server) and empties the slots. A record never holds
+// the log: caching it would save one millisecond-scale local read and buy an invalidation problem (a turn running when
+// the player left has moved on by the time they come back), so the log, the card and the calls are read again. A
+// deleted story leaves no record (`drop`: a library made before autoincrement hands a deleted id to the next story,
+// whose composer must not get the dead one's line), and its id named again is read afresh. Activations run one at a
+// time: a second waits for the first, so a slow read never lands in the next story's slots; the record goes back
+// before any read, so a switch away mid-read records the line, not the emptied boxes.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { boxes, calls, cards, editing, type Id, log, pin, registry, setBoxes, stories } from "./store.ts"
@@ -43,9 +47,7 @@ export const createReading = (d: Deps) => {
     registry.set(editing, null)
     registry.set(calls, new Map())
   }
-  /** A story into the slots; the same one again does nothing. Null is no story at all (an empty library): the first
-   *  card's page over an empty log. */
-  const activate = async (id: Id | null): Promise<void> => {
+  const run = async (id: Id | null): Promise<void> => {
     if (id === active) return
     deactivate()
     active = id
@@ -56,16 +58,26 @@ export const createReading = (d: Deps) => {
       if (first) await d.fetchCardOf(first.id)
       return
     }
-    registry.set(stories, await d.openStory(id)) // `stories.current`: every request after names this story
-    await Promise.all([d.fetchNodes(), d.fetchCard()])
-    d.attach()
-    const r = records.get(id)
+    const r = records.get(id) // before any read: the reads touch neither the boxes nor the pin
     if (r) {
       setBoxes(r.boxes)
       registry.set(pin, r.pin)
     }
+    registry.set(stories, await d.openStory(id)) // `stories.current`: every request after names this story
+    await Promise.all([d.fetchNodes(), d.fetchCard()])
+    d.attach()
   }
-  return { activate, deactivate }
+  let last: Promise<void> = Promise.resolve()
+  /** A story into the slots, once any activate before it is done; the same one again does nothing. Null is no story
+   *  at all (an empty library): the first card's page over an empty log. */
+  const activate = (id: Id | null): Promise<void> => (last = last.catch(() => {}).then(() => run(id)))
+  /** Deleted stories: their records gone; the active one among them leaves the slots unrecorded, so the next activate,
+   *  of its id too, reads afresh. */
+  const drop = (ids: readonly Id[]): void => {
+    for (const id of ids) records.delete(id)
+    if (active != null && ids.includes(active)) active = undefined
+  }
+  return { activate, deactivate, drop }
 }
 export type Reading = ReturnType<typeof createReading>
 

@@ -114,6 +114,7 @@ export const land = async (listing: Listing): Promise<void> => {
  *  moves (the reader keeps its draft and its place); otherwise the client lands on the story the listing names
  *  (stories.ts `stays`: the id alone cannot tell a placeholder from the story it replaced). */
 export const onDelete = async (listing: Listing, deleted: readonly number[]): Promise<void> => {
+  reading.drop(deleted) // no record of a dead story; its id named again is read afresh
   if (stays(registry.get(stories)?.current, deleted, listing.current)) registry.set(stories, listing)
   else await land(listing)
 }

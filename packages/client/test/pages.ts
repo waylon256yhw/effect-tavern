@@ -2,7 +2,6 @@
 // bottom; landing on a story decides card or reader, forgets what was under, closes the old story's stream, reads the
 // story's card and picks up its turn in flight; no story at all lands on the first card's page; a delete that leaves
 // the open story open moves nothing; one Escape rule.
-import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
 import { close, deleteStory, escaping, land, open, openStory } from "../src/pages.ts"
 import { card, log, page, registry, stories } from "../src/store.ts"
@@ -87,13 +86,14 @@ assert.deepEqual(
 await openStory(2)
 
 // a delete of another story: the open one stays, nothing lands; of the open one, the client lands on the next
-registry.set(stories, listing(1))
-registry.set(log, L.of({ nodes: [node(0, null), node(1, 0)], head: 1 }))
+// (named again: a library made before autoincrement hands a deleted id on, and the client reads it afresh)
+await openStory(1)
 open("timeline")
 await deleteStory(7)
-assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["timeline", 4, 2]) // two more landings above
+assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["timeline", 5, 1]) // three more landings above
+nodes = [node(0, null), node(1, 0)]
 await deleteStory(1)
-assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["reader", 5, 1])
+assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["reader", 6, 2])
 
 // Escape: a field that prevents it keeps it; a popover, dialog or drawer takes it; a field is left first; else close
 const target = (tagName: string, isContentEditable = false) =>
