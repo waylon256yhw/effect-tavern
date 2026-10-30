@@ -17,6 +17,7 @@ import {
   type Model,
 } from "@effect-tavern/provider"
 import { cardNames, loadCard, player } from "@effect-tavern/runtime/test/cards/index.ts"
+import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
 import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
@@ -41,44 +42,19 @@ let n = 0
  *  rewrite — the first draft says 一稿, check fails it, the correction draft says 二稿. */
 const answer = (o: FakeCall) => {
   const text = o.prompt.map(fakeText).join("\n")
-  const phase = o.responseFormat?.type === "json" ? (o.responseFormat.name ?? "narrate") : "narrate"
-  const open =
-    text
-      .match(/^Open: (.*)$/m)?.[1]
-      .split("|")
-      .map((x) => x.split("=")[0]!.trim())
-      .filter(Boolean) ?? []
+  const doc = readStage(o)
   const demo = /重写|一稿|二稿/.test(text)
-  switch (phase) {
+  switch (doc.phase) {
     case "lookup":
-      return { text: JSON.stringify({ read: [] }), delay: demo ? 1500 : 0 } // room to stop before the first character
-    case "decide":
-      return { text: JSON.stringify({ next: "end" }) }
+      return { ...defaultAnswer(doc), delay: demo ? 1500 : 0 } // room to stop before the first character
     case "direct":
-      return { text: JSON.stringify({ must: [], may: open, tone: "平静" }) }
+      return { text: JSON.stringify({ must: [], may: doc.open, tone: "平静" }) }
     case "check":
       return {
-        text: JSON.stringify({
-          fired: [],
-          violated: text.includes("一稿") ? [text.match(/^Rule: (.*)$/m)?.[1] ?? ""] : [],
-        }),
+        text: JSON.stringify({ fired: [], violated: text.includes("一稿") ? [doc.rules[0] ?? ""] : [] }),
         delay: demo ? 1000 : 0,
       }
-    case "polish": // every marked sentence back unchanged: a pass-through, so the prose stands
-      return {
-        text: JSON.stringify(
-          Object.fromEntries(
-            [...text.matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(([, id, s]) => [id, s]),
-          ),
-        ),
-      }
     case "record": {
-      const answers = Object.fromEntries(
-        [...text.matchAll(/^(?:Questions: )?(\w+): [^[\n]*\[([^\]]*)\]$/gm)].map(([, id, opts]) => [
-          id,
-          opts!.split(" | ")[0]!.split(":")[0]!.trim(),
-        ]),
-      )
       // ponytail: canned rows for the harness defaults and wuxia's products; another card's product decodes to nothing
       const canned: Record<string, unknown> = {
         notes: [`第${n}幕：你与裴青舟在苦竹岭茶亭中隔桌相对，试探彼此来意。`],
@@ -92,20 +68,15 @@ const answer = (o: FakeCall) => {
         people: [],
         inner: `裴青舟垂眼看着石桌上的雨水，心里暗自思量你究竟是从何处得知李鹤的名字。`,
       }
-      const asked = [...text.matchAll(/^(\w+): (?!.*\[)/gm)]
-        .map(([, id]) => id!)
-        .filter((id) => !["Known", "Current", "Questions"].includes(id))
-      const products = Object.fromEntries(asked.map((id) => [id, canned[id]]))
-      return {
-        text: JSON.stringify(Object.keys(answers).length ? { ...products, answers } : products),
-        delay: demo ? 1000 : 0,
-      }
+      return { ...defaultAnswer(doc, canned), delay: demo ? 1000 : 0 }
     }
-    default:
+    case "narrate":
       return {
         text: `第${++n}段。${text.includes("Previous draft broke") ? "二稿。" : demo ? "一稿。" : ""}${"雨后的苦竹林里雾气未散，竹叶上的水珠顺着亭檐一滴滴落在青石板上。"}${"裴青舟按着乌木剑鞘站在三步开外，目光静静地落在你腰间的旧短剑上。".repeat(demo ? 6 : 2)}`,
         delay: demo ? 120 : 20,
       }
+    default: // decide ends, polish hands every marked sentence back unchanged (a pass-through, so the prose stands)
+      return defaultAnswer(doc)
   }
 }
 

@@ -1,10 +1,11 @@
 // src/request.ts through its interface: the whole document each stage reads, asserted the way a person reads a preset,
 // top to bottom. One frame, one set of facts; the inputs vary, and the seven stages differ only in what the module lets
 // each one see.
-import type { Message } from "@effect-tavern/provider"
+import type { FakeCall, Message } from "@effect-tavern/provider"
 import assert from "node:assert/strict"
 import type { Hat, Msg } from "../src/fragment.ts"
 import { request, type Ask, type Common } from "../src/request.ts"
+import { readStage } from "./script.ts"
 
 const frame: Msg[] = [
   { role: "system", text: "Write in Chinese." },
@@ -277,5 +278,29 @@ for (const s of stages)
     worn(s),
     s,
   )
+
+// ───────── The scripted narrator reads what this module writes ─────────
+// test/script.ts parses the data lines back for every scripted model; a change to a line above fails here first.
+const read = (s: Ask["stage"], ms: Message[] = line[s]) =>
+  readStage({ prompt: ms, responseFormat: s === "narrate" ? undefined : { type: "json", name: s } } as FakeCall)
+assert.equal(read("narrate").phase, "narrate")
+assert.equal(read("record").phase, "record")
+assert.deepEqual(read("lookup").index, [
+  ["li", "Li: A's friend."],
+  ["people@3#0", "Li"],
+])
+assert.deepEqual(read("decide").soFar, [])
+assert.deepEqual(
+  read("decide", request(c({ text: "x" }), { ...asks.decide, soFar: ["strike:hit", "strike:miss"] } as Ask)).soFar,
+  ["strike:hit", "strike:miss"],
+)
+for (const s of ["direct", "check"] as const) {
+  assert.deepEqual(read(s).open, ["li", "echo"], s)
+  assert.deepEqual(read(s).rules, ["B does not die"], s)
+}
+assert.deepEqual(read("record").known, ["N1"])
+assert.deepEqual(read("record").asked, ["notes", "options"])
+assert.deepEqual(read("record").questions, [{ id: "warmth", options: ["cold", "flat"] }])
+assert.deepEqual(read("polish").targets, [["hit-1", "指节发白。"]])
 
 console.log("request ok")
