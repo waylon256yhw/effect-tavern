@@ -38,8 +38,8 @@
 
 接口两个动词，实现里藏今天 `land` / `on` / `abandon` / `attach` 的全部编排和"哪些 atom 属于一局"的唯一清单：
 
-- `activate(id)`：同一局是空操作。否则一律 `openStory(id)`（`PUT /stories/<id>` 空体：服务端验证 id、答一份带 `current` 和新鲜 `busy` 的 listing，`stories.current` 由此跟过去，`x-tavern-story` 不会串台）→ `fetchNodes` + `fetchCard` → `turn.attach()` → 最后把这局的记录（若有）写回槽位。**记录从不装 log**：log、card、calls 每次重取（本地 SQLite，毫秒级），所以离开时在跑、回来已跑完或还在跑的局，新节点和流都接得上，没有"命中记录就漏取"的分支。
-- `deactivate()`：把**服务端没有的**东西读回这局的记录，只有 `boxes()`（compose / noted / aside）和 `pin`（editing、revising 随 log 走，不记）；`turn.abandon()`（流关掉，draft 与打字机队列丢掉，turn 在服务端照跑）；其余槽位清空。
+- `activate(id)`：同一局是空操作。否则一律 `openStory(id)`（`PUT /stories/<id>` 空体：服务端验证 id、答一份带 `current` 和新鲜 `busy` 的 listing，`stories.current` 由此跟过去，`x-tavern-story` 不会串台）→ `fetchNodes` + `fetchCard` → `turn.attach()`；这局的记录（若有）在设定活跃 id 之后、任何请求之前就同步写回槽位（输入框零延迟回显，快速连点也不会把记录冲掉）；activate 排在一条 promise 链上串行执行，后一次等前一次完成。**记录从不装 log**：log、card、calls 每次重取（本地 SQLite，毫秒级），所以离开时在跑、回来已跑完或还在跑的局，新节点和流都接得上，没有"命中记录就漏取"的分支。
+- `deactivate()`：把**服务端没有的**东西读回这局的记录，只有 `boxes()`（compose / noted / aside）和 `pin`（editing、revising 随 log 走，不记）；`turn.abandon()`（流关掉，draft 与打字机队列丢掉，turn 在服务端照跑）；其余槽位清空。第三个动词 `drop(ids)`：删档后被删故事的记录删除，活跃的那局在其中时离开槽位而不记录（下一次 activate 同一个 id 重读；`stories.ts` 的 `stays` 说明旧库会把删掉的 id 发给下一局），`onDelete` 在判 `stays` 之前调它。
 
 不变量：**槽位里永远只显示一个 Reading，其余的 Reading 都是记录。** 槽位就是今天那些 atom，组件一行不改，`wire.call` 不改（`stories.current` 就是活跃 Reading 的 id）。记录是按故事 id 的有界表，上限 = tab 上限 8，逐出 = 丢半句台词和 pin；今天的行为等于没有记录。删除测试：log 的快照缓存的是一次毫秒级本地读，换来一个失效问题（离开时在跑的局），所以不存。流不进记录：离开 abandon、回来 attach，不做后台事件路由（那是数据多实例的线）。照 turn.ts `createTurn(Transport)` 的样子做：接缝上有真 wire 和 `MODEL=fake` 两个 adapter，所以 verify 里直接测它：activate A、往 boxes 写半句、activate B、activate A → 半句回来，fetchNodes 调过三次、attach 三次、A 的 listing 两次。
 
