@@ -23,7 +23,7 @@
 
 - 一枚 tab = `{ id, story: number | null, page: Page, under: Page[], scroll?: number }`。`pages.ts` 今天的模块级 `page` 与 `under` 变成活跃 tab 的字段，`open` / `close` / `toReader` / `escaping` 对活跃 tab 操作；`land` 写活跃 tab 的 `story`。列表与活跃 id 存设备（`fold.ts` 那种读回：不在 listing 里的故事 id 丢掉，页面栈不存，重载后每枚 tab 落在它的故事的阅读器或卡片页）。
 - 网页里始终一个阅读器，读的是槽位（活跃 Reading）。
-- 切 tab：换页面栈和滚动位置，然后 `reading.activate(story)`：同一局是空操作（阅读器 tab 与 Inspector / 写卡台 tab 之间秒切，不发请求），异局先 `deactivate` 再 activate（有记录不发请求，没有才取），`story` 为空只换页面栈（设置、卡片页不需要局）。镜像天然成立：两枚 tab 同一个 id 就是同一条记录。
+- 切 tab：换页面栈和滚动位置，然后 `reading.activate(story)`：同一局是空操作（阅读器 tab 与 Inspector / 写卡台 tab 之间秒切，不发请求），异局先 `deactivate` 再 activate（总是重取，见 Reading），`story` 为空只换页面栈（设置、卡片页不需要局）。镜像天然成立：两枚 tab 同一个 id 就是同一局。
 - **数据单份靠一个模块，不靠暂存**：今天"正在读的那一局"没有名字，摊在 store.ts 的 log、draft、stage、error、revising、editing、pin、compose / noted / aside、calls、card，apply 的打字机队列，和 turn.ts 的 `streams` 里当单例；哪些 atom 是一局的，这份知识只在 `land()` 清哪几个 atom 的那几行里。tab 要的不是"离开时暂存 boxes 和 pin"（删掉它，editing 和 calls 照丢，下一个一局的 atom 还得记着去 stash），而是生出这个模块，见下节 **Reading**。
 - "+"：开一枚 `{ story: null, page: "card" }`，落在当前卡（工作区那张）的卡片页，即开局落地。新 tab 从不复制上一枚（Cherry 的裸 `/app/chat` 跳到全局最近话题，正是让人迷惑的地方，不学）。
 - 入列：侧栏点局、`browse`、`newStory` 开局都在**活跃 tab** 里发生，写它的 `story`；不去别的 tab 里找。镜像允许，关掉镜像 tab 不碰故事。
@@ -38,10 +38,10 @@
 
 接口两个动词，实现里藏今天 `land` / `on` / `abandon` / `attach` 的全部编排和"哪些 atom 属于一局"的唯一清单：
 
-- `activate(id)`：这局有记录 → 把记录写进槽位；没有 → `fetchNodes` + `fetchCard`，再 `turn.attach()`。同一局再 activate 是空操作。
-- `deactivate()`：把槽位读回这局的记录（log 快照、card、editing、pin、boxes、calls、revising、error），`turn.abandon()`（流关掉，draft 与打字机队列丢掉，turn 在服务端照跑），槽位清空。
+- `activate(id)`：同一局是空操作。否则一律 `openStory(id)`（`PUT /stories/<id>` 空体：服务端验证 id、答一份带 `current` 和新鲜 `busy` 的 listing，`stories.current` 由此跟过去，`x-tavern-story` 不会串台）→ `fetchNodes` + `fetchCard` → `turn.attach()` → 最后把这局的记录（若有）写回槽位。**记录从不装 log**：log、card、calls 每次重取（本地 SQLite，毫秒级），所以离开时在跑、回来已跑完或还在跑的局，新节点和流都接得上，没有"命中记录就漏取"的分支。
+- `deactivate()`：把**服务端没有的**东西读回这局的记录，只有 `boxes()`（compose / noted / aside）和 `pin`（editing、revising 随 log 走，不记）；`turn.abandon()`（流关掉，draft 与打字机队列丢掉，turn 在服务端照跑）；其余槽位清空。
 
-不变量：**槽位里永远只显示一个 Reading，其余的 Reading 都是记录。** 槽位就是今天那些 atom，组件一行不改，`wire.call` 不改（`stories.current` 就是活跃 Reading 的 id）。记录是按故事 id 的有界缓存，上限 = tab 上限 8，逐出 = 丢记录（回来重新取）；今天的行为等于缓存为 0。流不进记录：离开 abandon、回来 attach，不做后台事件路由（那是数据多实例的线）。照 turn.ts `createTurn(Transport)` 的样子做：接缝上有真 wire 和 `MODEL=fake` 两个 adapter，所以 verify 里直接测它：activate A、往 boxes 写半句、activate B、activate A → 半句回来，B 的 attach 调过一次。
+不变量：**槽位里永远只显示一个 Reading，其余的 Reading 都是记录。** 槽位就是今天那些 atom，组件一行不改，`wire.call` 不改（`stories.current` 就是活跃 Reading 的 id）。记录是按故事 id 的有界表，上限 = tab 上限 8，逐出 = 丢半句台词和 pin；今天的行为等于没有记录。删除测试：log 的快照缓存的是一次毫秒级本地读，换来一个失效问题（离开时在跑的局），所以不存。流不进记录：离开 abandon、回来 attach，不做后台事件路由（那是数据多实例的线）。照 turn.ts `createTurn(Transport)` 的样子做：接缝上有真 wire 和 `MODEL=fake` 两个 adapter，所以 verify 里直接测它：activate A、往 boxes 写半句、activate B、activate A → 半句回来，fetchNodes 调过三次、attach 三次、A 的 listing 两次。
 
 pages.ts 的 `land` 缩成 `reading.activate(listing.current)` + `arrive`；`on()` 的取数进 Reading；`onDelete` 不变。
 
