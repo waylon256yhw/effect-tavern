@@ -6,8 +6,8 @@ import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type 
 import { KeyValues, PinButton, Reading, Shaped, whens } from "./readings.tsx"
 import { record } from "./record.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import { calls, card, log, page, path, pin, registry, turnOf, type Id } from "./store.ts"
-import { fetchCalls } from "./wire.ts"
+import { calls, card, log, path, pin, registry, turnOf, type Id } from "./store.ts"
+import { close, open } from "./pages.ts"
 import { t } from "./i18n.ts"
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
@@ -20,11 +20,10 @@ import { t } from "./i18n.ts"
 // place the list shows), the state against the parent, the products by their declared shape. Without `inspect` on the
 // server no call carries a request body: the rows keep their heads, time and tokens, open to their answers (the brief
 // stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
-// path, `[` `]` too, Escape returns to the story. src/inspect.ts projects; this draws.
+// path, `[` `]` too, Escape goes back (pages.ts). src/inspect.ts projects; this draws.
 export const openInspector = () => {
   const id = registry.get(path).at(-1)?.turn.id
-  registry.set(page, id === undefined ? "reader" : { inspect: id })
-  void fetchCalls()
+  if (id !== undefined) open({ inspect: id })
 }
 const fmt = (n: number) => n.toLocaleString("en-US")
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
@@ -295,7 +294,7 @@ export const Inspect = (props: { id: Id }) => {
   const version = () => siblings().findIndex((s) => s.turn.id === props.id) + 1
   const go = (d: number) => {
     const x = line()[at() + d]
-    if (x) registry.set(page, { inspect: x.turn.id })
+    if (x) open({ inspect: x.turn.id })
   }
   const mine = () => trace().get(props.id) ?? []
   // the server's gate: without `inspect` no call carries a request body
@@ -327,7 +326,6 @@ export const Inspect = (props: { id: Id }) => {
       if (tag === "INPUT" || tag === "TEXTAREA") return
       if (e.key === "[") go(-1)
       else if (e.key === "]") go(1)
-      else if (e.key === "Escape") registry.set(page, "reader")
       else return
       e.preventDefault()
     }
@@ -337,7 +335,7 @@ export const Inspect = (props: { id: Id }) => {
   return (
     <div class="inspect" data-pane={pane()}>
       <header class="top">
-        <button class="icon" aria-label={t("common.backToStory")} onClick={() => registry.set(page, "reader")}>
+        <button class="icon" aria-label={t("common.backToStory")} onClick={close}>
           <Back />
         </button>
         <h1>{view()?.title}</h1>

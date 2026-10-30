@@ -10,7 +10,8 @@ import { Clue, Edit, Export, Snippets, Star, StarFill, Trash } from "./icons.tsx
 import { Sheet } from "./readings.tsx"
 import { ago, empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
 import { stories, type StoryRow, working } from "./store.ts"
-import { newStory, searchStories, starStory } from "./wire.ts"
+import { newStory } from "./pages.ts"
+import { searchStories, starStory } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 /** `text` with every `q` in a `<mark>`. */

@@ -66,7 +66,7 @@ import {
   working,
 } from "./store.ts"
 import { turn } from "./turn.ts"
-import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchRouting, fetchStories } from "./wire.ts"
+import { boot, onKey } from "./pages.ts"
 import { type Key, t } from "./i18n.ts"
 
 const waiting: Record<string, Key> = {
@@ -538,16 +538,6 @@ const Reader = () => {
     },
     { equals: (a, b) => a.length === b.length && a.every((n, i) => n === b[i]) },
   )
-  onSettled(() => {
-    // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
-    // the listing first: it names the story every request after is on; the routing is the card page's Model row
-    void fetchStories()
-      .then(() => Promise.all([fetchCard(), fetchNodes(), fetchPersonas(), fetchPlayer(), fetchRouting()]))
-      .then(() => {
-        if (registry.get(log).nodes.size === 0) registry.set(page, "card")
-      })
-  })
-
   return (
     <>
       <div class="panel">
@@ -599,6 +589,12 @@ const Glance = () => {
 
 export const App = () => {
   const pg = read(page)
+  // the first load lands on the card page or the reader (pages.ts); one Escape rule for every page over the reader
+  onSettled(() => {
+    void boot()
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  })
   return (
     <>
       <div class="canvas">

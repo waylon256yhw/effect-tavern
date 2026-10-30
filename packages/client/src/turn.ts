@@ -17,7 +17,6 @@ import {
   type Id,
   inputOf,
   log,
-  page,
   pin,
   prose,
   registry,
@@ -68,13 +67,12 @@ export const createTurn = ({ send, fetchNodes, delay }: Transport) => {
       registry.set(pin, null)
       start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
     },
-    /** The story starts from an opening (none on the card: an empty line, the player's first words start it). A draft
-     *  is a reason to be in the reader: the page goes there, whatever the log holds yet. */
+    /** The story starts from an opening (none on the card: an empty line, the player's first words start it). The
+     *  caller (the card page's Begin) then closes onto the reader: this module sits under pages.ts and moves no page. */
     greet: (index?: number): void => {
       registry.set(pin, null) // the old story's pin and error do not carry into a new one
       registry.set(error, null)
       if (registry.get(card)?.greetings.length) go({ kind: "greet", ...(index !== undefined && { greeting: index }) })
-      registry.set(page, "reader")
     },
     /** Head to a version's newest leaf (the server moves it), or an empty line. */
     checkout: (id: Id | null): void => void go({ kind: "checkout", node: id }),

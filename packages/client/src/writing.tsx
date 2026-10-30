@@ -9,7 +9,7 @@
 // optimistic. switches.ts, requirements.ts, lexicon.ts and inserts.ts hold the pure parts (tested).
 import type { Format, Player, Snippet, Writing } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
-import { createSignal, For, onSettled, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Modal, newId, Switch } from "./controls.tsx"
 import { Back, Clue, Close, Export, Import, Snippets as Plus } from "./icons.tsx"
@@ -25,13 +25,13 @@ import {
 } from "./inserts.ts"
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
-import { card, page, player, registry } from "./store.ts"
+import { close, open } from "./pages.ts"
+import { card, player } from "./store.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
 import { fetchCard, putPlayer } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
 
-export const openWriting = () => registry.set(page, "writing")
-const close = () => registry.set(page, "reader")
+export const openWriting = () => open("writing")
 
 type Tab = "switches" | "prose" | "polish" | "inputs"
 const TABS: [Tab, Key][] = [
@@ -44,16 +44,6 @@ const TABS: [Tab, Key][] = [
 export const WritingPage = () => {
   const view = read(card)
   const [tab, setTab] = createSignal<Tab>("switches")
-  onSettled(() => {
-    // a field that prevents it keeps its Escape (a search, a row being typed); so does an open popover or dialog
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return
-      if (document.querySelector(":popover-open, dialog[open]")) return
-      close()
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  })
   return (
     <div class="inspect wpage">
       <article class="wsheet" aria-label={t("writing.title")}>
