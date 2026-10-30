@@ -1,0 +1,2788 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Harness 侧边栏（卡 → 局）与局级 Strip · 交互原型 (Issue #117)</title>
+  <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+    HARNESS SIDEBAR (CARD → STORY) & STORY STRIP PROTOTYPE (ISSUE #117 / #68)
+    ═══════════════════════════════════════════════════════════════════════════════
+    1. 桌面两层网格 (72rem+):
+       - 外层: 侧边栏 (15rem，可折叠) | 主舞台 (1fr)
+       - 内层:
+         * 主舞台 = 阅读器 (Reader) 时: 阅读列 (1fr) | Status/Record 右栏 (19rem)
+         * 主舞台 = 卡页 (CardPage) / 检查器 (Inspector) / 设置 / 写作 时: 铺满整个主舞台 (1fr)，右栏隐藏
+    2. 常驻侧边栏 (安装级):
+       - 顶部: 搜索框（跨卡搜标题与正文，命中自动展开所在卡组并在行下显示 <mark> 片段）+ 清理菜单按钮 + 折叠按钮
+       - 树 (卡 → 局):
+         * 组头 = 折叠箭头 + 卡名（点击卡名进该卡的卡页，不建 0 轮空局；Begin 时才 POST /stories + greet）
+         * 局行 = 星标在前 + 标题 (或 New story) + busy 进行中圆点 + hover/触屏常显 ⋯ 菜单（改名、星标、导出、删除）
+         * 切局永远可点（working 只锁本局 composer 与版本切换）
+       - 底部: 三个安装级图标（设置 ⚙、主题 ◐、语言 文）
+    3. 阅读区头部 Strip (局级):
+       - [展开侧栏键(仅折叠时)] + 卡名 › 局名 (ellipsis) + [人设 chip] + [叙事体位 chip (chosen()[0])] + 右侧 [Timeline ⧖] [Inspector ⌕]
+       - Pin 不上 Strip：作为待发挂件放在 Composer 输入框正上方，带 ×，发出即消耗
+    4. 手机 (< 72rem, 390×844):
+       - Topbar 左中右: ☰ 拉出侧边栏抽屉 | 卡名 › 局名 ▾ 拉出局级 Sheet（人设、写法、Timeline、Inspector）| Status 图标拉出状态表
+  -->
+  <style>
+    /* ───────── 1. Tokens: exact match with packages/client/src/tokens.css ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f9f9f7, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151515);
+      --surface-2: light-dark(#ffffff, #1a1a19);
+      --surface-3: light-dark(#ffffff, #20201f);
+
+      --ink: light-dark(#151515, #f5f5f5);
+      --ink-2: light-dark(#525252, #a3a3a3);
+      --ink-3: light-dark(#8a8a8a, #6f6f6f);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.05), rgb(255 255 255 / 0.05));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.1), rgb(255 255 255 / 0.09));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.2), rgb(255 255 255 / 0.18));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.35), rgb(255 255 255 / 0.3));
+      --line: var(--alpha-2);
+      --line-strong: var(--alpha-3);
+      --fill: var(--alpha-2);
+      --fill-hover: light-dark(rgb(20 20 20 / 0.14), rgb(255 255 255 / 0.14));
+      --ghost-hover: var(--alpha-1);
+      --ghost-active: var(--alpha-2);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --danger: light-dark(#dc2626, #f87171);
+      --ok: light-dark(#1f7a3f, #4ade80);
+      --ok-soft: light-dark(rgb(31 122 63 / 0.22), rgb(74 222 128 / 0.25));
+      --danger-soft: light-dark(rgb(220 38 38 / 0.18), rgb(248 113 113 / 0.22));
+      --ok-wash: light-dark(rgb(34 197 94 / 0.12), rgb(187 247 208 / 0.09));
+      --warn: light-dark(#b45309, #fbbf24);
+      --warn-soft: light-dark(rgb(217 119 6 / 0.12), rgb(251 191 36 / 0.14));
+      --scrim: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.55));
+      --ring: var(--alpha-4);
+
+      --hairline: 1px;
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-2:
+        0 2px 4px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+        0 6px 16px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-3:
+        0 4px 8px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
+        0 12px 28px -2px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+      --shadow-pop:
+        inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)),
+        0 0 0 1px light-dark(var(--line), transparent),
+        0 8px 24px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.65)),
+        0 2px 6px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+      --shadow-composer:
+        0 4px 20px light-dark(rgb(0 0 0 / 0.035), rgb(0 0 0 / 0.4)),
+        inset 0 0 0 1px var(--line);
+      --shadow-composer-focus:
+        0 4px 24px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.65)),
+        inset 0 0 0 1px var(--line-strong);
+
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-card: calc(var(--radius) + 4px);
+      --radius-composer: 14px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --control: 32px;
+      --control-sm: 24px;
+      --control-lg: 38px;
+      --icon: 20px;
+      --icon-sm: 16px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --text-caption: 0.6875rem; /* 11px */
+      --text-footnote: 0.75rem; /* 12px */
+      --text-body: 0.875rem; /* 14px */
+      --text-heading: 0.9375rem; /* 15px */
+      --text-prose: 1rem; /* 16px */
+      --text-field: var(--text-body);
+      --text-title: 1.25rem; /* 20px */
+      --leading-tight: 1.25;
+      --leading-body: 1.45;
+      --leading-prose: 1.75;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --line-prose: calc(var(--text-prose) * var(--leading-prose));
+      --gap-turn: calc(var(--line-prose) * 0.75);
+      --gap-item: calc(var(--line-prose) * 0.5);
+      --measure: 42rem;
+      --topbar: 48px;
+      --fade: 24px;
+
+      --dur-1: 60ms;
+      --dur-2: 120ms;
+      --dur-3: 200ms;
+      --dur-4: 300ms;
+      --dur-5: 450ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-pulse: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+    }
+    @media (resolution >= 2x) {
+      :root {
+        --hairline: 0.5px;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: var(--leading-body);
+      color: var(--ink);
+      background: var(--surface-0);
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    button, input, textarea {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+      margin: 0;
+    }
+    button {
+      cursor: pointer;
+      user-select: none;
+    }
+    button:disabled {
+      opacity: 0.38;
+      cursor: default;
+    }
+    mark {
+      background: var(--warn-soft);
+      color: var(--ink);
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+
+    /* ───────── 2. Shared Primitives (.icon, .chip, .btn, .input-box) ───────── */
+    .icon {
+      width: var(--control);
+      height: var(--control);
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-2);
+      flex: none;
+      position: relative;
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+    }
+    .icon:hover:not(:disabled) {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .icon:active:not(:disabled) {
+      background: var(--ghost-active);
+    }
+    .icon[aria-pressed="true"] {
+      background: var(--fill);
+      color: var(--ink);
+    }
+    .icon svg {
+      width: var(--icon);
+      height: var(--icon);
+    }
+    .icon.sm {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      border-radius: 6px;
+    }
+    .icon.sm svg {
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+    }
+    .icon .dot {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 0 1.5px var(--surface-1);
+    }
+
+    .chip {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      background: var(--fill);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+    }
+    button.chip:hover:not(:disabled) {
+      background: var(--fill-hover);
+      color: var(--ink);
+    }
+    .chip.primary {
+      background: var(--primary);
+      color: var(--primary-ink);
+    }
+    .chip.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    .chip svg {
+      width: 12px;
+      height: 12px;
+      color: var(--ink-3);
+    }
+
+    .input-box {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      height: var(--control);
+      padding: 0 var(--space-2);
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      box-shadow: inset 0 0 0 var(--hairline) var(--line);
+      flex: 1;
+      min-width: 0;
+      transition: box-shadow var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+    }
+    .input-box:focus-within {
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+    .input-box svg {
+      width: var(--icon-sm);
+      height: var(--icon-sm);
+      color: var(--ink-3);
+      flex: none;
+    }
+    .input-box input {
+      flex: 1;
+      min-width: 0;
+      outline: none;
+      font-size: var(--text-footnote);
+    }
+    .input-box input::placeholder {
+      color: var(--ink-3);
+    }
+
+    /* ───────── 3. Stage Container (Desktop vs Mobile Viewport Switcher) ───────── */
+    .viewport-host {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .viewport-host[data-device="mobile"] {
+      padding: var(--space-4) var(--space-4) 68px;
+      align-items: center;
+      background:
+        radial-gradient(circle at 50% 20%, var(--alpha-1), transparent 70%),
+        var(--surface-0);
+    }
+    .phone-frame {
+      width: 390px;
+      height: min(812px, 100%);
+      border-radius: 36px;
+      background: var(--surface-1);
+      box-shadow:
+        0 0 0 8px light-dark(#e5e5e2, #262625),
+        var(--shadow-3);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ───────── 4. Outer Harness Grid (Sidebar | Stage) ───────── */
+    .harness {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr);
+      gap: var(--space-5);
+      padding: var(--space-5) var(--space-5) calc(var(--space-5) + 48px);
+      transition: grid-template-columns var(--dur-3) var(--ease), gap var(--dur-3) var(--ease);
+    }
+    .harness[data-collapsed="true"] {
+      grid-template-columns: 0rem minmax(0, 1fr);
+      gap: 0;
+    }
+    .harness[data-collapsed="true"] > .sidebar-card {
+      opacity: 0;
+      pointer-events: none;
+      padding-inline: 0;
+      border-width: 0;
+    }
+
+    /* ───────── 5. Persistent Left Sidebar (卡 → 局 Tree) ───────── */
+    .sidebar-card {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: opacity var(--dur-2) var(--ease), padding var(--dur-3) var(--ease);
+    }
+    .sidebar {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: var(--space-3);
+      gap: var(--space-2);
+    }
+
+    /* Sidebar Top: Search + Cleanup Menu + Collapse */
+    .side-top {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      flex: none;
+    }
+
+    /* Sidebar Tree Scroller */
+    .tree-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      margin-inline: calc(-1 * var(--space-1));
+      padding-inline: var(--space-1);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .tree-scroll:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    /* Card Group in Tree */
+    .card-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .group-head {
+      display: flex;
+      align-items: center;
+      height: 30px;
+      border-radius: var(--radius);
+      padding-right: var(--space-1);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .group-head:hover {
+      background: var(--ghost-hover);
+    }
+    .group-head[aria-current="page"] {
+      background: var(--fill);
+    }
+    .group-toggle {
+      width: 24px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-3);
+      flex: none;
+      border-radius: var(--radius-sm);
+    }
+    .group-toggle:hover {
+      color: var(--ink);
+    }
+    .group-toggle svg {
+      width: 12px;
+      height: 12px;
+      transition: transform var(--dur-2) var(--ease);
+    }
+    .card-group[data-open="false"] .group-toggle svg {
+      transform: rotate(-90deg);
+    }
+    .group-title {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-1);
+      text-align: left;
+      padding-right: var(--space-1);
+      font-size: var(--text-body);
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .group-title .name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .group-title .group-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: var(--text-caption);
+      font-weight: 400;
+      font-family: var(--font-mono);
+      color: var(--ink-3);
+    }
+    .group-title .card-enter {
+      width: 12px;
+      height: 12px;
+      color: var(--ink-3);
+      opacity: 0;
+      transition: opacity var(--dur-2) var(--ease), translate var(--dur-2) var(--ease);
+    }
+    .group-head:hover .card-enter,
+    .group-head[aria-current="page"] .card-enter {
+      opacity: 0.85;
+    }
+    .group-head:hover .card-enter {
+      translate: 1px 0;
+    }
+
+    /* Story Rows inside a Card Group */
+    .story-list {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 0 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .card-group[data-open="false"] .story-list {
+      display: none;
+    }
+    .story-item {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .story-item:hover {
+      background: var(--ghost-hover);
+    }
+    .story-item[aria-current="true"] {
+      background: var(--fill);
+    }
+    .story-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-1);
+      min-height: 30px;
+      padding: 4px 6px 4px 10px;
+      text-align: left;
+      width: 100%;
+    }
+    .story-main {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+    .story-star {
+      width: 12px;
+      height: 12px;
+      color: var(--ink-2);
+      flex: none;
+      display: inline-flex;
+    }
+    .story-star svg {
+      width: 12px;
+      height: 12px;
+    }
+    .story-name {
+      font-size: var(--text-footnote);
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .story-item[aria-current="true"] .story-name {
+      font-weight: 600;
+    }
+    .story-name.unnamed {
+      color: var(--ink-2);
+    }
+    .story-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 20px;
+    }
+    /* Busy dot: indicates an in-flight turn on the server (#116 busy: Phase | null) */
+    .busy-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ok);
+      display: inline-block;
+      animation: pulseDot 1.4s var(--ease-pulse) infinite;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.82); }
+    }
+    .story-more {
+      width: 22px;
+      height: 22px;
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-3);
+      opacity: 0;
+      transition: opacity var(--dur-1) var(--ease), background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .story-item:hover .story-more,
+    .story-more[aria-expanded="true"],
+    .viewport-host[data-device="mobile"] .story-more {
+      opacity: 1;
+    }
+    .story-more:hover {
+      background: var(--alpha-2);
+      color: var(--ink);
+    }
+    .story-more svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Search Hit Snippet Line under Story Row */
+    .story-hit {
+      padding: 0 8px 5px 10px;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.35;
+    }
+    .story-hit .turn-tag {
+      font-family: var(--font-mono);
+      color: var(--ink-2);
+      margin-right: 4px;
+    }
+
+    .group-empty {
+      padding: 2px 10px 4px 10px;
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+
+    /* Sidebar Footer: 3 install-level icons (Settings, Theme, Language) */
+    .side-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: var(--space-2);
+      border-top: var(--hairline) solid var(--line);
+      flex: none;
+    }
+    .side-foot-left {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    /* ───────── 6. Main Stage (Reader + Glance | CardPage | Inspector) ───────── */
+    .stage {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-5);
+      position: relative;
+    }
+    .stage[data-view="reader"] {
+      grid-template-columns: minmax(0, 1fr) 19rem;
+    }
+
+    /* ───────── 7. Reader Column & Story-Level Top Strip ───────── */
+    .reader-card {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* The new Story-Level Strip at the top of the Reader: slim, borderless, blends into the top of the card */
+    .story-strip {
+      height: 36px;
+      padding: 6px var(--space-4) 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex: none;
+      min-width: 0;
+    }
+    .strip-crumb {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      flex: 0 1 auto;
+      overflow: hidden;
+    }
+    .strip-card-btn {
+      font-size: var(--text-body);
+      font-weight: 600;
+      color: var(--ink-2);
+      white-space: nowrap;
+      padding: 2px 5px;
+      margin-left: -5px;
+      border-radius: var(--radius-sm);
+      transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+    }
+    .strip-card-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .strip-sep {
+      color: var(--ink-3);
+      font-size: var(--text-footnote);
+      flex: none;
+    }
+    .strip-story-name {
+      font-size: var(--text-body);
+      font-weight: 600;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .strip-story-name.unnamed {
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+    .strip-chips {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex: none;
+    }
+    .strip-chips .chip {
+      height: 22px;
+      padding: 0 6px;
+      font-size: var(--text-caption);
+      max-width: 7.5rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .strip-tools {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      flex: none;
+    }
+
+    /* Reader Scroll & Turns */
+    .reader-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: var(--space-4) var(--space-6) var(--fade);
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap-turn);
+      mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - var(--fade)), transparent);
+    }
+    .reader-main {
+      max-width: var(--measure);
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap-turn);
+    }
+    .turn-sec {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap-item);
+    }
+    .spoke {
+      align-self: flex-end;
+      max-width: 82%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .said {
+      padding: 8px 13px;
+      border-radius: 14px 14px 4px 14px;
+      background: var(--fill);
+      color: var(--ink);
+      font-size: var(--text-prose);
+      line-height: var(--leading-body);
+    }
+    .said.note {
+      background: transparent;
+      border: var(--hairline) dashed var(--line-strong);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+    }
+    .prose {
+      font-size: var(--text-prose);
+      line-height: var(--leading-prose);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap-item);
+    }
+    .prose p {
+      margin: 0;
+    }
+    .turn-foot {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--ink-3);
+      font-size: var(--text-footnote);
+    }
+    .record-pill {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .record-pill svg {
+      width: 13px;
+      height: 13px;
+    }
+    .dots {
+      display: inline-flex;
+      gap: 3.5px;
+    }
+    .dots span {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--ink-3);
+      animation: pulseDot 1.2s var(--ease-pulse) infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .dots span:nth-child(3) { animation-delay: 0.4s; }
+    .cursor {
+      display: inline-block;
+      vertical-align: text-bottom;
+      width: 2px;
+      height: 1.05em;
+      margin-left: 2px;
+      background: var(--ok);
+      animation: blink 1s steps(2, jump-none) infinite;
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* ───────── 8. Composer + Input Helper Attachments above it ───────── */
+    .composer-wrap {
+      padding: 0 var(--space-6) var(--space-4);
+      flex: none;
+    }
+    .composer-stack {
+      max-width: var(--measure);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    /* Floating helper chips strip right above the composer box */
+    .helper-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+      padding: 0 2px;
+    }
+    .helper-bar .chip {
+      height: 22px;
+      padding: 0 7px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
+      box-shadow: var(--shadow-1), inset 0 0 0 var(--hairline) var(--line);
+      font-size: var(--text-caption);
+      color: var(--ink-2);
+    }
+    .helper-bar .chip:hover {
+      background: var(--fill);
+      color: var(--ink);
+    }
+    .helper-bar .chip.glyph {
+      font-family: var(--font-sans);
+      letter-spacing: 0.12em;
+      text-indent: 0.12em;
+      color: var(--ink);
+    }
+    .helper-bar .sep {
+      width: 1px;
+      height: 12px;
+      background: var(--line);
+      margin: 0 2px;
+    }
+    .composer-box {
+      width: 100%;
+      border-radius: var(--radius-composer);
+      background: var(--surface-2);
+      box-shadow: var(--shadow-composer);
+      overflow: hidden;
+      transition: box-shadow var(--dur-2) var(--ease);
+    }
+    .composer-box:focus-within {
+      box-shadow: var(--shadow-composer-focus);
+    }
+    /* Attached tray on top of the composer box (e.g. Note to narrator / Revising turn) */
+    .composer-attach {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 5px 8px 5px 12px;
+      background: var(--alpha-1);
+      border-bottom: var(--hairline) solid var(--line);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+    }
+    .composer-attach .attach-tag {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-2);
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--fill);
+      flex: none;
+    }
+    .composer-attach input {
+      flex: 1;
+      min-width: 0;
+      outline: none;
+      font-size: var(--text-footnote);
+      color: var(--ink);
+    }
+    .composer-attach input::placeholder {
+      color: var(--ink-3);
+    }
+    .composer-body {
+      padding: 10px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .composer-body.compact {
+      padding: 6px 8px;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+    }
+    .composer-body textarea {
+      width: 100%;
+      resize: none;
+      outline: none;
+      font-size: var(--text-body);
+      line-height: 1.5;
+      min-height: 24px;
+    }
+    .composer-body.compact textarea {
+      flex: 1;
+      min-width: 0;
+      min-height: 22px;
+      padding: 2px 0;
+    }
+    .composer-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .composer-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .send-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-pill);
+      background: var(--primary);
+      color: var(--primary-ink);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .send-btn.stop {
+      background: var(--fill);
+      color: var(--ink);
+    }
+    .send-btn svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* ───────── 9. Right Glance Card (Status & Record, only in Reader view) ───────── */
+    .glance-card {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      overflow-y: auto;
+    }
+    .glance-sec {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .glance-sec h2 {
+      margin: 0;
+      font-size: var(--text-caption);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink-3);
+    }
+    .meter-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 6px 0;
+    }
+    .meter-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: var(--text-footnote);
+    }
+    .meter-top .label {
+      font-weight: 600;
+    }
+    .meter-top .val {
+      font-family: var(--font-mono);
+      color: var(--ink-2);
+    }
+    .meter-track {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--alpha-2);
+      position: relative;
+      overflow: hidden;
+    }
+    .meter-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      background: var(--ink);
+      border-radius: 3px;
+    }
+    .clue-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-2);
+      padding: 7px 9px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+    }
+    .clue-item button {
+      flex: none;
+      color: var(--ink-3);
+    }
+    .clue-item button:hover,
+    .clue-item button[aria-pressed="true"] {
+      color: var(--ink);
+    }
+    .clue-item button svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ───────── 10. Full-Stage Views: CardPage & Inspector (Right Glance Hidden) ───────── */
+    .stage-surface {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .stage-surface-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-5);
+    }
+    /* CardSheet inside Stage (matches card.css max-width: 56rem two-column) */
+    .cardsheet {
+      width: 100%;
+      max-width: 54rem;
+      display: grid;
+      grid-template-columns: minmax(0, 9fr) minmax(0, 13fr);
+      min-height: 24rem;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-2);
+      box-shadow: var(--shadow-2);
+      border: var(--hairline) solid var(--line);
+      overflow: hidden;
+    }
+    .cardsheet .about {
+      padding: var(--space-6);
+      border-right: var(--hairline) solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: var(--space-4);
+    }
+    .cardsheet h1 {
+      margin: 0;
+      font-size: var(--text-title);
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .cardsheet .summary {
+      margin: var(--space-2) 0 0;
+      color: var(--ink-2);
+      line-height: 1.65;
+    }
+    .cardsheet .specs {
+      margin: 0;
+      padding-top: var(--space-3);
+      border-top: var(--hairline) solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: var(--text-footnote);
+    }
+    .cardsheet .specs .row {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .cardsheet .specs dt { color: var(--ink-3); }
+    .cardsheet .specs dd { margin: 0; font-weight: 500; color: var(--ink-2); }
+    .cardsheet .opening {
+      padding: var(--space-6);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: var(--space-4);
+    }
+    .cardsheet .well {
+      flex: 1;
+      padding: var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      font-size: var(--text-prose);
+      line-height: var(--leading-prose);
+      color: var(--ink);
+      overflow-y: auto;
+      max-height: 16rem;
+    }
+    .cardsheet .foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .begin-btn {
+      height: var(--control);
+      padding: 0 16px;
+      border-radius: var(--radius-pill);
+      background: var(--primary);
+      color: var(--primary-ink);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: var(--shadow-1);
+    }
+    .begin-btn svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* Inspector full-stage mock */
+    .inspect-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 18rem minmax(0, 1fr);
+      gap: var(--space-4);
+      padding: var(--space-4);
+    }
+    .inspect-pane {
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      font-size: var(--text-footnote);
+    }
+    .inspect-step {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      font-family: var(--font-mono);
+    }
+
+    /* ───────── 11. Mobile Topbar, Sidebar Drawer & Session Sheet ───────── */
+    .mobile-topbar {
+      height: var(--topbar);
+      padding: 0 var(--space-2);
+      border-bottom: var(--hairline) solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-1);
+      flex: none;
+    }
+    .mobile-title-btn {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      padding: 0 var(--space-2);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .mobile-title-btn:hover {
+      background: var(--ghost-hover);
+    }
+    .mobile-title-btn .c-name {
+      font-weight: 600;
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .mobile-title-btn .s-name {
+      font-weight: 600;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mobile-title-btn svg {
+      width: 12px;
+      height: 12px;
+      color: var(--ink-3);
+      flex: none;
+    }
+
+    /* Mobile Overlay Scrim + Left Drawer + Bottom Sheet */
+    .mobile-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      background: var(--scrim);
+      display: flex;
+      animation: fadeIn var(--dur-2) var(--ease);
+    }
+    .mobile-drawer {
+      width: 268px;
+      max-width: 82%;
+      height: 100%;
+      background: var(--surface-1);
+      box-shadow: var(--shadow-3);
+      display: flex;
+      flex-direction: column;
+    }
+    .mobile-sheet {
+      margin-top: auto;
+      width: 100%;
+      max-height: 82%;
+      border-radius: 20px 20px 0 0;
+      background: var(--surface-1);
+      box-shadow: var(--shadow-3);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      overflow-y: auto;
+    }
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sheet-head h3 {
+      margin: 0;
+      font-size: var(--text-heading);
+      font-weight: 600;
+    }
+    .session-cardhead {
+      padding: var(--space-3);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .session-cardhead .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+    }
+    .session-cardhead p {
+      margin: 0;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .session-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .session-row .lbl {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-3);
+      text-transform: uppercase;
+    }
+    .session-chosen {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+    }
+
+    /* ───────── 12. Floating Menus & Modal Sheets (⋯ Row Menu, Cleanup Sheet, Persona Picker) ───────── */
+    .pop-menu {
+      position: fixed;
+      z-index: 60;
+      min-width: 148px;
+      padding: 4px;
+      border-radius: var(--radius-card);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .pop-item {
+      height: 30px;
+      padding: 0 10px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--text-footnote);
+      color: var(--ink);
+      text-align: left;
+    }
+    .pop-item:hover {
+      background: var(--ghost-hover);
+    }
+    .pop-item.danger {
+      color: var(--danger);
+    }
+    .pop-item svg {
+      width: 14px;
+      height: 14px;
+      color: var(--ink-3);
+    }
+    .pop-item.danger svg {
+      color: var(--danger);
+    }
+
+    dialog.modal-sheet {
+      border: 0;
+      padding: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-2);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      width: min(30rem, calc(100vw - 32px));
+      max-height: 78vh;
+    }
+    dialog.modal-sheet::backdrop {
+      background: var(--scrim);
+    }
+    .modal-inner {
+      display: flex;
+      flex-direction: column;
+      max-height: 78vh;
+    }
+    .modal-head {
+      padding: var(--space-4) var(--space-5);
+      border-bottom: var(--hairline) solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .modal-head h3 {
+      margin: 0;
+      font-size: var(--text-heading);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-body {
+      padding: var(--space-3) var(--space-5);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .modal-foot {
+      padding: var(--space-3) var(--space-5);
+      border-top: var(--hairline) solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      font-size: var(--text-footnote);
+    }
+    .cleanup-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+    }
+    .cleanup-row .c-tag {
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--fill);
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+    }
+
+    /* ───────── 13. Prototype Control Dock & Toast ───────── */
+    .proto-dock {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      translate: -50% 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+      max-width: calc(100vw - 16px);
+      overflow-x: auto;
+    }
+    .proto-dock button {
+      height: 24px;
+      padding: 0 9px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-weight: 500;
+      transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+    }
+    .proto-dock button:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .proto-dock button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+    }
+    .proto-dock .sep {
+      width: 1px;
+      height: 14px;
+      background: var(--line);
+      margin: 0 2px;
+    }
+
+    .toast {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      translate: -50% -12px;
+      z-index: 80;
+      padding: 7px 14px;
+      border-radius: var(--radius-pill);
+      background: var(--ink);
+      color: var(--surface-1);
+      font-size: var(--text-footnote);
+      font-weight: 500;
+      box-shadow: var(--shadow-2);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur-2) var(--ease), translate var(--dur-2) var(--ease);
+    }
+    .toast[data-show="true"] {
+      opacity: 1;
+      translate: -50% 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Main Viewport Host (Desktop Harness or Phone 390px Frame) -->
+  <div id="viewport" class="viewport-host" data-device="desktop"></div>
+
+  <!-- Floating ⋯ Story Action Menu -->
+  <div id="story-menu" class="pop-menu" hidden></div>
+
+  <!-- Cleanup Sheet (#75 retained cleanup dialog, opened from sidebar top menu) -->
+  <dialog id="cleanup-dialog" class="modal-sheet" onclick="if(event.target===this)this.close()">
+    <div class="modal-inner" id="cleanup-content"></div>
+  </dialog>
+
+  <!-- Persona Picker Sheet -->
+  <dialog id="persona-dialog" class="modal-sheet" onclick="if(event.target===this)this.close()">
+    <div class="modal-inner" id="persona-content"></div>
+  </dialog>
+
+  <!-- Interactive Prototype Control Dock -->
+  <nav class="proto-dock" aria-label="原型状态切换">
+    <button type="button" id="dock-desktop" aria-pressed="true" onclick="setDevice('desktop')">桌面 (72rem+)</button>
+    <button type="button" id="dock-mobile" aria-pressed="false" onclick="setDevice('mobile')">手机 (390px)</button>
+    <span class="sep"></span>
+    <button type="button" id="dock-view-reader" aria-pressed="true" onclick="setStageView('reader')">舞台: 阅读器+右栏</button>
+    <button type="button" id="dock-view-card" aria-pressed="false" onclick="openCardInStage(currentCardId())">舞台: 卡页铺满</button>
+    <button type="button" id="dock-view-inspect" aria-pressed="false" onclick="setStageView('inspect')">舞台: Inspector铺满</button>
+    <span class="sep"></span>
+    <button type="button" id="dock-collapse" aria-pressed="false" onclick="toggleSidebarCollapse()">折叠侧栏</button>
+    <button type="button" id="dock-helpers" aria-pressed="true" onclick="toggleHelperBar()">输入助手附件</button>
+    <button type="button" id="dock-note" aria-pressed="true" onclick="toggleNoteAttach()">场外附言挂件</button>
+    <button type="button" id="dock-search" aria-pressed="false" onclick="demoSearch()">搜:「短剑」</button>
+    <button type="button" id="dock-busy" aria-pressed="true" onclick="toggleBusyDemo()">并发 busy 点</button>
+    <button type="button" id="dock-clean" onclick="openCleanupModal()">管理与删除</button>
+    <span class="sep"></span>
+    <button type="button" onclick="toggleTheme()">浅/深</button>
+  </nav>
+
+  <script>
+    // ───────── 1. Icons (Phosphor Regular & Fill) ─────────
+    const ICONS = {
+      search: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
+      caretDown: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>`,
+      caretRight: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`,
+      sidebar: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H80V200H40ZM216,200H96V56H216Z"/></svg>`,
+      list: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z"/></svg>`,
+      dots: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></svg>`,
+      plus: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,128a8,8,0,0,1-8,8H136v64a8,8,0,0,1-16,0V136H56a8,8,0,0,1,0-16h64V56a8,8,0,0,1,16,0v64h64A8,8,0,0,1,208,128Z"/></svg>`,
+      sliders: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H183a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h81a32,32,0,0,0,62,0h33a8,8,0,0,0,0-16Zm-64,24a16,16,0,1,1,16-16A16,16,0,0,1,152,192Z"/></svg>`,
+      star: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M239.18,97.26A16.38,16.38,0,0,0,224.92,86l-59-4.76L143.14,26.15a16.36,16.36,0,0,0-30.27,0L90.11,81.23,31.08,86a16.46,16.46,0,0,0-9.37,28.86l45,38.83L53,211.75a16.38,16.38,0,0,0,24.5,17.82L128,198.49l50.53,31.08A16.4,16.4,0,0,0,203,211.75l-13.76-58.07,45-38.83A16.43,16.43,0,0,0,239.18,97.26Z"/></svg>`,
+      starFill: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>`,
+      pencil: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120Z"/></svg>`,
+      export: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></svg>`,
+      gear: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Z"/></svg>`,
+      shade: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM40,128a88.1,88.1,0,0,1,88-88V216A88.1,88.1,0,0,1,40,128Z"/></svg>`,
+      translate: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M247.15,212.42l-56-112a8,8,0,0,0-14.31,0l-21.71,43.43A88,88,0,0,1,108,126.93,103.65,103.65,0,0,0,135.69,64H160a8,8,0,0,0,0-16H104V32a8,8,0,0,0-16,0V48H32a8,8,0,0,0,0,16h87.63A87.76,87.76,0,0,1,96,116.35a87.74,87.74,0,0,1-19-31,8,8,0,1,0-15.08,5.34A103.63,103.63,0,0,0,84,127a87.55,87.55,0,0,1-52,17,8,8,0,0,0,0,16,103.46,103.46,0,0,0,64-22.08,104.18,104.18,0,0,0,51.44,21.31l-26.6,53.19a8,8,0,0,0,14.31,7.16L148.94,192h70.11l13.79,27.58A8,8,0,0,0,240,224a8,8,0,0,0,7.15-11.58ZM156.94,176,184,121.89,211.05,176Z"/></svg>`,
+      tree: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M160,112h48a16,16,0,0,0,16-16V48a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16V64H128a24,24,0,0,0-24,24v32H72V104a16,16,0,0,0-16-16H24A16,16,0,0,0,8,104v48a16,16,0,0,0,16,16H56a16,16,0,0,0,16-16V136h32v32a24,24,0,0,0,24,24h16v16a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V160a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16v16H128a8,8,0,0,1-8-8V88a8,8,0,0,1,8-8h16V96A16,16,0,0,0,160,112ZM56,152H24V104H56Zm104,8h48v48H160Zm0-112h48V96H160Z"/></svg>`,
+      probe: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M237.66,226.34l-32.07-32.06a48,48,0,1,0-11.31,11.31l32.06,32.07a8,8,0,0,0,11.32-11.32ZM160,192a32,32,0,1,1,32-32A32,32,0,0,1,160,192ZM40,64a8,8,0,0,1,8-8H208a8,8,0,0,1,0,16H48A8,8,0,0,1,40,64Zm0,64a8,8,0,0,1,8-8h56a8,8,0,0,1,0,16H48A8,8,0,0,1,40,128Zm0,64a8,8,0,0,1,8-8H88a8,8,0,0,1,0,16H48A8,8,0,0,1,40,192Z"/></svg>`,
+      status: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg>`,
+      pin: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M235.33,104,152,20.69a16,16,0,0,0-22.63,0L98.39,51.67c-18-3.34-44.62-.67-69.07,23.78a8,8,0,0,0,0,11.31L84,141.43,42.34,183a8,8,0,0,0,11.32,11.32L95.31,152.7l54.69,54.68a8,8,0,0,0,11.31,0c24.44-24.44,27.12-51,23.78-69.06l30.98-30.98A16,16,0,0,0,235.33,104Z"/></svg>`,
+      close: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>`,
+      send: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,117.66a8,8,0,0,1-11.32,0L136,59.31V216a8,8,0,0,1-16,0V59.31L61.66,117.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0l72,72A8,8,0,0,1,205.66,117.66Z"/></svg>`,
+      stop: `<svg viewBox="0 0 256 256" fill="currentColor"><rect x="52" y="52" width="152" height="152" rx="16"/></svg>`,
+      record: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM48,48H208V208H48ZM80,96a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,96Zm0,32a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,128Zm0,32a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H88A8,8,0,0,1,80,160Z"/></svg>`,
+      arrowRight: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>`,
+      back: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>`,
+      check: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>`,
+    };
+
+    // ───────── 2. Mock Data: 4 Cards & Multi-Card Stories ─────────
+    const CARDS = [
+      {
+        id: "wuxia",
+        title: "竹林",
+        summary: "暮春雨后的越州苦竹岭，你携故人遗物寻访李鹤下落，在竹林荒亭中与守坟的剑客裴青舟相对。",
+        channel: "参与者视角 (act)",
+        rules: "戒心 · 交浅言深 · 4 项动作",
+        lore: "7 条设定 · 14 层",
+        tokens: "2.4K",
+        stance: "第二人称",
+        writingAll: ["第二人称", "转述言行", "仅限输入"],
+        openings: [
+          "暮春的山雨刚歇，苦竹岭上的雾气还缠在竹梢。你踩着湿滑的青石阶走到半山荒亭外，亭中一人青衫皂靴，正垂眼擦拭一柄乌木剑鞘。亭外新立着一座无碑孤坟，坟前石桌上搁着半碗冷茶。",
+          "夜雨如注，苦竹岭茶亭里只点了一盏快要燃尽的竹骨风灯。裴青舟背对你站在亭檐下，听见脚步声也未回头：「苦竹岭不迎外客，若是避雨，天亮便下山去。」",
+        ],
+        clues: [
+          { id: "c1", hook: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫" },
+          { id: "c2", hook: "裴青舟剑穗上系着半枚与你手中完全契合的旧铜钱" },
+        ],
+      },
+      {
+        id: "banxing",
+        title: "伴星",
+        summary: "深空观测站「白露号」在木卫二轨道失联第七日，你与最后一名值守工程师隔着气闸舱门通话。",
+        channel: "参与者视角 (act)",
+        rules: "电力 · 信任 · 舱压检定",
+        lore: "9 条设定 · 19 层",
+        tokens: "3.1K",
+        stance: "第二人称",
+        writingAll: ["第二人称", "直接反应", "适中"],
+        openings: [
+          "气闸舱观察窗上结着一层薄霜，应急灯每隔四秒闪过一次暗红。耳机里传来一阵干燥的电流声，随后是林栖沙哑的嗓音：「B 区主供氧管路还剩四十分钟，你那边拿到手动泄压阀了吗？」",
+        ],
+        clues: [
+          { id: "c3", hook: "三天前发往地球的求救信标被人为改写成了静默指令" },
+        ],
+      },
+      {
+        id: "ri",
+        title: "理",
+        summary: "梅雨季的旧式公寓，放学后的厨房飘着麦茶香气，理坐在餐桌旁翻看去年的暑假相册。",
+        channel: "参与者视角 (act)",
+        rules: "心绪 · 距离感 · 阶段推进",
+        lore: "5 条设定 · 11 层",
+        tokens: "1.9K",
+        stance: "第二人称",
+        writingAll: ["第二人称", "转述言行", "仅限输入", "本卡补充"],
+        openings: [
+          "窗外的紫阳花被雨水打得低垂下来。理把冰镇好的麦茶推到你面前，指尖还沾着一点水珠：「你看这张照片，去年海边烟火大会的时候，你是不是有什么话没说完？」",
+        ],
+        clues: [
+          { id: "c4", hook: "相册最后一页夹着一张未寄出的京都车票" },
+        ],
+      },
+      {
+        id: "yandao",
+        title: "盐道",
+        summary: "大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；无主角，输入即导演指示。",
+        channel: "作者指导 (note)",
+        rules: "局势紧张度 · 3 方势力",
+        lore: "6 条设定 · 12 层",
+        tokens: "2.2K",
+        stance: "无主角",
+        writingAll: ["无主角", "详尽", "本卡补充"],
+        openings: [
+          "五更天的沱江渡口雾气弥漫，十二艘满载青盐的乌篷船横在堰闸前。新任盐运判官带着二十名佩刀差役立在石牌坊下，而盐帮三当家沈二正蹲在船头慢条斯理地装一袋叶子烟。",
+        ],
+        clues: [
+          { id: "c5", hook: "三天前货栈门口打伤差役的驼夫已被沈二藏在十里渡口" },
+        ],
+      },
+    ];
+
+    let stories = [
+      {
+        id: 101,
+        card: "wuxia",
+        title: "雨夜茶亭",
+        starred: true,
+        turns: 14,
+        ago: "16m",
+        busy: null,
+        hitText: "我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的，不知裴兄可认得剑柄上的鹤纹？」",
+        hitTurn: 14,
+      },
+      {
+        id: 102,
+        card: "wuxia",
+        title: null,
+        starred: false,
+        turns: 3,
+        ago: "2h",
+        busy: "narrate", // Running in background on the same card!
+        hitText: "荒亭外竹叶被疾风卷起，裴青舟目光落在牛皮鞘旧短剑末端那道浅刻的鹤纹上。",
+        hitTurn: 3,
+      },
+      {
+        id: 103,
+        card: "wuxia",
+        title: "送剑 · 破庙支线",
+        starred: false,
+        turns: 8,
+        ago: "1d",
+        busy: null,
+        hitText: "趁夜色冒雨掘开苦竹岭后山那座孤坟，木匣里只有一件旧青衫。",
+        hitTurn: 5,
+      },
+      {
+        id: 201,
+        card: "banxing",
+        title: "气闸舱倒计时",
+        starred: true,
+        turns: 6,
+        ago: "35m",
+        busy: "record", // Running in background on another card!
+        hitText: "「林栖，把主控室的日志权限切给我，哪怕外面像装了短剑一样冷我也得出去。」",
+        hitTurn: 4,
+      },
+      {
+        id: 202,
+        card: "banxing",
+        title: null,
+        starred: false,
+        turns: 0,
+        ago: "3d",
+        busy: null,
+        hitText: "",
+        hitTurn: 0,
+      },
+      {
+        id: 301,
+        card: "ri",
+        title: "梅雨季相册",
+        starred: false,
+        turns: 9,
+        ago: "2d",
+        busy: null,
+        hitText: "「那张车票是我去年原本打算和你一起去京都时买的。」",
+        hitTurn: 7,
+      },
+      {
+        id: 401,
+        card: "yandao",
+        title: "沱江堰闸对峙",
+        starred: false,
+        turns: 5,
+        ago: "4d",
+        busy: null,
+        hitText: "让盐帮三当家沈二主动交出两船私盐试探判官虚实。",
+        hitTurn: 2,
+      },
+    ];
+
+    const PERSONAS = [
+      { id: "p-shen", name: "沈砚", bio: "关外行脚医者，背一只旧药箱，曾替李鹤医治过剑伤，不通武艺但极重然诺。" },
+      { id: "p-gu", name: "顾长风", bio: "江南六扇门解职捕头，名为送还遗物，实则暗查三年前苏州库银失窃一案。" },
+      { id: "p-lin", name: "林晚音", bio: "李鹤同乡义妹，携一把油纸伞自吴中北上，伞骨中藏有当年书信。" },
+    ];
+
+    // ───────── 3. Interactive State ─────────
+    let device = "desktop"; // "desktop" | "mobile"
+    let stageView = "reader"; // "reader" | "card" | "inspect"
+    let activeStoryId = 101;
+    let stageCardId = "wuxia"; // Which card is shown when stageView === "card"
+    let stageOpeningIdx = 0;
+    let sidebarCollapsed = false;
+    let showHelperBar = true; // Floating format & snippet pills above composer
+    let showNoteAttach = true; // Attached note-to-narrator / revise bar on top of composer
+    let noteDraftText = "让裴青舟注意到剑柄末端的浅刻鹤纹，但暂时不动声色";
+    let composerDraftText = "";
+    let expandedCards = new Set(["wuxia", "banxing"]);
+    let searchQuery = "";
+    let busyEnabled = true;
+    let pinnedByCard = {
+      wuxia: "苦竹岭孤坟下并无棺木，只埋着一件染血的旧青衫",
+      banxing: null,
+      ri: null,
+      yandao: null,
+    };
+    let personaByCard = {
+      wuxia: "p-shen",
+      banxing: undefined,
+      ri: undefined,
+      yandao: undefined,
+    };
+    let mobileDrawerOpen = false;
+    let mobileSheetOpen = false;
+    let menuStoryId = null;
+    let cleanupSelected = new Set();
+
+    function currentStory() {
+      return stories.find((s) => s.id === activeStoryId) || stories[0];
+    }
+    function currentCardId() {
+      if (stageView === "card") return stageCardId;
+      return currentStory()?.card || "wuxia";
+    }
+    function getCard(id) {
+      return CARDS.find((c) => c.id === id) || CARDS[0];
+    }
+    function isStoryBusy(s) {
+      return busyEnabled ? s.busy : null;
+    }
+
+    // ───────── 4. Helpers & Search Matching ─────────
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function highlightMark(text, q) {
+      if (!q.trim()) return escapeHtml(text);
+      const needle = q.trim();
+      const idx = text.toLowerCase().indexOf(needle.toLowerCase());
+      if (idx < 0) return escapeHtml(text);
+      return (
+        escapeHtml(text.slice(0, idx)) +
+        `<mark>${escapeHtml(text.slice(idx, idx + needle.length))}</mark>` +
+        escapeHtml(text.slice(idx + needle.length))
+      );
+    }
+    function storyMatches(s, q) {
+      const t = q.trim().toLowerCase();
+      if (!t) return { match: true, snippet: null };
+      const titleHit = (s.title || "New story").toLowerCase().includes(t);
+      const bodyHit = s.hitText && s.hitText.toLowerCase().includes(t);
+      return {
+        match: titleHit || bodyHit,
+        snippet: bodyHit ? s.hitText : null,
+      };
+    }
+
+    // ───────── 5. Render Sidebar (Used in Desktop Left Column & Mobile Drawer) ─────────
+    function renderSidebarHTML(inMobileDrawer = false) {
+      const q = searchQuery.trim();
+      const groupsHTML = CARDS.map((c) => {
+        const cardStories = stories
+          .filter((s) => s.card === c.id)
+          .sort((a, b) => Number(b.starred) - Number(a.starred));
+
+        const matchedStories = cardStories
+          .map((s) => ({ s, ...storyMatches(s, q) }))
+          .filter((x) => x.match);
+
+        if (q && matchedStories.length === 0 && !c.title.toLowerCase().includes(q.toLowerCase())) {
+          return "";
+        }
+
+        const isOpen = q ? true : expandedCards.has(c.id);
+        const isCardPageCurrent = stageView === "card" && stageCardId === c.id;
+        const hasBusyChild = cardStories.some((s) => isStoryBusy(s));
+
+        const rowsHTML = matchedStories.length
+          ? matchedStories
+              .map(({ s, snippet }) => {
+                const isCur = stageView !== "card" && s.id === activeStoryId;
+                const b = isStoryBusy(s);
+                const titleText = s.title ?? "New story";
+                return `
+                  <li class="story-item" aria-current="${isCur ? "true" : "false"}">
+                    <div class="story-row" onclick="selectStory(${s.id})">
+                      <span class="story-main">
+                        ${s.starred ? `<span class="story-star" title="已收藏">${ICONS.starFill}</span>` : ""}
+                        <span class="story-name ${s.title === null ? "unnamed" : ""}">
+                          ${highlightMark(titleText, q)}
+                        </span>
+                      </span>
+                      <span class="story-right" onclick="event.stopPropagation()">
+                        ${b ? `<i class="busy-dot" title="后台进行中 (${b})"></i>` : ""}
+                        <button
+                          type="button"
+                          class="story-more"
+                          aria-label="故事操作"
+                          aria-expanded="${menuStoryId === s.id ? "true" : "false"}"
+                          onclick="openStoryMenu(event, ${s.id})"
+                        >
+                          ${ICONS.dots}
+                        </button>
+                      </span>
+                    </div>
+                    ${
+                      snippet
+                        ? `<div class="story-hit" onclick="selectStory(${s.id})">
+                            <span class="turn-tag">第 ${s.hitTurn} 轮 ·</span>${highlightMark(snippet, q)}
+                          </div>`
+                        : ""
+                    }
+                  </li>
+                `;
+              })
+              .join("")
+          : `<li class="group-empty">暂无故事 · 点击卡名开启</li>`;
+
+        return `
+          <section class="card-group" data-open="${isOpen ? "true" : "false"}">
+            <div class="group-head" ${isCardPageCurrent ? 'aria-current="page"' : ""}>
+              <button
+                type="button"
+                class="group-toggle"
+                aria-label="${isOpen ? "收起分组" : "展开分组"}"
+                onclick="toggleCardGroup('${c.id}')"
+              >
+                ${ICONS.caretDown}
+              </button>
+              <button
+                type="button"
+                class="group-title"
+                onclick="openCardInStage('${c.id}')"
+                title="查看「${c.title}」卡片页与开场白（不建空局）"
+              >
+                <span class="name">${escapeHtml(c.title)}</span>
+                <span class="group-meta">
+                  ${!isOpen && hasBusyChild ? `<i class="busy-dot" title="组内有进行中的局"></i>` : ""}
+                  <span>${cardStories.length}</span>
+                  <span class="card-enter">${ICONS.caretRight}</span>
+                </span>
+              </button>
+            </div>
+            <ul class="story-list">
+              ${rowsHTML}
+            </ul>
+          </section>
+        `;
+      }).join("");
+
+      return `
+        <div class="sidebar">
+          <div class="side-top">
+            <div class="input-box">
+              ${ICONS.search}
+              <input
+                type="search"
+                placeholder="搜索故事与回合…"
+                value="${escapeHtml(searchQuery)}"
+                oninput="onSearchInput(this.value)"
+              />
+            </div>
+            ${
+              inMobileDrawer
+                ? `<button type="button" class="icon sm" aria-label="关闭抽屉" onclick="closeMobileOverlays()">${ICONS.close}</button>`
+                : `<button type="button" class="icon sm" title="折叠侧边栏" aria-label="折叠侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
+            }
+          </div>
+
+          <div class="tree-scroll" id="tree-scroller">
+            ${groupsHTML}
+          </div>
+
+          <footer class="side-foot">
+            <div class="side-foot-left">
+              <button type="button" class="icon sm" title="设置 (供应商 / 默认模型 / 人设)" onclick="showToast('打开 Settings 设置页')">
+                ${ICONS.gear}
+              </button>
+              <button type="button" class="icon sm" title="切换深浅色主题 (#70)" onclick="toggleTheme()">
+                ${ICONS.shade}
+              </button>
+              <button type="button" class="icon sm" title="切换界面语言 (#67)" onclick="showToast('切换界面语言 zh-CN / en')">
+                ${ICONS.translate}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="icon sm"
+              title="管理与清理故事"
+              aria-label="管理与清理故事"
+              onclick="openCleanupModal()"
+            >
+              ${ICONS.sliders}
+            </button>
+          </footer>
+        </div>
+      `;
+    }
+
+    // ───────── 6. Render Main Stage Views (Reader / CardPage / Inspector) ─────────
+    function renderReaderStageHTML(isMobile = false) {
+      const s = currentStory();
+      const c = getCard(s.card);
+      const b = isStoryBusy(s);
+      const pid = personaByCard[c.id];
+      const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
+      const stanceChip = c.stance; // Only chosen()[0] on the strip (#117)
+      const pinHook = pinnedByCard[c.id];
+
+      const stripHTML = isMobile
+        ? `
+          <header class="mobile-topbar">
+            <button type="button" class="icon" aria-label="打开侧边栏" onclick="openMobileDrawer()">
+              ${ICONS.list}
+            </button>
+            <button type="button" class="mobile-title-btn" onclick="openMobileSheet()">
+              <span class="c-name">${escapeHtml(c.title)}</span>
+              <span class="strip-sep">›</span>
+              <span class="s-name">${escapeHtml(s.title ?? "New story")}</span>
+              ${ICONS.caretDown}
+            </button>
+            <button type="button" class="icon" aria-label="状态表" onclick="showToast('手机端拉起 Status 状态表 Sheet')">
+              ${ICONS.status}
+              <i class="dot"></i>
+            </button>
+          </header>
+        `
+        : `
+          <header class="story-strip">
+            ${
+              sidebarCollapsed
+                ? `<button type="button" class="icon sm" title="展开侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
+                : ""
+            }
+            <div class="strip-crumb">
+              <button type="button" class="strip-card-btn" onclick="openCardInStage('${c.id}')" title="查看卡片页">
+                ${escapeHtml(c.title)}
+              </button>
+              <span class="strip-sep">›</span>
+              <span class="strip-story-name ${s.title === null ? "unnamed" : ""}">
+                ${escapeHtml(s.title ?? "New story")}
+              </span>
+            </div>
+            <div class="strip-chips">
+              <button type="button" class="chip" onclick="openPersonaModal()" title="切换当前卡的人设">
+                <span>${escapeHtml(pName)}</span>
+              </button>
+              <button type="button" class="chip" onclick="showToast('打开 Writing 写作偏好页（铺满主舞台）')" title="当前叙事体位（点击进入写作页）">
+                <span>${escapeHtml(stanceChip)}</span>
+              </button>
+            </div>
+            <div class="strip-tools">
+              <button type="button" class="icon sm" title="Timeline 时间线" aria-label="时间线" onclick="showToast('打开 Timeline 时间线页（铺满主舞台）')">
+                ${ICONS.tree}
+              </button>
+              <button type="button" class="icon sm" title="Inspector 检查器" aria-label="检查器" onclick="setStageView('inspect')">
+                ${ICONS.probe}
+              </button>
+            </div>
+          </header>
+        `;
+
+      const draftHTML = b
+        ? `
+          <section class="turn-sec">
+            <div class="spoke">
+              <div class="said">我顺着竹林石阶走入亭中，将油布包裹的旧短剑轻轻放在石桌上。</div>
+            </div>
+            <div class="prose">
+              <p>裴青舟停下擦拭乌木剑鞘的动作，山风穿亭而过，吹动他袖口洗得发白的青布。他的视线在那方油布上停了片刻，指节微不可察地收紧。<span class="cursor"></span></p>
+            </div>
+            <footer class="turn-foot">
+              <span class="record-pill">
+                ${ICONS.record}
+                <span class="dots"><span></span><span></span><span></span></span>
+              </span>
+            </footer>
+          </section>
+        `
+        : "";
+
+      const helperBarHTML = showHelperBar
+        ? `
+          <div class="helper-bar" role="toolbar" aria-label="输入助手">
+            <button type="button" class="chip glyph" onclick="insertHelperText('「', '」')" title="插入直角引号">「」</button>
+            <button type="button" class="chip glyph" onclick="insertHelperText('『', '』')" title="插入双直角引号">『』</button>
+            ${
+              c.id !== "yandao"
+                ? `<button type="button" class="chip glyph" onclick="insertHelperText('⦅', '⦆')" title="插入角色心声">⦅心声⦆</button>`
+                : ""
+            }
+            <span class="sep"></span>
+            ${
+              c.id !== "yandao"
+                ? `<button type="button" class="chip" onclick="openNoteAttach()" title="挂一条给叙述者的场外指导">+ 场外指导</button>`
+                : ""
+            }
+            <button type="button" class="chip" onclick="insertSnippet('继续。', true)">继续</button>
+            <button type="button" class="chip" onclick="insertSnippet('推进剧情到下一幕。', true)">推进剧情</button>
+          </div>
+        `
+        : "";
+
+      const noteAttachHTML =
+        showNoteAttach && c.id !== "yandao"
+          ? `
+            <div class="composer-attach">
+              <span class="attach-tag">致叙述者</span>
+              <input
+                type="text"
+                placeholder="仅作用于下一节的场外指导…"
+                value="${escapeHtml(noteDraftText)}"
+                oninput="noteDraftText = this.value"
+              />
+              <button type="button" class="icon sm" aria-label="移除场外指导" onclick="closeNoteAttach()">
+                ${ICONS.close}
+              </button>
+            </div>
+          `
+          : "";
+
+      const readerCard = `
+        <div class="reader-card">
+          ${stripHTML}
+          <div class="reader-scroll">
+            <div class="reader-main">
+              <section class="turn-sec">
+                <div class="prose">
+                  <p>${escapeHtml(c.openings[0])}</p>
+                </div>
+                <footer class="turn-foot">
+                  <span class="record-pill">${ICONS.record}</span>
+                </footer>
+              </section>
+              <section class="turn-sec">
+                <div class="spoke">
+                  <div class="said">${escapeHtml(s.hitText || "我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的。」")}</div>
+                </div>
+                <div class="prose">
+                  <p>雨后的苦竹林里雾气未散，竹叶上的水珠顺着亭檐一滴滴落在青石板上。裴青舟按着乌木剑鞘站在三步开外，目光静静地落在你腰间的旧短剑上：「三年前他在太湖渡口与唐门死战，此剑怎会流落到关外？」</p>
+                </div>
+                <footer class="turn-foot">
+                  <span class="record-pill">${ICONS.record}</span>
+                  <span>‹ 1/2 ›</span>
+                </footer>
+              </section>
+              ${draftHTML}
+            </div>
+          </div>
+          <div class="composer-wrap">
+            <div class="composer-stack">
+              ${helperBarHTML}
+              <div class="composer-box">
+                ${noteAttachHTML}
+                <div class="composer-body compact">
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label="输入助手"
+                    aria-pressed="${showHelperBar ? "true" : "false"}"
+                    title="展开/收起上方输入助手小附件"
+                    onclick="toggleHelperBar()"
+                  >
+                    ${ICONS.plus}
+                  </button>
+                  <textarea
+                    id="composer-input"
+                    rows="1"
+                    placeholder="${c.id === "yandao" ? "给叙述者的指示…" : "你的台词或行动…"}"
+                    oninput="composerDraftText = this.value"
+                  >${escapeHtml(composerDraftText)}</textarea>
+                  ${
+                    b
+                      ? `<button type="button" class="send-btn stop" aria-label="停止" onclick="stopStoryTurn(${s.id})">${ICONS.stop}</button>`
+                      : `<button type="button" class="send-btn" aria-label="发送" onclick="startStoryTurn(${s.id})">${ICONS.send}</button>`
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (isMobile) return readerCard;
+
+      const glanceCard = `
+        <aside class="glance-card">
+          <section class="glance-sec">
+            <h2>状态 (Status)</h2>
+            <div class="meter-row">
+              <div class="meter-top">
+                <span class="label">戒心</span>
+                <span class="val">6 / 10 (-1)</span>
+              </div>
+              <div class="meter-track">
+                <div class="meter-fill" style="width: 60%"></div>
+              </div>
+            </div>
+            <div class="meter-row">
+              <div class="meter-top">
+                <span class="label">关系阶段</span>
+                <span class="val">试探来意</span>
+              </div>
+              <div class="meter-track">
+                <div class="meter-fill" style="width: 40%"></div>
+              </div>
+            </div>
+          </section>
+          <section class="glance-sec">
+            <h2>本轮记录与可钉线索 (Record)</h2>
+            ${c.clues
+              .map(
+                (cl) => `
+                <div class="clue-item">
+                  <span>${escapeHtml(cl.hook)}</span>
+                  <button
+                    type="button"
+                    aria-pressed="${pinnedByCard[c.id] === cl.hook ? "true" : "false"}"
+                    title="钉到输入框上方（随下一轮发送）"
+                    onclick="toggleCluePin('${c.id}', '${escapeHtml(cl.hook)}')"
+                  >
+                    ${ICONS.pin}
+                  </button>
+                </div>
+              `
+              )
+              .join("")}
+          </section>
+        </aside>
+      `;
+
+      return readerCard + glanceCard;
+    }
+
+    function renderCardStageHTML() {
+      const c = getCard(stageCardId);
+      const pid = personaByCard[c.id];
+      const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
+      const openingText = c.openings[stageOpeningIdx] ?? c.openings[0];
+
+      return `
+        <div class="stage-surface">
+          <header class="story-strip">
+            ${
+              sidebarCollapsed
+                ? `<button type="button" class="icon sm" title="展开侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
+                : ""
+            }
+            <button type="button" class="icon sm" title="返回当前故事阅读器" onclick="setStageView('reader')">
+              ${ICONS.back}
+            </button>
+            <span class="strip-story-name">${escapeHtml(c.title)}</span>
+          </header>
+          <div class="stage-surface-body">
+            <article class="cardsheet">
+              <section class="about">
+                <div>
+                  <h1>${escapeHtml(c.title)}</h1>
+                  <p class="summary">${escapeHtml(c.summary)}</p>
+                </div>
+                <dl class="specs">
+                  <div class="row"><dt>输入通道</dt><dd>${escapeHtml(c.channel)}</dd></div>
+                  <div class="row"><dt>状态与规则</dt><dd>${escapeHtml(c.rules)}</dd></div>
+                  <div class="row"><dt>世界设定</dt><dd>${escapeHtml(c.lore)}</dd></div>
+                  <div class="row"><dt>当前人设</dt><dd>${escapeHtml(pName)}</dd></div>
+                  <div class="row"><dt>Head 估算</dt><dd style="font-family:var(--font-mono)">~${c.tokens} tokens</dd></div>
+                </dl>
+              </section>
+              <section class="opening">
+                <div class="well">
+                  ${escapeHtml(openingText)}
+                </div>
+                <footer class="foot">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    ${
+                      c.openings.length > 1
+                        ? `<button type="button" class="chip" onclick="cycleOpening(${c.openings.length})">
+                            开场 ${stageOpeningIdx + 1} / ${c.openings.length} ▾
+                          </button>`
+                        : `<span style="font-size:var(--text-footnote); color:var(--ink-3);">唯一开场白</span>`
+                    }
+                  </div>
+                  <button type="button" class="begin-btn" onclick="beginNewStoryFromCard('${c.id}')">
+                    <span>开始新故事 (Begin)</span>
+                    ${ICONS.arrowRight}
+                  </button>
+                </footer>
+              </section>
+            </article>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderInspectStageHTML() {
+      const s = currentStory();
+      const c = getCard(s.card);
+      return `
+        <div class="stage-surface">
+          <header class="story-strip">
+            ${
+              sidebarCollapsed
+                ? `<button type="button" class="icon sm" title="展开侧边栏" onclick="toggleSidebarCollapse()">${ICONS.sidebar}</button>`
+                : ""
+            }
+            <button type="button" class="icon sm" title="返回阅读器" onclick="setStageView('reader')">
+              ${ICONS.back}
+            </button>
+            <span class="strip-story-name">${escapeHtml(c.title)} › ${escapeHtml(s.title ?? "New story")}</span>
+            <span class="chip" style="font-family:var(--font-mono)">第 ${s.turns || 1} 轮</span>
+          </header>
+          <div class="inspect-grid">
+            <div class="inspect-pane">
+              <strong style="font-size:var(--text-caption); color:var(--ink-3); text-transform:uppercase;">Pipeline Calls</strong>
+              <div class="inspect-step"><span>1. lookup</span><span>180ms · 0 hits</span></div>
+              <div class="inspect-step"><span>2. decide</span><span>310ms · end</span></div>
+              <div class="inspect-step" style="outline: 1.5px solid var(--ink);"><span>3. narrate</span><span>1.8s · 412 tok</span></div>
+              <div class="inspect-step"><span>4. check</span><span>240ms · clean</span></div>
+              <div class="inspect-step"><span>5. record</span><span>490ms · ok</span></div>
+            </div>
+            <div class="inspect-pane">
+              <strong style="font-size:var(--text-caption); color:var(--ink-3); text-transform:uppercase;">Narrate Request & Cache Breakpoints</strong>
+              <p style="margin:0; color:var(--ink-2); font-family:var(--font-mono); line-height:1.6;">
+                [Breakpoint 1 · Head 1h TTL] frame + persona (${escapeHtml(PERSONAS.find((p) => p.id === personaByCard[c.id])?.name ?? "卡片默认")}) + fiction<br/>
+                [Breakpoint 2 · Folded Summary] turns 1..8 compressed<br/>
+                [Breakpoint 3 · Transcript Tail] turns 9..13 cached<br/>
+                [Live Turn Input] "${escapeHtml(s.hitText || "我解下腰间那柄旧短剑…")}"
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ───────── 7. Render Mobile Overlays (Drawer & Session Sheet) ─────────
+    function renderMobileOverlaysHTML() {
+      if (mobileDrawerOpen) {
+        return `
+          <div class="mobile-overlay" onclick="if(event.target===this)closeMobileOverlays()">
+            <aside class="mobile-drawer">
+              ${renderSidebarHTML(true)}
+            </aside>
+          </div>
+        `;
+      }
+      if (mobileSheetOpen) {
+        const s = currentStory();
+        const c = getCard(s.card);
+        const pid = personaByCard[c.id];
+        const pName = PERSONAS.find((p) => p.id === pid)?.name ?? "卡片默认";
+        return `
+          <div class="mobile-overlay" onclick="if(event.target===this)closeMobileOverlays()">
+            <div class="mobile-sheet">
+              <div class="sheet-head">
+                <h3>当前局设定 · ${escapeHtml(s.title ?? "New story")}</h3>
+                <button type="button" class="icon sm" onclick="closeMobileOverlays()">${ICONS.close}</button>
+              </div>
+              <button type="button" class="session-cardhead" onclick="closeMobileOverlays(); openCardInStage('${c.id}')">
+                <div class="top">
+                  <span>${escapeHtml(c.title)} · 卡片页与开场</span>
+                  <span style="width:14px;height:14px;display:inline-flex">${ICONS.caretRight}</span>
+                </div>
+                <p>${escapeHtml(c.summary)}</p>
+              </button>
+              <div class="session-row">
+                <span class="lbl">人设 (Persona)</span>
+                <button type="button" class="session-chosen" onclick="closeMobileOverlays(); openPersonaModal()">
+                  <span class="chip">${escapeHtml(pName)}</span>
+                  <span style="width:14px;height:14px;display:inline-flex">${ICONS.caretRight}</span>
+                </button>
+              </div>
+              <div class="session-row">
+                <span class="lbl">写作偏好 (Writing)</span>
+                <button type="button" class="session-chosen" onclick="closeMobileOverlays(); showToast('打开 Writing 写作页')">
+                  <span style="display:flex; gap:4px; flex-wrap:wrap;">
+                    ${c.writingAll.map((w) => `<span class="chip">${escapeHtml(w)}</span>`).join("")}
+                  </span>
+                  <span style="width:14px;height:14px;display:inline-flex">${ICONS.caretRight}</span>
+                </button>
+              </div>
+              <div style="display:flex; gap:8px; padding-top:4px;">
+                <button type="button" class="chip" style="flex:1; justify-content:center; height:34px;" onclick="closeMobileOverlays(); showToast('打开 Timeline 时间线')">
+                  ${ICONS.tree} <span>时间线 (Timeline)</span>
+                </button>
+                <button type="button" class="chip" style="flex:1; justify-content:center; height:34px;" onclick="closeMobileOverlays(); setStageView('inspect')">
+                  ${ICONS.probe} <span>检查器 (Inspector)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      return "";
+    }
+
+    // ───────── 8. Master Render & Interactions ─────────
+    function renderAll() {
+      const host = document.getElementById("viewport");
+      host.setAttribute("data-device", device);
+
+      let stageContent = "";
+      if (stageView === "reader") stageContent = renderReaderStageHTML(device === "mobile");
+      else if (stageView === "card") stageContent = renderCardStageHTML();
+      else stageContent = renderInspectStageHTML();
+
+      if (device === "mobile") {
+        host.innerHTML = `
+          <div class="phone-frame">
+            ${stageContent}
+            ${renderMobileOverlaysHTML()}
+          </div>
+        `;
+      } else {
+        host.innerHTML = `
+          <div class="harness" data-collapsed="${sidebarCollapsed ? "true" : "false"}">
+            <aside class="sidebar-card" aria-label="故事库侧边栏">
+              ${renderSidebarHTML(false)}
+            </aside>
+            <div class="stage" data-view="${stageView}">
+              ${stageContent}
+            </div>
+          </div>
+        `;
+      }
+
+      // Sync dock buttons
+      document.getElementById("dock-desktop").setAttribute("aria-pressed", String(device === "desktop"));
+      document.getElementById("dock-mobile").setAttribute("aria-pressed", String(device === "mobile"));
+      document.getElementById("dock-view-reader").setAttribute("aria-pressed", String(stageView === "reader"));
+      document.getElementById("dock-view-card").setAttribute("aria-pressed", String(stageView === "card"));
+      document.getElementById("dock-view-inspect").setAttribute("aria-pressed", String(stageView === "inspect"));
+      document.getElementById("dock-collapse").setAttribute("aria-pressed", String(sidebarCollapsed));
+      document.getElementById("dock-helpers").setAttribute("aria-pressed", String(showHelperBar));
+      document.getElementById("dock-note").setAttribute("aria-pressed", String(showNoteAttach));
+      document.getElementById("dock-search").setAttribute("aria-pressed", String(searchQuery === "短剑"));
+      document.getElementById("dock-busy").setAttribute("aria-pressed", String(busyEnabled));
+    }
+
+    function setDevice(d) {
+      device = d;
+      closeStoryMenu();
+      renderAll();
+    }
+    function setStageView(v) {
+      stageView = v;
+      closeStoryMenu();
+      renderAll();
+    }
+    function toggleSidebarCollapse() {
+      if (device === "mobile") {
+        mobileDrawerOpen = !mobileDrawerOpen;
+      } else {
+        sidebarCollapsed = !sidebarCollapsed;
+      }
+      renderAll();
+    }
+    function toggleHelperBar() {
+      showHelperBar = !showHelperBar;
+      renderAll();
+    }
+    function toggleNoteAttach() {
+      showNoteAttach = !showNoteAttach;
+      if (showNoteAttach && !noteDraftText) {
+        noteDraftText = "让裴青舟注意到剑柄末端的浅刻鹤纹，但暂时不动声色";
+      }
+      renderAll();
+    }
+    function openNoteAttach() {
+      showNoteAttach = true;
+      renderAll();
+      const inp = document.querySelector(".composer-attach input");
+      if (inp) inp.focus();
+    }
+    function closeNoteAttach() {
+      showNoteAttach = false;
+      noteDraftText = "";
+      renderAll();
+    }
+    function insertHelperText(openGlyph, closeGlyph) {
+      const box = document.getElementById("composer-input");
+      if (!box) return;
+      const a = box.selectionStart ?? composerDraftText.length;
+      const b = box.selectionEnd ?? a;
+      const inner = composerDraftText.slice(a, b);
+      composerDraftText =
+        composerDraftText.slice(0, a) + openGlyph + inner + closeGlyph + composerDraftText.slice(b);
+      renderAll();
+      const nextBox = document.getElementById("composer-input");
+      if (nextBox) {
+        nextBox.focus();
+        nextBox.setSelectionRange(a + openGlyph.length + inner.length, a + openGlyph.length + inner.length);
+      }
+    }
+    function insertSnippet(text, isNote) {
+      if (isNote && currentCardId() !== "yandao") {
+        showNoteAttach = true;
+        noteDraftText = text;
+        renderAll();
+        const inp = document.querySelector(".composer-attach input");
+        if (inp) inp.focus();
+      } else {
+        composerDraftText = (composerDraftText ? composerDraftText + " " : "") + text;
+        renderAll();
+        const nextBox = document.getElementById("composer-input");
+        if (nextBox) nextBox.focus();
+      }
+    }
+    function toggleCardGroup(cardId) {
+      if (expandedCards.has(cardId)) expandedCards.delete(cardId);
+      else expandedCards.add(cardId);
+      renderAll();
+    }
+    function selectStory(id) {
+      activeStoryId = id;
+      const s = currentStory();
+      expandedCards.add(s.card);
+      stageView = "reader";
+      mobileDrawerOpen = false;
+      closeStoryMenu();
+      const b = isStoryBusy(s);
+      showToast(
+        b
+          ? `切换到「${s.title ?? "New story"}」：GET /turn 接回快照 (${b}) 并续流`
+          : `切换到「${s.title ?? "New story"}」（后台进行中的局继续运行，不中断）`
+      );
+      renderAll();
+    }
+    function openCardInStage(cardId) {
+      stageCardId = cardId;
+      stageOpeningIdx = 0;
+      stageView = "card";
+      expandedCards.add(cardId);
+      mobileDrawerOpen = false;
+      closeStoryMenu();
+      renderAll();
+    }
+    function cycleOpening(total) {
+      stageOpeningIdx = (stageOpeningIdx + 1) % total;
+      renderAll();
+    }
+    function beginNewStoryFromCard(cardId) {
+      const c = getCard(cardId);
+      const newId = Math.max(...stories.map((s) => s.id)) + 1;
+      stories.unshift({
+        id: newId,
+        card: cardId,
+        title: null,
+        starred: false,
+        turns: 0,
+        ago: "刚刚",
+        busy: null,
+        hitText: "",
+        hitTurn: 0,
+      });
+      activeStoryId = newId;
+      expandedCards.add(cardId);
+      stageView = "reader";
+      showToast(`POST /stories { card: "${cardId}" } + greet(${stageOpeningIdx}) → 建局并进入阅读器`);
+      renderAll();
+    }
+
+    function onSearchInput(val) {
+      searchQuery = val;
+      const scroller = document.getElementById("tree-scroller");
+      if (!scroller) return renderAll();
+      // Re-render whole sidebar except keep focus in search input
+      renderAll();
+      const inp = document.querySelector(".side-top input[type='search']");
+      if (inp) {
+        inp.focus();
+        inp.setSelectionRange(val.length, val.length);
+      }
+    }
+    function demoSearch() {
+      searchQuery = searchQuery === "短剑" ? "" : "短剑";
+      renderAll();
+    }
+    function toggleBusyDemo() {
+      busyEnabled = !busyEnabled;
+      renderAll();
+    }
+    function startStoryTurn(id) {
+      const s = stories.find((x) => x.id === id);
+      if (!s) return;
+      busyEnabled = true;
+      s.busy = "narrate";
+      const c = getCard(s.card);
+      if (pinnedByCard[c.id]) {
+        pinnedByCard[c.id] = null;
+        showToast("已发送回合（Pin 线索已随 Input.pin 带走并消耗；可随时切去别的局）");
+      } else {
+        showToast("已发送回合（后台运行中，你可以随时点击左侧其他局或卡片）");
+      }
+      renderAll();
+    }
+    function stopStoryTurn(id) {
+      const s = stories.find((x) => x.id === id);
+      if (!s) return;
+      s.busy = null;
+      showToast("POST /stop：显式停止当前回合");
+      renderAll();
+    }
+
+    function togglePinDemo() {
+      const cid = currentCardId();
+      const c = getCard(cid);
+      pinnedByCard[cid] = pinnedByCard[cid] ? null : c.clues[0].hook;
+      if (stageView !== "reader") stageView = "reader";
+      renderAll();
+    }
+    function toggleCluePin(cid, hook) {
+      pinnedByCard[cid] = pinnedByCard[cid] === hook ? null : hook;
+      renderAll();
+    }
+    function clearPin(cid) {
+      pinnedByCard[cid] = null;
+      renderAll();
+    }
+
+    // ───────── 9. Row ⋯ Popover Menu ─────────
+    function openStoryMenu(ev, id) {
+      ev.stopPropagation();
+      const menu = document.getElementById("story-menu");
+      if (menuStoryId === id && !menu.hidden) {
+        return closeStoryMenu();
+      }
+      menuStoryId = id;
+      const s = stories.find((x) => x.id === id);
+      if (!s) return;
+      const rect = ev.currentTarget.getBoundingClientRect();
+      menu.innerHTML = `
+        <button type="button" class="pop-item" onclick="renameStoryPrompt(${s.id})">
+          ${ICONS.pencil} <span>重命名…</span>
+        </button>
+        <button type="button" class="pop-item" onclick="toggleStarStory(${s.id})">
+          ${s.starred ? ICONS.starFill : ICONS.star} <span>${s.starred ? "取消星标" : "设为星标"}</span>
+        </button>
+        <button type="button" class="pop-item" onclick="exportStoryAction(${s.id})">
+          ${ICONS.export} <span>导出 (.md / .json)</span>
+        </button>
+      `;
+      menu.hidden = false;
+      menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - 150)}px`;
+      menu.style.left = `${Math.min(rect.left, window.innerWidth - 165)}px`;
+      renderAll();
+    }
+    function closeStoryMenu() {
+      const menu = document.getElementById("story-menu");
+      if (menu) menu.hidden = true;
+      menuStoryId = null;
+    }
+    window.addEventListener("click", () => {
+      if (menuStoryId !== null) {
+        closeStoryMenu();
+        renderAll();
+      }
+    });
+
+    function toggleStarStory(id) {
+      const s = stories.find((x) => x.id === id);
+      if (s) s.starred = !s.starred;
+      closeStoryMenu();
+      renderAll();
+    }
+    function renameStoryPrompt(id) {
+      const s = stories.find((x) => x.id === id);
+      closeStoryMenu();
+      if (!s) return;
+      const next = prompt("重命名故事（留空恢复 New story）：", s.title ?? "");
+      if (next !== null) {
+        s.title = next.trim() || null;
+        renderAll();
+      }
+    }
+    function exportStoryAction(id) {
+      const s = stories.find((x) => x.id === id);
+      closeStoryMenu();
+      showToast(`打开导出确认框：「${s?.title ?? "New story"}」(.md 阅读稿 / .json 完整树)`);
+      renderAll();
+    }
+    function deleteStoryAction(id) {
+      closeStoryMenu();
+      stories = stories.filter((s) => s.id !== id);
+      if (activeStoryId === id && stories.length) activeStoryId = stories[0].id;
+      showToast("已删除故事");
+      renderAll();
+    }
+
+    // ───────── 10. Cleanup Sheet (#75 retained batch cleanup) ─────────
+    function openCleanupModal() {
+      cleanupSelected = new Set(stories.filter((s) => s.turns === 0 || (s.title === null && !s.starred)).map((s) => s.id));
+      renderCleanupModalContent();
+      document.getElementById("cleanup-dialog").showModal();
+    }
+    function renderCleanupModalContent() {
+      const el = document.getElementById("cleanup-content");
+      const emptyCount = stories.filter((s) => s.turns === 0).length;
+      const unnamedCount = stories.filter((s) => s.title === null && !s.starred).length;
+      el.innerHTML = `
+        <div class="modal-head">
+          <h3>批量清理故事 <span class="chip">${stories.length}</span></h3>
+          <button type="button" class="icon sm" onclick="document.getElementById('cleanup-dialog').close()">${ICONS.close}</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; align-items:center; gap:6px; padding-bottom:4px;">
+            <span style="font-size:var(--text-caption); color:var(--ink-3);">快选：</span>
+            <button type="button" class="chip" onclick="selectCleanupPreset('empty')">空档 (${emptyCount})</button>
+            <button type="button" class="chip" onclick="selectCleanupPreset('unnamed')">未命名未收藏 (${unnamedCount})</button>
+            <button type="button" class="chip" onclick="selectCleanupPreset('clear')">清空</button>
+          </div>
+          ${stories
+            .map((s) => {
+              const c = getCard(s.card);
+              const checked = cleanupSelected.has(s.id);
+              return `
+                <label class="cleanup-row" style="cursor:pointer">
+                  <input type="checkbox" ${checked ? "checked" : ""} onchange="toggleCleanupRow(${s.id})" />
+                  <span class="c-tag">${escapeHtml(c.title)}</span>
+                  <span style="flex:1; font-weight:${s.title ? 500 : 400}; color:${s.title ? "var(--ink)" : "var(--ink-2)"}">
+                    ${escapeHtml(s.title ?? "New story")}
+                  </span>
+                  <span style="font-size:var(--text-caption); color:var(--ink-3); font-family:var(--font-mono);">
+                    ${s.turns} 轮 · ${s.ago}
+                  </span>
+                </label>
+              `;
+            })
+            .join("")}
+        </div>
+        <div class="modal-foot">
+          <span style="color:var(--ink-3)">保留 #75 的批量清理 Sheet，从侧栏顶部唤起</span>
+          <button
+            type="button"
+            class="chip danger"
+            ${cleanupSelected.size === 0 ? "disabled" : ""}
+            onclick="commitCleanupDelete()"
+          >
+            删除选中 ${cleanupSelected.size || ""}
+          </button>
+        </div>
+      `;
+    }
+    function selectCleanupPreset(kind) {
+      if (kind === "clear") cleanupSelected.clear();
+      if (kind === "empty") stories.filter((s) => s.turns === 0).forEach((s) => cleanupSelected.add(s.id));
+      if (kind === "unnamed") stories.filter((s) => s.title === null && !s.starred).forEach((s) => cleanupSelected.add(s.id));
+      renderCleanupModalContent();
+    }
+    function toggleCleanupRow(id) {
+      if (cleanupSelected.has(id)) cleanupSelected.delete(id);
+      else cleanupSelected.add(id);
+      renderCleanupModalContent();
+    }
+    function commitCleanupDelete() {
+      const n = cleanupSelected.size;
+      stories = stories.filter((s) => !cleanupSelected.has(s.id));
+      if (!stories.some((s) => s.id === activeStoryId) && stories.length) {
+        activeStoryId = stories[0].id;
+      }
+      document.getElementById("cleanup-dialog").close();
+      showToast(`已批量清理 ${n} 个故事`);
+      renderAll();
+    }
+
+    // ───────── 11. Persona Picker Sheet ─────────
+    function openPersonaModal() {
+      const cid = currentCardId();
+      const c = getCard(cid);
+      const curPid = personaByCard[cid];
+      const el = document.getElementById("persona-content");
+      el.innerHTML = `
+        <div class="modal-head">
+          <h3>选择人设 · ${escapeHtml(c.title)}</h3>
+          <button type="button" class="icon sm" onclick="document.getElementById('persona-dialog').close()">${ICONS.close}</button>
+        </div>
+        <div class="modal-body">
+          <button
+            type="button"
+            class="cleanup-row"
+            style="text-align:left; justify-content:space-between;"
+            onclick="pickPersonaForCard('${cid}', undefined)"
+          >
+            <div>
+              <div style="font-weight:600">卡片默认 <span class="c-tag">随卡</span></div>
+              <div style="font-size:var(--text-caption); color:var(--ink-3)">使用卡片自带的角色设定</div>
+            </div>
+            ${!curPid ? `<span style="width:16px;height:16px">${ICONS.check}</span>` : ""}
+          </button>
+          ${PERSONAS.map(
+            (p) => `
+              <button
+                type="button"
+                class="cleanup-row"
+                style="text-align:left; justify-content:space-between;"
+                onclick="pickPersonaForCard('${cid}', '${p.id}')"
+              >
+                <div>
+                  <div style="font-weight:600">${escapeHtml(p.name)}</div>
+                  <div style="font-size:var(--text-caption); color:var(--ink-3)">${escapeHtml(p.bio)}</div>
+                </div>
+                ${curPid === p.id ? `<span style="width:16px;height:16px">${ICONS.check}</span>` : ""}
+              </button>
+            `
+          ).join("")}
+        </div>
+      `;
+      document.getElementById("persona-dialog").showModal();
+    }
+    function pickPersonaForCard(cid, pid) {
+      personaByCard[cid] = pid;
+      document.getElementById("persona-dialog").close();
+      showToast(`已切换「${getCard(cid).title}」人设（下一轮请求立即生效）`);
+      renderAll();
+    }
+
+    // ───────── 12. Mobile Overlays & Theme ─────────
+    function openMobileDrawer() {
+      mobileDrawerOpen = true;
+      mobileSheetOpen = false;
+      renderAll();
+    }
+    function openMobileSheet() {
+      mobileSheetOpen = true;
+      mobileDrawerOpen = false;
+      renderAll();
+    }
+    function closeMobileOverlays() {
+      mobileDrawerOpen = false;
+      mobileSheetOpen = false;
+      renderAll();
+    }
+    function toggleTheme() {
+      const root = document.documentElement;
+      const cur = root.getAttribute("data-theme") || "light";
+      root.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.setAttribute("data-show", "true");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.setAttribute("data-show", "false"), 2400);
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>
