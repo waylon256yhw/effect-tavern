@@ -306,7 +306,7 @@ const drain = () => {
 /** The open story's row in the listing as its stream says (a stage, or the turn over): the server writes `busy` too,
  *  but the client reads it again only at a stream's end or the sidebar's poll, and a tab's dot must not wait. A story
  *  left mid-turn keeps its row as it was until the next listing. */
-const running = (phase: Phase | null): void =>
+export const running = (phase: Phase | null): void =>
   registry.update(stories, (l) =>
     l?.current == null
       ? l

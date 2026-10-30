@@ -8,9 +8,8 @@ import assert from "node:assert/strict"
 import {
   apply,
   boxes,
-  card,
-  type CardView,
   cancelRevise,
+  card,
   dismiss,
   draft,
   error,
@@ -20,7 +19,10 @@ import {
   revising,
   setBoxes,
   stage,
+  stories,
   working,
+  type CardView,
+  type StoryRow,
   type Wire,
 } from "../src/store.ts"
 import { createTurn } from "../src/turn.ts"
@@ -83,10 +85,13 @@ await turn.stop()
 assert.equal(stops, 0)
 turn.act("line", "note")
 setBoxes({ text: "", note: "", aside: false }) // the composer clears after the send
+registry.set(stories, { current: 1, stories: [{ id: 1, busy: null } as unknown as StoryRow] })
 last().emit({ kind: "stage", phase: "narrate" })
+assert.equal(registry.get(stories)?.stories[0]?.busy, "narrate") // the row says so before any listing
 stopping = "withdrawn"
 await turn.stop()
 assert.ok(last().aborted)
+assert.equal(registry.get(stories)?.stories[0]?.busy, null) // withdrawn: no node comes to end it, the row is told
 assert.deepEqual(boxes(), { text: "line", note: "note", aside: true })
 assert.deepEqual([registry.get(draft), registry.get(stage)], [null, null])
 

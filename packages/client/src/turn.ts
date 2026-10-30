@@ -20,6 +20,7 @@ import {
   prose,
   registry,
   revising,
+  running,
   settle,
   stage,
   withdraw,
@@ -101,6 +102,7 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
         for (const close of streams) close() // the turn is gone: nothing late on its stream lands after the clear
         streams = []
         withdraw()
+        running(null) // no node or error will come down the stream to say the turn is over
         return clear() // the revision, if any, stays: its line is back in the box under it
       }
       // halted: what the server is doing with the cut prose; the node (or record's error) comes down the stream
