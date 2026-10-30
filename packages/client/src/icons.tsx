@@ -49,6 +49,3 @@ export { default as Export } from "~icons/ph/download-simple"
 export { default as Jump } from "~icons/ph/arrow-up-right"
 export { default as Star } from "~icons/ph/star" // a story the player keeps first
 export { default as StarFill } from "~icons/ph/star-fill"
-export { default as Sidebar } from "~icons/ph/sidebar-simple" // the sidebar's fold and unfold (#117)
-export { default as Dots } from "~icons/ph/dots-three" // a story row's menu
-export { default as Menu } from "~icons/ph/list" // the phone's way to the sidebar drawer

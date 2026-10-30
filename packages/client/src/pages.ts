@@ -8,21 +8,15 @@
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { stays } from "./stories.ts"
-import { calls, card, cards, editing, log, page, type Page, pin, registry, stories, viewed } from "./store.ts"
+import { calls, cards, editing, log, page, type Page, pin, registry, stories } from "./store.ts"
 import { turn } from "./turn.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
 
-type Kind = Exclude<Page, object> | "card" | "inspect"
-const kindOf = (p: Page): Kind => (typeof p !== "object" ? p : "card" in p ? "card" : "inspect")
+type Kind = Exclude<Page, object> | "inspect"
+const kindOf = (p: Page): Kind => (typeof p === "object" ? "inspect" : p)
 /** What each page reads when it opens; a page not named reads nothing of its own. */
-const loads: Partial<Record<Kind, (p: Page) => unknown>> = {
-  // the story's own card is in hand; another card's page is read by id (no story of it need exist)
-  card: (p) => {
-    const own = registry.get(card)
-    const id = (p as { card: string }).card
-    return own?.id === id ? registry.set(viewed, own) : wire.fetchCardOf(id)
-  },
+const loads: Partial<Record<Kind, () => unknown>> = {
   inspect: wire.fetchCalls,
   settings: () =>
     Promise.all([
@@ -36,51 +30,45 @@ const loads: Partial<Record<Kind, (p: Page) => unknown>> = {
 }
 let under: Page[] = [] // the pages the current one covers, the reader at the bottom implied
 
-/** A page over the current one. The same page again (the Inspect page walking to another node, the card page on
- *  another card) replaces it: no return point; the card page reads its card. The reader is under every page, never
- *  over one: opening it drops whatever covered it (Begin on an empty story the player had browsed Settings or Writing
- *  from). */
+/** A page over the current one. The same page again (the Inspect page walking to another node) replaces it: no
+ *  return point, no reload. The reader is under every page, never over one: opening it drops whatever covered it
+ *  (Begin on an empty story the player had browsed Settings or Writing from). */
 export const open = (p: Page): void => {
   const at = registry.get(page)
   if (p === "reader") {
     under = []
     return registry.set(page, p)
   }
-  const same = kindOf(at) === kindOf(p)
-  if (!same && at !== "reader") under.push(at)
+  if (kindOf(at) === kindOf(p)) return registry.set(page, p)
+  if (at !== "reader") under.push(at)
   registry.set(page, p)
-  if (!same || kindOf(p) === "card") void loads[kindOf(p)]?.(p)
+  void loads[kindOf(p)]?.()
 }
-/** A card's page, from the sidebar's group head or the strip's card name. */
-export const openCard = (id: string): void => open({ card: id })
 /** Back to the page this one covered, the reader when none. */
 export const close = (): void => registry.set(page, under.pop() ?? "reader")
-/** On the story as if just opened: an empty log lands on its card's page (pick an opening, or begin; with no story
- *  at all, the first card's), a story in progress in the reader; nothing to go back to. */
+/** On the story as if just opened: an empty log lands on the card page (pick an opening, or begin), a story in
+ *  progress in the reader; nothing to go back to. */
 const arrive = () => {
   under = []
-  if (registry.get(log).nodes.size) return registry.set(page, "reader")
-  const id = registry.get(card)?.id ?? registry.get(cards)[0]?.id
-  if (id === undefined) return registry.set(page, "reader")
-  registry.set(page, { card: id })
-  void loads.card!({ card: id })
+  registry.set(page, registry.get(log).nodes.size ? "reader" : "card")
 }
 
-/** First load: the listing first (it names the story every request after is on) and the shelf (the sidebar's groups,
- *  and where an empty library lands), then the card, the nodes and the player's layer; the routing is the card page's
- *  Model row. A turn already in flight on the story is picked up (turn.ts `attach`). */
+/** First load: the listing first (it names the story every request after is on), then the card, the nodes and the
+ *  player's layer; the routing is the card page's Model row. With no story at all, the first card's page: a story
+ *  begins there. A turn already in flight on the story is picked up (turn.ts `attach`). */
 export const boot = async (): Promise<void> => {
-  await Promise.all([wire.fetchStories(), wire.fetchCards()])
+  await wire.fetchStories()
   await Promise.all([on(), wire.fetchPersonas(), wire.fetchPlayer(), wire.fetchRouting()])
   arrive()
 }
-/** The story the listing names, read: its card, its nodes, its turn in flight; with none, no card and an empty log
- *  (the shelf, read again, names the card page to land on). */
+/** The story the listing names, read: its card, its nodes, its turn in flight; with none, the first card's page over
+ *  an empty log. */
 const on = async (): Promise<void> => {
   if (registry.get(stories)?.current == null) {
     registry.set(log, L.of<Node>())
-    registry.set(card, null)
     await wire.fetchCards()
+    const first = registry.get(cards)[0]
+    if (first) await wire.fetchCardOf(first.id)
     return
   }
   await Promise.all([wire.fetchCard(), wire.fetchNodes()])
@@ -108,6 +96,7 @@ export const onDelete = async (listing: Listing, deleted: readonly number[]): Pr
 }
 export const openStory = async (id: number): Promise<void> => land(await wire.openStory(id))
 export const newStory = async (card: string): Promise<void> => land(await wire.newStory(card))
+export const deleteStory = async (id: number): Promise<void> => onDelete(await wire.deleteStory(id), [id])
 export const deleteStories = async (ids: readonly number[]): Promise<void> =>
   onDelete(await wire.deleteStories(ids), ids)
 

@@ -9,7 +9,7 @@
 body {
   margin: 0;
 }
-/* the frame holds still: the strip, the column and the composer fill the viewport, and only the column scrolls */
+/* the frame holds still: the bar, the column and the composer fill the viewport, and only the column scrolls */
 .canvas,
 .panel {
   display: flex;
@@ -312,115 +312,35 @@ section:has(> .editor) > .actions {
   gap: var(--space-1);
 }
 
-/* the strip on top of the reading (strip.tsx, #117): on a phone the bar (--topbar tall under the safe area: ☰ for the
-   sidebar's drawer, the crumb that opens the story sheet, Status with a dot when this turn moved the state); from 72rem
-   one slim row, a control and a hair of air, with no line under it: the column's fade is the transition. The crumb is
-   `card › story`: the card's name in ink-2 (on desktop a key to its page), the story's in ink, cut with an ellipsis */
-.strip {
+/* the bar on top (phone): the card's title (a tap opens the session sheet), and Status with a dot when this turn
+   moved the state */
+.topbar {
   box-sizing: border-box;
-  flex: none;
-  min-width: 0;
-  min-height: calc(var(--topbar) + var(--safe-top));
-  padding: var(--safe-top) var(--space-2) 0;
+  height: calc(var(--topbar) + var(--safe-top));
+  padding: var(--safe-top) var(--space-2) 0 var(--space-4);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   background: var(--surface-1);
-  font-size: var(--text-body);
-  line-height: var(--leading-tight);
 }
-.strip .crumb {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 1 1 auto;
+.topbar .title {
+  flex: 1;
   min-width: 0;
-  height: var(--control);
-  padding: 0 var(--space-2);
-  border-radius: var(--radius);
-  font-weight: 600;
   text-align: left;
 }
-.strip button.crumb:hover {
-  background: var(--ghost-hover);
-}
-.strip .cardname {
-  flex: none;
-  max-width: 10rem;
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.strip button.cardname {
-  padding: 2px 5px;
-  margin-left: -5px;
-  border-radius: var(--radius-sm);
-  font: inherit;
+.topbar h1 {
+  margin: 0;
+  font-size: var(--text-heading);
   font-weight: 600;
-  transition:
-    background var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease);
-}
-.strip button.cardname:hover {
-  background: var(--ghost-hover);
-  color: var(--ink);
-}
-.strip .sep {
-  flex: none;
-  color: var(--ink-3);
-  font-size: var(--text-footnote);
-}
-.strip .storyname {
-  min-width: 0;
+  line-height: var(--leading-tight);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.strip .storyname.unnamed {
-  color: var(--ink-2);
-  font-weight: 500;
-}
-.strip .crumb > svg {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--ink-3);
-}
-/* the two chips: the persona in force, the stance; each cut with an ellipsis, never widening the row */
-.strip .chips {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.strip .chips .chip {
-  display: block;
-  max-width: 7.5rem;
-  padding: 0 8px;
-  line-height: var(--control-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.strip .chips .chip:hover:not(:disabled) {
-  background: var(--ghost-active);
-  color: var(--ink);
-}
-.strip .spacer {
-  flex: 1;
-}
-.strip .icon {
+.topbar .icon {
   position: relative;
-  flex: none;
 }
-/* desktop's pieces, not on the phone's bar (chrome.css turns them on from 72rem and the phone's off) */
-.strip .icon.desk,
-.strip .crumb.desk,
-.strip .chips.desk {
-  display: none;
-}
-.strip .dot,
+.topbar .dot,
 .record-pill .dot {
   position: absolute;
   top: 6px;
@@ -434,13 +354,6 @@ section:has(> .editor) > .actions {
   /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */
   top: 2px;
   right: 2px;
-}
-/* the stage under the strip's column (App.tsx): on a phone the reading alone fills it */
-.stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 /* the side cards exist on desktop only */
 .side {

@@ -54,9 +54,6 @@ export interface CardView {
   format: readonly Format[]
 }
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
-/** The card the card page shows (`GET /cards/<id>`): the story's own, or another card the sidebar's group head opened
- *  (#117). Never the story's atom: the composer and the strip read that one while this page is browsed. */
-export const viewed = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
 /** The library (GET /stories, /personas, /player): every card's stories and which is open (a story is one root's tree),
  *  the player's personas, and the player layer the writing switches and the persona pick live in. Read at open. */
 export interface StoryRow {
@@ -129,10 +126,9 @@ export const error = Atom.make<Failure | null>(null)
 /** A turn in flight: a draft that is not the ghost of a failed one, or any stage running (a demand runs one with no
  *  draft, and two streams would interleave into one `apply` queue). What holds the composer, the story and a new root. */
 export const working = Atom.make((get) => (get(draft) !== null && get(error) === null) || get(stage) !== null)
-/** The page over the reader: none, a card's page (the stage's other content, #117: the story's own card, or any card
- *  from the sidebar), the Timeline, the settings, the Writing page (writing.tsx) or the Inspect page on one node. The
- *  reader stays mounted under it, so a turn in flight keeps streaming. */
-export type Page = "reader" | "timeline" | "settings" | "writing" | { card: string } | { inspect: Id }
+/** The page over the reader: none, the card page, the Timeline, the settings, the Writing page (writing.tsx) or the
+ *  Inspect page on one node. The reader stays mounted under it, so a turn in flight keeps streaming. */
+export type Page = "reader" | "card" | "timeline" | "settings" | "writing" | { inspect: Id }
 export const page = Atom.make<Page>("reader")
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())

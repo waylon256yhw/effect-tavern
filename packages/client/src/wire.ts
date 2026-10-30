@@ -3,8 +3,8 @@
 // answers the listing with the story to be on (`current`, none on an empty library): the client names it on every
 // request after, and pages.ts lands on it (nodes, calls, the draft and the pin gone; a delete that leaves the open
 // story open only replaces the listing). A new story is of a card (`POST /stories {card}`); a card's page is readable
-// before any story of it (`GET /cards/<id>`). The sidebar's search (`GET /stories/search`) and the exports
-// (`/stories/<id>/export.md|json`, plain links the browser downloads) are the sidebar's (stories.ts, side.tsx).
+// before any story of it (`GET /cards/<id>`). The manager's search (`GET /stories/search`) and the exports
+// (`/stories/<id>/export.md|json`, plain links the browser downloads) are the manager's (stories.ts, side.tsx).
 // `DELETE /nodes/<id>` drops a node and everything under it (the reply is the Change): the Timeline's branch delete.
 // The turn is the server's, not the response's: closing a stream only stops reading it. `POST /stop` is the stop
 // (before the first character the turn is withdrawn, after it the prose halts and the node comes down the same
@@ -35,7 +35,6 @@ import {
   type StoryRow,
   type CardView,
   type Routing,
-  viewed,
   type Wire,
 } from "./store.ts"
 
@@ -55,9 +54,9 @@ const got = async (res: Promise<Response>) => (await res).json()
 export const fetchNodes = async (): Promise<void> =>
   registry.set(log, L.of((await got(call(`${base}/nodes`))) as L.Snapshot<Node>))
 export const fetchCard = async (): Promise<void> => registry.set(card, (await got(call(`${base}/card`))) as CardView)
-/** A card by id for its page (`viewed`), no story of it needed: the sidebar's group head, where an empty library lands. */
+/** A card's page by id, no story needed: where an empty library lands. */
 export const fetchCardOf = async (id: string): Promise<void> =>
-  registry.set(viewed, (await got(call(`${base}/cards/${encodeURIComponent(id)}`))) as CardView)
+  registry.set(card, (await got(call(`${base}/cards/${encodeURIComponent(id)}`))) as CardView)
 export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(call(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
   registry.update(log, (l) => L.apply(l, c))
@@ -77,7 +76,9 @@ const listing = (res: Promise<Response>) => got(res) as Promise<Listing>
 export const openStory = (id: number): Promise<Listing> => listing(call(`${base}/stories/${id}`, { method: "PUT" }))
 export const newStory = (card: string): Promise<Listing> =>
   listing(call(`${base}/stories`, { method: "POST", body: JSON.stringify({ card }) }))
-/** The one delete, the cleanup's: the ids at once (`DELETE /stories`), one listing back; a busy story stays. */
+export const deleteStory = (id: number): Promise<Listing> =>
+  listing(call(`${base}/stories/${id}`, { method: "DELETE" }))
+/** The cleanup: several at once (`DELETE /stories` with the ids), one listing back. */
 export const deleteStories = (ids: readonly number[]): Promise<Listing> =>
   listing(call(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) }))
 /** A name the player gives the story; blank clears it. Nothing else moves: only the listing comes back. */

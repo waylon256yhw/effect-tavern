@@ -2,8 +2,8 @@
 // empty box), the box, Send / Stop. What serves the typing hangs on the box's top edge only while it is in use: the
 // format keys, a row of glyph chips over the text while the hand is in the box or words are; the note to the
 // narrator a note snippet opens (a word that goes with the line, or alone), its own box in a thin strip; the line
-// being revised, a strip naming its turn. The pin is not here: armed and shown in the Record alone, it rides on the
-// next send (turn.ts). The story's own entries live on the strip above the reading (strip.tsx).
+// being revised, a strip naming its turn. The pin is not here: armed and shown in the Record (and the session's
+// pinned row), it rides on the next send (turn.ts). The session's own actions live beside the reading (side.tsx).
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"

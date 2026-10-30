@@ -1,6 +1,6 @@
-// The stories as the sidebar's tree and the cleanup sheet (side.tsx, manager.tsx) arrange them: starred first; the
-// sidebar's search over the title here and over the turns on the server (its hits by story id), the quick picks of
-// the cleanup (#75), the preview a row carries. Pure over the rows the wire holds.
+// The stories as the left card and the manager (side.tsx) arrange them: starred first, the open one kept in view on
+// the card's four rows; the manager's search over the title here and over the turns on the server (its hits by
+// story id), the quick picks of the cleanup (#75), the preview a row carries. Pure over the rows the wire holds.
 import type { StoryRow } from "./store.ts"
 import { locale as current, t } from "./i18n.ts"
 
@@ -23,7 +23,7 @@ const units: [Intl.RelativeTimeFormatUnit, number][] = [
   ["minute", 6e4],
 ]
 const formats = new Map<string, Intl.RelativeTimeFormat>()
-/** "2 hours ago", "yesterday", "now" in the locale given. */
+/** "2 hours ago", "yesterday", "now" in the locale given (the card's rows are English, the manager Chinese). */
 export const ago = (at: number, locale: string = current(), now = Date.now()): string => {
   let rel = formats.get(locale)
   if (!rel) formats.set(locale, (rel = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })))
@@ -34,6 +34,17 @@ export const ago = (at: number, locale: string = current(), now = Date.now()): s
 /** Starred first; within each, the listing's own order (newest first). */
 export const ranked = (rows: readonly StoryRow[]): StoryRow[] =>
   [...rows].sort((a, b) => Number(b.starred) - Number(a.starred))
+/** The left card's rows: the first `n` of the ranked list, and the open story among them whatever its rank (it takes
+ *  the last place), so the row on the tint is never below the cut. */
+export const shown = (rows: readonly StoryRow[], current: number | null | undefined, n = 4): StoryRow[] => {
+  const all = ranked(rows)
+  const top = all.slice(0, n)
+  if (all.length > n && current != null && !top.some((s) => s.id === current)) {
+    const open = all.find((s) => s.id === current)
+    if (open) top[n - 1] = open
+  }
+  return top
+}
 
 /** What a row previews: the last turn's line, or its note marked as one, or nothing (an opening alone). */
 export const preview = (row: StoryRow): string | null => {

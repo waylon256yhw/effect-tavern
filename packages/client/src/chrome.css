@@ -1,4 +1,4 @@
-/* The Record pill and sheet, the readings, the scene list, Options, the snippets menu, the sidebar, the desktop grid. */
+/* The Record pill and sheet, the readings, the scene list, Options, the snippets menu, the desktop cards. */
 /* the Record pill under each section: one glyph in a pill (the icon-only rule of brief 3, as the bar's Status), every
    section the same; the icon sits centered, and the draft's waiting dots widen it */
 .record-pill {
@@ -609,8 +609,8 @@
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 
-/* the story sheet's session (strip.tsx, phone): the card head, the persona, the writing chips, the two pages; and the
-   sidebar's drawer under it. Nothing here wraps but a persona's text in its form. */
+/* the session (side.tsx): the card, this card's stories, the persona, the writing chips, the pin, the pages; the left card on
+   desktop, the sheet the title opens on a phone. Nothing here wraps but a persona's text in its form. */
 .session {
   display: flex;
   flex-direction: column;
@@ -632,8 +632,8 @@
 }
 /* a section head is a word in its place (settings' .block-title): no nameplate (uppercase, tracked) in the components
    layer, so a card's own layer may add one */
-.session h2,
-.glance h2 {
+.side h2,
+.session h2 {
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -643,8 +643,19 @@
   font-weight: 600;
   color: var(--ink-2);
 }
-.session section,
-.glance section {
+.session h2 .icon {
+  width: var(--control-sm);
+  height: var(--control-sm);
+}
+.session h2 .icon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.session h2 .icon:first-of-type {
+  margin-left: auto;
+}
+.side section,
+.session section {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -703,332 +714,125 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
-/* the sidebar (side.tsx, #117): the install's column, a tree of card → story under a search, the install's keys at
-   the foot. Desktop: the left card (below); phone: the same column in a drawer. Denser than the reading's cards: 12px
-   inside, rows a control tall, no line between the zones */
-.sidebar {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
-}
-.sidebar .top {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.sidebar .top .input-box {
-  flex: 1;
-  min-width: 0;
-}
-.sidebar .tree {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  margin-inline: calc(-1 * var(--space-1));
-  padding-inline: var(--space-1);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color var(--dur-3) var(--ease);
-}
-.sidebar .tree:hover {
-  scrollbar-color: var(--alpha-2) transparent;
-}
-/* a card's group: the head (the fold, the name as the way to the card page), its rows indented under it */
-.group {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.group .head {
-  display: flex;
-  align-items: center;
-  min-height: var(--control);
-  border-radius: var(--radius);
-  transition: background var(--dur-2) var(--ease);
-}
-.group .head:hover {
-  background: var(--ghost-hover);
-}
-.group .head[aria-current] {
-  background: var(--fill);
-}
-.group .fold {
-  flex: none;
-  width: var(--control-sm);
-  height: var(--control);
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  color: var(--ink-3);
-}
-.group .fold:hover {
-  color: var(--ink);
-}
-.group .fold svg {
-  width: 12px;
-  height: 12px;
-  transition: rotate var(--dur-2) var(--ease);
-}
-.group .fold[aria-expanded="true"] svg {
-  rotate: 90deg;
-}
-.group .name {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: var(--control);
-  padding-right: var(--space-1);
-  font-weight: 600;
-  text-align: left;
-}
-.group .name .first {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.group .name .enter {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--ink-3);
-  opacity: 0;
-  transition:
-    opacity var(--dur-2) var(--ease),
-    translate var(--dur-2) var(--ease);
-}
-.group .head:hover .enter,
-.group .head[aria-current] .enter {
-  opacity: 0.85;
-}
-.group .head:hover .enter {
-  translate: 1px 0;
-}
-.group ul {
+/* a story row: the player's name for it, and under it the turns and the time; the open one sits on a tint */
+.stories ul {
   margin: 0;
-  padding: 0 0 0 var(--space-3);
+  padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-/* a story row: the star when it is kept first, the name (or "New story"), the dot of a turn in flight; the open one
-   on the fill, a hovered one on the ghost, so the two are told apart; its ⋯ at the end, there under the pointer, on
-   the focus, or always on a touch screen */
-.group .row {
-  display: flex;
-  align-items: center;
-  border-radius: var(--radius);
-  transition: background var(--dur-2) var(--ease);
-}
-.group .row:hover {
-  background: var(--ghost-hover);
-}
-.group .row:has(> .story[aria-current]) {
-  background: var(--fill);
+  display: grid;
+  gap: 2px;
+  max-height: 11rem; /* four rows; the list is unbounded, the card is not */
+  overflow-y: auto;
 }
 .story {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: var(--control);
-  padding: 0 var(--space-1) 0 var(--space-2);
+  display: grid;
+  /* the column can shrink under its text: a long line clips, never widens the list */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
   text-align: left;
 }
-.story .star {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--ink-2);
+.story:hover:not(:disabled) {
+  background: var(--ghost-hover);
 }
-.story .first {
-  min-width: 0;
+.story[aria-current] {
+  background: var(--alpha-1);
+}
+.story .first,
+.story .meta {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.story[aria-current] .first {
-  font-weight: 600;
-}
+/* a story never named */
 .story .first.unnamed {
   color: var(--ink-2);
 }
-/* the dot: a turn runs on this story on the server (the Status key's dot, in ink: green is a hit's); it breathes */
-.sidebar .dot,
-.manager .dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
-  animation: breathe 1.6s var(--ease-pulse) infinite;
-}
-@keyframes breathe {
-  50% {
-    opacity: 0.3;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .sidebar .dot,
-  .manager .dot {
-    animation: none;
-  }
-}
-.group .more {
-  flex: none;
-  width: var(--control-sm);
-  height: var(--control-sm);
-  margin-right: 2px;
+.story .meta {
+  font-size: var(--text-footnote);
   color: var(--ink-3);
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
-}
-.group .row:hover .more,
-.group .more:focus-visible,
-.group .more:has(+ .menu:popover-open) {
-  opacity: 1;
-}
-@media (hover: none) {
-  .group .more {
-    opacity: 1;
-  }
-}
-.group .more svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-}
-/* the row's menu (rename, star, export): the version list's shape, under its ⋯ with the right edges aligned */
-.menu {
-  position-anchor: auto;
-  position-area: bottom span-left;
-  position-try-fallbacks: flip-block;
-  width: max-content;
-  min-width: 9rem;
-  margin: var(--space-1) 0 0;
-}
-/* the search's hit under its row: the turn, then a piece of the line, one row of small print cut with an ellipsis */
-.group .hit {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  min-width: 0;
-  padding: 0 var(--space-2) var(--space-1) calc(var(--space-2) + 17px);
-  font-size: var(--text-caption);
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
-.group .hit .where {
-  margin-right: 4px;
-  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
-.sidebar mark {
-  padding: 0 2px;
-  border-radius: 3px;
-  background: var(--warn-soft);
-  color: var(--ink);
-  font-weight: 600;
-}
-.sidebar .empty {
-  margin: var(--space-2) 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-card);
-  background: var(--alpha-1);
-  color: var(--ink-3);
-  font-size: var(--text-footnote);
-  text-align: center;
-}
-/* the foot: the settings and the two device flips (pressed while they hold), the cleanup at the other end */
-.sidebar .foot {
-  flex: none;
+/* under the four rows, the way to every story: the manager */
+.stories .all {
   display: flex;
   align-items: center;
-  gap: 2px;
+  justify-content: space-between;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-footnote);
+  color: var(--ink-2);
+  text-align: left;
 }
-.sidebar .foot .spacer {
-  flex: 1;
-}
-.sidebar .foot .icon[aria-pressed="true"] {
-  background: var(--fill);
+.stories .all:hover:not(:disabled) {
+  background: var(--ghost-hover);
   color: var(--ink);
 }
-/* the phone's drawer: the sidebar as a modal panel from the left edge on the scrim; the strip's ☰ opens it */
-.drawer {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: min(17rem, 82vw);
-  height: 100%;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  flex-direction: column;
-  background: var(--surface-1);
-  color: inherit;
-  box-shadow: var(--shadow-3);
-  outline: none;
-  translate: -100% 0;
-  transition:
-    translate var(--dur-4) var(--ease),
-    overlay var(--dur-4) allow-discrete,
-    display var(--dur-4) allow-discrete;
+.stories .all .chev {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
 }
-.drawer[open] {
-  display: flex;
-  translate: 0 0;
-}
-.drawer::backdrop {
-  background: var(--scrim);
-  opacity: 0;
-  transition:
-    opacity var(--dur-4) var(--ease),
-    overlay var(--dur-4) allow-discrete,
-    display var(--dur-4) allow-discrete;
-}
-.drawer[open]::backdrop {
-  opacity: 1;
-}
-@starting-style {
-  .drawer[open] {
-    translate: -100% 0;
-  }
-  .drawer[open]::backdrop {
-    opacity: 0;
-  }
-}
-.drawer .sidebar {
-  padding-top: calc(var(--space-3) + var(--safe-top));
-  padding-bottom: calc(var(--space-3) + var(--safe-bottom));
-}
-/* the cleanup sheet (manager.tsx): the picker's sheet one step wider (32rem on desktop), every story as a row with a
-   checkbox, the card's name as a tag, the title, the turns and the time; a checked row on the warning tint, a busy one
-   greyed with its dot (it cannot be checked); the list alone scrolls, the footer holds the quick picks and the delete */
+/* the stories manager (manager.tsx): the picker's sheet one step wider (32rem on desktop), a search over the turns
+   beside the 全部 / 收藏 toggle, three-line cards (checkbox, star, name and its actions; the preview or the search's
+   hit; turns and time), and the cleanup's footer; the list alone scrolls */
 .manager {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
   padding: var(--space-1) var(--space-4) var(--space-3);
+}
+.manager .search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.manager .search .input-box {
+  flex: 1;
+  min-width: 0;
+}
+.manager .filter {
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+}
+.manager .filter button {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.manager .filter button:hover {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.manager .filter button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface-1);
+  font-weight: 600;
+}
+.manager .filter svg {
+  width: 12px;
+  height: 12px;
+}
+.manager .filter .n {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  opacity: 0.75;
 }
 .manager .list {
   flex: 1;
@@ -1036,16 +840,19 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   margin: 0 calc(-1 * var(--space-2));
   padding: 2px var(--space-2);
 }
+/* a card: the checkbox and the star in their columns, the three lines beside them; the open one on the tint, a
+   checked one on the warning tint */
 .manager .card {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-2);
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  padding: 8px 8px 8px var(--space-2);
   border-radius: var(--radius-card);
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
@@ -1059,44 +866,51 @@
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 .manager .card[aria-current] {
+  background: var(--alpha-1);
   box-shadow: inset 0 0 0 1.5px var(--line-strong);
 }
 .manager .card[data-checked] {
   background: var(--warn-soft);
   box-shadow: inset 0 0 0 1.5px var(--warn);
 }
-.manager .card:has(.box:disabled) {
-  cursor: default;
-  color: var(--ink-3);
-}
 .manager .card .box {
-  flex: none;
   width: 15px;
   height: 15px;
-  margin: 0;
+  margin: 5px 0 0;
   accent-color: var(--ink);
   cursor: pointer;
 }
-.manager .card .box:disabled {
-  cursor: default;
+.manager .card .star {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.manager .card .star:hover {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.manager .card .star[aria-pressed="true"] {
+  color: var(--warn);
+}
+.manager .card .star svg {
+  width: 14px;
+  height: 14px;
 }
 .manager .card .body {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .manager .card .top {
+  min-width: 0;
+  min-height: 24px;
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-}
-.manager .card .top .tag {
-  height: 18px;
-  padding: 0 5px;
-  font-size: var(--text-caption);
 }
 .manager .card .name {
   min-width: 0;
@@ -1112,6 +926,59 @@
 .manager .card[aria-current] .name {
   font-weight: 600;
   color: var(--primary);
+}
+.manager .card .acts {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+}
+.manager .card .acts .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--ink-3);
+}
+.manager .card .acts .icon svg {
+  width: 14px;
+  height: 14px;
+}
+.manager .card .acts .icon:hover:not(:disabled) {
+  color: var(--ink);
+}
+.manager .card .acts .icon.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+/* the second line: the last line written, or the turn the search hit with its place, two rows at most */
+.manager .card .preview {
+  font-size: var(--text-footnote);
+  line-height: 1.45;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.manager .card .preview.none {
+  color: var(--ink-3);
+}
+.manager .card .where {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px;
+  margin-right: 5px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  vertical-align: baseline;
+}
+.manager mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-weight: 600;
 }
 .manager .card .meta {
   font-size: var(--text-caption);
@@ -1166,7 +1033,7 @@
 .confirm a.chip {
   text-decoration: none;
 }
-/* the persona picker (strip.tsx): a sheet (rising on a phone over the story sheet; on desktop a centred card of
+/* the persona picker (side.tsx): a sheet (rising on a phone over the session sheet; on desktop a centred card of
    25rem) with a search over the player's personas and two-line rows, the card's own first; the list alone scrolls */
 .picker {
   flex: 1;
@@ -1338,20 +1205,43 @@
   opacity: 1;
   translate: 1px 0;
 }
-/* the story sheet's keys at the bottom: the two pages that look at the story, spread evenly */
+.pinned p {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ink-2);
+  text-align: left;
+}
+.pinned svg {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.pinned span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the keys at the bottom: the two pages that look at the story, the two device flips (theme, language) and the
+   settings, spread evenly: five fill the row, so a grouping gap would only read as a hole; the flips show their
+   state as pressed keys */
 .tools {
   display: flex;
-  justify-content: space-around;
+  justify-content: space-between;
   margin-top: auto;
 }
 
-/* desktop: the harness's two-level grid (#117). From 72rem (#66): the sidebar's card and the stage; the stage is the
-   reading raised one step with the glance card beside it, or a card's page over both. Under 72rem the fixed sides
-   and the gaps left the reading narrower than a phone, so the one-column reader with its sheets and the drawer serves
-   the tablet and half-screen band instead */
+/* desktop: three cards on the canvas, the reading raised one step; the side cards hold what the sheets hold. From
+   72rem (#66): the fixed sides and the gaps take 40rem, so at 64rem the reading was left about 384px, narrower than a
+   phone; the one-column reader with its sheets serves the tablet and half-screen band instead */
 @media (min-width: 72rem) {
   :root {
     background: var(--surface-0);
+  }
+  .topbar {
+    display: none;
   }
   /* the latest turn's Record and 小剧场 sit in the right card: its pill would open the same thing twice (the draft's
      pill is the only sign of check and record running: it stays); its actions stay in its row, where every turn's are */
@@ -1393,63 +1283,52 @@
   .sheet:has(> .manager) {
     width: min(32rem, calc(100% - 2 * var(--space-5)));
   }
-  /* the grid: the sidebar's track and the stage; folded, the track goes to nothing and the stage takes the canvas */
   .canvas {
     box-sizing: border-box;
     display: grid;
-    grid-template-columns: 15rem minmax(0, 1fr);
+    grid-template-columns: 15rem minmax(0, 1fr) 19rem;
     grid-template-rows: minmax(0, 1fr);
-    align-items: stretch;
+    align-items: start;
     gap: var(--space-5);
     padding: var(--space-5);
-    transition:
-      grid-template-columns var(--dur-3) var(--ease),
-      gap var(--dur-3) var(--ease);
-  }
-  .canvas[data-collapsed] {
-    grid-template-columns: 0 minmax(0, 1fr);
-    gap: 0;
-  }
-  .canvas[data-collapsed] > .side {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
   }
   .side {
     box-sizing: border-box;
-    min-width: 0;
     max-height: 100%;
-    overflow: hidden; /* each card's own zone scrolls (the tree, the glance's column); nothing in the card is wider than it */
+    overflow-y: auto;
+    overflow-x: hidden; /* nothing in the card is wider than it; a shown hint at its edge must not add a bar */
     display: flex;
     flex-direction: column;
+    gap: var(--space-5);
+    padding: var(--space-5);
     border-radius: var(--radius-dialog);
     background: var(--surface-1);
     box-shadow: var(--shadow-1);
     font-size: var(--text-body);
     line-height: var(--leading-body);
-    transition:
-      opacity var(--dur-2) var(--ease),
-      visibility var(--dur-2) allow-discrete;
+    /* the reader's bar: thin, visible only under the pointer (no end fade: the card is its own scroller, a mask would
+       fade the card's edges too) */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--dur-3) var(--ease);
   }
-  /* the stage: the reading and the glance side by side, or a card's page over both (the reading stays mounted) */
-  .stage {
-    position: relative;
-    min-width: 0;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 19rem;
-    grid-template-rows: minmax(0, 1fr);
-    align-items: stretch;
-    gap: var(--space-5);
+  .side:hover,
+  .glance .scrolls:hover {
+    scrollbar-color: var(--alpha-2) transparent;
   }
-  .stage > .manifest {
-    position: absolute;
-    inset: 0;
-    border-radius: var(--radius-dialog);
-    box-shadow: var(--shadow-2);
+  .side {
+    align-self: stretch;
+  }
+  .side .session {
+    flex: 1;
+  }
+  /* the one zone that grows sits in the card's spare height; the settings under it stay compact */
+  .side .stories {
+    margin-block: auto;
   }
   .glance {
-    padding-block: var(--space-5);
+    overflow: hidden;
+    padding-inline: 0;
   }
   .glance .scrolls {
     flex: 1;
@@ -1465,34 +1344,14 @@
     transition: scrollbar-color var(--dur-3) var(--ease);
     mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
   }
-  .glance .scrolls:hover {
-    scrollbar-color: var(--alpha-2) transparent;
-  }
   .glance > .actions {
     padding-inline: var(--space-5);
   }
   .panel {
+    align-self: stretch;
     border-radius: var(--radius-dialog);
     background: var(--surface-1);
     box-shadow: var(--shadow-2);
-  }
-  /* the strip on the card: a control and a hair of air, nothing painted (the card is its ground), the phone's keys gone */
-  .strip {
-    min-height: calc(var(--control) + var(--space-1));
-    padding: var(--space-1) var(--space-4) 0;
-    background: none;
-  }
-  .strip .phone {
-    display: none;
-  }
-  .strip .icon.desk {
-    display: grid;
-  }
-  .strip .crumb.desk {
-    display: flex;
-  }
-  .strip .chips.desk {
-    display: inline-flex;
   }
   main {
     padding-inline: var(--space-6);
