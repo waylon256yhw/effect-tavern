@@ -15,6 +15,7 @@ import { DatabaseSync } from "node:sqlite"
 import { open } from "../src/data.ts"
 import { library } from "../src/library.ts"
 import { app, handle, serve } from "../src/serve.ts"
+import { tavern } from "../src/tavern.ts"
 
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
@@ -353,8 +354,13 @@ await run(false)
     ),
     hat: "h",
   }
-  const guarded = library({ data: open(":memory:"), card: { ...chat, guard: ["R"] }, player, model: () => drafts })
-  const server = serve(guarded).listen(0)
+  const { lib: guarded, handler } = tavern({
+    data: open(":memory:"),
+    card: { ...chat, guard: ["R"] },
+    player,
+    model: () => drafts,
+  })
+  const server = createServer(handler).listen(0)
   try {
     const ac = new AbortController()
     const r = await fetch(`http://localhost:${(server.address() as AddressInfo).port}`, {
@@ -414,8 +420,9 @@ await run(false)
     })
   }).listen(0)
   const up = `http://localhost:${(upstream.address() as AddressInfo).port}`
-  const routed = library({ data: open(":memory:"), card: chat, player, model })
-  const server = serve(routed, { inspect: true }).listen(0)
+  const server = createServer(
+    tavern({ data: open(":memory:"), card: chat, player, model, inspect: true }).handler,
+  ).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const call = async (method: string, path: string, v?: unknown) => {
     const r = await fetch(base + path, { method, body: v === undefined ? undefined : JSON.stringify(v) })
@@ -589,7 +596,7 @@ await run(false)
     secret: "k",
     models: [],
   })
-  const server = serve(library({ data, card: chat, player, model })).listen(0)
+  const server = createServer(tavern({ data, card: chat, player, model }).handler).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const post = async (v: unknown) =>
     (await fetch(`${base}/providers/a/test`, { method: "POST", body: JSON.stringify(v) })).json() as Promise<any>
@@ -655,7 +662,7 @@ await run(false)
     .prepare("insert into card values (?, ?, '{}', 0), (?, ?, '{}', 0)")
     .run("mine", "我的", chat.id, "dup")
   const cards = [{ id: "bare" }, { id: chat.id, title: "dup" }]
-  const server = serve(library({ data, card: chat, cards, player, model })).listen(0)
+  const server = createServer(tavern({ data, card: chat, cards, player, model }).handler).listen(0)
   try {
     const got = await (await fetch(`http://localhost:${(server.address() as AddressInfo).port}/cards`)).json()
     assert.deepEqual(got, [
@@ -694,7 +701,7 @@ await run(false)
   })
   data.providers.put(relay(16000))
   data.routing.write({ stages: { narrate: { provider: "relay", model: "m" } } })
-  const server = serve(library({ data, card: chat, player, model }), { inspect: true }).listen(0)
+  const server = createServer(tavern({ data, card: chat, player, model, inspect: true }).handler).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const summarized = async (text: string) => {
     const evs = sse(
@@ -703,7 +710,7 @@ await run(false)
     const call = evs.find((e) => e.data.kind === "call" && e.data.phase === "narrate")!
     return JSON.stringify((call.data as Extract<Event, { kind: "call" }>).msgs).includes("Summary:")
   }
-  const bare = serve(library({ data: open(":memory:"), card: chat, player })).listen(0)
+  const bare = createServer(tavern({ data: open(":memory:"), card: chat, player }).handler).listen(0)
   try {
     const seen = []
     for (const t of "1234") seen.push(await summarized(t))

@@ -5,7 +5,8 @@
 // Each request names its story; one that names none plays the card's newest, or a new one. An empty story opens on
 // the greeting GREETING names, and on none otherwise: the player picks one on the card page (a greet is a root, and one
 // picked on the server would stay as an orphan root beside the player's). Which model runs each stage is the library's
-// routing (the settings page); MODEL=fake puts the scripted model over it.
+// routing (the settings page); MODEL=fake puts the scripted model over it. This module is the environment's entry: it
+// reads the environment and opens the store, tavern.ts builds the tavern from what it read.
 import {
   bind,
   fake,
@@ -19,9 +20,8 @@ import { cardNames, loadCard, player } from "@effect-tavern/runtime/test/cards/i
 import { mkdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { open } from "./data.ts"
-import { library } from "./library.ts"
 import { refresh } from "./names.ts"
-import { handle } from "./serve.ts"
+import { tavern } from "./tavern.ts"
 
 const name = process.env["CARD"] ?? "ri"
 // a compiled binary (bun build --compile) has no checkout around it: its library lives where it is run
@@ -122,31 +122,19 @@ const scripted = process.env["MODEL"] === "fake"
 const one = scripted ? { ...fake(answer), hat: process.env["HAT"] } : live() // HAT works on the scripted model too
 const model = one && (() => one)
 
-// First start on a developer machine: the local Anthropic key becomes the vault's one secret and the library's one
-// provider, its Haiku the default, so the settings page opens on what the dev loop already ran on.
 const key = localAnthropicKey()
-if (key && !data.providers.list().length && !data.secrets.list().length) {
-  data.secrets.put({ id: "anthropic", name: "Anthropic", type: "api_key", value: key })
-  data.providers.put({
-    id: "anthropic",
-    name: "Anthropic",
-    enabled: true,
-    defaultFormat: "anthropic",
-    endpoints: { anthropic: { url: "https://api.anthropic.com" } },
-    secret: "anthropic",
-    models: [
-      { id: "claude-haiku-5-5", effort: "low" },
-      { id: "claude-sonnet-5-5", effort: "low" },
-    ],
-  })
-  data.routing.write({ default: { provider: "anthropic", model: "claude-haiku-5-5" } })
-}
+const greeting = process.env["GREETING"]
 const card = await loadCard(name)
 // the template cards, listed by GET /cards
 const cards = (await Promise.all(cardNames.map(loadCard))).map((c) => ({ id: c.id, title: c.title }))
-const lib = library({ data, card, cards, player, model, pinned: scripted }) // MODEL=fake scripts every stage, whatever the routing says
-if (lib.session().log.nodes.size === 0 && process.env["GREETING"] !== undefined) {
-  const greeting = card.greetings[Number(process.env["GREETING"])]
-  if (greeting) lib.session().greet(greeting)
-}
-export const handler = handle(lib, { inspect: true })
+export const { handler } = tavern({
+  data,
+  card,
+  cards,
+  player,
+  model,
+  pinned: scripted, // MODEL=fake scripts every stage, whatever the routing says
+  ...(key && { seed: { key } }), // a first start puts the local key in the vault (tavern.ts `seed`)
+  ...(greeting !== undefined && { greeting: Number(greeting) }),
+  inspect: true,
+})
