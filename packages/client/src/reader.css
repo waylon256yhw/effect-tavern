@@ -29,8 +29,8 @@ body {
   scrollbar-color: transparent transparent;
   transition: scrollbar-color var(--dur-3) var(--ease);
   /* the prose fades out over the column's padding at both ends, like the composer's text, instead of cutting
-     under the bar or the composer */
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+     under the bar or the composer; the head is `--head` where the stage card sets one (the canvas: the reader's keys) */
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--head), #000 calc(100% - var(--fade)), transparent);
 }
 .scroll:hover {
   scrollbar-color: var(--alpha-2) transparent;
@@ -40,14 +40,14 @@ main {
   margin: 0 auto;
   /* 40px at the foot (fade + space-4): the turn's 24px action row (40..64px, glyphs 44..60px) sits clear of a
      two-row box (32..34px) and hides whole under a three-row box (66px), with the last prose line (78px+) untouched */
-  padding: var(--fade) var(--space-4) calc(var(--fade) + var(--space-4));
+  padding: var(--head) var(--space-4) calc(var(--fade) + var(--space-4));
   display: flex;
   flex-direction: column;
   gap: var(--gap-turn);
   overflow-wrap: anywhere;
 }
 section {
-  scroll-margin-top: var(--fade); /* a scene jump lands below the fade */
+  scroll-margin-top: var(--head); /* a scene jump lands below the fade */
   display: flex;
   flex-direction: column;
   gap: var(--gap-item);
@@ -62,7 +62,7 @@ main > section:not(:last-of-type) {
 /* the latest section fills the column: scrolled to its start, the blank under it is where the prose grows, and
    the column holds still while it does */
 main > section:last-of-type {
-  min-height: calc(100cqh - 2 * var(--fade) - var(--space-4)); /* the column's head and foot paddings */
+  min-height: calc(100cqh - var(--head) - var(--fade) - var(--space-4)); /* the column's head and foot paddings */
 }
 .cursor {
   display: inline-block;
@@ -309,8 +309,7 @@ section:has(> .editor) > .actions {
   gap: var(--space-1);
 }
 
-/* a dot in the corner of a key: on the Record pill when this turn moved the state (the strip's keys carry the same,
-   shell.css) */
+/* a dot in the corner of a key: on the Record pill when this turn moved the state */
 .record-pill .dot {
   position: absolute;
   top: 2px; /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */

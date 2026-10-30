@@ -1,23 +1,60 @@
 // The sidebar (#117, docs/sidebar-brief-1.md): the install's navigation, cards → stories, and nothing of one story's
 // (that is the reader's strip, shell.tsx). Two layers, one shown at a time, sliding sideways: the shelf (every card,
 // with a search; a card's row has a dot while a turn runs on any of its stories) and the workspace (one card: its
-// head, which opens its page; a search; its stories, starred first then newest, the open one on a tint, a dot on one
+// head, which opens its page; two rows under it, the persona and the writing in force on this card (both are the
+// card's, not a story's); a search; its stories, starred first then newest, the open one on a tint, a dot on one
 // with a turn in flight; "新建故事" at the foot, which opens the card's page and makes no story: a story begins at
-// Begin). The top strip (the way back to the shelf, with a dot when another card is busy) and the foot (settings,
-// theme, language; at the right end, this card's story manager) are one DOM for both layers: only the middle moves.
-// On the desktop it stands in the canvas's left space; under 72rem the same component is the phone's drawer. A row
-// only switches the story: the rename, star, export and delete live in the manager (manager.tsx, dialogs.tsx).
+// Begin). The top strip (the way back to the shelf, with a dot when another card is busy) and the foot (this card's
+// story manager at the right end) are one DOM for both layers: only the middle moves. Settings, theme and language
+// are the install's (`InstallKeys`): the canvas's top strip holds them, the phone's drawer its foot. On the desktop
+// it stands in the canvas's left space; under 72rem the same component is the phone's drawer. A row only switches
+// the story: the rename, star, export and delete live in the manager (manager.tsx, dialogs.tsx).
 import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { openManager } from "./dialogs.tsx"
-import { Clue, Close, Next, Prev, Settings, Shade, Sliders, Snippets, Translate } from "./icons.tsx"
+import { openManager, openPicker } from "./dialogs.tsx"
+import { Archive, Clue, Close, Edit, Next, Prev, Settings, Shade, Snippets, Translate, User } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, openStory, showCard } from "./pages.ts"
 import { arranged, busyElsewhere, busyOn, fold, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
-import { cards, focus, layer, page, registry, stories, type StoryRow } from "./store.ts"
+import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
+import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
 import { fetchStories, searchStories } from "./wire.ts"
+import { openWriting } from "./writing.tsx"
 import { flip as flipLocale, locale, t } from "./i18n.ts"
+
+/** The install's keys: settings, the theme (a flip, pressed while the dark side holds) and the interface's language
+ *  (a flip, pressed while English holds). `onLeave` is the drawer's, closed before settings opens. */
+export const InstallKeys = (props: { onLeave?: () => void }) => (
+  <>
+    <button
+      type="button"
+      class="icon sm"
+      aria-label={t("common.settings")}
+      onClick={() => (props.onLeave?.(), openSettings())}
+    >
+      <Settings />
+    </button>
+    <button
+      type="button"
+      class="icon sm"
+      aria-label={t("side.darkTheme")}
+      aria-pressed={theme() === "dark" ? "true" : "false"}
+      onClick={flip}
+    >
+      <Shade />
+    </button>
+    <button
+      type="button"
+      class="icon sm"
+      aria-label={t("side.language")}
+      aria-pressed={locale() === "en" ? "true" : "false"}
+      onClick={flipLocale}
+    >
+      <Translate />
+    </button>
+  </>
+)
 
 /** `text` with every `q` in a `<mark>`. */
 const Mark = (props: { text: string; q: string }) => (
@@ -43,6 +80,18 @@ export const Sidebar = (props: {
   const pg = read(page)
   const rows = () => lib()?.stories ?? []
   const card = createMemo(() => shelf().find((c) => c.id === at()))
+  // who the player is on this card, and the writing in force: a change rewrites the cached prefix, no new story
+  const me = read(player)
+  const people = read(personas)
+  const persona = () => people().find((p) => p.id === me()?.persona?.[at() ?? ""])?.name ?? t("side.cardDefault")
+  const writing = createMemo(
+    () =>
+      chosen(me()?.writing, !!me()?.forCard[at() ?? ""]?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard"),
+  )
+  const leaveFor = (go: () => void) => {
+    props.onLeave?.()
+    go()
+  }
   // the shelf's search: title and summary, here
   const [cq, setCq] = createSignal("")
   const shown = createMemo(() => {
@@ -182,6 +231,20 @@ export const Sidebar = (props: {
                 <Next />
               </span>
             </button>
+            <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openPicker)}>
+              <span class="lbl">
+                <User aria-hidden="true" />
+                <span>{t("common.persona")}</span>
+              </span>
+              <span class="val">{persona()}</span>
+            </button>
+            <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openWriting)}>
+              <span class="lbl">
+                <Edit aria-hidden="true" />
+                <span>{t("side.writing")}</span>
+              </span>
+              <span class="val">{writing()}</span>
+            </button>
             <div class="input-box sm">
               <Clue aria-hidden="true" />
               <input
@@ -245,39 +308,15 @@ export const Sidebar = (props: {
         </div>
       </div>
       <footer class="side-foot">
+        {/* the phone has no top strip: the install's keys stay at the drawer's foot */}
         <span class="left">
-          <button
-            type="button"
-            class="icon sm"
-            aria-label={t("common.settings")}
-            onClick={() => (props.onLeave?.(), openSettings())}
-          >
-            <Settings />
-          </button>
-          {/* the theme (theme.ts): a flip, not a page, so the drawer stays; pressed while the dark side holds */}
-          <button
-            type="button"
-            class="icon sm"
-            aria-label={t("side.darkTheme")}
-            aria-pressed={theme() === "dark" ? "true" : "false"}
-            onClick={flip}
-          >
-            <Shade />
-          </button>
-          {/* the interface's language (i18n.ts): a flip like the theme; pressed while English holds */}
-          <button
-            type="button"
-            class="icon sm"
-            aria-label={t("side.language")}
-            aria-pressed={locale() === "en" ? "true" : "false"}
-            onClick={flipLocale}
-          >
-            <Translate />
-          </button>
+          <Show when={props.inDrawer}>
+            <InstallKeys onLeave={props.onLeave} />
+          </Show>
         </span>
         <Show when={which() === "workspace"}>
           <button type="button" class="icon sm" aria-label={t("side.manager")} disabled={!card()} onClick={openManager}>
-            <Sliders />
+            <Archive />
           </button>
         </Show>
       </footer>

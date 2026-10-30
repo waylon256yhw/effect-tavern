@@ -319,7 +319,6 @@ const zh = {
     cardBusy: "这张卡有进行中的故事",
     cardDefault: "卡片默认",
     cardPersonaBio: "这张卡写定的玩家角色",
-    closeReadings: "收起读数",
     collapse: "收起侧栏",
     confirmDeleteMany: "删除选中的 {n} 个故事？其中的所有回合都将永久移除。",
     confirmDeleteOne: "删除「{title}」？其中的所有回合都将永久移除。",
