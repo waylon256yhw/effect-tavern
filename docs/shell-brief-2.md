@@ -1,4 +1,4 @@
-# 空间壳层二期 brief：舞台去顶条、正负空间归位、故事 tab、读数页（2026-10-31，#117 二期，交 Opus 实现；tab 一节 10-31 晚按 Cherry 的模型改为视图 tab）
+# 空间壳层二期 brief：舞台去顶条、正负空间归位、故事 tab、读数页（2026-10-31，#117 二期，交 Opus 实现；tab 一节 10-31 晚按 Cherry 的模型改为视图 tab，再按深模块改为 Reading）
 
 一期（`c69b233` / `ae0a9cd`）把三层立体空间立住了：地面（顶条 + 左栏）、台上一张舞台卡、台上临时挂载的读数卡。走查暴露的五个问题（左上角名字写三遍、读数键和另两枚图标语法不一、故事管理器用了"设置"的图形、读数卡 18.5rem 窄柱、首屏纯文本）出自同一个错位：安装级和卡片级的控件掉进了舞台和左栏底脚。这份 brief 是一次归位，顺着同一条逻辑把前四个解开（第五个是 #120 / #1 的事，这里不碰）。来源：Gemini 的 `spatial-shell-v2-proposal.md` 与 10-31 的三轮对齐；下面的结论都已定，不再重开。
 
@@ -22,17 +22,28 @@
 **tab 的模型**（读过 Cherry 的 `TabsProvider.tsx` / `TabRouter.tsx`：tab 只存地址，数据在公共池；没有"已打开就拒绝"，重复的 tab 是同一份数据的两个窗口；只能发生一次的副作用用 `useIsActiveTab` 门住）：
 
 - 一枚 tab = `{ id, story: number | null, page: Page, under: Page[], scroll?: number }`。`pages.ts` 今天的模块级 `page` 与 `under` 变成活跃 tab 的字段，`open` / `close` / `toReader` / `escaping` 对活跃 tab 操作；`land` 写活跃 tab 的 `story`。列表与活跃 id 存设备（`fold.ts` 那种读回：不在 listing 里的故事 id 丢掉，页面栈不存，重载后每枚 tab 落在它的故事的阅读器或卡片页）。
-- 数据单份：`log`、`draft`、`working`、`editing`、`calls`、`focus` 仍是"打开的那一局"的单例，不按 tab 分。网页里始终一个阅读器。
-- 切 tab：目标 tab 的 `story` 与 `current` 相同 → 只换页面栈和滚动位置，不发请求（同一局的阅读器 tab 与 Inspector / 写卡台 tab 之间秒切）；不同 → `openStory(story)`，`land` 之后恢复该 tab 的页面栈与滚动位置；`story` 为空 → 页面栈照常（设置、卡片页不需要局）。
-- **离开一局时暂存，切回时恢复**：`openStory` 走 `land`，`turn.abandon()` 会丢未发的输入，`pin` 被清。所以离开一局前按故事 id 在内存里记下 `boxes()`（compose / noted / aside）和 `pin`，切回该局时写回。暂存按**故事**记，不按 tab；不落设备。滚动位置按 tab 记。
+- 网页里始终一个阅读器，读的是槽位（活跃 Reading）。
+- 切 tab：换页面栈和滚动位置，然后 `reading.activate(story)`：同一局是空操作（阅读器 tab 与 Inspector / 写卡台 tab 之间秒切，不发请求），异局先 `deactivate` 再 activate（有记录不发请求，没有才取），`story` 为空只换页面栈（设置、卡片页不需要局）。镜像天然成立：两枚 tab 同一个 id 就是同一条记录。
+- **数据单份靠一个模块，不靠暂存**：今天"正在读的那一局"没有名字，摊在 store.ts 的 log、draft、stage、error、revising、editing、pin、compose / noted / aside、calls、card，apply 的打字机队列，和 turn.ts 的 `streams` 里当单例；哪些 atom 是一局的，这份知识只在 `land()` 清哪几个 atom 的那几行里。tab 要的不是"离开时暂存 boxes 和 pin"（删掉它，editing 和 calls 照丢，下一个一局的 atom 还得记着去 stash），而是生出这个模块，见下节 **Reading**。
 - "+"：开一枚 `{ story: null, page: "card" }`，落在当前卡（工作区那张）的卡片页，即开局落地。新 tab 从不复制上一枚（Cherry 的裸 `/app/chat` 跳到全局最近话题，正是让人迷惑的地方，不学）。
 - 入列：侧栏点局、`browse`、`newStory` 开局都在**活跃 tab** 里发生，写它的 `story`；不去别的 tab 里找。镜像允许，关掉镜像 tab 不碰故事。
 - 有界：最多 8 枚；"+"在满时丢最早的非活跃一枚。tab 名是 `卡 › 局`（`.shell-tab` 已有的 `.c › .s`），空 tab 显示卡名；截断不换行。
 - 点击：非活跃 tab → 切 tab；活跃 tab 且 `page !== "reader"` 且有故事 → `toReader()`；否则无事。
 - ×：移除；关的是活跃 tab 时切到相邻一枚（右边优先）；最后一枚不显示 ×。删档：`onDelete` 之后持有被删故事的 tab 变成 `{ story: null, page: "card" }`（那张卡的卡片页），不消失。
 - 点：listing 里 `busy !== null` 的故事，其每枚 tab 显示 `.busy-dot`（侧栏同一元素）。**未读点**按故事记（内存）：某局 `busy` 从非空变 null 时它不是活跃 tab 的故事 → 记未读；它的所有 tab 一起亮，切到其中任一枚时一起灭。零服务端改动。
-- 门住的副作用：Escape 与页面栈只对活跃 tab；滚动位置只在离开 tab 时写；`land` 只由活跃 tab 触发。没有后台 DOM，所以没有别的要门。
+- 门住的副作用：Escape 与页面栈只对活跃 tab；滚动位置只在离开 tab 时写；activate / deactivate 只由切 tab 和故事调用触发。没有后台 DOM，所以没有别的要门。
 - 没有任何局时顶条左端是一枚空 tab（第一张卡的卡片页，`boot` 已经这么落）。
+
+### Reading（新文件 `reading.ts`：一局在客户端的全部持有物）
+
+接口两个动词，实现里藏今天 `land` / `on` / `abandon` / `attach` 的全部编排和"哪些 atom 属于一局"的唯一清单：
+
+- `activate(id)`：这局有记录 → 把记录写进槽位；没有 → `fetchNodes` + `fetchCard`，再 `turn.attach()`。同一局再 activate 是空操作。
+- `deactivate()`：把槽位读回这局的记录（log 快照、card、editing、pin、boxes、calls、revising、error），`turn.abandon()`（流关掉，draft 与打字机队列丢掉，turn 在服务端照跑），槽位清空。
+
+不变量：**槽位里永远只显示一个 Reading，其余的 Reading 都是记录。** 槽位就是今天那些 atom，组件一行不改，`wire.call` 不改（`stories.current` 就是活跃 Reading 的 id）。记录是按故事 id 的有界缓存，上限 = tab 上限 8，逐出 = 丢记录（回来重新取）；今天的行为等于缓存为 0。流不进记录：离开 abandon、回来 attach，不做后台事件路由（那是数据多实例的线）。照 turn.ts `createTurn(Transport)` 的样子做：接缝上有真 wire 和 `MODEL=fake` 两个 adapter，所以 verify 里直接测它：activate A、往 boxes 写半句、activate B、activate A → 半句回来，B 的 attach 调过一次。
+
+pages.ts 的 `land` 缩成 `reading.activate(listing.current)` + `arrive`；`on()` 的取数进 Reading；`onDelete` 不变。
 
 ### 舞台卡 `.stage-card`（shell.tsx、shell.css、reader.css）
 
@@ -67,11 +78,11 @@
 ## 约束
 
 1. **一个语法。** 三枚图标一种形态、一种行为；tab 是 `.shell-tab` 的复数加"+"，不是新控件；人设、写法两行与 `storysheet` 的行同一份样式。
-2. **不做**：数据多实例（两局的 log / draft / DOM 同时常驻，Cherry 也没有）、tab 拖拽排序、tab 固定、tab 休眠、读数页的立绘位与人物表、任何新依赖。
+2. **不做**：数据多实例（两局同时在槽位里、后台事件路由进记录，Cherry 也没有）、tab 拖拽排序、tab 固定、tab 休眠、读数页的立绘位与人物表、任何新依赖。
 3. **数据有界**：tab ≤ 8；读数两块各自滚动；名字截断不换行。
-4. **删除是这个 PR 的一半**：`.strip` 宽屏分支、`mount` 三件套、`storysheet`、`Sliders`、`--mount-w`、只被它们用的 CSS 与词。净行数应为负。
+4. **删除是这个 PR 的一半**：`.strip` 宽屏分支、`mount` 三件套、`storysheet`、`Sliders`、`--mount-w`、只被它们用的 CSS 与词、pages.ts `land` 里清 atom 的那几行（进 Reading）。净行数应为负。
 5. **控件旁不放说明文字**，aria-label 齐全；`aria-pressed` 给读数键，`aria-current` 给当前 tab；Phosphor 图标走 icons.tsx。
-6. 一个 PR，顺序：归位（strip 删、工作区收两行、顶条收三键、archive 图标）→ 读数页并删 mount → 手机删 storysheet → tab（pages.ts 的页面栈归 tab、暂存与恢复、顶条）。每步 `vp check` 与 `vp run verify` 绿。
+6. 一个 PR，顺序：归位（strip 删、工作区收两行、顶条收三键、archive 图标）→ 读数页并删 mount → 手机删 storysheet → 生 Reading（reading.ts + 它的 verify 脚本，组件不动）→ tab（pages.ts 的页面栈归 tab、tabs.ts、顶条）。每步 `vp check` 与 `vp run verify` 绿。
 
 ## 验收（用户在自己的浏览器里看）
 
