@@ -23,14 +23,14 @@
 
 - 一枚 tab = `{ id, story: number | null, card: string | null, page: Page, under: Page[], scroll?: number }`。`card` 是这枚 tab 在看的卡：有故事时就是故事的卡（冗余但省一次查表），无故事时是浏览到的那张（"+"、`showCard`、`browse`）。**"看着的卡"只有一个来源**：store.ts 的 `focus` 不再是自由 atom，而是活跃 tab 的 `card` 的派生；`arrive` / `toReader` / `showCard` / `browse` 写 tab，不写 `focus`。`card` atom（CardView）跟着活跃 tab 取（有故事走 Reading 的 `fetchCard`，无故事 `fetchCardOf(tab.card)`），所以工作区的人设、写法两行（读 `focus`）和 Writing 页（读 `card`）永远是同一张卡；#125 留下的"浏览到别的卡时两处不一致"由此关掉。`pages.ts` 今天的模块级 `page` 与 `under` 变成活跃 tab 的字段，`open` / `close` / `toReader` / `escaping` 对活跃 tab 操作；`land` 写活跃 tab 的 `story`。列表与活跃 id 存设备（`fold.ts` 那种读回：不在 listing 里的故事 id 丢掉，页面栈不存，重载后每枚 tab 落在它的故事的阅读器或卡片页）。
 - 网页里始终一个阅读器，读的是槽位（活跃 Reading）。
-- 切 tab：换页面栈和滚动位置，然后 `reading.activate(story)`：同一局是空操作（阅读器 tab 与 Inspector / 写卡台 tab 之间秒切，不发请求），异局先 `deactivate` 再 activate（总是重取，见 Reading），`story` 为空只换页面栈（设置、卡片页不需要局）。镜像天然成立：两枚 tab 同一个 id 就是同一局。
+- 切 tab：换页面栈和滚动位置，然后 `reading.activate(story)`：同一局是空操作（阅读器 tab 与 Inspector / 写卡台 tab 之间秒切，不发请求），异局先 `deactivate` 再 activate（总是重取，见 Reading），`story` 为空也 activate(null)：**不变量是 `tab.story === null` ⇔ 槽位空、`stories.current` 为 null**，所以 "+" 出来的卡片 tab 下面没有上一局（Begin 一定建新局，上一局的半句台词进记录，`working` 为 false）。镜像天然成立：两枚 tab 同一个 id 就是同一局。
 - **数据单份靠一个模块，不靠暂存**：今天"正在读的那一局"没有名字，摊在 store.ts 的 log、draft、stage、error、revising、editing、pin、compose / noted / aside、calls、card，apply 的打字机队列，和 turn.ts 的 `streams` 里当单例；哪些 atom 是一局的，这份知识只在 `land()` 清哪几个 atom 的那几行里。tab 要的不是"离开时暂存 boxes 和 pin"（删掉它，editing 和 calls 照丢，下一个一局的 atom 还得记着去 stash），而是生出这个模块，见下节 **Reading**。
-- "+"：开一枚 `{ story: null, page: "card" }`，落在当前卡（工作区那张）的卡片页，即开局落地。新 tab 从不复制上一枚（Cherry 的裸 `/app/chat` 跳到全局最近话题，正是让人迷惑的地方，不学）。
+- "+"：开一枚 `{ story: null, page: "card" }`，落在当前卡（工作区那张）的卡片页，即开局落地。新 tab 从不复制上一枚（Cherry 的裸 `/app/chat` 跳到全局最近话题，正是让人迷惑的地方，不学）。卡片 tab 的栈底是 "card"：Esc、返回、点它自己都无事。有故事的 tab 浏览别的卡（`showCard`）时 **保留 story、只换 card**，tab 名只显示在看的卡；Esc 或点它自己回到那局的阅读器和卡。
 - 入列：侧栏点局、`browse`、`newStory` 开局都在**活跃 tab** 里发生，写它的 `story`；不去别的 tab 里找。镜像允许，关掉镜像 tab 不碰故事。
 - 有界：最多 8 枚；"+"在满时丢最早的非活跃一枚。tab 名是 `卡 › 局`（`.shell-tab` 已有的 `.c › .s`），空 tab 显示卡名；截断不换行。
 - 点击：非活跃 tab → 切 tab；活跃 tab 且 `page !== "reader"` 且有故事 → `toReader()`；否则无事。
-- ×：移除；关的是活跃 tab 时切到相邻一枚（右边优先）；最后一枚不显示 ×。删档：`onDelete` 之后持有被删故事的 tab 变成 `{ story: null, page: "card" }`（那张卡的卡片页），不消失。
-- 点：listing 里 `busy !== null` 的故事，其每枚 tab 显示 `.busy-dot`（侧栏同一元素）。**未读点**按故事记（内存）：某局 `busy` 从非空变 null 时它不是活跃 tab 的故事 → 记未读；它的所有 tab 一起亮，切到其中任一枚时一起灭。零服务端改动。
+- ×：移除；关的是活跃 tab 时切到相邻一枚（右边优先）；最后一枚不显示 ×。删档：**从不把活跃 tab 挪到别的故事**。持有被删故事的 tab 变成 `{ story: null, page: "card" }`（那张卡的卡片页），活跃的那枚同时 `activate(null)` 清槽位；其余 tab 不动；listing 的 `current` 取活跃 tab 的 story。`land` 只给 `newStory` 和 boot。
+- 点：listing 里 `busy !== null` 的故事，其每枚 tab 显示 `.busy-dot`（侧栏同一元素）。`busy` 由客户端也写：打开的那局收到 stage / attach 事件时把它的行写成该阶段，收到节点或错误时写回 null（离开一局时行保持，服务端的下一次 listing 刷新它），否则 "+" 之后没有 PUT、点永远不亮。listing 的读和改名、星标的回复**保留客户端自己的 `current`**（wire.ts `keep`）：对不报故事的请求服务端答它最新的一局，而在哪一局是 tab 的事；只有 boot 的第一份 listing 照服务端给的。**未读点**按故事记（内存）：某局 `busy` 从非空变 null 时它不是活跃 tab 的故事 → 记未读；它的所有 tab 一起亮，切到其中任一枚时一起灭。零服务端改动。
 - 门住的副作用：Escape 与页面栈只对活跃 tab；滚动位置只在离开 tab 时写；activate / deactivate 只由切 tab 和故事调用触发。没有后台 DOM，所以没有别的要门。
 - 没有任何局时顶条左端是一枚空 tab（第一张卡的卡片页，`boot` 已经这么落）。
 
@@ -38,6 +38,7 @@
 
 接口两个动词，实现里藏今天 `land` / `on` / `abandon` / `attach` 的全部编排和"哪些 atom 属于一局"的唯一清单：
 
+- `activate(null)`：清槽位、空 log、`stories.current = null`，不取任何卡（哪张卡是 tab 的事；空库落第一张卡的页由 pages.ts 的 `arrive` 做）。
 - `activate(id)`：同一局是空操作。否则一律 `openStory(id)`（`PUT /stories/<id>` 空体：服务端验证 id、答一份带 `current` 和新鲜 `busy` 的 listing，`stories.current` 由此跟过去，`x-tavern-story` 不会串台）→ `fetchNodes` + `fetchCard` → `turn.attach()`；这局的记录（若有）在设定活跃 id 之后、任何请求之前就同步写回槽位（输入框零延迟回显，快速连点也不会把记录冲掉）；activate 排在一条 promise 链上串行执行，后一次等前一次完成。**记录从不装 log**：log、card、calls 每次重取（本地 SQLite，毫秒级），所以离开时在跑、回来已跑完或还在跑的局，新节点和流都接得上，没有"命中记录就漏取"的分支。
 - `deactivate()`：把**服务端没有的**东西读回这局的记录，只有 `boxes()`（compose / noted / aside）和 `pin`（editing、revising 随 log 走，不记）；`turn.abandon()`（流关掉，draft 与打字机队列丢掉，turn 在服务端照跑）；其余槽位清空。第三个动词 `drop(ids)`：删档后被删故事的记录删除，活跃的那局在其中时离开槽位而不记录（下一次 activate 同一个 id 重读；`stories.ts` 的 `stays` 说明旧库会把删掉的 id 发给下一局），`onDelete` 在判 `stays` 之前调它。
 
