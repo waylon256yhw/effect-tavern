@@ -215,6 +215,9 @@ export const library = ({
     for (const s of sessions.values()) s.setPlayer(p)
   }
   return {
+    /** The model a stage runs on and the fold policy, as every session reads them on its next request. */
+    model,
+    policy,
     session,
     exists,
     newest,
