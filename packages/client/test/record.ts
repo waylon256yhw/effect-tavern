@@ -1,6 +1,6 @@
 // The Record projection: changed fields by shape (enum → steps, two-bounded int → meter, the rest → value), checks,
 // clues with pinnability from `readable`, the pin's fate, notes; an unchanged root yields nothing. Then the turn
-// heading under a field path or a product key, and the reading line folded into scene runs.
+// heading under a field path or a product key.
 import assert from "node:assert/strict"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import { heading, reading, record, status, type Element } from "../src/record.ts"

@@ -1,6 +1,6 @@
 # 客户端的形状与它向协议提的要求
 
-设计稿（已被 `client-design-brief-3.md` 的重画稿取代，本文的数据模型对照仍有效）：https://claude.ai/artifact/X1rfLi2uLPmog74g8A6V3e（互动小说阅读器主界面，按 `docs/client-design-brief.md` 做）。三个方向里取 A：每一节是一张卡片，读者的话在两张卡片之间，没有两个说话者；附注收在卡片底部一行，点开展开。手机 390 与桌面 1280，深浅两套。本文记录设计稿定下的形状，把它的数据模型逐项对到 `src/session.ts` 的接口上，列出已供、缺、多余，以及对三处冲突的决定。README §五"demo 的顺序"要的清单就是这一份。
+设计稿（已被 `client-design-brief-3.md` 的重画稿取代，本文的数据模型对照仍有效）：https://claude.ai/artifact/X1rfLi2uLPmog74g8A6V3e（互动小说阅读器主界面，按 `docs/client-design-brief.md` 做）。三个方向里取 A：每一节是一张卡片，读者的话在两张卡片之间，没有两个说话者；附注收在卡片底部一行，点开展开。手机 390 与桌面 1280，深浅两套。本文记录设计稿定下的形状，把它的数据模型逐项对到 `packages/runtime/src/session.ts` 的接口上，列出已供、缺、多余，以及对三处冲突的决定。README §五"demo 的顺序"要的清单就是这一份。
 
 ## 一、设计稿定下的
 
@@ -9,17 +9,17 @@
 - **版本与分支**：有多个版本的节显示 ‹ 2/3 ›，点数字列出全部版本（类型、开头一句、后续节数），切换时这一节不动，后面的节淡入替换。
 - **对过去一节的动作**：每节一个入口「⋯」（手机长按、桌面右键）；展开附注时重来、改写、编辑排在底部；改读数点那一行，钉住点线索旁的图钉。
 - **读数面板**：只有带规则的故事常驻，手机上是标题下一条放三项，点开是全部并可直接改；桌面放左栏。没有规则的故事，读数只出现在附注里。
-- **长局导航**：标题下显示当前节号与章节名，点开是目录（章节、钉住的线索、搜索）；滚动时右侧出现拖动条；只载入最近的节。
+- **长局导航**：标题下显示当前节号与章节名，点开是目录（章节、钉住的线索、搜索）；滚动时右侧出现拖动条；只载入最近的节（现在还是整份快照一次载入）。
 - **流式不跳**：发送后新的一节移到屏幕顶部，下方留一屏空白，正文每长一行留白短一行，视口不动；往上翻不被拉回，底部出现回到底部的入口。等待时光标停在正文将要开始的位置；带规则的故事同时显示正在掷的骰子。
 
 设计稿的节模型：`{ input: { mode: 'act' | 'direct', text }, active, versions: [{ kind, paras, set, add, clues, notes, dice, scene, extras, sug, next }] }`。
 
 ## 二、对到协议上
 
-| 设计稿 | 协议（`src/session.ts`） | 备注 |
+| 设计稿 | 协议（`packages/runtime/src/session.ts`） | 备注 |
 | --- | --- | --- |
 | `input.mode` act / direct | `Input.text` / `Input.note` | 纯 direct 轮就是只有 note 的轮：不进历史，只作用于下一节 |
-| `versions` + `active` | 同一 parent 下的兄弟节点 | ~~"当前在哪个兄弟"是客户端状态，协议不存~~ 2026-10-23：head 由服务端持有（`src/log.ts`），切版本是 `checkout` 动作，刷新不丢 |
+| `versions` + `active` | 同一 parent 下的兄弟节点 | ~~"当前在哪个兄弟"是客户端状态，协议不存~~ 2026-10-23：head 由服务端持有（`packages/runtime/src/log.ts`），切版本是 `checkout` 动作，刷新不丢 |
 | `set` / `add` | 相邻 `Node.state` 的 diff | 闪烁与"上次变化在哪一节"都由客户端从 diff 算 |
 | `clues` | `Node.delivered` | 读到的、check 确认的、钉住的三类合在一起 |
 | `notes` / `sug` / `inner` / `scene` | products：`notes`、`options`、`inner`，卡声明的 `scene` | 建议只填输入框不发送，所以这个客户端不用 `pick` |
@@ -34,7 +34,7 @@
 ## 三、三处冲突与决定
 
 1. **keepTail**（改写与编辑共用后续的节）。树里兄弟是新节点、没有孩子，后续挂在旧兄弟下；共用要嫁接 parent 指针，而 edit 重跑 check 与 record，后续的 notes 会和新正文不一致。**砍掉**，不加嫁接动作。
-2. **输出中停止**。原来关掉响应就中断整轮，没有节点，部分正文只能是客户端的幽灵，"继续"无处可接。**改为按阶段分两种**：正文开始之前关响应是取消，什么都不留；正文开始之后关响应是收尾，narrate 在当前位置停、check 跳过（截断的是玩家不是模型）、record 照跑、节点照存，`end: "stopped"`。"继续"于是就是它下面一条 note 子轮（文字"继续。"），协议早就有，不是 swipe 的一种，也不需要 prefill。客户端这一半在 `packages/client/src/turn.ts` 的 `stop`：正文前撤回，原话回到输入框；正文后回读 `/nodes`，直到 stopped 节点出现。
+2. **输出中停止**。原来关掉响应就中断整轮，没有节点，部分正文只能是客户端的幽灵，"继续"无处可接。**改为按阶段分两种**：正文开始之前关响应是取消，什么都不留；正文开始之后关响应是收尾，narrate 在当前位置停、check 跳过（截断的是玩家不是模型）、record 照跑、节点照存，`end: "stopped"`。"继续"于是就是它下面一条 note 子轮（文字"继续。"），协议早就有，不是 swipe 的一种，也不需要 prefill。客户端这一半在 `packages/client/src/turn.ts` 的 `stop`：正文前撤回，原话回到输入框；正文后回读 `/nodes`，直到 stopped 节点出现（最多 100 次）。
 3. **纠错重写**。check 不过时 narrate 第二次跑，客户端会收到第二个 `stage: narrate` 和一整段新 delta；设计稿没有"第一稿被第二稿替换"这个状态。**留给客户端设计**，协议不动。
 
 ## 四、快捷输入是 harness 的基础设施
@@ -49,7 +49,7 @@
 
 ## 五、协议欠客户端的
 
-- **卡与玩家层的投影端点**：`GET /card` 已带 id、标题、简介（`summary`，2026-10-23）、回合标题引用、默认通道（`input`，客户端据此决定参与者 / 作者视角的输入框）、规则、开场（`greetings` 整条，含 `do`；客户端按下标 `greet`）、导演开关、护栏条数、lore 的条数与层数、虚构模块（`fiction` 去掉正文：id、`label`、`when`）、`snippets`、`format`。cast 不进 schema：虚构区的单元是 fragment 不是人（盐道的 `sides` 一条写四个人），展示名是 `Fragment.label`，工作台编辑的也是同一份。护栏与 lore 只给数：禁令本身就是提示，对玩家同样成立；当前可讲的（readable）在节点上。仍缺状态条放哪三项。persona 有无不上线：客户端只读通道（模板里 wuxia、伴星没有 persona 槽却是参与者卡）。dev.ts 不再替玩家 greet（除非显式 `GREETING`）：开场是卡页上选的，服务端选的会留成孤儿根。 2026-10-24 卡页已建（`src/card.tsx`，`docs/card-page-brief.md` 与 Gemini 的 `docs/card-page-prototype.html`）：`page` 的第四个值，日志空时落页，⋯ 菜单的 Card 项随时进，Start over 与删空都落到它；开场在卡页上选（`greet` 按下标，故事中选开场是开新线程），无开场的卡直接开始；`Field.hidden` 让状态表与卡页同时跳过一个字段（理的恋人 / 哥哥）；`GET /card` 加 `tokens.head`，runtime 的 `tokens()` 是按字符的估算，权重用 Anthropic count_tokens 在模板卡上量过（中文 1.25 / 字，其余 0.3），精确计数以后是连接的能力。
+- **卡与玩家层的投影端点**：`GET /card` 已带 id、标题、简介（`summary`，2026-10-23）、回合标题引用、默认通道（`input`，客户端据此决定参与者 / 作者视角的输入框）、规则、开场（`greetings` 整条，含 `do`；客户端按下标 `greet`）、导演开关、护栏条数、lore 的条数与层数、虚构模块（`fiction` 去掉正文：id、`label`、`when`）、`snippets`、`format`。cast 不进 schema：虚构区的单元是 fragment 不是人（盐道的 `sides` 一条写四个人），展示名是 `Fragment.label`，工作台编辑的也是同一份。护栏与 lore 只给数：禁令本身就是提示，对玩家同样成立；当前可讲的（readable）在节点上。仍缺状态条放哪三项。persona 有无不上线：客户端只读通道（模板里 wuxia、伴星没有 persona 槽却是参与者卡）。dev.ts 不再替玩家 greet（除非显式 `GREETING`）：开场是卡页上选的，服务端选的会留成孤儿根。 2026-10-24 卡页已建（`packages/client/src/card.tsx`，`docs/card-page-brief.md` 与 Gemini 的 `docs/card-page-prototype.html`）：`page` 的第四个值，日志空时落页，⋯ 菜单的 Card 项随时进，Start over 与删空都落到它；开场在卡页上选（`greet` 按下标，故事中选开场是开新线程），无开场的卡直接开始；`Field.hidden` 让状态表与卡页同时跳过一个字段（理的恋人 / 哥哥）；`GET /card` 加 `tokens.head`，runtime 的 `tokens()` 是按字符的估算，权重用 Anthropic count_tokens 在模板卡上量过（中文 1.25 / 字，其余 0.3），精确计数以后是连接的能力。
 - ~~**兄弟的类型**~~：2026-10-22 已有，`Turn.sibling` 记 swipe / reword / edit，版本列表按它画图标。
 - ~~**`reword` 的风格**~~：2026-10-22 已有，`reword` 带可选的 `note`，并入这个兄弟的 input.note（只随它走）。
 - **`demand` 的参数**：设计稿按人物要内心想法，`demand` 只收产物 id。
@@ -58,8 +58,8 @@
 - **客户端用不上的**：`pick`（建议只填输入框）。2026-10-27 删掉了：没有调用方，选中的建议就是一次普通的 act。
 - ~~**客户端欠协议的：`edit` 的入口与编辑态**~~：2026-10-23 已做。玩家自己的那句：点气泡回到 composer 的修订态（Cherry Studio 的做法），对号留正文重算记录（`edit` 带 `input`），箭头重来（`act` 到同父），Escape 取消并恢复原草稿。铅笔是 Swipe / Reword 旁的第三键（当时在手机 Record 弹层底部、桌面右卡；#101 起在每一轮正文下面的动作行）；正文原位变 textarea，字号行高同段落、底色同改写输入框，随内容长高；Enter 分段，⌘↵ 发 `edit`（与 composer 同键），Escape 取消，没改或清空也是取消。
 - ~~**重开一局**~~：2026-10-23 已做，按树推出来：根是兄弟，一条线（ST 的一个 chat）是一个根的子树，第一节的版本列表就是线的列表。Start over 开一个新根（有开场 `greet`，没有就 `checkout(null)`，head 置空、阅读线清空等玩家第一句），旧线不动；Delete story 是 `DELETE /nodes/<根>`，页面自己的 confirm（`<dialog class="confirm">`，取消在左、红色的 Delete 在右）；日志空了而卡有开场就再 `greet`。两项在本线没有玩家回合时灰掉：空线上没有东西可留下或可删。
-- **一局 = 一棵单根树（2026-10-25）**：存档层（server `library.ts`，`/stories`）出现后，"线程"（同一棵树的第二个根）和"故事"是一件事的两个名字，玩家只看故事：Start over 与卡页上的开场都走 `POST /stories`（沿用当前 persona），Delete story 是 `DELETE /stories/<id>`，运行时的多根 log 不变，客户端只是不再造第二个根。故事、persona（新建、改、删）、写法开关（`PUT /player`，一行摘要加弹层：它们是 head 文本，改一次整个缓存前缀作废，所以不做成回合旋钮）、钉住、Timeline 与 Inspector 的入口都在阅读线旁的 session 卡上（`side.tsx`：桌面左栏，手机标题拉起同一份内容），composer 的 ⋯ 菜单退役；场景导航删除（标题是模型改写的产物，相邻相同是巧合，地图是 Timeline），`heading` 只给回合标题。`GET /stories` 每行带 `turns` 与 `last`（head 的玩家台词，或 head 正文的首句）。
+- **一局 = 一棵单根树（2026-10-25）**：存档层（`packages/server/src/library.ts`，`/stories`）出现后，"线程"（同一棵树的第二个根）和"故事"是一件事的两个名字，玩家只看故事：Start over 与卡页上的开场都走 `POST /stories`（沿用当前 persona），Delete story 是 `DELETE /stories/<id>`，运行时的多根 log 不变，客户端只是不再造第二个根。故事、persona（新建、改、删）、写法开关（`PUT /player`，一行摘要加弹层：它们是 head 文本，改一次整个缓存前缀作废，所以不做成回合旋钮）、钉住、Timeline 与 Inspector 的入口都在阅读线旁的 session 卡上（`packages/client/src/side.tsx`：桌面左栏，手机标题拉起同一份内容），composer 的 ⋯ 菜单退役；场景导航删除（标题是模型改写的产物，相邻相同是巧合，地图是 Timeline），`heading` 只给回合标题。`GET /stories` 每行带 `turns` 与 `last`（head 的玩家台词，或 head 正文的首句）。
 - **主题手动切换（2026-10-28，#70）**：`tokens.css` 的 `light-dark()` 跟随系统，`:root[data-theme]` 钉住一边；入口是 session 卡底部导航的第四枚图标（`ph/circle-half`，#77 原型定的左二右二），不在设置页。选择存 `localStorage`（`theme`），不进 Player：主题是这块屏幕和这间屋子的事，而且要在首帧之前生效，`main.tsx` 第一个 import 就是 `theme.ts`。只存"和系统相反"的那一边：翻回系统正在显示的那边就清掉，页面重新跟随系统（白天黑夜的切换照旧跟），所以不需要第三个"跟随系统"状态。手机 sheet 里同一个按钮，按下不关 sheet。
 - **Story 行只认玩家起的名（2026-10-28，#75 第一步）**：`GET /stories` 去掉 `opening` 与 `last`（同一张卡的每个 story 都从同一句 greeting 起步，未命名的行全部相同，head 的末句在 192px 里只剩一个碎片），`data.ts` 不再为列表读任何节点 JSON；`turns` 只数 head 所在那条线上（head 到根）带玩家输入的节点（`input.text != ''` 或有 `input.note`），greeting 不算一轮，swipe 出来的兄弟节点也不会重复计数，别的线不算。行是 `title ?? "New story"` 加副行 `N turns · 16 minutes ago`（零轮只给时间），服务端继续存 `null`：`title === null` 就是「没改过名」的状态，第二步的筛选要用。改名是复用 `.confirm` 样式加一个 `.field` 的 dialog，铅笔打开（不做行上双击：两次单击会开两次故事，手机上会先把 sheet 关掉），桌面和手机 sheet 同一套，Enter 保存、空白清名、Escape 不动。`.story` 加 `grid-template-columns: minmax(0, 1fr)`，长名不再把列表撑出横向滚动条。
-- **左栏按 #77 原型落地（2026-10-28）**：卡头常驻一枚进卡页的角标（20px，hover 时前倾），简介 `-webkit-line-clamp: 3`；人设、写作两行各一行加右侧 chevron，芯片缩一号（22px、caption 字号），三枚四字芯片 55px 正好排进 chevron 旁的 176px，写作超过三枚收成前两枚加「+N」，补充芯片叫「本卡补充」；底部导航纯图标左二右二（时间线、检查器 ｜ 主题、设置）。选人设从 popover 换成 `Sheet`（手机从底部升起叠在 session sheet 上，桌面居中 25rem）：搜索名字和正文、两行一条、「卡片默认」置顶带勾、底部「管理人设」去设置页；没有人设时不再 disable，弹窗里就是「卡片默认」和去新建的路。`Session` 不再需要 id 前缀（dialog 都用 ref 持有），picker 作为 `.session` 的兄弟渲染，免得 sheet 的标题吃到 `.session h2` 的小标样式。Stories 定长 4 条和「全部 N 个故事」等 #75 第二步的管理页。
+- **左栏按 #77 原型落地（2026-10-28）**：卡头常驻一枚进卡页的角标（20px，hover 时前倾），简介 `-webkit-line-clamp: 3`；人设、写作两行各一行加右侧 chevron，芯片缩一号（22px、caption 字号），三枚四字芯片 55px 正好排进 chevron 旁的 176px，写作超过三枚收成前两枚加「+N」，补充芯片叫「本卡补充」；底部导航纯图标左二右二（时间线、检查器 ｜ 主题、设置）。选人设从 popover 换成 `Sheet`（手机从底部升起叠在 session sheet 上，桌面居中 25rem）：搜索名字和正文、两行一条、「卡片默认」置顶带勾、底部「管理人设」去设置页；没有人设时不再 disable，弹窗里就是「卡片默认」和去新建的路。`Session` 自己的 dialog 都用 ref 持有，不再需要 id 前缀（`Topbar` 外层的两个 `Sheet` 仍是 `id="session"` / `id="status"`，按钮用 `commandfor` 打开），picker 作为 `.session` 的兄弟渲染，免得 sheet 的标题吃到 `.session h2` 的小标样式。Stories 定长 4 条和「全部 N 个故事」等 #75 第二步的管理页。
 - **故事管理弹窗（2026-10-28，#75 第二步）**：不是设置那种单页，是选人设弹窗的机制宽一档（`Sheet`，桌面 32rem，手机叠在 session sheet 上的第二层），从左栏四行下面的「全部 N 个故事 ›」打开（`manager.tsx`）。左栏四行是收藏置顶、其余按最近，开着的那条不在前四也占最后一行（`stories.ts` `shown`）。弹窗：头部「全部故事 · 数量 · 新建」；一行搜索加「全部 / ★ 收藏」切换；每条故事三层：勾选框、星标、名字（`当前` 标签）与改名 / 导出 / 删除三枚小图标，预览行（最后一轮输入的开头，零轮「尚未开始对话」），`N 轮 · 最后更新 xx前`；底栏常驻「快选 空档 / 未命名未收藏 / 清空」与「删除选中 N」。搜索：标题在客户端比，回合在服务端比（`GET /stories/search?q=`，`data.ts` `search`：沿每局 head 那条线用 `instr` 查玩家台词、场外指导与正文的 text 片段，每局回最早命中的那个节点的片段、轮次与命中数；FTS5 是上限），命中时预览行换成「第 N 轮 · 玩家台词 / 正文」徽标加 `<mark>`；输入停 200ms 才发请求，旧答案丢弃。为了预览，`GET /stories` 的行重新带 `last`——但只是那条线上最后一个带输入节点的 `input`（同一条递归 CTE 里取 `max(id)`，只 `json_extract` 输入，不读正文），不是第一步去掉的那种整段 JSON 子查询。`story` 表加 `starred` 列（旧库在 open 时 `alter table` 补上），`PUT /stories/<id>` 的 body 变成 `{title?, starred?}`；批量删除是 `DELETE /stories` 带 `{ids}`，一个事务，只删本卡的；删除确认是共用的一个 dialog（左栏垃圾桶、卡片垃圾桶各传一条，删除选中传勾选集合的副本），取消不丢勾选；删掉的不是当前故事时只换列表、阅读器不动（`wire.ts` `onDelete`）。导出是 `GET /stories/<id>/export.md`（head 那条线：开场白、玩家台词与场外指导的引用、正文，`export.ts`）与 `export.json`（整棵树的备份，带 format / version；导入另开 issue），两条 `download` 链接放在一个 `.confirm` 里，文件名由标题起（`content-disposition` 的 `filename*`）。卡片点开故事时弹窗关闭（手机上连同 session sheet），改名只走铅笔，不做双击。

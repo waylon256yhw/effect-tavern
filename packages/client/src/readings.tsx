@@ -566,6 +566,3 @@ export const StatusTable = () => {
     </div>
   )
 }
-
-/** The scene list: the reading line folded into runs of one title (the card's `heading`); a row scrolls to the run's
- *  first section. Nothing when the card declares no heading. */

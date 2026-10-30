@@ -6,7 +6,7 @@ import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, PinFill, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
-import { roam } from "./side.tsx"
+import { roam } from "./controls.tsx"
 import {
   acting,
   aside,

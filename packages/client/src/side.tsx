@@ -12,6 +12,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openCard } from "./card.tsx"
+import { roam } from "./controls.tsx"
 import {
   Check,
   Clue,
@@ -41,15 +42,6 @@ import { exportUrl, nameStory, putPlayer } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
 import { flip as flipLocale, locale, t } from "./i18n.ts"
 
-/** The menu's keyboard: arrows move focus among the items and wrap, Home/End jump; Escape and outside clicks are the popover's. */
-export const roam = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
-  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role^=menuitem]")]
-  const i = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
-  const d = { ArrowDown: 1, ArrowUp: -1, Home: -i, End: items.length - 1 - i }[e.key]
-  if (d === undefined) return
-  e.preventDefault()
-  items.at((i + d) % items.length)?.focus()
-}
 const closeUp = (el: HTMLElement) => {
   el.closest<HTMLElement>("[popover]")?.hidePopover()
   el.closest("dialog")?.close() // the phone's sheet: a pick is the end of the visit
