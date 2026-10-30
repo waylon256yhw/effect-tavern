@@ -1,11 +1,13 @@
-// The library behind the wire: one card's stories and the player's personas, one story open. A story is a session over
-// its rows in data.ts, with the player layer the library stores (it wins over the harness default given). A persona is
-// the player's, a sibling of the card, not a step of a story: `Player.persona[card]` names the one in force, and the
-// library reads its text into the per-card persona slot on every request (the card's default overridden by the slot
-// rules, nothing else in the card touched), so an edit of the persona is in force from the next request and a change of
-// pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). The library holds no
-// "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens that story's
-// session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
+// The library behind the wire: every card's stories and the player's personas. A story is a session over its rows in
+// data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player
+// layer the library stores (it wins over the harness default given), and the turn in flight beside it (turn.ts): a
+// turn is the story's, it runs to its end whoever listens, one at a time per story and with no lock across stories.
+// A persona is the player's, a sibling of the card, not a step of a story: `Player.persona[card]` names the one in
+// force, and the library reads its text into the per-card persona slot on every request (the card's default overridden
+// by the slot rules, nothing else in the card touched), so an edit of the persona is in force from the next request and
+// a change of pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). The
+// library holds no "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens
+// that story's session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
 // the install's: the player layer (a write reaches every open session), personas, hats, providers and routing. A hat is the player's too, named by a
 // connection (`Model.hat`) and read from the table on every request the same way: an edit is in force from the
 // next request, and a deleted hat leaves the connection bare (the id resolves to nothing).
@@ -34,11 +36,19 @@ import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
-import { makeSession, phases, type Phase, type Session, type Turn } from "@effect-tavern/runtime/src/session.ts"
+import {
+  cardView,
+  makeSession,
+  phases,
+  type Phase,
+  type Session,
+  type Turn as Logged,
+} from "@effect-tavern/runtime/src/session.ts"
 import { Effect, Schema } from "effect"
 import type { Data } from "./data.ts"
 import type { Exported } from "./export.ts"
 import { names } from "./names.ts"
+import { makeTurn, type Turn } from "./turn.ts"
 
 /** The model test asks for this many output tokens: the least a gateway accepts (CommandCode refuses `max_tokens` under
  *  16), still a fraction of a cent on any model. */
@@ -58,18 +68,22 @@ export class NoModel extends Error {
   }
 }
 
+/** Where cards come from (tavern.ts `shelf`: a directory of YAML and the library's table): every one by id and title,
+ *  and one whole by id (throws when there is none). */
+export interface Cards {
+  list(): { id: string; title: string }[]
+  get(id: string): Card
+}
+
 export const library = ({
   data,
-  card,
-  cards = [],
+  cards,
   player,
   model: env,
   pinned = false,
 }: {
   data: Data
-  card: Card
-  /** The cards besides the library's own: the TS template modules, by id and title. */
-  cards?: readonly { id: string; title?: string }[]
+  cards: Cards
   player: Player
   model?: (phase: Phase) => Model
   pinned?: boolean
@@ -190,71 +204,92 @@ export const library = ({
     },
     write: data.player.write,
   }
-  const persona = (p: Player) => {
-    const id = p.persona?.[card.id]
+  /** The persona in force on `card`, read per request. */
+  const persona = (card: string) => (p: Player) => {
+    const id = p.persona?.[card]
     return id === undefined ? undefined : data.personas.list().find((x) => x.id === id)?.text
   }
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
-  const sessions = new Map<Id, Session>()
-  const exists = (id: Id) => data.stories.list(card.id, id).length > 0 // one story's line, not the card's
-  /** The most recently updated story, or a new one when the card has none. */
-  const newest = () => data.stories.list(card.id)[0]?.id ?? data.stories.create(card.id)
-  /** A story's session, opened on its first request and the same one for every request that names it after. */
-  const session = (id: Id = newest()): Session => {
-    let s = sessions.get(id)
-    if (s) return s
-    if (!exists(id)) throw new Error(`no story ${id}`)
-    s = makeSession({ card, player, model, store: data.store<Turn>(id), players, persona, hat, policy })
-    sessions.set(id, s)
-    return s
+  const sessions = new Map<Id, { session: Session; turn: Turn }>()
+  const row = (id: Id) => data.stories.list(undefined, id)[0] // one story's line, not the card's
+  const exists = (id: Id) => row(id) !== undefined
+  /** A story's session and its turn, opened on its first request on the story's card, the same ones after. */
+  const open = (id: Id) => {
+    const had = sessions.get(id)
+    if (had) return had
+    const r = row(id)
+    if (!r) throw new Error(`no story ${id}`)
+    const card = cards.get(r.card)
+    const store = data.store<Logged>(id)
+    const session = makeSession({ card, player, model, store, players, persona: persona(card.id), hat, policy })
+    const opened = { session, turn: makeTurn(session, (node, calls) => data.calls(id).add(node, calls)) }
+    sessions.set(id, opened)
+    return opened
   }
+  const session = (id: Id): Session => open(id).session
   /** The player layer is the install's, one for every story: a write reaches every open session. */
   const setPlayer = (p: Player) => {
     data.player.write(p)
-    for (const s of sessions.values()) s.setPlayer(p)
+    for (const s of sessions.values()) s.session.setPlayer(p)
   }
+  const layer = () => players.read() ?? player
   return {
     /** The model a stage runs on and the fold policy, as every session reads them on its next request. */
     model,
     policy,
     session,
+    /** A story's turn in flight (turn.ts), beside its session. */
+    turn: (id: Id): Turn => open(id).turn,
     exists,
-    newest,
+    /** The card a story is of. */
+    cardOf: (id: Id): string | undefined => row(id)?.card,
     get player(): Player {
-      return players.read() ?? player
+      return layer()
     },
     setPlayer,
     calls: (id: Id) => data.calls(id),
     stories: {
-      /** A row: the player's title or none (the client prints "New story"), the star, the turns and the last one's
-       *  input, the time. A card's stories all open on the same greeting, so no line of the text tells them apart:
-       *  a name the player gave does, and the last line they wrote recalls where the story stands. */
-      list: () => data.stories.list(card.id),
+      /** A row: its card, the player's title or none (the client prints "New story"), the star, the turns and the last
+       *  one's input, the time, and `busy`: the phase of a turn in flight, or null. A card's stories all open on the
+       *  same greeting, so no line of the text tells them apart: a name the player gave does, and the last line they
+       *  wrote recalls where the story stands. Every card's when `card` is absent. */
+      list: (card?: string) =>
+        data.stories.list(card).map((s) => ({ ...s, busy: sessions.get(s.id)?.turn.busy ?? null })),
       /** Named by the player, or the name cleared (empty or blank): null, the state "never named". */
       title: (id: Id, title: string | null) => data.stories.title(id, title?.trim() || null),
       /** Starred: the left card and the manager put it first. */
       star: (id: Id, starred: boolean) => data.stories.star(id, starred),
-      create: (): Id => data.stories.create(card.id),
+      /** A new, empty story of `card`; throws when there is no such card. */
+      create: (card: string): Id => data.stories.create(cards.get(card).id),
+      // ponytail: a story deleted under a turn in flight leaves that turn to fail on its own writes; refuse or stop
+      // first if a client ever deletes the story it is playing
       del: (id: Id) => {
         if (!exists(id)) throw new Error(`no story ${id}`)
         data.stories.del(id)
         sessions.delete(id)
       },
-      /** The batch cleanup: the card's own among `ids` go, in one transaction, their sessions with them; another
-       *  card's or a stranger's id is left alone. */
-      delMany: (ids: readonly Id[]) => {
-        for (const id of data.stories.delMany(card.id, ids)) sessions.delete(id)
+      /** The batch cleanup: the card's own among `ids` go (any card's when it is absent), in one transaction, their
+       *  sessions with them; another card's or a stranger's id is left alone. */
+      delMany: (ids: readonly Id[], card?: string) => {
+        for (const id of data.stories.delMany(card, ids)) sessions.delete(id)
       },
-      /** This card's stories that hold `q` on their head's line (data.ts `Hit`). The title is the client's to match. */
-      search: (q: string) => data.stories.search(card.id, q),
-      /** One story whole for export.ts: its row, the card it is of, and its log tree; none when it is not this
-       *  card's. */
+      /** The stories (a card's, or every card's) that hold `q` on their head's line (data.ts `Hit`). The title is the
+       *  client's to match. */
+      search: (q: string, card?: string) => data.stories.search(card, q),
+      /** One story whole for export.ts: its row, the card it is of, and its log tree; none when there is no story. */
       export: (id: Id): Exported | undefined => {
-        const story = data.stories.list(card.id, id)[0]
+        const story = row(id)
         if (!story) return undefined
-        return { card: { id: card.id, title: card.title ?? card.id }, story, snapshot: data.store<Turn>(id).read()! }
+        const card = cards.list().find((c) => c.id === story.card) ?? { id: story.card, title: story.card }
+        return { card, story, snapshot: data.store<Logged>(id).read()! }
       },
+    },
+    /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player layer in force;
+     *  throws on no card. */
+    view: (card: string) => {
+      const { meta, ...rest } = cardView(cards.get(card), layer())
+      return { ...meta, ...rest }
     },
     hats: data.hats,
     /** The vault as the wire lists it: never a value (that is `value`, one key on request). A provider naming a deleted secret has no key. */
@@ -345,17 +380,14 @@ export const library = ({
     routing: { read: routing, write: data.routing.write },
     /** The model-name table in force (names.ts). */
     names: () => names(data),
-    /** Every card the install knows, by id and title: the open one, the templates, the library's table; first id wins. */
-    cards: () =>
-      [card, ...cards, ...data.cards()]
-        .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
-        .map((c) => ({ id: c.id, title: c.title ?? c.id })),
+    /** Every card the install knows, by id and title (`Cards`). */
+    cards: () => cards.list(),
     personas: {
       ...data.personas,
       /** Gone from the table, and from every card it was picked on: the card's own persona is back in force there. */
       del: (id: string) => {
         data.personas.del(id)
-        const p = players.read() ?? player
+        const p = layer()
         if (p.persona && Object.values(p.persona).includes(id)) {
           const rest = Object.fromEntries(Object.entries(p.persona).filter(([, v]) => v !== id))
           setPlayer({ ...p, persona: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key

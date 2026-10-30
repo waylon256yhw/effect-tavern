@@ -1,22 +1,31 @@
 // The wire adapter at the session's seam: one process, a session per story, no logic of its own. A request names its
-// story in `x-tavern-story` (the client's `stories.current`); without the header it is on the most recently updated
-// story, and a header naming no story is a 404 on every story route (/card, /nodes, /calls, POST /). The rest
-// (/player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story.
-//   POST /      an Action (src/session.ts `Action`, decoded at this boundary) → the events it causes, as SSE, one
-//                 `event:` per kind; a failure is an `error` event {message, code?} (code "no-model": no routing pair
-//                 and no environment model, library.ts `NoModel`). Closing the response is the stop: before the first
-//                 character of a draft it interrupts the action (nothing is saved, the model request aborts); once a
-//                 delta was sent it halts the prose where it is and the turn finishes into a `stopped` node.
+// story in `x-tavern-story` (the client's `stories.current`); a story route (/card, /nodes, /calls, /turn, /stop,
+// POST /, DELETE /nodes/<id>) without the header, or with one naming no story, is a 404. The rest (/stories, /cards,
+// /player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
+// one turn at a time (turn.ts): an action on a story whose turn is in flight, a synchronous one too (greet, checkout,
+// setField, a node dropped), is a 409 {error, code: "busy"}; stories run side by side, with no lock across them.
+//   POST /      an Action (src/session.ts `Action`, decoded at this boundary) starts the story's turn and answers its
+//                 events as SSE, one `event:` per kind; a failure is an `error` event {message, code?} (code "no-model":
+//                 no routing pair and no environment model, library.ts `NoModel`). The turn is the story's, not the
+//                 response's: closing the response stops nothing, the turn lands whoever listens.
+//   GET  /turn    the turn in flight, to a client that comes back to the story: 204 when idle; else SSE, one `attach`
+//                 event {phase, draft: {parent, input, text, prev?} | null} then the live events (no replay). A turn
+//                 that failed with nobody listening answers once: `attach` with its draft, then its `error`, and ends.
+//   POST /stop    the player's stop {stopped: "withdrawn" | "halted" | null}: before the first character the action is
+//                 interrupted and nothing is saved (its stream ends, nothing more), after it the prose halts and the
+//                 turn finishes a `stopped` node down the same streams; null when nothing ran.
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories this card's stories (id, title or null, starred, turns: the nodes with a player line or note, so a
-//                 greeting is none, last: the last turn's input or null, updated), newest first, and `current`: the
-//                 story the client is to be on (the one it named while that one is there, else the newest).
-//                 POST /stories makes a new one and answers it as `current`, PUT /stories/<id> answers that one (404
+//   GET  /stories every card's stories (id, card, title or null, starred, turns: the nodes with a player line or note,
+//                 so a greeting is none, last: the last turn's input or null, updated, busy: the phase of a turn in
+//                 flight or null), newest first, and `current`: the story the client is to be on (the one it named
+//                 while that one is there, else the newest, null on an empty library).
+//                 POST /stories {card} makes a new one of that card (400 when there is none) and answers it as
+//                 `current`, PUT /stories/<id> answers that one (404
 //                 when there is none), with a body {title?: string | null, starred?: boolean} names or stars it
 //                 instead (blank = null, `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
-//                 {ids: number[]} removes those of this card's among them in one go. Every one answers the listing.
+//                 {ids: number[]} removes those among them in one go. Every one answers the listing.
 //                 The server opens nothing: the client adopts `current`, sends it from then on, re-reads /nodes, and
 //                 the trace starts over. GET /stories/search?q=… is the manager's search: the stories whose head's
 //                 line holds q in a player line, a note or the prose, each as {id, turn, kind, text, count} (data.ts
@@ -49,26 +58,29 @@
 //   GET  /routing which (provider, model) runs each stage: {default?, stages?}; PUT /routing replaces it (in force
 //                 from the next request).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
-//   GET  /calls   the open story's `call` events by node id: the inspector's trace. They evaporate with the SSE (a
-//                 stop closes it before record's call), so the adapter files them in the library under the node they
-//                 made once it lands; they go with the node, and only a story's last 200 nodes keep theirs.
-//   GET  /cards   every card the install knows, as {id, title}: the open one, the template modules, the library's table.
-//   GET  /card    what a client draws the card by: id, title and summary, the default channel, the rules as data (field
-//                 bounds, options, action ids), the openings whole, the products' shapes, the quick inputs (snippets),
-//                 the format keys, the fiction's modules without their text, the guard and lore as counts, and what
-//                 the card's text costs each turn, estimated.
+//   GET  /calls   the story's `call` events by node id: the inspector's trace. The turn files them in the library
+//                 under the node they made once it lands (turn.ts), whoever listened; they go with the node, and only
+//                 a story's last 200 nodes keep theirs.
+//   GET  /cards   every card the install knows, as {id, title}: the card files, then the library's table (tavern.ts
+//                 `shelf`). GET /cards/<id> is what a client draws that card by (404 when there is none), before any
+//                 story of it exists: id, title and summary, the default channel, the rules as data (field bounds,
+//                 options, action ids), the openings whole, the declared products' shapes, the quick inputs
+//                 (snippets), the format keys, the fiction's modules without their text, the guard and lore as counts,
+//                 and what the card's text costs each turn, estimated (session.ts `cardView`).
 //                 Fragment bodies, guard lines and lore never leave the server.
-// `inspect` keeps the request messages on `call` events; they carry the card's fragment bodies, so a player client
-// gets phase, answer and usage only.
+//   GET  /card    the same for the story's own card.
+// `inspect` keeps the request messages on `call` events (the stream and /calls); they carry the card's fragment
+// bodies, so a player client gets phase, answer and usage only.
 import { Provider, Secret } from "@effect-tavern/provider"
 import { decodePlayer, Hat } from "@effect-tavern/runtime/src/fragment.ts"
-import { decodeAction, perform, type Event } from "@effect-tavern/runtime/src/session.ts"
-import { Cause, Deferred, Effect, Fiber, Schema, Stream, Struct } from "effect"
+import { decodeAction, type Event } from "@effect-tavern/runtime/src/session.ts"
+import { Cause, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { extname, join, resolve, sep } from "node:path"
 import { backup, disposition, markdown } from "./export.ts"
 import { NoModel, Routing, type Library } from "./library.ts"
+import type { Out } from "./turn.ts"
 
 const body = (req: IncomingMessage, limit = 1 << 20) =>
   new Promise<string>((resolve, reject) => {
@@ -92,7 +104,6 @@ const failure = (c: Cause.Cause<unknown>): { message: string; code?: string } =>
   return { message: e instanceof Error ? e.message : String(e) }
 }
 
-export type Call = Extract<Event, { kind: "call" }>
 // The body besides Action and Player, decoded here like them.
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
@@ -116,6 +127,7 @@ const StoryBody = Schema.decodeUnknownSync(
   }),
 )
 const IdsBody = Schema.decodeUnknownSync(Schema.Struct({ ids: Schema.Array(Schema.Number) }))
+const NewStory = Schema.decodeUnknownSync(Schema.Struct({ card: Schema.String }))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
@@ -138,13 +150,16 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     }
     const named = req.headers["x-tavern-story"]
     const asked = typeof named === "string" && named !== "" ? Number(named) : undefined
-    /** The listing, with the story the client is to be on: the one it named while that one is still there. */
-    const stories = (current = asked !== undefined && lib.exists(asked) ? asked : lib.newest()) => ({
-      current,
-      stories: lib.stories.list(),
-    })
+    /** The listing, with the story the client is to be on: the one it named while that one is still there, else the
+     *  newest, none on an empty library. */
+    const stories = (current?: number) => {
+      const rows = lib.stories.list()
+      const named = current ?? (asked !== undefined && lib.exists(asked) ? asked : undefined)
+      return { current: named ?? rows[0]?.id ?? null, stories: rows }
+    }
     if (req.method === "GET" && req.url === "/stories") return json(200, stories())
-    if (req.method === "POST" && req.url === "/stories") return json(200, stories(lib.stories.create()))
+    if (req.method === "POST" && req.url === "/stories")
+      return reply(async () => stories(lib.stories.create((await read(NewStory)).card)))
     if (req.method === "DELETE" && req.url === "/stories")
       return reply(async () => (lib.stories.delMany((await read(IdsBody)).ids), stories()))
     const searching = req.method === "GET" && /^\/stories\/search(?:\?(.*))?$/.exec(req.url ?? "")
@@ -240,63 +255,63 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (req.method === "PUT" && req.url === "/player")
       return reply(async () => (lib.setPlayer(await read(decodePlayer)), lib.player))
     if (req.method === "GET" && req.url === "/cards") return json(200, lib.cards())
-    // Everything below is one story's: the one the request names, or the most recently updated when it names none.
-    const story = asked ?? lib.newest()
-    if (!lib.exists(story)) return json(404, { error: `no story ${story}` })
+    const cardAt = req.method === "GET" && /^\/cards\/([^/]+)$/.exec(req.url ?? "")
+    if (cardAt) return reply(() => lib.view(decodeURIComponent(cardAt[1]!)), 404)
+    // Everything below is one story's: the one the request names.
+    if (asked === undefined || !lib.exists(asked)) return json(404, { error: `no story ${asked ?? ""}`.trim() })
+    const story = asked
     const s = lib.session(story)
-    if (req.method === "GET" && req.url === "/card")
-      return json(200, {
-        ...s.meta,
-        greetings: s.greetings,
-        fiction: s.fiction,
-        rules: s.rules,
-        products: s.products,
-        snippets: s.snippets,
-        format: s.format,
-      })
+    const turn = lib.turn(story)
+    if (req.method === "GET" && req.url === "/card") return json(200, lib.view(lib.cardOf(story)!))
     if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
+    if (req.method === "GET" && req.url === "/calls")
+      return json(
+        200,
+        Object.fromEntries(
+          Object.entries(lib.calls(story).list()).map(([id, cs]) => [id, cs.map((c) => shown(c as Event))]),
+        ),
+      )
+    if (req.method === "POST" && req.url === "/stop") return json(200, { stopped: turn.stop() })
+    /** Streams `events` as SSE, after `first` when given; the response's close unsubscribes, nothing more. */
+    const stream = (events: Stream.Stream<Out>, first?: [string, unknown]) => {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" })
+      let closed = false
+      const send = (name: string, v: unknown) => {
+        if (!closed) res.write(`event: ${name}\ndata: ${JSON.stringify(v)}\n\n`)
+      }
+      if (first) send(...first)
+      const fiber = Effect.runFork(
+        Stream.runForEach(events, (e) =>
+          Effect.sync(() => (e.kind === "error" ? send("error", failure(e.cause)) : send(e.kind, shown(e)))),
+        ).pipe(Effect.ensuring(Effect.sync(() => void (closed || res.end())))),
+      )
+      // `req` "close" means the request body was consumed (Node ≥ 16), not that the client went away; the response's does.
+      res.on("close", () => {
+        if (res.writableFinished) return
+        closed = true
+        Effect.runFork(Fiber.interrupt(fiber))
+      })
+    }
+    if (req.method === "GET" && req.url === "/turn") {
+      const at = turn.attach()
+      if (!at) {
+        res.writeHead(204)
+        return void res.end()
+      }
+      return stream(at.events, ["attach", { phase: at.phase, draft: at.draft }])
+    }
     const dropping = req.method === "DELETE" && /^\/nodes\/(\d+)$/.exec(req.url ?? "")
-    if (dropping) return reply(() => s.drop(Number(dropping[1])), 404) // the dropped nodes' calls went with them
-    if (req.method === "GET" && req.url === "/calls") return json(200, lib.calls(story).list())
-    if (req.method !== "POST" || req.url !== "/") return json(404, { error: "not found" })
+    if (!dropping && (req.method !== "POST" || req.url !== "/")) return json(404, { error: "not found" })
+    const busy = () => json(409, { error: `story ${story} is busy: ${turn.busy}`, code: "busy" })
+    if (dropping) return turn.busy ? busy() : reply(() => s.drop(Number(dropping[1])), 404) // its nodes' calls go with them
     let action
     try {
       action = await read(decodeAction)
     } catch (e) {
       return bad(e)
     }
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" })
-    let closed = false
-    let narrating = false
-    const send = (name: string, v: unknown) => {
-      if (!closed) res.write(`event: ${name}\ndata: ${JSON.stringify(v)}\n\n`)
-    }
-    const made: Call[] = [] // this action's calls, filed under its node once the node exists (an amend appends)
-    const trace = lib.calls(story)
-    const stop = Effect.runSync(Deferred.make<void>())
-    const fiber = Effect.runFork(
-      Stream.runForEach(perform(s, action, Deferred.await(stop)), (e) =>
-        Effect.sync(() => {
-          // Once a character has streamed, every close stops the turn: a stop before the correction rewrite's (or the
-          // prefill continuation's) first character keeps the first draft, `stopped`, as the client expects (#58).
-          if (e.kind === "delta" && e.part.type === "text-delta") narrating = true // reasoning is not prose: the client counts the same
-          const v = shown(e)
-          if (v.kind === "call") made.push(v)
-          if (v.kind === "change" && v.node) trace.add(v.node.id, made.splice(0))
-          send(e.kind, v)
-        }),
-      ).pipe(
-        Effect.catchCause((c) => Effect.sync(() => send("error", failure(c)))),
-        Effect.ensuring(Effect.sync(() => void (closed || res.end()))),
-      ),
-    )
-    // `req` "close" means the request body was consumed (Node ≥ 16), not that the client went away; the response's does.
-    res.on("close", () => {
-      if (res.writableFinished) return
-      closed = true
-      if (narrating) Effect.runSync(Deferred.succeed(stop, undefined))
-      else Effect.runFork(Fiber.interrupt(fiber))
-    })
+    if (turn.busy) return busy()
+    stream(turn.start(action))
   }
 }
 export const serve = (lib: Library, opts?: { inspect?: boolean }) => createServer(handle(lib, opts))

@@ -19,7 +19,15 @@ const turn = (id: number, parent: number | null, input: Turn["input"], reply: Tu
   violated: [],
   products: {},
 })
-const story = { id: 7, title: "竹林夜话", starred: true, updated: 1700000000000, turns: 2, last: { text: "x" } }
+const story = {
+  id: 7,
+  card: "wuxia",
+  title: "竹林夜话",
+  starred: true,
+  updated: 1700000000000,
+  turns: 2,
+  last: { text: "x" },
+}
 const x: Exported = {
   card: { id: "wuxia", title: "竹林" },
   story,

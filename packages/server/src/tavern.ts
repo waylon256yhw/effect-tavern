@@ -1,9 +1,27 @@
-// A tavern from an open library store, a card and a model: the library over them, seeded on a first run when given a
-// key, greeted when asked, behind the HTTP handler. The environment is the caller's: dev.ts reads it (CARD, DATA,
-// MODEL, HAT, GREETING, the local key) and opens the store; a test passes `open(":memory:")`.
+// A tavern from an open library store, the cards and a model: the library over them, seeded on a first run when given a
+// key, behind the HTTP handler. No card is bound: a story names its own (library.ts). The environment is the caller's:
+// dev.ts reads it (CARDS, DATA, MODEL, HAT, the local key), loads the card files and opens the store; a test passes
+// `open(":memory:")` and a shelf of its own.
+import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
 import type { Data } from "./data.ts"
-import { library } from "./library.ts"
+import { library, type Cards } from "./library.ts"
 import { handle } from "./serve.ts"
+
+/** The cards an install knows: `files` (a directory of YAML, dev.ts) first, then the library's `card` table; the first
+ *  id wins. A table card is decoded when a story of it opens. */
+export const shelf = (files: readonly Card[], data: Data): Cards => ({
+  list: () =>
+    [...files, ...data.cards.list()]
+      .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
+      .map((c) => ({ id: c.id, title: c.title ?? c.id })),
+  get: (id) => {
+    const file = files.find((c) => c.id === id)
+    if (file) return file
+    const json = data.cards.get(id)
+    if (json === undefined) throw new Error(`no card ${id}`)
+    return decodeCard({ ...(json as object), id })
+  },
+})
 
 /** First run on a developer machine: the key becomes the vault's one secret and the library's one provider, its
  *  Haiku the default, so the settings page opens on what the dev loop already ran on. Only on an empty install: once
@@ -28,22 +46,15 @@ export const seed = (data: Data, key: string) => {
 
 export const tavern = ({
   seed: seeded,
-  greeting,
   inspect = false,
   ...o
 }: Parameters<typeof library>[0] & {
   /** Seed an empty install with this key (`seed`). */
   seed?: { key: string }
-  /** An empty story opens on this greeting of the card (a root); none = the player picks one on the card page. */
-  greeting?: number
   /** Keep the request messages on `call` events (serve.ts `handle`). */
   inspect?: boolean
 }) => {
   if (seeded) seed(o.data, seeded.key)
   const lib = library(o)
-  if (greeting !== undefined && lib.session().log.nodes.size === 0) {
-    const g = o.card.greetings[greeting]
-    if (g) lib.session().greet(g)
-  }
   return { data: o.data, lib, handler: handle(lib, { inspect }) }
 }

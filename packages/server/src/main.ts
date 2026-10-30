@@ -1,4 +1,4 @@
-// `PORT=7777 CARD=wuxia MODEL=fake bun src/main.ts`: the whole tavern on one port, what a phone runs. The developer's
+// `PORT=7777 MODEL=fake bun src/main.ts`: the whole tavern on one port, what a phone runs. The developer's
 // session (dev.ts) under /api, and the client build (`vp build` in packages/client) under everything else; `vp dev`
 // mounts the same handler at /api itself and serves the client from source.
 import { createServer } from "node:http"
