@@ -6,10 +6,16 @@
 // one of two by what its number means (runtime card.ts `drawn`, shared with `card check`): a gauge is a stock filled
 // from min (hp 0..100), a scale is a point on an axis the card's fiction splits into stages (好感度 -30..100 with six
 // bands); the cuts come from the bands' `when`, and the card's `view` overrides the guess.
+// Beside the readings, the rest of what the chrome reads off a node, each its own pure function over the log, the card
+// view or the node (review/architecture-review-2026-10-30.html card 4: one module, no eager node object): the field
+// rows alone and the two dots' yes/no (`fields`, `fieldChanged`, `marked`), the input line and its channel, the parent,
+// the versions, the scene.
 import { drawn, type Check, type Field, type Rules, type State } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
+import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
+import type { CardView } from "./store.ts"
 
 export type Element =
   | { kind: "steps"; path: string; label: string; options: readonly string[]; was: number; now: number } // enum: indexes into options
@@ -63,6 +69,48 @@ export const reading = (
   return { kind: "value", path: f.path, label, was, now }
 }
 
+/** The conditions a meter's stages come from: the fiction variants' `when` (`reading`'s cuts). */
+export const whens = (view: Pick<CardView, "fiction"> | null | undefined) => view?.fiction.map((f) => f.when) ?? []
+
+const before = (rules: Rules, prev: Node | undefined): State =>
+  prev?.state ?? Object.fromEntries(rules.fields.map((f) => [f.path, f.initial]))
+
+/** The Record's field-change rows alone: every shown field whose value differs from the parent's (from the initial
+ *  values at a root). */
+export const fields = (
+  rules: Rules,
+  node: Node,
+  prev: Node | undefined,
+  whens: readonly (Cond | undefined)[] = [],
+): Element[] => {
+  const was = before(rules, prev)
+  return rules.fields
+    .filter((f) => !f.hidden && was[f.path] !== node.state[f.path])
+    .map((f) => reading(f, was[f.path]!, node.state[f.path]!, whens))
+}
+
+/** Did this turn change a shown field: the Status button's dot. */
+export const fieldChanged = (rules: Rules | undefined, node: Node, prev: Node | undefined): boolean => {
+  if (rules === undefined) return false
+  const was = before(rules, prev)
+  return rules.fields.some((f) => !f.hidden && was[f.path] !== node.state[f.path])
+}
+
+/** Does the Record hold anything but notes (a field change, a check, a clue, a pin, a declared product): the Record
+ *  pill's dot. Notes alone light nothing: every turn has them. */
+export const marked = (
+  rules: Rules | undefined,
+  node: Node,
+  prev: Node | undefined,
+  products: readonly Declared[] = [],
+): boolean =>
+  rules !== undefined &&
+  (fieldChanged(rules, node, prev) ||
+    node.checks.length > 0 ||
+    node.delivered.length > 0 ||
+    node.turn.input.pin !== undefined ||
+    products.some((p) => p.id !== "notes" && p.id !== "options" && node.turn.products[p.id] !== undefined))
+
 /** What the card view says of a product: its id, shown name and shape (store.ts CardView). */
 export type Declared = { id: string; label?: string; shape: Shape }
 export const record = (
@@ -72,14 +120,7 @@ export const record = (
   products: readonly Declared[] = [],
   whens: readonly (Cond | undefined)[] = [],
 ): Element[] => {
-  const before: State = prev?.state ?? Object.fromEntries(rules.fields.map((f) => [f.path, f.initial]))
-  const out: Element[] = []
-  for (const f of rules.fields) {
-    if (f.hidden) continue
-    const was = before[f.path]!
-    const now = node.state[f.path]!
-    if (was !== now) out.push(reading(f, was, now, whens))
-  }
+  const out: Element[] = fields(rules, node, prev, whens)
   for (const check of node.checks) out.push({ kind: "check", check })
   const untold = new Set(node.readable.map((r) => r.id))
   for (const d of node.delivered) out.push({ kind: "clue", id: d.id, text: d.text, pinnable: untold.has(d.id) })
@@ -125,4 +166,35 @@ export const heading = (ref: string | undefined, node: Node): string | undefined
   const [id, key] = ref.split(".")
   const w = (node.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
   return typeof w === "string" && w ? w : undefined
+}
+
+/** The player's line on a turn: the act's text, else the note; a greeting has none. */
+export const lineOf = (node: Node): string => node.turn.input.text || node.turn.input.note || ""
+
+/** Which channel a turn's input took (GLOSSARY §二 channel): an act, a note, both, or neither (the greeting). */
+export const channelOf = (node: Node): "act" | "note" | "both" | "greeting" => {
+  const { text, note } = node.turn.input
+  return text && note ? "both" : text ? "act" : note ? "note" : "greeting"
+}
+
+/** A node's parent in the log; a root has none. */
+export const parentOf = (log: L.Log<Node>, node: Node): Node | undefined =>
+  node.parent === null ? undefined : log.nodes.get(node.parent)
+
+/** A turn's versions: its parent's children in id order, where it stands among them, and whether they differ in the
+ *  player's input (then a version is told apart by its line, otherwise by its prose). */
+export const versions = (log: L.Log<Node>, node: Node): { list: Node[]; index: number; varied: boolean } => {
+  const list = L.children(log, node.parent)
+  return {
+    list,
+    index: list.findIndex((s) => s.id === node.id),
+    varied: new Set(list.map((v) => `${v.turn.input.text}\n${v.turn.input.note}`)).size > 1,
+  }
+}
+
+/** A turn's scene: its heading where it differs from its parent's (the first turn under a new title); else none. */
+export const sceneOf = (ref: string | undefined, log: L.Log<Node>, node: Node): string | undefined => {
+  const h = heading(ref, node)
+  const p = parentOf(log, node)
+  return h !== undefined && (!p || heading(ref, p) !== h) ? h : undefined
 }

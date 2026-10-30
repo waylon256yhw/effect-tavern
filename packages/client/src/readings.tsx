@@ -8,27 +8,28 @@ import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
-import { heading, record, status, type Declared, type Element } from "./record.ts"
-import {
-  card,
-  dismiss,
-  draft,
-  editing,
-  error,
-  type Id,
-  latest,
-  log,
-  pin,
-  registry,
-  working,
-  type CardView,
-} from "./store.ts"
+import { heading, marked, parentOf, record, status, whens, type Declared, type Element } from "./record.ts"
+import { card, dismiss, draft, editing, error, type Id, latest, log, pin, registry, working } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
-/** The conditions a meter's stages come from: the fiction variants' `when` (src/record.ts `cuts`). */
-export const whens = (view: CardView | null | undefined) => view?.fiction.map((f) => f.when) ?? []
+
+/** Which sibling action made a version (GLOSSARY §二 swipe / reword / edit), as its icon; a plain act draws the
+ *  fallback (nothing unless given). The reader's version list and the Timeline draw with it. */
+export const SiblingKind = (props: { of: Node["turn"]["sibling"]; class?: string; fallback?: JSX.Element }) => (
+  <Switch fallback={props.fallback}>
+    <Match when={props.of === "swipe"}>
+      <Swipe class={props.class} aria-label={t("common.swipe")} />
+    </Match>
+    <Match when={props.of === "reword"}>
+      <Reword class={props.class} aria-label={t("common.reword")} />
+    </Match>
+    <Match when={props.of === "edit"}>
+      <Edit class={props.class} aria-label={t("common.edit")} />
+    </Match>
+  </Switch>
+)
 
 /** Arms (or disarms) an untold entry as the next act's pin. */
 export const PinButton = (props: { id: string }) => {
@@ -504,18 +505,12 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
   const all = read(log)
   const view = read(card)
   let dlg!: HTMLDialogElement
-  const prev = () => (props.node.parent === null ? undefined : all().nodes.get(props.node.parent))
-  // the pill's dot: this turn changed a field, judged a beat, told a clue or holds a product (notes alone light
-  // nothing: every turn has them)
-  const marked = () => {
-    const r = view()?.rules
-    return r !== undefined && record(r, props.node, prev(), view()?.products).some((e) => e.kind !== "notes")
-  }
+  const prev = () => parentOf(all(), props.node)
   return (
     <>
       <button class="record-pill" aria-label={t("common.record")} onClick={() => dlg.showModal()}>
         <Record aria-hidden="true" />
-        <Show when={marked()}>
+        <Show when={marked(view()?.rules, props.node, prev(), view()?.products)}>
           <i class="dot" />
         </Show>
       </button>

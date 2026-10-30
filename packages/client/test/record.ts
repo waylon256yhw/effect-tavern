@@ -3,7 +3,23 @@
 // heading under a field path or a product key.
 import assert from "node:assert/strict"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
-import { heading, reading, record, status, type Element } from "../src/record.ts"
+import * as L from "@effect-tavern/runtime/src/log.ts"
+import {
+  channelOf,
+  fieldChanged,
+  fields,
+  heading,
+  lineOf,
+  marked,
+  parentOf,
+  reading,
+  record,
+  sceneOf,
+  status,
+  versions,
+  whens,
+  type Element,
+} from "../src/record.ts"
 
 const rules = {
   fields: [
@@ -120,4 +136,84 @@ assert.equal(
   false,
 )
 assert.equal(meter({ min: 0, max: 100, view: "scale" }).scale, true)
+
+// The projection of a node for the chrome, over a fixture log: a greeting root (1), an act under it (2) with two
+// siblings (3: swipe, same line; 4: edit, another line), a note turn (5) and a turn with both channels (6) under 2
+const n = (id: number, parent: number | null, input: object, extra: object = {}, sibling?: string) =>
+  ({
+    id,
+    parent,
+    ...node(
+      { hp: 40, foe: 30, mood: "low" },
+      { turn: { id, parent, input, fired: [], products: {}, ...(sibling && { sibling }) }, ...extra },
+    ),
+  }) as any
+const g = n(
+  1,
+  null,
+  { text: "" },
+  { turn: { id: 1, input: { text: "" }, fired: [], products: { scene: { place: "亭" } } } },
+)
+const a = n(2, 1, { text: "go" }, { state: { hp: 30, foe: 30, mood: "low" } })
+const s = n(3, 1, { text: "go" }, {}, "swipe")
+const e = n(4, 1, { text: "stay" }, {}, "edit")
+const o = n(5, 2, { text: "", note: "slower" })
+const b = n(6, 2, { text: "go", note: "slower" })
+const log = L.of({ nodes: [g, a, s, e, o, b], head: 6 })
+// whens: the fiction's conditions in order, none without a view
+assert.deepEqual(whens({ fiction: [{ id: "a", when: { path: "hp", op: "lt", value: 3 } }, { id: "b" }] }), [
+  { path: "hp", op: "lt", value: 3 },
+  undefined,
+])
+assert.deepEqual(whens(null), [])
+// fields: only the changed rows, the same ones record() opens with; fieldChanged / marked are the yes/no of each
+assert.deepEqual(fields(rules, a, g), [
+  { kind: "meter", path: "hp", label: "体力", min: 0, max: 100, was: 40, now: 30, cuts: [], scale: false },
+])
+assert.deepEqual(fields(rules, s, g), [])
+assert.equal(fieldChanged(rules, a, g), true)
+assert.equal(fieldChanged(rules, s, g), false)
+assert.equal(fieldChanged(undefined, a, g), false)
+assert.equal(marked(rules, a, g), true) // a field
+assert.equal(marked(undefined, a, g), false) // no rules, no dot
+assert.equal(marked(rules, s, g), false)
+assert.equal(marked(rules, node(s.state, { turn: { input: {}, fired: [], products: { notes: ["n"] } } }), g), false) // notes alone
+assert.equal(marked(rules, node(s.state, { checks: [{ action: "x", chance: 1, roll: 0, hit: true }] }), g), true)
+assert.equal(marked(rules, node(s.state, { delivered: [{ id: "li", layer: 1, text: "c" }] }), g), true)
+assert.equal(marked(rules, node(s.state, { turn: { input: { pin: "li" }, fired: [], products: {} } }), g), true)
+const scened = node(s.state, { turn: { input: {}, fired: [], products: { options: ["o"], scene: { place: "亭" } } } })
+assert.equal(marked(rules, scened, g, declared), true) // a declared product
+assert.equal(marked(rules, scened, g), false) // undeclared: not drawn, no dot
+assert.equal(
+  marked(rules, node(s.state, { turn: { input: {}, fired: [], products: { options: ["o"] } } }), g, declared),
+  false,
+)
+// the yes/no agree with record() over the same nodes
+for (const x of [a, s, scened]) {
+  assert.equal(
+    fieldChanged(rules, x, g),
+    record(rules, x, g).some((el) => "path" in el),
+  )
+  assert.equal(
+    marked(rules, x, g, declared),
+    record(rules, x, g, declared).some((el) => el.kind !== "notes"),
+  )
+}
+// the input line and its channel
+assert.deepEqual([g, a, o, b].map(lineOf), ["", "go", "slower", "go"])
+assert.deepEqual([g, a, o, b].map(channelOf), ["greeting", "act", "note", "both"])
+// parent, versions, scene
+assert.equal(parentOf(log, g), undefined)
+assert.equal(parentOf(log, a), g)
+assert.deepEqual(versions(log, s), { list: [a, s, e], index: 1, varied: true }) // 4 has another line
+assert.deepEqual(versions(log, g), { list: [g], index: 0, varied: false })
+assert.equal(versions(L.of({ nodes: [g, a, s], head: 3 }), a).varied, false) // a swipe keeps the line
+assert.equal(sceneOf("scene.place", log, g), "亭") // a root under a title: a scene
+assert.equal(sceneOf("scene.place", log, a), undefined) // no title
+assert.equal(sceneOf(undefined, log, g), undefined)
+const same = n(7, 1, { text: "on" }, { turn: { id: 7, input: {}, fired: [], products: { scene: { place: "亭" } } } })
+const moved = n(8, 1, { text: "on" }, { turn: { id: 8, input: {}, fired: [], products: { scene: { place: "林" } } } })
+const both = L.of({ nodes: [g, same, moved], head: 8 })
+assert.equal(sceneOf("scene.place", both, same), undefined) // the parent's title again: no new scene
+assert.equal(sceneOf("scene.place", both, moved), "林")
 console.log("ok")
