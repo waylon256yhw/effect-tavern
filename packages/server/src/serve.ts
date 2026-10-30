@@ -125,21 +125,28 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       res.end(JSON.stringify(v))
     }
     const bad = (e: unknown, status = 400) => json(status, { error: e instanceof Error ? e.message : String(e) })
+    /** The body, decoded; `empty` stands in for a blank one. Throws on a bad or too-large body, for `reply`. */
+    const read = async <T>(decode: (u: unknown) => T, empty?: string): Promise<T> =>
+      decode(JSON.parse((await body(req)) || (empty ?? "")))
+    /** What `f` gives as 200, or what it throws as `status`. */
+    const reply = async (f: () => unknown, status = 400) => {
+      try {
+        return json(200, await f())
+      } catch (e) {
+        return bad(e, status)
+      }
+    }
     const named = req.headers["x-tavern-story"]
     const asked = typeof named === "string" && named !== "" ? Number(named) : undefined
     /** The listing, with the story the client is to be on: the one it named while that one is still there. */
-    const stories = (current = asked !== undefined && lib.exists(asked) ? asked : lib.newest()) =>
-      json(200, { current, stories: lib.stories.list() })
-    if (req.method === "GET" && req.url === "/stories") return stories()
-    if (req.method === "POST" && req.url === "/stories") return stories(lib.stories.create())
-    if (req.method === "DELETE" && req.url === "/stories") {
-      try {
-        lib.stories.delMany(IdsBody(JSON.parse(await body(req))).ids)
-      } catch (e) {
-        return bad(e)
-      }
-      return stories()
-    }
+    const stories = (current = asked !== undefined && lib.exists(asked) ? asked : lib.newest()) => ({
+      current,
+      stories: lib.stories.list(),
+    })
+    if (req.method === "GET" && req.url === "/stories") return json(200, stories())
+    if (req.method === "POST" && req.url === "/stories") return json(200, stories(lib.stories.create()))
+    if (req.method === "DELETE" && req.url === "/stories")
+      return reply(async () => (lib.stories.delMany((await read(IdsBody)).ids), stories()))
     const searching = req.method === "GET" && /^\/stories\/search(?:\?(.*))?$/.exec(req.url ?? "")
     if (searching) return json(200, lib.stories.search(new URLSearchParams(searching[1] ?? "").get("q") ?? ""))
     const exporting = req.method === "GET" && /^\/stories\/(\d+)\/export\.(md|json)$/.exec(req.url ?? "")
@@ -159,53 +166,41 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (storyAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = Number(storyAt[1])
       if (!lib.exists(id)) return json(404, { error: `no story ${id}` })
-      if (req.method === "PUT") {
-        const raw = await body(req)
-        if (raw === "") return stories(id)
-        try {
+      if (req.method === "PUT")
+        return reply(async () => {
+          const raw = await body(req)
+          if (raw === "") return stories(id) // a blank body is the switch: this story becomes the current one
           const b = StoryBody(JSON.parse(raw))
           if (b.title !== undefined) lib.stories.title(id, b.title)
           if (b.starred !== undefined) lib.stories.star(id, b.starred)
-        } catch (e) {
-          return bad(e)
-        }
-        return stories()
-      }
+          return stories()
+        })
       lib.stories.del(id)
-      return stories()
+      return json(200, stories())
     }
     if (req.method === "GET" && req.url === "/personas") return json(200, lib.personas.list())
     const personaAt = /^\/personas\/([^/]+)$/.exec(req.url ?? "")
     if (personaAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = decodeURIComponent(personaAt[1]!)
-      try {
-        if (req.method === "PUT") lib.personas.put({ id, ...PersonaBody(JSON.parse(await body(req))) })
+      return reply(async () => {
+        if (req.method === "PUT") lib.personas.put({ id, ...(await read(PersonaBody)) })
         else lib.personas.del(id)
-      } catch (e) {
-        return bad(e)
-      }
-      return json(200, lib.personas.list())
+        return lib.personas.list()
+      })
     }
     if (req.method === "GET" && req.url === "/hats") return json(200, lib.hats.list())
     const hatAt = /^\/hats\/([^/]+)$/.exec(req.url ?? "")
     if (hatAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = decodeURIComponent(hatAt[1]!)
-      try {
-        if (req.method === "PUT") lib.hats.put({ id, ...HatBody(JSON.parse(await body(req))) })
+      return reply(async () => {
+        if (req.method === "PUT") lib.hats.put({ id, ...(await read(HatBody)) })
         else lib.hats.del(id)
-      } catch (e) {
-        return bad(e)
-      }
-      return json(200, lib.hats.list())
+        return lib.hats.list()
+      })
     }
     if (req.method === "GET" && req.url === "/secrets") return json(200, lib.secrets.list())
-    if (req.method === "POST" && req.url === "/secrets") {
-      try {
-        return json(200, lib.secrets.add(SecretBody(JSON.parse(await body(req)))))
-      } catch (e) {
-        return bad(e)
-      }
-    }
+    if (req.method === "POST" && req.url === "/secrets")
+      return reply(async () => lib.secrets.add(await read(SecretBody)))
     const valueAt = req.method === "GET" && /^\/secrets\/([^/]+)\/value$/.exec(req.url ?? "")
     if (valueAt) {
       const value = lib.secrets.value(decodeURIComponent(valueAt[1]!))
@@ -214,78 +209,41 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const secretAt = /^\/secrets\/([^/]+)$/.exec(req.url ?? "")
     if (secretAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = decodeURIComponent(secretAt[1]!)
-      try {
-        if (req.method === "PUT") lib.secrets.set(id, SecretMeta(JSON.parse(await body(req))))
+      return reply(async () => {
+        if (req.method === "PUT") lib.secrets.set(id, await read(SecretMeta))
         else lib.secrets.del(id)
-      } catch (e) {
-        return bad(e)
-      }
-      return json(200, lib.secrets.list())
+        return lib.secrets.list()
+      })
     }
     if (req.method === "GET" && req.url === "/providers") return json(200, lib.providers.list())
     const providerAt = /^\/providers\/([^/]+)(\/models|\/test)?$/.exec(req.url ?? "")
     if (providerAt) {
       const id = decodeURIComponent(providerAt[1]!)
       const known = lib.providers.list().some((p) => p.id === id)
-      if (!providerAt[2] && (req.method === "PUT" || req.method === "DELETE")) {
-        try {
-          if (req.method === "PUT") lib.providers.put({ id, ...ProviderBody(JSON.parse(await body(req))) })
+      if (!providerAt[2] && (req.method === "PUT" || req.method === "DELETE"))
+        return reply(async () => {
+          if (req.method === "PUT") lib.providers.put({ id, ...(await read(ProviderBody)) })
           else lib.providers.del(id)
-        } catch (e) {
-          return bad(e)
-        }
-        return json(200, lib.providers.list())
-      }
+          return lib.providers.list()
+        })
       if (!known && providerAt[2]) return json(404, { error: `no provider ${id}` })
-      if (providerAt[2] === "/models" && req.method === "GET") {
-        try {
-          return json(200, await lib.providers.models(id))
-        } catch (e) {
-          return bad(e, 502)
-        }
-      }
-      if (providerAt[2] === "/test" && req.method === "POST") {
-        let model: string | undefined
-        try {
-          model = TestBody(JSON.parse((await body(req)) || "{}")).model
-        } catch (e) {
-          return bad(e)
-        }
-        try {
-          return json(200, await lib.providers.test(id, model))
-        } catch (e) {
-          return bad(e) // the provider's configuration, not a probe's finding
-        }
-      }
+      if (providerAt[2] === "/models" && req.method === "GET") return reply(() => lib.providers.models(id), 502)
+      // a bad body, or the provider's configuration (no key, no endpoint): 400; a probe's finding is a 200's Probe
+      if (providerAt[2] === "/test" && req.method === "POST")
+        return reply(async () => lib.providers.test(id, (await read(TestBody, "{}")).model))
     }
     if (req.method === "GET" && req.url === "/models/names") return json(200, lib.names())
     if (req.method === "GET" && req.url === "/routing") return json(200, lib.routing.read())
-    if (req.method === "PUT" && req.url === "/routing") {
-      try {
-        lib.routing.write(RoutingBody(JSON.parse(await body(req))))
-      } catch (e) {
-        return bad(e)
-      }
-      return json(200, lib.routing.read())
-    }
+    if (req.method === "PUT" && req.url === "/routing")
+      return reply(async () => (lib.routing.write(await read(RoutingBody)), lib.routing.read()))
     if (req.method === "GET" && req.url === "/player") return json(200, lib.player)
-    if (req.method === "PUT" && req.url === "/player") {
-      try {
-        lib.setPlayer(decodePlayer(JSON.parse(await body(req))))
-      } catch (e) {
-        return json(400, { error: e instanceof Error ? e.message : String(e) })
-      }
-      return json(200, lib.player)
-    }
+    if (req.method === "PUT" && req.url === "/player")
+      return reply(async () => (lib.setPlayer(await read(decodePlayer)), lib.player))
     if (req.method === "GET" && req.url === "/cards") return json(200, lib.cards())
     // Everything below is one story's: the one the request names, or the most recently updated when it names none.
     const story = asked ?? lib.newest()
-    let s
-    try {
-      s = lib.session(story)
-    } catch (e) {
-      return bad(e, 404)
-    }
+    if (!lib.exists(story)) return json(404, { error: `no story ${story}` })
+    const s = lib.session(story)
     if (req.method === "GET" && req.url === "/card")
       return json(200, {
         ...s.meta,
@@ -298,22 +256,14 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       })
     if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
     const dropping = req.method === "DELETE" && /^\/nodes\/(\d+)$/.exec(req.url ?? "")
-    if (dropping) {
-      let c
-      try {
-        c = s.drop(Number(dropping[1]))
-      } catch (e) {
-        return json(404, { error: e instanceof Error ? e.message : String(e) })
-      }
-      return json(200, c) // the dropped nodes' calls went with them
-    }
+    if (dropping) return reply(() => s.drop(Number(dropping[1])), 404) // the dropped nodes' calls went with them
     if (req.method === "GET" && req.url === "/calls") return json(200, lib.calls(story).list())
     if (req.method !== "POST" || req.url !== "/") return json(404, { error: "not found" })
     let action
     try {
-      action = decodeAction(JSON.parse(await body(req)))
+      action = await read(decodeAction)
     } catch (e) {
-      return json(400, { error: e instanceof Error ? e.message : String(e) })
+      return bad(e)
     }
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" })
     let closed = false
