@@ -58,7 +58,7 @@ export const CardPage = () => {
   const begin = async () => {
     if (inStory()) await newStory() // lands on the new, empty story: the card page, nothing under it
     turn.greet(at())
-    close() // a draft is a reason to be in the reader, whatever the log holds yet
+    open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
   }
   return (
     <div class="inspect manifest">

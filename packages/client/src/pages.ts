@@ -28,9 +28,14 @@ const loads: Partial<Record<Kind, () => unknown>> = {
 let under: Page[] = [] // the pages the current one covers, the reader at the bottom implied
 
 /** A page over the current one. The same page again (the Inspect page walking to another node) replaces it: no
- *  return point, no reload. */
+ *  return point, no reload. The reader is under every page, never over one: opening it drops whatever covered it
+ *  (Begin on an empty story the player had browsed Settings or Writing from). */
 export const open = (p: Page): void => {
   const at = registry.get(page)
+  if (p === "reader") {
+    under = []
+    return registry.set(page, p)
+  }
   if (kindOf(at) === kindOf(p)) return registry.set(page, p)
   if (at !== "reader") under.push(at)
   registry.set(page, p)

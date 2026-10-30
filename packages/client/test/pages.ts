@@ -37,6 +37,14 @@ close()
 assert.equal(at(), "reader")
 close()
 assert.equal(at(), "reader") // nothing under the reader
+// the reader is under every page: opening it drops what covered it (Begin after browsing Settings from the card page)
+open("card")
+open("settings")
+open("card")
+open("reader")
+assert.equal(at(), "reader")
+close()
+assert.equal(at(), "reader")
 
 // Inspect from the Timeline returns to the Timeline; walking the Inspect page is no new return point
 open("timeline")
