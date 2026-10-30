@@ -79,6 +79,7 @@ const en: Dict = {
     closeNote: "Close the note",
     formatKeys: "Format keys",
     keepProse: "Keep the prose",
+    noteTag: "To the narrator",
     noteToNarrator: "Note to the narrator",
     pickOpening: "Pick an opening on the card page…",
     revising: "Revising",
@@ -87,7 +88,6 @@ const en: Dict = {
     snippets: "Snippets",
     stop: "Stop",
     toNarrator: "To the narrator, not in the story…",
-    unpin: "Unpin",
     yourLine: "Your line…",
   },
   controls: {
