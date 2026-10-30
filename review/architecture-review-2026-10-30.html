@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review for effect-tavern</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { htmlLabels: true, curve: "basis" } });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .mod { border: 1.5px solid #94a3b8; border-radius: 6px; background: #fff; }
+      .mod-deep { border: 3px solid #0f172a; border-radius: 6px; background: #0f172a; color: #e2e8f0; }
+      .lbl { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+      .lbl-light { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; }
+      .mermaid svg { max-width: 100%; height: auto; }
+      .dup { outline: 2px dashed #dc2626; outline-offset: 2px; }
+      .faded { opacity: .45; }
+      .mass-if { background: #fde68a; border: 1.5px solid #d97706; }
+      .mass-impl { background: #c7d2fe; border: 1.5px solid #4f46e5; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <header class="space-y-3">
+        <h1 class="font-serif text-4xl tracking-tight">Architecture review · <span class="text-indigo-700">effect-tavern</span></h1>
+        <p class="text-sm text-slate-600">2026-10-30 · main at e4278e3 · scoped by the last 120 commits' hot spots: <code>App.tsx</code> (32 touches), <code>session.ts</code> (30), <code>test/serve.ts</code> (28), <code>store.ts</code> (25), <code>serve.ts</code> (24), <code>library.ts</code> / <code>dev.ts</code> (19), <code>loop.ts</code> (19). No <code>docs/adr/</code> exists; nothing below re-litigates a recorded decision.</p>
+        <div class="flex flex-wrap gap-5 text-xs text-slate-600 pt-2">
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 mod"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#475569" stroke-width="1.5" class="seam"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#dc2626" stroke-width="2"/></svg> leak / duplicate</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 mod-deep"></span> deep module</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 mass-if"></span> interface</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 mass-impl"></span> implementation</span>
+        </div>
+        <nav class="text-xs text-slate-500 pt-1 flex flex-wrap gap-x-3 gap-y-1">
+          <a class="hover:text-indigo-700" href="#c1">1 settled path</a>
+          <a class="hover:text-indigo-700" href="#c2">2 bound model</a>
+          <a class="hover:text-indigo-700" href="#c3">3 turn in flight</a>
+          <a class="hover:text-indigo-700" href="#c4">4 node projection</a>
+          <a class="hover:text-indigo-700" href="#c5">5 library test + route table</a>
+          <a class="hover:text-indigo-700" href="#c6">6 composition root</a>
+          <a class="hover:text-indigo-700" href="#c7">7 scripted narrator</a>
+          <a class="hover:text-indigo-700" href="#c8">8 page shell</a>
+          <a class="hover:text-indigo-700" href="#c9">9 key in flight</a>
+          <a class="hover:text-indigo-700" href="#minor">minor</a>
+          <a class="hover:text-indigo-700" href="#top">top pick</a>
+        </nav>
+      </header>
+
+      <!-- Overview -->
+      <section class="rounded-lg border border-slate-200 bg-white p-5">
+        <p class="lbl mb-2">Package shape today</p>
+        <pre class="mermaid">
+flowchart LR
+  subgraph provider
+    P1[call.ts]:::m
+    P2[connection.ts]:::m
+    P3[providers.ts · capabilities.ts]:::m
+  end
+  subgraph runtime
+    R0[log.ts]:::m
+    R1[session.ts · 1054]:::hot
+    R2[request · fragment · product · lore · journal · history]:::m
+    R3[view.ts]:::m
+  end
+  subgraph server
+    S1[dev.ts]:::hot
+    S2[library.ts]:::hot
+    S3[serve.ts]:::hot
+    S4[data.ts · SQLite]:::m
+    S5[main.ts]:::m
+  end
+  subgraph client
+    C1[App.tsx · 767]:::hot
+    C2[store.ts · wire.ts]:::hot
+    C3[pages ×5]:::m
+  end
+  R1 --> P1
+  R1 --> R2
+  R3 -. asks, defaultProducts .-> R1
+  S5 --> S1
+  S1 --> S2
+  S2 --> R1
+  S2 --> P2
+  S2 --> P3
+  S3 --> S2
+  S3 --> S4
+  S2 --> S4
+  C2 -- "/api" --> S3
+  C1 --> C2
+  C3 --> C2
+  C2 -. "deep paths ×9" .-> R1
+  C1 -. log.ts ×6 .-> R0
+  S4 -. log.ts, journal Input redeclared .-> R0
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef hot fill:#fef3c7,stroke:#d97706,stroke-width:2px;
+        </pre>
+        <p class="text-xs text-slate-500 mt-2">Amber = hot spot. No Effect Layers or services anywhere; composition is plain function calls <code>open → library → handle → createServer</code>. Dashed edges are type reach-ins across packages. <code>log.ts</code> is the one module all three consumers share verbatim: that one is already deep.</p>
+      </section>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ───────── C1 ───────── -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">1 · The settled path: a turn's derived facts as a module</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/runtime/src/session.ts:238-244 (floorAt) · :320-337 (textOf, cost, foldOf, summaryOf) · :347-361 (known) · :363-460 (settleTurn, settleFresh, stateAt, gated, settledOf, readableOn, project) · :485-486 (ledgerOf, told) · callers :564-852 (turn), :858-998 (return object) · packages/runtime/test/loop.ts (702 lines)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · inside makeSession's closure</p>
+              <div class="relative h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs overflow-hidden">
+                <div class="mod h-full p-3 flex flex-col gap-2">
+                  <span class="lbl">makeSession( ) · the only interface is Session.node(id)</span>
+                  <div class="grid grid-cols-2 gap-2 flex-1">
+                    <div class="mod p-2 space-y-1 dup">
+                      <span class="lbl">pure fold over (card, path, policy)</span>
+                      <div class="text-[11px] leading-4 font-mono text-slate-700">stateAt · settleTurn<br/>gated · floorAt<br/>readableOn · known<br/>cost · foldOf · summaryOf<br/>ledgerOf · told<br/>memo: settledFrom, costs</div>
+                    </div>
+                    <div class="space-y-2">
+                      <div class="mod p-2"><span class="lbl">turn( )</span><div class="font-mono text-[11px] text-red-700">settleTurn(stateAt(path.slice(0,-1)), prev)</div></div>
+                      <div class="mod p-2"><span class="lbl">project( )</span><div class="font-mono text-[11px] text-red-700">settledOf(path, t)</div></div>
+                      <div class="mod p-2"><span class="lbl">setField( )</span><div class="font-mono text-[11px] text-red-700">settleTurn(stateAt(chain(parent)), {…t, adjust})</div></div>
+                      <div class="mod p-2"><span class="lbl">demand( )</span><div class="font-mono text-[11px] text-red-700">settleTurn(stateAt(chain(parent)), t).pre</div></div>
+                    </div>
+                  </div>
+                  <div class="text-[11px] text-slate-500">tests: loop.ts runs ~10 scripted turns through a fake model to assert one floor predicate (551-596)</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · one deep module, four callers</p>
+              <div class="relative h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs overflow-hidden flex gap-3">
+                <div class="flex-1 flex flex-col">
+                  <div class="mass-if rounded-t p-2 text-[11px] leading-4">
+                    <span class="lbl">interface</span><br/>facts at the end of a path: state · events · pre/post · gate (floors, counters) · readable · ledger · Known/Current · summary
+                  </div>
+                  <div class="mass-impl rounded-b flex-1 p-2 text-[11px] leading-4 text-indigo-950">
+                    <span class="lbl">implementation</span><br/>settle · gate · floors · recall-after-fold rule (:421 prefix) · fold boundaries · memo tables · the two <code>ponytail:</code> defects (:416, :668) now in one place
+                  </div>
+                </div>
+                <div class="w-36 flex flex-col justify-between py-2">
+                  <div class="mod p-2 text-center">turn( )</div>
+                  <div class="mod p-2 text-center">project( )</div>
+                  <div class="mod p-2 text-center">setField( )</div>
+                  <div class="mod p-2 text-center">demand( )</div>
+                  <div class="mod-deep p-2 text-center text-[11px]">test: hand-written Turns in a Log, no model (like views.ts)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p>About 150 lines of pure fold over the path (state, gate floors, the readable list, the fold's Known lines, the ledger) live inside <code>makeSession</code>'s closure, so their only interface is the node projection after a model-driven turn. Understanding "why is this lore entry readable" bounces through <code>gated</code>, <code>floorAt</code>, <code>lore.ts</code>, <code>product.ts recallEntries</code>, the prefix rule at :421 and <code>journal.ts deliveredOn</code>.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>Lift the fold into its own module: given the Card, a path of Turns and the fold policy, return every derived fact at the path's end. <code>turn</code>, <code>project</code>, <code>setField</code> and <code>demand</code> become callers; the memo tables move with it.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>locality: gate + fold + readable in one module</li>
+              <li>tests hit one interface, no fake model</li>
+              <li>loop.ts shrinks to stage order and stop semantics</li>
+              <li>the four hand-folds collapse to one call</li>
+              <li>both <code>ponytail:</code> defects become testable</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete it and <code>turn</code>, <code>project</code>, <code>setField</code>, <code>demand</code> each re-fold the path by hand. They already do. Earns its keep.</p>
+        </article>
+
+        <!-- ───────── C2 ───────── -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">2 · Bind a stage's model once</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">local-substitutable</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/server/src/library.ts:93-116 (resolve, model) · packages/server/src/dev.ts:113-132 (live) · packages/runtime/src/session.ts:114-129 (SessionModel, SessionModels), :292-293 (modelFor) · packages/provider/src/providers.ts (connection) · capabilities.ts</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · the same record built twice, the same ternary twice</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  Conn[Connection]:::m --> Res
+  ME[ModelEntry]:::m --> Res
+  Caps[capabilities]:::m --> Res
+  Conn --> Live
+  Caps --> Live
+  Res["library.resolve( )<br/>8 fields by hand"]:::leak
+  Live["dev.live( )<br/>same 8 fields by hand"]:::leak
+  Res --> SM[SessionModel]:::m
+  Live --> SM
+  SM --> SMs["SessionModels<br/>3 shapes: one · default+stages · fn"]:::wide
+  SMs --> T1["session.modelFor<br/>typeof fn ? : 'default' in ? :"]:::leak
+  SMs --> T2["library.model env fallthrough<br/>typeof fn ? : 'default' in ? :"]:::leak
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef leak fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+  classDef wide fill:#fef3c7,stroke:#d97706;
+                </pre>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · provider owns the bound model; session takes one shape</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  Conn[Connection]:::m --> B
+  ME[ModelEntry]:::m --> B
+  B["bound model<br/>(provider)<br/>format · model · prefill · reasoningBack<br/>effort · maxOutputTokens · ttl · hat"]:::deep
+  Rt["library routing<br/>pair → Connection"]:::m --> B
+  Env["dev env model"]:::m --> B
+  B --> S["session: models(phase)<br/>one shape"]:::m
+  T["provider test:<br/>caps overrides, effort, ttl, hat"]:::test -.-> B
+  T2["library test:<br/>stages ?? default ?? env ?? NoModel"]:::test -.-> Rt
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#e2e8f0,stroke-width:3px;
+  classDef test fill:#ecfdf5,stroke:#059669;
+                </pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p>The interface of "the model a stage runs" is spread over five types in three packages (<code>Model</code>, <code>SessionModel</code>, <code>SessionModels</code>, <code>Routing</code>, <code>ModelEntry</code>). Two builders produce the same record field by field; the default/stage/function resolution is copied verbatim; the phase list exists twice. The last per-model knob (<code>contextTokens</code>, #55) touched five files plus <code>test/serve.ts</code>.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>Provider exports one builder: a Connection plus its ModelEntry gives everything a call needs, settings included. The session takes exactly one shape for <code>models</code>, a function of phase. The library's job shrinks to pair → Connection; <code>dev.live</code> calls the same builder.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>leverage: one builder, two callers today</li>
+              <li>interface shrinks: 3 shapes → 1</li>
+              <li>routing fallthrough tested without SSE</li>
+              <li>a new knob is a one-package change</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete <code>resolve</code>/<code>live</code> and the eight-field mapping reappears in both callers; delete the ternary and it reappears wherever a <code>SessionModels</code> is read. Earns its keep, once.</p>
+        </article>
+
+        <!-- ───────── C3 ───────── -->
+        <article id="c3" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">3 · The turn in flight: one client module from start to settle</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">local-substitutable</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/client/src/App.tsx:570-659 (start, onSend, onRevise, revised, onKeep, onCancel, onSwipe, onReword, onDemand, onEdit, onStop) · store.ts:19-29, 99-116, 186-188, 256-326 · wire.ts:181-209 (send) · card.tsx:58-64 (begin) · timeline.tsx:95-109 (checkout, openInReader)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · the action's lifecycle across three files, bypassed by two</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart LR
+  Reader["Reader (App.tsx)<br/>start: draft + fresh rule<br/>onStop: poll /nodes ×100<br/>fabricates error event"]:::hot
+  Section["Section<br/>5 closures from Reader"]:::m
+  Glance["Glance → Demand"]:::m
+  Sheet["RecordSheet → Demand"]:::m
+  Composer:::m
+  Timeline["Timeline.checkout"]:::m
+  Card["CardPage.begin"]:::m
+  Wire["wire.send<br/>SSE → apply<br/>refetch stories"]:::m
+  Store["store.apply<br/>land / error / withdraw / settle<br/>'prose done' = {check,polish,record}"]:::m
+  Reader --> Section
+  Section --> Sheet
+  Reader --> Glance
+  Composer --> Reader
+  Card --> Reader
+  Reader --> Wire
+  Wire --> Store
+  Timeline -- "send( ) direct, no draft" --> Wire
+  Section -- "go: send( ) direct" --> Wire
+  Reader -- "'prose done' ×2 more<br/>:253, :687" --> Store
+  linkStyle 7,8,9 stroke:#dc2626,stroke-width:2px;
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef hot fill:#fef3c7,stroke:#d97706,stroke-width:2px;
+                </pre>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · eight actions by node id, plus stop</p>
+              <div class="relative h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex gap-3">
+                <div class="flex-1 mod-deep p-3 flex flex-col">
+                  <span class="lbl-light">turn module · interface</span>
+                  <div class="font-mono text-[11px] leading-5 mt-1">act · greet · checkout · swipe<br/>reword · edit · setField · demand<br/>stop · inFlight()</div>
+                  <span class="lbl-light mt-3">implementation (faded = now internal)</span>
+                  <div class="faded text-[11px] leading-4 mt-1">draft birth + fresh rule · revising stash/restore · pin attach · send · stop-before-prose → withdraw · stop-after-prose → snapshot poll → settle · the one "prose done" set · one busy flag (today: <code>working</code> OR <code>stage !== null</code>)</div>
+                </div>
+                <div class="w-40 flex flex-col gap-2 justify-center">
+                  <div class="mod p-2 text-center">Section</div>
+                  <div class="mod p-2 text-center">Composer</div>
+                  <div class="mod p-2 text-center">Timeline</div>
+                  <div class="mod p-2 text-center">CardPage</div>
+                  <div class="mod p-2 text-center">Glance / Sheet</div>
+                  <div class="rounded p-2 text-center bg-emerald-50 border border-emerald-600 text-emerald-900 text-[11px]">bun test: scripted wire, act → delta → stop → withdraw/settle</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p><code>Reader</code> owns the draft's birth, <code>wire.send</code> the stream, <code>store.apply</code> the landing, and <code>onStop</code> polls the log 100 × 300 ms and synthesizes an error event. Timeline's checkout and Section's <code>go</code> call <code>send</code> with no draft at all. Any page wanting an action must be handed a closure from <code>Reader</code>; <code>onDemand</code> is threaded four levels deep. The bug fixes #87, #72, #50 and the checkout-while-streaming guard all landed on this spread.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>A <code>turn</code> module beside <code>store.ts</code> whose interface is the GLOSSARY's eight actions by node id plus stop. Draft, stash, pin, send, the stop choice and the post-stop poll go behind it. Pages call it directly; <code>Section</code> loses its five callbacks.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>locality: lifecycle bugs land in one module</li>
+              <li>tests: lifecycle scripted like test/store.ts</li>
+              <li>leverage: setField gets a client entry for free</li>
+              <li>delete closure threading in 4 files</li>
+              <li>one "prose done" set, one busy flag</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete <code>Reader</code>'s handler block and the choreography reappears in Section, Composer, Timeline, CardPage and Glance. Earns its keep; it is homed in a view file and half-bypassed.</p>
+        </article>
+
+        <!-- ───────── C4 ───────── -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">4 · One projection of a node for the chrome</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/client/src/record.ts · readings.tsx:17 (whens), :373-392, :493-527, :530-541 · App.tsx:382-409, :438-448, :494-509, :525-534 · inspector.tsx:288-302, :315-320, :453-480 · timeline.tsx:34-49, :77-88, :408-427 · store.ts:117-138</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · four callers, four argument subsets, plus re-derivations</p>
+              <div class="relative h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-[11px] overflow-hidden">
+                <div class="grid grid-cols-4 gap-2 mb-3">
+                  <div class="mod p-2"><span class="lbl">App.tsx:388</span><div class="font-mono">record(r, node, prev)</div><div class="text-slate-500">"did a field change?"</div></div>
+                  <div class="mod p-2"><span class="lbl">readings:380</span><div class="font-mono">record(r, node, prev, products, whens)</div></div>
+                  <div class="mod p-2"><span class="lbl">readings:502</span><div class="font-mono">record(r, node, prev, products)</div><div class="text-slate-500">"anything but notes?"</div></div>
+                  <div class="mod p-2"><span class="lbl">inspector:318</span><div class="font-mono">record(r, x, parent, [], whens)</div><div class="text-slate-500">then filter to fields</div></div>
+                </div>
+                <div class="flex justify-center mb-3"><div class="mass-if rounded px-4 py-1">record( ) · interface ≈ "know which arg matters to which row"</div></div>
+                <table class="w-full text-left border-separate border-spacing-y-1">
+                  <tr class="text-red-700"><td class="pr-2">the node before</td><td>store :125 · readings :497 · inspector :290</td><td class="font-mono">×3</td></tr>
+                  <tr class="text-red-700"><td class="pr-2">siblings + version index</td><td>App :441 · inspector :294 · timeline :87</td><td class="font-mono">×3</td></tr>
+                  <tr class="text-red-700"><td class="pr-2">sibling-kind icon switch</td><td>App :494 · timeline :37</td><td class="font-mono">×2</td></tr>
+                  <tr class="text-red-700"><td class="pr-2">turn's input drawn</td><td>App Said · timeline :412 · inspector :461</td><td class="font-mono">×3</td></tr>
+                  <tr class="text-red-700"><td class="pr-2">"which channel is this turn"</td><td>App :335, :443, :529 · timeline :34 · inspector :457</td><td class="font-mono">×5</td></tr>
+                </table>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · record.ts widens what sits behind it, pages only draw</p>
+              <div class="relative h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex gap-3">
+                <div class="flex-1 flex flex-col">
+                  <div class="mass-if rounded-t p-2 text-[11px] leading-4"><span class="lbl">interface</span><br/>nodeView(log, cardView, id)</div>
+                  <div class="mass-impl rounded-b flex-1 p-2 text-[11px] leading-4 text-indigo-950"><span class="lbl">implementation</span><br/>readings (fields, meters, products) · field-changed flag · non-notes flag · heading · parent · siblings + index · channel: act / note / greeting · sibling kind · owns <code>whens</code> · the one JSON.stringify memo (today ×3: readings :382, :540, App :557)</div>
+                </div>
+                <div class="w-36 flex flex-col gap-2 justify-center">
+                  <div class="mod p-2 text-center">Reader rows</div>
+                  <div class="mod p-2 text-center">Record sheet</div>
+                  <div class="mod p-2 text-center">Inspector</div>
+                  <div class="mod p-2 text-center">Timeline</div>
+                  <div class="rounded p-2 text-center bg-emerald-50 border border-emerald-600 text-emerald-900 text-[11px]">test/record.ts grows: flags, siblings, channel over a fixture log</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p><code>record()</code>'s interface is nearly as wide as its implementation: each caller must know that <code>whens</code> only matters to meters and <code>products</code> only to product rows. Around it, the reader, Record sheet, Inspector and Timeline each re-derive the parent, the siblings, the channel and the sibling kind, and draw a turn's input three different ways. #101, #94 and #95 all edited here.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>Grow <code>record.ts</code> into the one projection of a node for the chrome: given the log, the Card view and a node id, return everything a row needs. Pages stop reaching into <code>turn.input</code>, <code>turn.products</code> and <code>L.children</code>.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>leverage: one projection, four drawers</li>
+              <li>locality: reader / inspector / timeline stop drifting</li>
+              <li>callers lose their argument-subset knowledge</li>
+              <li>tests: plain assertions over a fixture log</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete <code>record.ts</code> and the field diff, pinnability and product rows reappear in four callers. Earns its keep; the deepening widens what sits behind the seam.</p>
+        </article>
+
+        <!-- ───────── C5 ───────── -->
+        <article id="c5" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">5 · Test the library as the library; the noun routes as a table</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span><span class="text-xs text-slate-500">(the test)</span>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span><span class="text-xs text-slate-500">(the table)</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">ports &amp; adapters</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/server/src/serve.ts:96-118 (8 body decoders), :133-280 (33 method checks, 16 try/catch, 9 regex matchers) · packages/server/src/library.ts (384 lines, 19 touches, no test file) · packages/server/test/serve.ts:392-577, :677-736</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · every library assertion crosses the socket</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+sequenceDiagram
+  participant T as test/serve.ts
+  participant H as serve.ts
+  participant L as library.ts
+  participant D as data.ts
+  T->>H: POST /routing (JSON)
+  H->>H: match regex, decode body, try/catch
+  H->>L: lib.routing.write( )
+  L->>D: Store.write
+  T->>H: POST /act (SSE)
+  H->>L: perform( )
+  L-->>H: events
+  H-->>T: text/event-stream
+  T->>T: regex over inspect msgs for "Summary:" / "HAT-TAIL"
+  Note over T,L: prune, listings, formatFor, probed, policy, persona cascade: all asserted this way
+                </pre>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · two tests at two seams; serve is a table plus the SSE route</p>
+              <div class="relative h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex flex-col gap-2">
+                <div class="flex gap-2 flex-1">
+                  <div class="flex-1 mod p-2 flex flex-col">
+                    <span class="lbl">serve.ts</span>
+                    <div class="mod p-1 mt-1 text-[11px]">SSE action route · stop by stage · x-tavern-story · app( ) static</div>
+                    <div class="mod p-1 mt-1 text-[11px] font-mono leading-4">rows: (method, pattern, decode, lib call, answer)<br/>one loop walks them</div>
+                    <div class="rounded p-1 mt-auto bg-emerald-50 border border-emerald-600 text-emerald-900 text-[11px]">test: wire only (400/404, stop, headers, static)</div>
+                  </div>
+                  <div class="flex-1 mod-deep p-2 flex flex-col">
+                    <span class="lbl-light">library.ts</span>
+                    <div class="text-[11px] mt-1 leading-4">routing prune · listings merge · formatFor · probed error walk · persona-delete cascade · policy( ) · NoModel</div>
+                    <div class="rounded p-1 mt-auto bg-emerald-50 border border-emerald-600 text-emerald-900 text-[11px]">test/library.ts over open(":memory:")</div>
+                  </div>
+                </div>
+                <div class="text-[11px] text-slate-500">a new noun = one row + one library assertion, not a route block + a serve.ts test block</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p><code>serve.ts</code> says "no logic of its own" and is right, but the library behind it is reachable only through it, so library behaviour is asserted by parsing SSE and grepping inspect messages. The test churns more than the adapter (28 touches vs 24): each new noun lands a route block, a decoder, and a test block. The order of the regex matchers is itself a hidden invariant (<code>/stories/search</code> before <code>/stories/(\d+)</code>).</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>Give the library its own assert script over an in-memory store. Keep the SSE action route and static serving by hand; express the noun routes as data walked by one loop.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>tests hit the library's own interface</li>
+              <li>test/serve.ts drops to wire behaviour</li>
+              <li>delete 16 identical try/catch blocks</li>
+              <li>route order becomes visible data</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete the route table and the 16 try/catch blocks reappear: pass-through today, so the table is the deeper form. Delete <code>library.ts</code> and session wiring, routing and probes reappear in <code>serve.ts</code>: it earns its keep and deserves its own test.</p>
+        </article>
+
+        <!-- ───────── C6 ───────── -->
+        <article id="c6" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">6 · A tavern from (data, card, model): name the composition root</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/server/src/dev.ts (161 lines, whole) · packages/server/src/main.ts:7 · packages/server/src/serve.ts:352, :367 · packages/server/test/serve.ts (library({…}) hand-wired ×8)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · dev.ts is the production root, by import side effect</p>
+              <div class="h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex flex-col gap-1">
+                <div class="mod p-2 flex justify-between"><span>main.ts (the phone's one port)</span><span class="text-red-700 font-mono">import { handler } from "./dev.ts"</span></div>
+                <div class="text-center text-slate-400">↓ runs at import time</div>
+                <div class="flex-1 mod p-2 flex flex-col gap-1 border-red-400">
+                  <span class="lbl">dev.ts · top level</span>
+                  <div class="h-7 border-l-4 border-red-500 pl-2 flex items-center">env reads: CARD · DATA · MODEL · HAT · GREETING (PORT in main)</div>
+                  <div class="h-7 border-l-4 border-red-500 pl-2 flex items-center">open( ) with the lock · refresh( )</div>
+                  <div class="h-7 border-l-4 border-red-500 pl-2 flex items-center">first-run vault seeding (:136-152, untested)</div>
+                  <div class="h-7 border-l-4 border-amber-500 pl-2 flex items-center">scripted model <code>answer</code> (:38-111) · see 7</div>
+                  <div class="h-7 border-l-4 border-amber-500 pl-2 flex items-center">live( ) (:113-132) · see 2</div>
+                  <div class="h-7 border-l-4 border-slate-400 pl-2 flex items-center">card load · optional GREETING root · library → handle</div>
+                </div>
+                <div class="text-[11px] text-slate-500">test/serve.ts rebuilds this by hand eight times</div>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · one function, two entries</p>
+              <div class="h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex flex-col gap-2">
+                <div class="flex gap-2">
+                  <div class="flex-1 mod p-2 text-center">dev.ts<br/><span class="text-slate-500">Vite entry: read env, call it</span></div>
+                  <div class="flex-1 mod p-2 text-center">main.ts<br/><span class="text-slate-500">port entry: call it, wrap app( )</span></div>
+                  <div class="flex-1 rounded p-2 text-center bg-emerald-50 border border-emerald-600 text-emerald-900">test/serve.ts<br/>one call each</div>
+                </div>
+                <div class="text-center text-slate-400">↓</div>
+                <div class="flex-1 mod-deep p-3 flex flex-col">
+                  <span class="lbl-light">tavern(data file, card, model, options)</span>
+                  <div class="text-[11px] mt-1">→ { lib, handler }</div>
+                  <div class="faded text-[11px] mt-2 leading-4">open + lock · refresh · first-run seeding (named option) · GREETING root (named option) · library → handle</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p>The one-port phone build runs the developer module: opening the store, seeding the vault, loading the card and binding the model all happen as top-level side effects of importing <code>dev.ts</code>. There is no way to build a tavern in a test without a socket except by redoing what <code>dev.ts</code> does, which <code>test/serve.ts</code> does eight times.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>One function builds a tavern from a data file, a card, a model and named options, returning the library and the handler. <code>dev.ts</code> and <code>main.ts</code> become two thin entries.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>two adapters justify the seam: Vite, port</li>
+              <li>first-run seeding gets a direct test</li>
+              <li>eight hand-wirings become one call</li>
+              <li>no import-time side effects</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete <code>dev.ts</code> and <code>main.ts</code> must grow all of it. Earns its keep, under the wrong name and shape.</p>
+        </article>
+
+        <!-- ───────── C7 ───────── -->
+        <article id="c7" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">7 · One scripted narrator that reads the stage document</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">mock</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/runtime/test/loop.ts:12-129 (script) · packages/server/src/dev.ts:38-111 (answer) · packages/server/test/serve.ts:22-39, :345-360 · packages/provider/src/fake.ts · the format: packages/runtime/src/request.ts:97, :181, session.ts:356, :605, :637</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · request.ts writes the data lines, three readers re-derive them</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart LR
+  Req["request.ts<br/>Open: · Index: · Questions: · Known:"]:::m
+  F["fake.ts<br/>format-agnostic"]:::m
+  A["loop.ts script<br/>/^Open: (.*)$/m<br/>/^(?:Questions: )?(\w+): …\[…\]$/gm"]:::leak
+  B["dev.ts answer<br/>same regexes verbatim<br/>+ responseFormat.name → phase"]:::leak
+  C["test/serve.ts<br/>its own stub"]:::leak
+  Req --> F
+  F --> A
+  F --> B
+  F --> C
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef leak fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+                </pre>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · the reader lives once, beside the test cards</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart LR
+  Req["request.ts"]:::m --> F["fake.ts"]:::m --> N
+  N["scripted narrator<br/>FakeCall → phase + fields<br/>(open ids, index, questions+options, asked products)<br/>well-formed defaults per phase"]:::deep
+  N --> A["loop.ts: overrides narrations / warmths"]:::m
+  N --> B["dev.ts: canned rows, 重写 demo"]:::m
+  N --> C["test/serve.ts"]:::m
+  T["test/request.ts already builds every stage document → assert the reader once"]:::test -.-> N
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#e2e8f0,stroke-width:3px;
+  classDef test fill:#ecfdf5,stroke:#059669;
+                </pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p><code>request.ts</code> owns the data-line format, but three scripted models each parse it with their own regexes, two of them verbatim copies. When the record line changed (#83) every parser was at risk. <code>fake.ts</code> is deliberately format-agnostic, so the knowledge has nowhere to live.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>A test-side module next to the cards that takes a fake call, names the phase, reads the document's data lines into fields and returns well-formed defaults per phase. Each test or the dev loop overrides only what its scenario needs.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>the parser asserted once, against request()</li>
+              <li>delete ~150 lines of regex ×3</li>
+              <li>a format change breaks one place</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> the regexes exist three times now; deleting the shared reader brings them back three times. Earns its keep.</p>
+        </article>
+
+        <!-- ───────── C8 ───────── -->
+        <article id="c8" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">8 · The page over the reader: open, back, Escape, what to load</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/client/src/card.tsx:57-71 · timeline.tsx:93, :122-131 · inspector.tsx:24-28, :324-336, :340 · settings.tsx:33-41, :64-75 · writing.tsx:33-34, :47-56 · wire.ts:73-81 (adopt sets page) · App.tsx:563-567, :735-767</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · five pages, five shells, five Escape guards</p>
+              <div class="h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-[11px] overflow-hidden">
+                <table class="w-full text-left border-separate border-spacing-y-1">
+                  <tr class="lbl"><th>page</th><th>Escape guard</th><th>remembers back?</th><th>loads on open</th></tr>
+                  <tr><td class="mod px-2">card</td><td>:popover-open only</td><td>no</td><td>—</td></tr>
+                  <tr><td class="mod px-2">timeline</td><td>!confirm.open</td><td>no</td><td>fetchCalls</td></tr>
+                  <tr><td class="mod px-2">inspector</td><td>skips INPUT/TEXTAREA</td><td>no</td><td>fetchCalls</td></tr>
+                  <tr><td class="mod px-2">settings</td><td>defaultPrevented + popover/dialog/drawer</td><td>module-level <code>backTo</code></td><td>six fetches</td></tr>
+                  <tr><td class="mod px-2">writing</td><td>defaultPrevented + popover/dialog</td><td>no</td><td>fetchCard round trip</td></tr>
+                </table>
+                <div class="mt-3 space-y-1 text-red-700">
+                  <div><code>registry.set(page, …)</code> in 14 places across 7 files</div>
+                  <div>"empty log → card page" decided in <code>wire.adopt</code> and <code>App.tsx:566</code></div>
+                  <div><code>card.begin</code> relies on adopt → "card" then overrides to "reader"</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · one module owns the page atom</p>
+              <div class="h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex gap-3">
+                <div class="flex-1 mod-deep p-3 flex flex-col">
+                  <span class="lbl-light">pages · interface</span>
+                  <div class="font-mono text-[11px] mt-1 leading-5">open(page)<br/>close()</div>
+                  <span class="lbl-light mt-3">implementation</span>
+                  <div class="faded text-[11px] mt-1 leading-4">return point · per-page load list · one App-level Escape listener with one guard (no popover, dialog or drawer open; not default-prevented) · card-or-reader after adopt decided once</div>
+                </div>
+                <div class="w-40 flex flex-col gap-2 justify-center">
+                  <div class="mod p-2 text-center">five pages: draw, no <code>registry</code> import</div>
+                  <div class="rounded p-2 text-center bg-emerald-50 border border-emerald-600 text-emerald-900 text-[11px]">table test: settings from card → back lands on card; adopt empty → card; greet → reader</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p>Each page added (#69 writing, #75 manager) re-copied the shell: an <code>onSettled</code> keydown listener, a close, a fetch list. The Escape guards have already diverged five ways; only settings remembers where it came from. None of it is testable because it is wired into five <code>onSettled</code>s.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>A <code>pages</code> module owning the <code>page</code> atom: open records the return point and runs that page's load list, close returns, one Escape listener with one guard. <code>wire.adopt</code> returns the listing and lets this module choose.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>locality: one Escape rule</li>
+              <li>14 page writes → 2 calls</li>
+              <li>open/back rules become a table test</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete the five listeners and five closes and the behaviour reappears five times. Pass-through today; would earn its keep once owned.</p>
+        </article>
+
+        <!-- ───────── C9 ───────── -->
+        <article id="c9" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="font-serif text-2xl">9 · providers: the key in flight and the model-format rule</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">local-substitutable</span>
+          </div>
+          <p class="font-mono text-sm text-slate-700">packages/client/src/providers.tsx:208-283 (storeKey, writeKey, savingKey, keySaved, flushKey) · :285 (createProbing ready) · :604-607 (ready into both drawers) · :627-654 (requestOf, applied) · :856-863 (stale, correct) · models.tsx:22-38 (addModels, removeModels) · settings.tsx:150-181 (key, pairOf, stale)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl mb-2">Before · an invariant threaded as a prop to three callers</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  K["key field<br/>let savingKey: Promise"]:::m
+  P["createProbing({ ready })"]:::m
+  R["RequestDrawer ready="]:::m
+  S["SyncDrawer ready="]:::m
+  K -- "await before first request" --> P
+  K -- "await before first request" --> R
+  K -- "await before first request" --> S
+  M1["models.addModels :28<br/>no format → listing's"]:::leak
+  M2["SyncDrawer stale/correct :858<br/>no format → listing's"]:::leak
+  linkStyle 0,1,2 stroke:#dc2626,stroke-width:2px;
+  classDef m fill:#fff,stroke:#94a3b8;
+  classDef leak fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+                </pre>
+              </div>
+            </div>
+            <div>
+              <p class="lbl mb-2">After · the pending write is a property of the one thing that can be pending</p>
+              <div class="h-[320px] rounded-lg border border-slate-200 bg-stone-50 p-3 text-xs flex gap-3">
+                <div class="flex-1 mod-deep p-3 flex flex-col">
+                  <span class="lbl-light">key field</span>
+                  <div class="text-[11px] mt-1 leading-4">the key as typed · commit · settled( ) for the write in flight</div>
+                  <div class="faded text-[11px] mt-2">probe and drawers ask it; no <code>ready</code> prop</div>
+                </div>
+                <div class="flex-1 mod-deep p-3 flex flex-col">
+                  <span class="lbl-light">models.ts (pure)</span>
+                  <div class="text-[11px] mt-1 leading-4">addModels · removeModels · stale · correct · requestOf · applied · routing key / pairOf</div>
+                  <div class="rounded p-1 mt-auto bg-emerald-50 border border-emerald-600 text-emerald-900 text-[11px]">table tests, like test/probe.ts</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="lbl mb-1">Problem</p><p>After #79 the dialogs and vault are out and <code>probe.ts</code> is a real seam (two adapters of <code>run</code>). What remains wide is "a typed key may still be in flight": a promise threaded to three callers that each await it. The rule "a listed model with no stored format takes the listing's" is implemented twice. <code>requestOf</code>/<code>applied</code> is a ten-branch pure round trip with no test. #78's "probe went out keyless" is this ordering.</p></div>
+            <div><p class="lbl mb-1">Solution</p><p>A key-field module that owns its own pending write; a pure <code>models.ts</code> holding the format rule, the request round trip and the routing pair encoding, tested like <code>probe.ts</code>. The drawers draw.</p></div>
+            <div><p class="lbl mb-1">Wins</p><ul class="list-disc pl-4 space-y-1">
+              <li>the format rule lives once</li>
+              <li>key-then-probe ordering gets a scripted test</li>
+              <li>ten untested branches become a table test</li>
+            </ul></div>
+          </div>
+          <p class="text-xs text-slate-500"><strong>Deletion test:</strong> delete <code>models.tsx</code>/<code>vault.tsx</code> as files and the lines return to <code>providers.tsx</code> unchanged: the split was locality, not leverage. Delete the <code>ready</code> threading and three callers each need their own await: earns its keep, wrongly homed.</p>
+        </article>
+      </section>
+
+      <!-- Minor -->
+      <section id="minor" class="rounded-xl border border-slate-200 bg-white p-6 space-y-3">
+        <h2 class="font-serif text-2xl">Noted, not carded</h2>
+        <ul class="text-sm space-y-2 list-disc pl-5">
+          <li><span class="px-1.5 py-0.5 rounded text-xs bg-slate-100 text-slate-700">Speculative</span> <code>data.ts</code> knows the Turn's JSON shape: SQL reads <code>$.input.text</code> and <code>$.reply[*].type='text'</code>, a second copy of <code>journal.ts textOf</code>; it redeclares journal's <code>Input</code>; <code>StoryRow</code>/<code>Hit</code> are wire types living in the SQLite module. Type-level duplication, mostly caught by <code>vp check</code>.</li>
+          <li><span class="px-1.5 py-0.5 rounded text-xs bg-slate-100 text-slate-700">Speculative</span> Composing a line: the participant/author channel mapping is written in <code>store.ts:94-98</code> and re-derived in <code>composer.tsx:28</code> and <code>App.tsx:604</code>; the three-box stash is copied three times; the caret insert (<code>composer.tsx:64-82</code>) is untested; the Writing page re-fetches the card after every <code>PUT /player</code> because the composer reads snippets off the Card view. Folds into candidate 3 if that one goes ahead.</li>
+          <li><code>view.ts</code> imports <code>session.ts</code> for <code>asks</code>, <code>defaultProducts</code>, <code>wordingOf</code>, <code>questionOf</code> (session.ts:131-250): card-and-player-level data, not session behaviour. The CLI pulls in the whole loop to print a document.</li>
+          <li><code>serve.ts:290-298</code> builds <code>/card</code> from seven session getters; the card projection has no single owner on the runtime side.</li>
+          <li><code>bridge.ts read</code> is the identity on an <code>Atom</code> that already is an accessor; 23 files import it as ceremony. One adapter, hypothetical seam.</li>
+          <li><code>roam</code> (<code>side.tsx:44-51</code>) is imported by <code>composer.tsx</code> and <code>controls.tsx</code>, closing a <code>side → readings → controls → side</code> cycle; it belongs in <code>controls.tsx</code>.</li>
+          <li><code>docs/client-shape.md</code> and the code disagree in five places: "只载入最近的节" (the whole snapshot loads, and <code>onStop</code> re-reads it up to 100 times); "Session 不再需要 id 前缀" (<code>Topbar</code> still opens sheets by id); §二 names <code>src/session.ts</code> (it is <code>packages/runtime/src/session.ts</code>); the deleted <code>Scenes</code> docstring survives at <code>readings.tsx:560</code>; §三 2's "回读 /nodes" is a poll, not a single read.</li>
+        </ul>
+      </section>
+
+      <!-- Addendum -->
+      <section id="addendum" class="rounded-xl border border-amber-300 bg-amber-50 p-6 space-y-3">
+        <h2 class="font-serif text-2xl">Addendum · after an independent check (2026-10-30)</h2>
+        <p class="text-sm text-slate-700">A second reader (Gemini) re-verified every citation against main at e4278e3; all held. Adjustments agreed after re-checking the code:</p>
+        <ul class="text-sm space-y-2 list-disc pl-5">
+          <li><strong>C1</strong>: the facts at the path's end are read lazily, per fact, with the memo tables; <code>setField</code> needs only the settle, never the readable list or the summary.</li>
+          <li><strong>C2</strong>: the session takes one shape, a function of phase; a one-line helper lifts a single model into it. The bare-model shape is not kept, because the ternary is the duplication.</li>
+          <li><strong>C4</strong>: one module, several functions, not one eager object: Timeline draws hundreds of nodes and needs the heading, the channel and the sibling kind, never the field diff. The point is where the knowledge lives, not one call.</li>
+          <li><strong>C5</strong>: the library test stands (Strong). The route table is withdrawn: <code>PUT /stories/&lt;id&gt;</code> switches on a blank body and renames on a non-blank one, model listing fails with 502, the story routes answer the wrapped list. A <code>parseBody(req, Schema)</code> plus one guarded call helper removes the 16 try/catch blocks and keeps the control flow readable.</li>
+          <li><strong>C9</strong>: only the pure half: <code>requestOf</code>/<code>applied</code>, <code>stale</code>/<code>correct</code>, <code>addModels</code>, <code>pairOf</code> as tested functions. The key-in-flight threading stays as it is (about fifteen lines inside one detail view).</li>
+          <li><strong>bridge.ts</strong>: left alone; 23 import edits for no behaviour.</li>
+        </ul>
+        <p class="text-sm text-slate-700">Order, each step a commit on its own: C1 → C3 + C8 → C2 + C6 + the library test → C7, C9's pure half, C4's module, <code>roam</code> and the five doc fixes.</p>
+      </section>
+
+      <!-- Top -->
+      <section id="top" class="rounded-xl border-2 border-indigo-700 bg-indigo-50 p-8 space-y-3">
+        <p class="lbl text-indigo-700">Top recommendation</p>
+        <h2 class="font-serif text-3xl"><a class="hover:underline" href="#c1">1 · The settled path</a></h2>
+        <p class="text-slate-800">It sits in the hottest runtime file, it is where both <code>ponytail:</code> defects live, and it is the one deepening that makes the whole loop cheaper to test afterwards: once the path's facts have their own interface, <code>loop.ts</code> stops being the only way to assert a floor, a readable list or a fold boundary, and candidates 2 and 7 both shrink because the session's interface shrinks with it.</p>
+        <p class="text-sm text-slate-600">On the client the matching first move is <a class="underline" href="#c3">3 · the turn in flight</a>: same shape of problem (a lifecycle homed in a view file), same test win (scripted events, no DOM).</p>
+      </section>
+    </main>
+  </body>
+</html>
