@@ -194,7 +194,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
         <span class="digest">
           <Digest row={props.row} node={props.node} nth={props.nth} dev={props.dev} />
         </span>
-        <span class="metrics" title={t("inspector.tokenLegend")} aria-label={t("inspector.tokenLegend")}>
+        <span class="metrics" title={t("inspector.tokenLegend")}>
           <span class="ms">{secs(c().ms)}</span> · {tokens(c().usage, fmt)}
         </span>
       </summary>
@@ -345,7 +345,7 @@ export const Inspect = (props: { id: Id }) => {
         </span>
         <span class="spacer" />
         <Show when={sums().calls}>
-          <span class="sums" title={t("inspector.tokenLegend")} aria-label={t("inspector.tokenLegend")}>
+          <span class="sums" title={t("inspector.tokenLegend")}>
             {sums().calls}× · {secs(sums().ms)} · {tokens(sums(), (n) => compact.format(n))}
           </span>
         </Show>
