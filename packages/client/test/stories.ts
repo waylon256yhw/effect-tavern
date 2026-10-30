@@ -1,19 +1,7 @@
 // stories.ts: the card's four rows (starred first, the open one kept in view), the preview a row carries, the search's
 // match over title and hits, the marks it cuts, the cleanup's quick picks.
 import assert from "node:assert/strict"
-import {
-  ago,
-  empty,
-  matches,
-  pieces,
-  preview,
-  ranked,
-  shown,
-  stays,
-  turnLabel,
-  unnamed,
-  type Hit,
-} from "../src/stories.ts"
+import { ago, empty, matches, pieces, preview, ranked, shown, turnLabel, unnamed, type Hit } from "../src/stories.ts"
 import type { StoryRow } from "../src/store.ts"
 
 const row = (id: number, p: Partial<StoryRow> = {}): StoryRow => ({
@@ -101,12 +89,4 @@ assert.deepEqual(rows.map(empty), [false, false, false, false, false, false])
 assert.equal(empty(row(7, { turns: 0 })), true)
 assert.deepEqual(rows.map(unnamed), [true, false, true, true, false, true]) // starred or named is kept
 assert.deepEqual([turnLabel({ ...hits.get(3)!, turn: 0 }), turnLabel(hits.get(3)!)], ["开场白", "第 2 轮"])
-console.log("ok")
-// After a delete: the client stays only when the story it was on survived and is still named; the open story among
-// the deleted moves even when the placeholder made in its stead carries its id again (a pre-autoincrement library)
-assert.equal(stays(1, [2], 1), true)
-assert.equal(stays(1, [2], 3), false)
-assert.equal(stays(1, [1], 1), false)
-assert.equal(stays(1, [1, 2], 3), false)
-assert.equal(stays(undefined, [], 1), false)
 console.log("ok")

@@ -66,7 +66,11 @@ export const fetchCalls = async (): Promise<void> => {
   const by = (await got(call(`${base}/calls`))) as Record<string, Call[]>
   registry.set(calls, new Map(Object.entries(by).map(([id, list]) => [Number(id), list])))
 }
-export const fetchStories = async (): Promise<void> => registry.set(stories, await got(call(`${base}/stories`)))
+/** A listing read or answered by a write keeps the client's own `current`: to a request that names no story (a tab on
+ *  a card's page) the server names its newest, and which story the client is on is its tabs' (tabs.ts). The first
+ *  listing, at boot, is taken as given. */
+const keep = (l: Listing): void => registry.update(stories, (prev) => (prev ? { ...l, current: prev.current } : l))
+export const fetchStories = async (): Promise<void> => keep(await got(call(`${base}/stories`)))
 export const fetchPersonas = async (): Promise<void> => registry.set(personas, await got(call(`${base}/personas`)))
 export const fetchPlayer = async (): Promise<void> => registry.set(player, await got(call(`${base}/player`)))
 
@@ -83,10 +87,10 @@ export const deleteStories = (ids: readonly number[]): Promise<Listing> =>
   listing(call(`${base}/stories`, { method: "DELETE", body: JSON.stringify({ ids }) }))
 /** A name the player gives the story; blank clears it. Nothing else moves: only the listing comes back. */
 export const nameStory = async (id: number, title: string): Promise<void> =>
-  registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) })))
+  keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) })))
 /** Starred or not: the same write as a name, only the listing comes back. */
 export const starStory = async (id: number, starred: boolean): Promise<void> =>
-  registry.set(stories, await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ starred }) })))
+  keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ starred }) })))
 /** The manager's search: the stories whose turns hold `q`, as hits by story (stories.ts `Hit`). */
 export const searchStories = (q: string): Promise<Hit[]> =>
   got(call(`${base}/stories/search?q=${encodeURIComponent(q)}`)) as Promise<Hit[]>

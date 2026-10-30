@@ -1,10 +1,10 @@
 // The Reading (src/reading.ts) on a faked wire: a story left keeps its boxes and pin in a record and gets them back,
 // while its log is read again every time (open, nodes, attach); the same story again asks nothing; a ninth record
-// drops the oldest; a deactivate with nothing in the slots is harmless; no story at all is the first card's page.
+// drops the oldest; a deactivate with nothing in the slots is harmless; no story names none: slots and log empty, `current` null.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
 import { createReading } from "../src/reading.ts"
-import { boxes, card, cards, type CardView, log, pin, registry, setBoxes, stories } from "../src/store.ts"
+import { boxes, card, type CardView, log, pin, registry, setBoxes, stories } from "../src/store.ts"
 
 const opened: number[] = []
 let nodes = 0
@@ -19,8 +19,6 @@ const reading = createReading({
     registry.set(log, L.of({ nodes: [], head: null }))
   },
   fetchCard: async () => registry.set(card, { id: "c", greetings: [] } as unknown as CardView),
-  fetchCards: async () => registry.set(cards, [{ id: "first" }] as any),
-  fetchCardOf: async (id) => registry.set(card, { id, greetings: [] } as unknown as CardView),
   attach: () => void attached++,
   abandon: () => void abandoned++,
 })
@@ -68,12 +66,16 @@ reading.drop([20])
 await reading.activate(20)
 assert.deepEqual([boxes(), nodes - n, abandoned - a], [line(""), 1, 1]) // a record of 20 would have put "dead" back
 
-// no story at all: the first card's page over an empty log, no story route asked, nothing attached
+// no story (a card tab, an empty library): a line typed is recorded, the slots and the log are empty, the listing
+// names no story, no story route asked, nothing attached; the card is the caller's
+setBoxes(line("left"))
 const before = [opened.length, attached]
 await reading.activate(null)
 assert.deepEqual(
-  [registry.get(card)?.id, registry.get(log).nodes.size, opened.length, attached],
-  ["first", 0, ...before],
+  [boxes(), registry.get(log).nodes.size, registry.get(stories)?.current, opened.length, attached],
+  [line(""), 0, null, ...before],
 )
 assert.ok(abandoned > 0)
+await reading.activate(20)
+assert.deepEqual(boxes(), line("left"))
 console.log("reading ok")

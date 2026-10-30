@@ -359,6 +359,9 @@ const en: Dict = {
     withCard: "with the card",
     workspace: "Card workspace",
     writing: "Writing",
+    closeTab: "Close this story",
+    unread: "Just finished",
+    newTab: "New tab",
   },
   stories: {
     kindInput: "Your line",

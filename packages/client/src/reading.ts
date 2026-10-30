@@ -3,7 +3,8 @@
 // composer's boxes) and the turn's streams; this module is the one list of which of them are a story's. One Reading is
 // in the slots, the rest are records: what the server does not hold of a story the player left (the half-typed line,
 // its note, the armed pin), by story id, bounded at the tab cap, the oldest dropped. Activate is the way in: it puts
-// the story's record back, then always reads the story afresh (open, nodes, card, its turn in flight); deactivate keeps
+// the story's record back, then always reads the story afresh (open, nodes, card, its turn in flight); activate(null)
+// empties the slots and names no story (`stories.current` null: a card tab, an empty library); deactivate keeps
 // the record, stops reading the streams (the turn runs on, on the server) and empties the slots. A record never holds
 // the log: caching it would save one millisecond-scale local read and buy an invalidation problem (a turn running when
 // the player left has moved on by the time they come back), so the log, the card and the calls are read again. A
@@ -13,7 +14,7 @@
 // before any read, so a switch away mid-read records the line, not the emptied boxes.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
-import { boxes, calls, cards, editing, type Id, log, pin, registry, setBoxes, stories } from "./store.ts"
+import { boxes, calls, editing, type Id, log, pin, registry, setBoxes, stories } from "./store.ts"
 import { turn } from "./turn.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
@@ -22,8 +23,6 @@ export interface Deps {
   openStory: (id: Id) => Promise<Listing> // the blank PUT: the server checks the id and answers the listing on it
   fetchNodes: () => Promise<void>
   fetchCard: () => Promise<void>
-  fetchCards: () => Promise<void>
-  fetchCardOf: (id: string) => Promise<void>
   attach: () => void
   abandon: () => void
 }
@@ -53,9 +52,8 @@ export const createReading = (d: Deps) => {
     active = id
     if (id === null) {
       registry.set(log, L.of<Node>())
-      if (!registry.get(cards).length) await d.fetchCards()
-      const first = registry.get(cards)[0]
-      if (first) await d.fetchCardOf(first.id)
+      const lib = registry.get(stories)
+      if (lib) registry.set(stories, { ...lib, current: null }) // no story named: requests are the install's
       return
     }
     const r = records.get(id) // before any read: the reads touch neither the boxes nor the pin
@@ -69,7 +67,8 @@ export const createReading = (d: Deps) => {
   }
   let last: Promise<void> = Promise.resolve()
   /** A story into the slots, once any activate before it is done; the same one again does nothing. Null is no story
-   *  at all (an empty library): the first card's page over an empty log. */
+   *  (a tab on a card's page, an empty library): the slots empty, the log empty, and the listing names no story, so
+   *  every request after is the install's. Which card the view shows is the caller's (tabs.ts, pages.ts). */
   const activate = (id: Id | null): Promise<void> => (last = last.catch(() => {}).then(() => run(id)))
   /** Deleted stories: their records gone; the active one among them leaves the slots unrecorded, so the next activate,
    *  of its id too, reads afresh. */
@@ -85,8 +84,6 @@ export const reading: Reading = createReading({
   openStory: wire.openStory,
   fetchNodes: wire.fetchNodes,
   fetchCard: wire.fetchCard,
-  fetchCards: wire.fetchCards,
-  fetchCardOf: wire.fetchCardOf,
   attach: () => turn.attach(), // read late: pages' test stubs the turn's own
   abandon: () => turn.abandon(),
 })

@@ -86,9 +86,6 @@ export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
 /** Every card the install knows (GET /cards), by id and title, with its one-line summary when it has one: the
  *  sidebar's shelf (side.tsx), and what a persona's picks are named by. */
 export const cards = Atom.make<readonly { id: string; title: string; summary?: string }[]>([]).pipe(Atom.keepAlive)
-/** The card the sidebar's workspace layer is on (#117): the open story's card, or one browsed from the shelf (its
- *  page shown, no story of it yet). Back in the reader, it is the story's card again (pages.ts). */
-export const focus = Atom.make<string | null>(null).pipe(Atom.keepAlive)
 /** Which of the sidebar's two layers shows: the shelf (every card) or the workspace (one card's stories). Arriving at
  *  a story lands on its workspace, an empty library on the shelf (pages.ts); the back button and a card's row move it. */
 export const layer = Atom.make<"shelf" | "workspace">("workspace").pipe(Atom.keepAlive)
@@ -136,7 +133,30 @@ export const working = Atom.make((get) => (get(draft) !== null && get(error) ===
 /** The page over the reader: none, the card page, the Timeline, the settings, the Writing page (writing.tsx) or the
  *  Inspect page on one node. The reader stays mounted under it, so a turn in flight keeps streaming. */
 export type Page = "reader" | "card" | "timeline" | "settings" | "writing" | "status" | { inspect: Id }
-export const page = Atom.make<Page>("reader")
+/** A tab on the top strip (docs/shell-brief-2.md, #123): an address, not data. The story it reads (none: a card's
+ *  page, a fresh "+"), the card it is on (its story's card when it has one), its page and the pages under it, and the
+ *  reader's scroll as it was left. Every tab reads the one Reading in the slots (reading.ts); tabs.ts is the one
+ *  writer of the list. */
+export interface Tab {
+  id: number
+  story: Id | null
+  card: string | null
+  page: Page
+  under: Page[]
+  scroll?: number
+}
+export type Tabs = { list: readonly Tab[]; active: number }
+export const tabs = Atom.make<Tabs>({
+  list: [{ id: 0, story: null, card: null, page: "reader", under: [] }],
+  active: 0,
+}).pipe(Atom.keepAlive)
+/** The active tab of the list as given. */
+export const activeOf = (s: Tabs): Tab => s.list.find((t) => t.id === s.active)!
+/** What the stage shows: the active tab's page, written through the tab (pages.ts). */
+export const page = Atom.make((get) => activeOf(get(tabs)).page)
+/** The card the sidebar's workspace layer is on (#117): the active tab's card, its story's card or one browsed from
+ *  the shelf (its page shown, no story of it yet). One source for the workspace and the card view. */
+export const focus = Atom.make((get) => activeOf(get(tabs)).card).pipe(Atom.keepAlive)
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
@@ -283,6 +303,15 @@ export const apply = (e: Wire): void => {
 const drain = () => {
   while (held.length && (play.queue.length === 0 || held[0]!.kind === "delta")) applyNow(held.shift()!)
 }
+/** The open story's row in the listing as its stream says (a stage, or the turn over): the server writes `busy` too,
+ *  but the client reads it again only at a stream's end or the sidebar's poll, and a tab's dot must not wait. A story
+ *  left mid-turn keeps its row as it was until the next listing. */
+const running = (phase: Phase | null): void =>
+  registry.update(stories, (l) =>
+    l?.current == null
+      ? l
+      : { ...l, stories: l.stories.map((s) => (s.id === l.current && s.busy !== phase ? { ...s, busy: phase } : s)) },
+  )
 const applyNow = (e: Wire): void => {
   switch (e.kind) {
     case "attach":
@@ -291,10 +320,12 @@ const applyNow = (e: Wire): void => {
       // fails from here goes back in the box, a swipe's or an edit's is already on its node.
       registry.set(draft, e.draft)
       registry.set(stage, e.phase)
+      running(e.phase)
       if (e.phase === "narrate") play.ended = false
       return
     case "stage":
       registry.set(stage, e.phase)
+      running(e.phase)
       // Each draft starts over: a narrate after check is the rewrite, the first one greys under it.
       if (e.phase === "narrate") {
         resetPlay()
@@ -313,7 +344,10 @@ const applyNow = (e: Wire): void => {
       registry.update(log, (l) => L.apply(l, e))
       const id = e.node?.id
       if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made]))
-      if (id !== undefined || !registry.get(draft)) settle() // a checkout while a turn streams moves head, not the draft
+      if (id !== undefined || !registry.get(draft)) {
+        settle() // a checkout while a turn streams moves head, not the draft
+        running(null)
+      }
       return
     }
     case "error":
@@ -321,6 +355,7 @@ const applyNow = (e: Wire): void => {
       resetPlay()
       registry.set(error, { message: e.message, ...(e.code && { code: e.code }) })
       registry.set(stage, null)
+      running(null)
       withdraw()
       return
   }
