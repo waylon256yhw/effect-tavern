@@ -180,10 +180,9 @@ export const makeDerived = ({
 
   /** The facts at the end of `path`, each computed when read. */
   const at = (path: readonly Turn[]) => {
-    const last = () => {
-      const all = settledAlong(path)
-      return all.at(-1) ?? { s: rpg.initial, events: [], checks: [], post: [], pre: rpg.initial }
-    }
+    let all: ReturnType<typeof settledAlong> | undefined // walked once per handle: a node() reads four facts off it
+    const along = () => (all ??= settledAlong(path))
+    const last = () => along().at(-1) ?? { s: rpg.initial, events: [], checks: [], post: [], pre: rpg.initial }
     const text = (d: Disclosure) => textIn(path, d)
     return {
       get state(): State {
@@ -208,10 +207,7 @@ export const makeDerived = ({
       fold: () => foldOf(path),
       summary: () => summaryOf(path),
       known: () => known(path),
-      ledger: () => {
-        const all = settledAlong(path)
-        return ledger(path, (t) => all[path.indexOf(t)]!.events, summaryOf(path))
-      },
+      ledger: () => ledger(path, (t) => along()[path.indexOf(t)]!.events, summaryOf(path)),
       text,
       /** A candidate turn settled on top of the path (setField's adjusted node, demand's `pre`). */
       settle: (t: Turn) => settleTurn(last().s, t),
