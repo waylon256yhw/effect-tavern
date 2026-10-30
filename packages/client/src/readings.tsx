@@ -338,11 +338,7 @@ export const Reading = (props: { el: Element }) => (
       {(el) => (
         <div class="notes">
           <Notes aria-hidden="true" />
-          <ul>
-            <For each={el().items} keyed={false}>
-              {(n) => <li>{n()}</li>}
-            </For>
-          </ul>
+          <p>{el().text}</p>
         </div>
       )}
     </Match>

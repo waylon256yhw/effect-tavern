@@ -19,7 +19,7 @@ import { tavern } from "../src/tavern.ts"
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
 
-const canned = { notes: ["N1"], options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
+const canned = { notes: "N1", options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
 const scripted = {
   ...fake((o) => {
     const doc = readStage(o)

@@ -310,7 +310,8 @@
   margin-top: 2px;
   color: var(--ink-3);
 }
-.clue p {
+.clue p,
+.notes p {
   flex: 1;
   text-align: left;
 }
@@ -324,10 +325,6 @@
 .icon[aria-pressed="true"],
 .icon[aria-expanded="true"] {
   color: var(--ink);
-}
-.notes ul {
-  margin: 0;
-  padding-left: 1.2em;
 }
 /* a product on the node (a card's, or one demanded): its name over its value by shape (readings.tsx `Shaped`) */
 .product {

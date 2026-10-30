@@ -34,7 +34,7 @@ export type Element =
   | { kind: "check"; check: Check }
   | { kind: "clue"; id: string; text: string; pinnable: boolean } // pinnable: a deeper layer is still untold
   | { kind: "pin"; id: string; hook: string; told: boolean } // the entry this act pinned, by its hook (the parent's readable list; told, it has left this node's); untold: check never saw it fire, it can be pinned again
-  | { kind: "notes"; items: readonly string[] }
+  | { kind: "notes"; text: string }
   | { kind: "product"; id: string; label: string; shape: Shape; value: unknown } // any other product on the node (a card's, or one demanded), drawn by its shape; options are the Options container's
 
 export const reading = (
@@ -132,8 +132,9 @@ export const record = (
       hook: prev?.readable.find((r) => r.id === p)?.hook ?? p,
       told: node.turn.fired.some((d) => d.id === p),
     })
-  const notes = node.turn.products.notes as readonly string[] | undefined
-  if (notes?.length) out.push({ kind: "notes", items: notes })
+  const notes = node.turn.products.notes as string | readonly string[] | undefined // a list in libraries before #82
+  const text = Array.isArray(notes) ? notes.join(" ") : (notes as string | undefined)
+  if (text) out.push({ kind: "notes", text })
   for (const p of products) {
     if (p.id === "notes" || p.id === "options") continue
     const value = node.turn.products[p.id]

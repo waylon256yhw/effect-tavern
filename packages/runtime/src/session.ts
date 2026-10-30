@@ -152,8 +152,12 @@ export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
     {
       id: "notes",
       label: "事件摘要",
-      text: "Notes are the record: write only the new facts this scene established (what happened, what was said that matters, what changed), each a short factual sentence in the third person. Name characters by their names in the frame, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never comment on the writing.",
-      shape: { kind: "list" },
+      // One text, not a list: a list reads as "fill it", and on a pure-chat card (伴星, Opus) it came back as six or
+      // seven items a turn, the prose paraphrased paragraph by paragraph, one item split in three on a quoted "我懂"
+      // (a list's grammar admits that; a string's does not). The three ecosystem summaries read for #82 all make a
+      // turn's summary one unit (docs/summary-reading.md).
+      text: "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing.",
+      shape: { kind: "text" },
       feed: true,
     },
     {

@@ -18,7 +18,7 @@ const answers: Record<string, string> = {
   lookup: '{"read":[]}',
   direct: '{"must":[],"may":[],"tone":""}',
   check: '{"fired":[],"violated":[]}',
-  record: '{"notes":[],"options":[],"answers":{"tension":"same"}}',
+  record: '{"notes":"","options":[],"answers":{"tension":"same"}}',
 }
 const scripted = fake((o) => ({
   text: (o.responseFormat?.type === "json" && answers[o.responseFormat.name!]) || "PROSE",

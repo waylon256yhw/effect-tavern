@@ -57,7 +57,7 @@ const answer = (o: FakeCall) => {
     case "record": {
       // ponytail: canned rows for the harness defaults and wuxia's products; another card's product decodes to nothing
       const canned: Record<string, unknown> = {
-        notes: [`第${n}幕：你与裴青舟在苦竹岭茶亭中隔桌相对，试探彼此来意。`],
+        notes: `第${n}幕：玩家与裴青舟在苦竹岭茶亭中隔桌相对，试探彼此来意。`,
         options: [
           "我解下腰间那柄旧短剑放在石桌上：「我是替李鹤来送还故物的。」",
           "「既然裴兄不愿提他，那我便向阁下讨教几招。」我按住剑柄往前踏出一步。",

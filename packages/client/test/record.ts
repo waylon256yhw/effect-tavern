@@ -41,7 +41,7 @@ const els = record(
       checks: [{ action: "strike", chance: 0.6, roll: 0.7, hit: false }],
       delivered: [{ id: "li", layer: 1, text: "a clue" }],
       readable: [{ id: "li", hook: "more" }],
-      turn: { input: { text: "go", pin: "li" }, fired: [], products: { notes: ["a fact"] } },
+      turn: { input: { text: "go", pin: "li" }, fired: [], products: { notes: "a fact" } },
     },
   ),
   node({ hp: 40, foe: 30, mood: "low" }, { readable: [{ id: "li", hook: "a hook" }] }),
@@ -53,7 +53,7 @@ assert.deepEqual(els, [
   { kind: "check", check: { action: "strike", chance: 0.6, roll: 0.7, hit: false } },
   { kind: "clue", id: "li", text: "a clue", pinnable: true },
   { kind: "pin", id: "li", hook: "a hook", told: false }, // pinned, never fired: the row is where it can be pinned again; named by the parent's hook
-  { kind: "notes", items: ["a fact"] },
+  { kind: "notes", text: "a fact" },
 ])
 assert.deepEqual(
   record(
@@ -69,7 +69,7 @@ assert.deepEqual(
 // Products: every declared one on the node but notes (its own kind) and options (the Options container), by shown
 // name, in the card's order; one not on the node (off, or not yet demanded) draws nothing
 const declared = [
-  { id: "notes", label: "事件摘要", shape: { kind: "list" } },
+  { id: "notes", label: "事件摘要", shape: { kind: "text" } },
   { id: "options", shape: { kind: "list" } },
   { id: "inner", label: "人物心声", shape: { kind: "text" } },
   { id: "scene", shape: { kind: "record", keys: [{ key: "place", type: "text" }] } },
@@ -79,13 +79,13 @@ assert.deepEqual(
     rules,
     node(
       { hp: 40, foe: 30, mood: "low" },
-      { turn: { input: {}, fired: [], products: { notes: ["n"], options: ["o"], scene: { place: "亭" } } } },
+      { turn: { input: {}, fired: [], products: { notes: "n", options: ["o"], scene: { place: "亭" } } } },
     ),
     undefined,
     declared,
   ),
   [
-    { kind: "notes", items: ["n"] },
+    { kind: "notes", text: "n" },
     {
       kind: "product",
       id: "scene",

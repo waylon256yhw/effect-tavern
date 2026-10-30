@@ -56,9 +56,8 @@ function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
           return [id, options.includes(want) ? want : options[0]]
         }),
       )
-      // Notes repeat the first Known item on purpose: the session drops what the path already holds.
       const canned: Record<string, unknown> = {
-        notes: [`NOTE#${n}`, ...doc.known.slice(0, 1)],
+        notes: `NOTE#${n}`,
         options: ["O1", "O2", "O3", "O4", "O5"], // five: the cap cuts to four
         scene: { place: `P#${n}`, present: [{ name: "B", mood: "calm" }] },
         // "names li" rows Li too, on a line the lookup script does not read from
@@ -182,7 +181,7 @@ const program = Effect.gen(function* () {
   assert.ok(/Questions: warmth: 这一幕里裴青舟对待你的态度/.test(rec1) && !/bond|State:/.test(rec1))
   assert.ok(str(lastNarr()).includes(full.fiction[1]!.text!) && !/bond/.test(str(lastNarr())))
   assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
-  assert.deepEqual(t1.products.notes, ["NOTE#2"]) // the echoed Known item is dropped; only the new fact is kept
+  assert.equal(t1.products.notes, "NOTE#2") // one sentence a turn (#82)
 
   // Turn 2: no lookup: li#1 is on the path and t1's people row is not readable while t1 is in the unfolded tail (its
   // prose is still verbatim in the transcript); strikes settle, window opens, director, reveal fired. The narrator gets the feed record as `Current:` after the outcome.

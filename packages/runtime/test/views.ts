@@ -112,7 +112,7 @@ const run = (
       card.rules.length || card.director
         ? (yield* ask("check", render(card, path, "check", cur))).split(",").filter(Boolean)
         : []
-    const notes = [yield* ask("record", render(card, path, "record", cur))]
+    const notes = yield* ask("record", render(card, path, "record", cur))
     return held.commit(
       Log.add(held.log, {
         parent,
@@ -248,7 +248,7 @@ const program = Effect.gen(function* () {
   // An amend (a `demand` rewriting a folded node's notes) keeps the id but not the content: the summary is refolded,
   // never served stale, and replaces the entry rather than adding one (#64).
   const t1 = held.log.nodes.get(turns[1].id)!
-  held.commit(Log.amend(held.log, t1.id, { products: { ...t1.products, notes: ["NOTE#1 amended"] } }))
+  held.commit(Log.amend(held.log, t1.id, { products: { ...t1.products, notes: "NOTE#1 amended" } }))
   assert.equal(summaries.summaryFor(chain(fork.id)), undefined) // the cached fold covers the old node
   const again = summaries.compress(chain(turns[4].id), 2)!
   assert.notEqual(again, sum)

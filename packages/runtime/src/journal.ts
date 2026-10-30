@@ -32,8 +32,12 @@ export interface Turn<B> {
   sibling?: "swipe" | "reword" | "edit" // which action made this sibling; absent on a player's own turn
   products: Readonly<Record<string, unknown>> // record's answers by product id, shaped by the card (src/product.ts); `notes` is one
 }
-/** The notes product: the list of facts this turn established, the compression source. */
-export const notesOf = <B>(t: Turn<B>): readonly string[] => (t.products.notes as readonly string[] | undefined) ?? []
+/** The notes product, the compression source: this turn's sentence, as the one-item list every fold joins. A library
+ *  written before #82 holds a list per turn; it reads the same. */
+export const notesOf = <B>(t: Turn<B>): readonly string[] => {
+  const n = t.products.notes as string | readonly string[] | undefined
+  return typeof n === "string" ? (n ? [n] : []) : (n ?? [])
+}
 
 export const textOf = (parts: readonly Part[]): string =>
   parts
