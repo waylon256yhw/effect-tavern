@@ -548,6 +548,11 @@
     padding-bottom: 0;
   }
 }
+/* Status with no row to show (no rules, or every field off by `when` this turn): no bare head over an empty table;
+   a pin alone still keeps the left block */
+.status-page .status:not(:has(.group)) {
+  display: none;
+}
 .status-page section {
   gap: var(--space-2);
 }

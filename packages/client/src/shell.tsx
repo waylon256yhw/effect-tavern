@@ -197,6 +197,7 @@ export const Shell = (props: { children: JSX.Element }) => {
         type="button"
         class={{ icon: true, sm: wide() }}
         aria-label={t("side.readings")}
+        disabled={line().length === 0}
         aria-pressed={pg() === "status" ? "true" : "false"}
         onClick={readings}
       >
