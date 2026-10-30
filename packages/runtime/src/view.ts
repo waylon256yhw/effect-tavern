@@ -10,7 +10,8 @@ import { frame, head, type Fragment, type Player } from "./fragment.ts"
 import { hook, makeLore } from "./lore.ts"
 import { request, type Ask } from "./request.ts"
 import { resolve } from "./product.ts"
-import { defaultProducts, floorAt, questionOf, wordingOf } from "./session.ts"
+import { floorAt } from "./derived.ts"
+import { defaultProducts, questionOf, wordingOf } from "./session.ts"
 import { tokens } from "./tokens.ts"
 
 export const stages = ["narrate", "record", "lookup"] as const

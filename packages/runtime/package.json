@@ -11,7 +11,7 @@
   },
   "scripts": {
     "card": "bun bin/card.ts",
-    "verify": "bun check && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/assemble.ts && bun test/request.ts && bun test/polish.ts && bun test/loop.ts && bun test/card.ts && bun test/lint.ts && bun test/product.ts && bun test/tokens.ts && bun test/view.ts"
+    "verify": "bun check && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/derived.ts && bun test/assemble.ts && bun test/request.ts && bun test/polish.ts && bun test/loop.ts && bun test/card.ts && bun test/lint.ts && bun test/product.ts && bun test/tokens.ts && bun test/view.ts"
   },
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",

@@ -5,7 +5,7 @@ import { fake, fakeText, type Message } from "@effect-tavern/provider"
 import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import { prose, splitAside } from "../src/journal.ts"
-import { makeSession, outcome, type Event, type Turn } from "../src/session.ts"
+import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
 
 // ───────── Scripted model ─────────
@@ -519,9 +519,8 @@ const program = Effect.gen(function* () {
   assert.deepEqual([since(i), q0.products], [["narrate"], {}])
 
   // ───────── Derived lore counters in the window (§8 item 4), and a card's own ask ─────────
-  // A recurring entry: offered when it has not reached the narrator for two turns and has been shown fewer than twice.
-  // Never shown counts as Infinity, so it opens on the first turn; shown there, it waits one turn, then opens again.
-  // The same card overrides one of the session's own asks by id; the rest keep their defaults.
+  // The counters themselves are test/derived.ts; here the window the gate opens reaches direct and check. The same card
+  // overrides one of the session's own asks by id; the rest keep their defaults.
   const echo = {
     id: "echo",
     layers: ["E1", "E2", "E3"],
@@ -538,62 +537,31 @@ const program = Effect.gen(function* () {
     player,
     model,
   })
-  narrations.push("fire", "plain", "fire")
+  narrations.push("fire")
   const a = yield* go(E.act(null, { text: "wait" }))
   assert.deepEqual([a.brief.may, a.fired], [["echo"], [{ id: "echo", layer: 2 }]])
   assert.ok(/^notes: ASK#notes$/m.test(str(prompts("record").at(-1)!)))
   assert.ok(/Notes are the record/.test(str(prompts("record").at(-2)!)))
-  const b = yield* go(E.act(a.id, { text: "wait" }))
-  assert.deepEqual(b.brief.may, []) // since = 1
-  const c = yield* go(E.act(b.id, { text: "wait" }))
-  assert.deepEqual([c.brief.may, c.fired], [["echo"], [{ id: "echo", layer: 3 }]]) // since = 2, shown = 1
 
-  // ───────── The lock is a predicate over the path: a layer once unlocked stays readable after the state drops ─────────
-  // li's second layer unlocks at bond ≥ 8. Two warm turns reach it ("warm", not "close": close's event would open a
-  // window next turn, which reads the layer under it); a cold turn after takes bond back to 3, and the layer is still
-  // readable (so pinnable), then read by the lookup. Layer 3 never: only a window opens it.
+  // ───────── The lookup picks from the node's readable (the floor and the fold rule are test/derived.ts) ─────────
   const V = makeSession({ card: full, player, model, policy })
   const untold = (id: number) => V.node(id).readable.map((r) => r.id)
   const v0 = yield* go(V.act(null, { text: "about li" }))
   assert.deepEqual([v0.read, untold(v0.id)], [[{ id: "li", layer: 1 }], []])
-  warmths.push("warm", "warm")
-  const v1 = yield* go(V.act((yield* go(V.act(v0.id, { text: "wait" }))).id, { text: "wait" }))
-  assert.deepEqual([V.node(v1.id).state.bond, untold(v1.id)], [8, ["li"]])
-  warmths.push("cold")
-  const v2 = yield* go(V.act(v1.id, { text: "wait" }))
-  assert.deepEqual([V.node(v2.id).state.bond, untold(v2.id)], [3, ["li"]]) // the instant no longer holds; the lock stays open
-  const v4 = yield* go(V.act(v2.id, { text: "about li" }))
-  assert.deepEqual([v4.read, untold(v4.id)], [[{ id: "li", layer: 2 }], []])
-  // A recall row enters the Index only once its node folds: in the tail its prose is still verbatim in the transcript.
-  // (Budget 0: two turns kept, the boundary a block of two behind them; `untold(x)` is what the turn after x may read.)
-  // The row's node sits at index i on its path; it is absent on every wait until the boundary passes i, then present.
-  // Counted from i, not hard-coded: the turns before it belong to other assertions and move when they do.
-  const depth = (id: number) => {
-    let d = 0
-    for (let n = V.node(id); n.parent != null; n = V.node(n.parent)) d++
-    return d
-  }
-  const settles = (from: Turn, id: string) =>
-    Effect.gen(function* () {
-      const i = depth(from.id)
-      let k = 0
-      while (Math.floor((i + 1 + ++k - 2) / 2) * 2 <= i); // the first k with folded(i + 1 + k) > i, keep 2 block 2
-      const seen: string[][] = []
-      for (let j = 0; j < k; j++) seen.push(untold((from = yield* go(V.act(from.id, { text: "wait" }))).id))
-      assert.deepEqual(seen, [...Array<string[]>(k - 1).fill([]), [id]])
-      return from
-    })
-  const r1 = yield* go(V.act(v4.id, { text: "names li" }))
-  assert.deepEqual([r1.products.people, untold(r1.id)], [[{ name: "Li", note: `N#${n}` }], []])
-  const f1 = yield* settles(r1, `people@${r1.id}#0`)
-  // Two rows with one key are one index entry, the newest row, and the fold runs first: with the old row folded and the
-  // new one in the tail, the key is absent, not the old row back.
-  const r2 = yield* go(V.act(f1.id, { text: "names li" }))
-  assert.deepEqual(untold(r2.id), [])
-  const f2 = yield* settles(r2, `people@${r2.id}#0`)
-  // Reading the newest row tells the key: the superseded row does not come back as unread.
-  const r3 = yield* go(V.act(f2.id, { text: "about Li" }))
-  assert.deepEqual([r3.read, untold(r3.id)], [[{ id: `people@${r2.id}#0`, layer: 1 }], []])
+  // A recall row record wrote reaches the lookup's index through the node's readable once its node folds.
+  let f = yield* go(V.act(v0.id, { text: "names li" }))
+  const row = `people@${f.id}#0`
+  for (let k = 0; k < 4 && !untold(f.id).includes(row); k++) f = yield* go(V.act(f.id, { text: "wait" }))
+  const r3 = yield* go(V.act(f.id, { text: "about Li" }))
+  assert.deepEqual(
+    [str(prompts("lookup").at(-1)!).match(/Index: (.*)/)![1], r3.read],
+    [
+      V.node(f.id)
+        .readable.map((e) => `${e.id}=${e.hook}`)
+        .join(", "),
+      [{ id: row, layer: 1 }],
+    ],
+  )
   // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
   let light = 0
   const lookup = { ...fake((o) => (light++, script(o))), prefill: true }
