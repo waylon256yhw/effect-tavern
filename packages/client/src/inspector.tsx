@@ -194,12 +194,13 @@ const Step = (props: {
     return p && p.q === props.q ? p.tab : defaultTab(rhits(), props.q)
   }
   const setTab = (tab: number | null) => setPick({ q: props.q, tab })
-  // a query (or a tab) brings the well's first mark to its middle, by the well's own scrollTop so the pane stays put
+  // a query (or a tab, or the step opening under one) brings the well's first mark to its middle, by the well's own
+  // scrollTop so the pane stays put
   let well: HTMLDivElement | undefined
   createEffect(
-    () => [props.q, shownTab()] as const,
-    ([q]) => {
-      if (!q) return
+    () => [props.q, shownTab(), props.open] as const,
+    ([q, , open]) => {
+      if (!q || !open) return // a closed step has no geometry; it scrolls when it opens under the query
       const id = requestAnimationFrame(() => {
         const m = well?.querySelector("mark")
         if (!well || !m) return
