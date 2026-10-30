@@ -8,37 +8,23 @@
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Phase } from "@effect-tavern/runtime/src/session.ts"
 import { Dynamic, type JSX } from "@solidjs/web"
-import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
 import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
 import { Providers } from "./providers.tsx"
-import { cards, hats, page, personas, player, providers, registry, routing, type Pair } from "./store.ts"
+import { close, open } from "./pages.ts"
+import { cards, hats, personas, player, providers, routing, type Pair } from "./store.ts"
 import { type Key, t } from "./i18n.ts"
-import {
-  deleteHat,
-  deletePersona,
-  fetchCards,
-  fetchHats,
-  fetchNames,
-  fetchProviders,
-  fetchRouting,
-  fetchSecrets,
-  putHat,
-  putPersona,
-  putRouting,
-} from "./wire.ts"
+import { deleteHat, deletePersona, putHat, putPersona, putRouting } from "./wire.ts"
 
 export type Section = "providers" | "routing" | "templates" | "personas"
 let opening: Section = "providers"
-let backTo: "reader" | "card" = "reader" // Back returns to where Settings was opened from: the card page keeps its Begin
 /** The page on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's error, the card page). */
 export const openSettings = (at: Section = "providers") => {
   opening = at
-  backTo = registry.get(page) === "card" ? "card" : "reader"
-  registry.set(page, "settings")
+  open("settings") // Back returns to where it was opened from: the card page keeps its Begin
 }
-const close = () => registry.set(page, backTo)
 
 const SECTIONS: [Section, Key, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element][] = [
   ["providers", "settings.providers", Plugs],
@@ -60,19 +46,6 @@ export const Settings = () => {
   })
   const switchTo = (s: Section) => (setSection(s), setPane("list"))
   const title = () => t(SECTIONS.find(([s]) => s === section())![1])
-
-  onSettled(() => {
-    void Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards(), fetchNames()])
-    // a popover, a dialog or an open drawer takes its own Escape (controls.tsx's shells); so does a field
-    // that prevents it
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return
-      if (document.querySelector(":popover-open, dialog[open], .side-drawer[data-open='true']")) return
-      close()
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  })
 
   return (
     <div class="settings" data-section={section()} data-pane={section() === "routing" ? "detail" : pane()}>

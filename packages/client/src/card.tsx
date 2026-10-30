@@ -6,19 +6,19 @@
 // pick starts a new story beside the old one. A card with no opening begins on an empty line,
 // the player's first words start it.
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
-import { createSignal, For, onSettled, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
-import { card, log, page, personas, player, registry, routing, working } from "./store.ts"
+import { close, newStory, open } from "./pages.ts"
+import { card, log, personas, player, routing, working } from "./store.ts"
 import { turn } from "./turn.ts"
-import { newStory } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
-export const openCard = () => registry.set(page, "card")
+export const openCard = () => open("card")
 
 /** A list of names, the first few inline and the rest behind "and N more" (a popover, since a phone cannot hover). */
 let lists = 0
@@ -55,18 +55,11 @@ export const CardPage = () => {
   const inStory = () => all().nodes.size > 0
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
-  const back = () => registry.set(page, "reader")
   const begin = async () => {
-    if (inStory()) await newStory()
+    if (inStory()) await newStory() // lands on the new, empty story: the card page, nothing under it
     turn.greet(at())
+    open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
   }
-  onSettled(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(":popover-open")) back()
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  })
   return (
     <div class="inspect manifest">
       <Show when={view()}>
@@ -75,7 +68,7 @@ export const CardPage = () => {
             <section class="about" aria-label={t("card.card")}>
               <div class="head">
                 <div class="title">
-                  <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={back}>
+                  <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
                     <Back />
                   </button>
                   <h1>{c().title}</h1>

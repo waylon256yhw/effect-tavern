@@ -15,9 +15,10 @@ import { Back, Checkout, Clue, Edit, Notes, Reword, Swipe, Trash } from "./icons
 import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { plain, Prose } from "./prose.tsx"
 import { heading } from "./record.ts"
-import { card, draft, type Id, log, page, path, prose, registry, working } from "./store.ts"
+import { close, open } from "./pages.ts"
+import { card, draft, type Id, log, path, prose, registry, working } from "./store.ts"
 import { turn } from "./turn.ts"
-import { dropNodes, fetchCalls } from "./wire.ts"
+import { dropNodes } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 // px: a station's width (its height is the CSS's), the gap between lanes, the row step, the turn ruler, the padding, a thread's
@@ -31,7 +32,7 @@ const BAND = 32
 const THREAD_GAP = 14
 const KNOT = { x: 7, y: 14 }
 
-export const openTimeline = () => registry.set(page, "timeline")
+export const openTimeline = () => open("timeline")
 const lineOf = (n: Node) => n.turn.input.text || n.turn.input.note || ""
 const textOf = (n: Node) => lineOf(n) || plain(prose(n))
 
@@ -91,7 +92,6 @@ export const Timeline = () => {
   const isTarget = (id: Id) => target() === id && selected() !== id && !isHead(id)
   const lit = (c: Cell) => c.ids[0] !== DRAFT && c.ids.some((i) => onLine().has(i))
 
-  const close = () => registry.set(page, "reader")
   const scrollTo = (id: Id) => document.getElementById(`node-${id}`)?.scrollIntoView({ block: "start" })
   const checkout = (id: Id) => {
     setSelected(L.leaf(all(), id))
@@ -108,11 +108,7 @@ export const Timeline = () => {
     })
     turn.checkout(id)
   }
-  const inspect = (id: Id) => {
-    close()
-    registry.set(page, { inspect: id })
-    void fetchCalls()
-  }
+  const inspect = (id: Id) => open({ inspect: id }) // over the Timeline: Back returns here
   let confirm!: HTMLDialogElement
   const drop = async () => {
     const id = sel()!.id
@@ -124,11 +120,6 @@ export const Timeline = () => {
     document
       .querySelector(".timeline .cell[aria-current='true']")
       ?.scrollIntoView({ block: "center", inline: "nearest" })
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !confirm.open) close()
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
   })
 
   const Single = (p: { c: Cell; id: Id }) => {

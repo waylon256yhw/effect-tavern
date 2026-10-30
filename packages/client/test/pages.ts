@@ -1,0 +1,89 @@
+// The page over the reader (src/pages.ts) on a stubbed wire: close returns to the page under, the reader at the
+// bottom; landing on a story decides card or reader, forgets what was under and closes the old story's stream; a
+// delete that leaves the open story open moves nothing; one Escape rule.
+import * as L from "@effect-tavern/runtime/src/log.ts"
+import assert from "node:assert/strict"
+import { close, deleteStory, escaping, land, open, openStory } from "../src/pages.ts"
+import { log, page, registry, stories } from "../src/store.ts"
+import { turn } from "../src/turn.ts"
+
+const node = (id: number, parent: number | null) =>
+  ({ id, parent, turn: { id, parent, input: { text: "" }, reply: [], end: "end" } }) as any
+let nodes: unknown[] = [] // what GET /nodes answers
+const listing = (current: number) => ({ current, stories: [] })
+;(globalThis as any).fetch = async (url: string, init?: RequestInit) => {
+  const path = String(url)
+  const body =
+    path === "/api/nodes"
+      ? { nodes, head: nodes.length ? (nodes.at(-1) as { id: number }).id : null }
+      : path.startsWith("/api/stories/") && init?.method === "DELETE"
+        ? listing(1) // the open story stays the one to be on
+        : path.startsWith("/api/stories/")
+          ? listing(Number(path.split("/").at(-1)))
+          : [] // the settings' lists
+  return new Response(JSON.stringify(body))
+}
+let abandoned = 0
+turn.abandon = () => void abandoned++
+const at = () => registry.get(page)
+
+// the stack: each page returns to the one it covered
+open("card")
+open("settings")
+assert.equal(at(), "settings")
+close()
+assert.equal(at(), "card")
+close()
+assert.equal(at(), "reader")
+close()
+assert.equal(at(), "reader") // nothing under the reader
+// the reader is under every page: opening it drops what covered it (Begin after browsing Settings from the card page)
+open("card")
+open("settings")
+open("card")
+open("reader")
+assert.equal(at(), "reader")
+close()
+assert.equal(at(), "reader")
+
+// Inspect from the Timeline returns to the Timeline; walking the Inspect page is no new return point
+open("timeline")
+open({ inspect: 1 })
+open({ inspect: 2 })
+assert.deepEqual(at(), { inspect: 2 })
+close()
+assert.equal(at(), "timeline")
+
+// landing: an empty log lands on the card page with nothing under it, the old stream closed
+open({ inspect: 1 })
+await land(listing(1))
+assert.deepEqual([at(), abandoned, registry.get(stories)?.current], ["card", 1, 1])
+close()
+assert.equal(at(), "reader")
+
+// a story in progress lands in the reader
+nodes = [node(0, null)]
+open("writing")
+await openStory(2)
+assert.deepEqual([at(), abandoned, registry.get(stories)?.current, registry.get(log).nodes.size], ["reader", 2, 2, 1])
+
+// a delete of another story: the open one stays, nothing lands; of the open one, the client lands on the next
+registry.set(stories, listing(1))
+registry.set(log, L.of({ nodes: [node(0, null), node(1, 0)], head: 1 }))
+open("timeline")
+await deleteStory(7)
+assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["timeline", 2, 2])
+await deleteStory(1)
+assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["reader", 3, 1])
+
+// Escape: a field that prevents it keeps it; a popover, dialog or drawer takes it; a field is left first; else close
+const target = (tagName: string, isContentEditable = false) =>
+  ({ tagName, isContentEditable }) as unknown as EventTarget
+assert.equal(escaping({ defaultPrevented: true, target: target("DIV") }, false), null)
+assert.equal(escaping({ defaultPrevented: false, target: target("INPUT") }, true), null)
+assert.equal(escaping({ defaultPrevented: false, target: target("INPUT") }, false), "blur")
+assert.equal(escaping({ defaultPrevented: false, target: target("TEXTAREA") }, false), "blur")
+assert.equal(escaping({ defaultPrevented: false, target: target("DIV", true) }, false), "blur")
+assert.equal(escaping({ defaultPrevented: false, target: target("BUTTON") }, false), "close")
+assert.equal(escaping({ defaultPrevented: false, target: null }, false), "close")
+console.log("pages ok")
