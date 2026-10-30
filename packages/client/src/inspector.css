@@ -30,8 +30,7 @@
 .inspect .pid,
 .inspect .hid,
 .inspect .kv,
-.inspect .rows th,
-.inspect .bar {
+.inspect .rows th {
   font-family: var(--font-mono);
 }
 .inspect .pill {
@@ -388,36 +387,12 @@
   font-weight: 500;
 }
 
-/* the body: the call's numbers, then the well */
+/* the body: the well */
 .inspect .body {
   padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-.inspect .bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  font-size: var(--text-caption);
-  color: var(--ink-3);
-}
-.inspect .bar b {
-  color: var(--ink-2);
-  font-weight: 600;
-}
-.inspect .cp {
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--alpha-1);
-  color: var(--ink-2);
-  font-size: var(--text-caption);
-}
-.inspect .cp:hover {
-  background: var(--alpha-2);
-  color: var(--ink);
 }
 .inspect .well {
   display: flex;
@@ -462,6 +437,9 @@
 }
 .inspect .rtabs button[aria-selected="true"] .chars {
   font-weight: 400;
+}
+.inspect .rtabs .copy {
+  margin-inline-start: auto;
 }
 .inspect .bp {
   width: 5px;

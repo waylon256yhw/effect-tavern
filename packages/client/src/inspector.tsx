@@ -1,11 +1,11 @@
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
-import { Back, Clue, Next, Prev, Record } from "./icons.tsx"
-import { groups, isTray, missing, regions, rows, textOf, totals, type Row, type Tray } from "./inspect.ts"
+import { Back, Check, Clue, Copy, Next, Prev, Record } from "./icons.tsx"
+import { groups, isTray, regions, rows, textOf, totals, type Call, type Row, type Tray } from "./inspect.ts"
 import { KeyValues, PinButton, Reading, Shaped } from "./readings.tsx"
 import { channelOf, fields, lineOf, parentOf, versions, whens } from "./record.ts"
-import { calls, card, log, path, pin, registry, turnOf, type Id } from "./store.ts"
+import { calls, card, log, path, pin, registry, type Id } from "./store.ts"
 import { close, open } from "./pages.ts"
 import { t } from "./i18n.ts"
 
@@ -30,6 +30,12 @@ export const openInspector = () => {
 const fmt = (n: number) => n.toLocaleString("en-US")
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`
+// token readings in one grammar: ↑ in, ↓ out, ↻ cache read, + cache write (the last two only when not 0); the words
+// live once, in the reading's title
+const tokens = (u: Call["usage"], f: (n: number) => string) =>
+  [`↑${f(u.input)}`, `↓${f(u.output)}`, u.cacheRead && `↻${f(u.cacheRead)}`, u.cacheWrite && `+${f(u.cacheWrite)}`]
+    .filter(Boolean)
+    .join(" ")
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const count = (text: string, q: string) => (q ? (text.match(new RegExp(escapeRe(q), "gi")) ?? []).length : 0)
 /** Text with every match of the (literal) query marked. */
@@ -166,10 +172,6 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
   const opens = () => (props.dev && c().msgs.length > 0) || props.row.phase !== "direct"
   const [tab, setTab] = createSignal<number | null>(null) // a region, or null for all
   const shownTab = () => (props.q ? null : (tab() ?? Math.max(0, regs().length - 1)))
-  const prefix = () =>
-    regs()
-      .filter((r) => r.breakpoint)
-      .reduce((n, r) => n + r.chars, 0)
   const [copied, setCopied] = createSignal(false)
   const copy = () => {
     const out = { regions: regs().map(({ msgs, ...r }) => ({ ...r, messages: msgs })), answer: c().out }
@@ -178,16 +180,6 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
       setTimeout(() => setCopied(false), 1500)
     })
   }
-  const u = () => c().usage
-  // the call's numbers in one line: tokens, and the chars before the last breakpoint beside cache read to compare
-  const bar = () =>
-    [
-      t("inspector.tokensLine", { input: fmt(u().input), output: fmt(u().output), cacheRead: fmt(u().cacheRead) }),
-      u().cacheWrite && t("inspector.cacheWrite", { n: fmt(u().cacheWrite) }),
-      props.dev && prefix() && t("inspector.prefixChars", { n: fmt(prefix()) }),
-    ]
-      .filter(Boolean)
-      .join(" · ")
   return (
     <details
       class={{ step: true, flat: !opens(), bad: props.row.status !== "ok" }}
@@ -202,21 +194,12 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
         <span class="digest">
           <Digest row={props.row} node={props.node} nth={props.nth} dev={props.dev} />
         </span>
-        <span class="metrics">
-          <span class="ms">{secs(c().ms)}</span> ·{" "}
-          {t("inspector.inOut", { input: fmt(u().input), output: fmt(u().output) })}
+        <span class="metrics" title={t("inspector.tokenLegend")} aria-label={t("inspector.tokenLegend")}>
+          <span class="ms">{secs(c().ms)}</span> · {tokens(c().usage, fmt)}
         </span>
       </summary>
       <Show when={opens()}>
         <div class="body">
-          <div class="bar">
-            <span>{bar()}</span>
-            <Show when={props.dev && c().msgs.length > 0}>
-              <button class="cp" onClick={copy}>
-                {copied() ? t("common.copied") : t("inspector.copyJson")}
-              </button>
-            </Show>
-          </div>
           <div class="well">
             <Show when={props.dev && regs().length > 0}>
               <div class="rtabs" role="tablist">
@@ -233,6 +216,11 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                 <button role="tab" aria-selected={shownTab() === null ? "true" : "false"} onClick={() => setTab(null)}>
                   {t("inspector.all")}
                 </button>
+                <button class="copy" aria-label={t("inspector.copyJson")} onClick={copy}>
+                  <Show when={copied()} fallback={<Copy />}>
+                    <Check />
+                  </Show>
+                </button>
               </div>
             </Show>
             <div class="wscroll">
@@ -244,7 +232,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                         {(m, j) => (
                           <div class="msg" data-role={m().role}>
                             <span class="role">
-                              {r().name} · {m().role}
+                              {shownTab() === null ? `${r().name} · ${m().role}` : m().role}
                               <Show when={r().breakpoint && j === r().msgs.length - 1}>
                                 <span class="bptag">{t("inspector.breakpoint")}</span>
                               </Show>
@@ -260,9 +248,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                 </For>
               </Show>
               <div class="answer">
-                <span class="role">
-                  {t("inspector.answer")} <span class="chars">{t("inspector.outN", { n: fmt(u().output) })}</span>
-                </span>
+                <span class="role">{t("inspector.answer")}</span>
                 <Show
                   when={typeof c().out === "string"}
                   fallback={<KeyValues of={c().out as Record<string, unknown>} />}
@@ -301,7 +287,6 @@ export const Inspect = (props: { id: Id }) => {
   const [q, setQ] = createSignal("")
   const trows = createMemo(() => (node() ? rows(mine(), node()!.turn) : []))
   const grouped = createMemo(() => groups(trows()))
-  const absent = () => missing(mine())
   const sums = createMemo(() => totals(mine()))
   const nth = (r: Row) =>
     trows()
@@ -360,14 +345,8 @@ export const Inspect = (props: { id: Id }) => {
         </span>
         <span class="spacer" />
         <Show when={sums().calls}>
-          <span class="sums">
-            {t("inspector.sumCalls", {
-              calls: sums().calls,
-              secs: secs(sums().ms),
-              input: compact.format(sums().input),
-            })}
-            <Show when={sums().cacheRead}>{t("inspector.sumCached", { n: compact.format(sums().cacheRead) })}</Show>
-            {t("inspector.sumOut", { n: compact.format(sums().output) })}
+          <span class="sums" title={t("inspector.tokenLegend")} aria-label={t("inspector.tokenLegend")}>
+            {sums().calls}× · {secs(sums().ms)} · {tokens(sums(), (n) => compact.format(n))}
           </span>
         </Show>
         <span class="seg" role="tablist" aria-label={t("common.view")}>
@@ -390,9 +369,6 @@ export const Inspect = (props: { id: Id }) => {
             <section class="pane pipeline" aria-label={t("inspector.pipeline")}>
               <div class="sechead">
                 <span class="lbl">{t("inspector.pipeline")}</span>
-                <Show when={absent().length}>
-                  <span class="meta">{t("inspector.absent", { stages: absent().join(", ") })}</span>
-                </Show>
                 <Show when={dev()}>
                   <label class="search">
                     <Clue aria-hidden="true" />
@@ -474,36 +450,30 @@ export const Inspect = (props: { id: Id }) => {
               </div>
               <div class="sechead">
                 <span class="lbl">{t("inspector.untold")}</span>
-                <span class="meta">
-                  {x().readable.length
-                    ? t("inspector.readable", { n: x().readable.length })
-                    : t("inspector.nothingLeft")}
-                </span>
               </div>
-              <div class="hooks">
-                <For each={x().readable} keyed={(r) => r.id}>
-                  {(r) => (
-                    <div class={{ hook: true, armed: pinned() === r().id }}>
-                      <span class="hb">
-                        <span class="hid">
-                          {r().id}
-                          {pinned() === r().id ? t("inspector.armed") : ""}
+              <Show when={x().readable.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
+                <div class="hooks">
+                  <For each={x().readable} keyed={(r) => r.id}>
+                    {(r) => (
+                      <div class={{ hook: true, armed: pinned() === r().id }}>
+                        <span class="hb">
+                          <span class="hid">
+                            {r().id}
+                            {pinned() === r().id ? t("inspector.armed") : ""}
+                          </span>
+                          <span class="ht">{r().hook}</span>
                         </span>
-                        <span class="ht">{r().hook}</span>
-                      </span>
-                      <PinButton id={r().id} />
-                    </div>
-                  )}
-                </For>
-              </div>
+                        <PinButton id={r().id} />
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
               <div class="sechead">
                 <span class="lbl">{t("inspector.state")}</span>
-                <span class="meta">
-                  <Show when={parent()} fallback={t("inspector.afterThisNode")}>
-                    {(p) => <>{t("inspector.vsTurn", { turn: turnOf(line(), p().turn.id) })}</>}
-                  </Show>
-                  <Show when={x().events.length}> · {x().events.join(", ")}</Show>
-                </span>
+                <Show when={x().events.length}>
+                  <span class="meta">{x().events.join(", ")}</span>
+                </Show>
               </div>
               <Show when={changes().length} fallback={<p class="dim">{t("inspector.noFieldChanged")}</p>}>
                 <div class="record">
@@ -514,7 +484,6 @@ export const Inspect = (props: { id: Id }) => {
               </Show>
               <div class="sechead">
                 <span class="lbl">{t("inspector.products")}</span>
-                <span class="meta">{t("inspector.recordMeta")}</span>
               </div>
               <For each={Object.entries(x().turn.products)} keyed={([k]) => k}>
                 {(e) => (
@@ -526,12 +495,6 @@ export const Inspect = (props: { id: Id }) => {
                   </div>
                 )}
               </For>
-              <Show when={Object.keys(x().turn.answers).length}>
-                <div class="prod">
-                  <span class="pid">{t("inspector.answers")}</span>
-                  <KeyValues of={x().turn.answers} />
-                </div>
-              </Show>
             </aside>
           </div>
         )}
