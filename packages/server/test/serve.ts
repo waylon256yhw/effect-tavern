@@ -135,6 +135,7 @@ const run = async (inspect: boolean) => {
     assert.deepEqual([refused.status, ((await refused.json()) as { code: string }).code], [409, "busy"])
     assert.equal((await post({ kind: "checkout", node: null })).status, 409)
     assert.equal((await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).status, 409)
+    assert.equal((await fetch(`${base}/stories/${story}`, { method: "DELETE" })).status, 409)
     const rows = (await (await fetch(`${base}/stories`)).json()) as { stories: { id: number; busy: string | null }[] }
     assert.equal(rows.stories.find((s) => s.id === story)!.busy, "narrate")
     const attached = sse(await (await fetch(`${base}/turn`)).text())

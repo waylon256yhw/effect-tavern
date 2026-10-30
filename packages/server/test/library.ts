@@ -117,6 +117,9 @@ const over = (data: Data, m: () => Model = model) =>
   await Effect.runPromise(Fiber.interrupt(gone))
   assert.equal(lib.stories.list().find((s) => s.id === p)!.busy, "narrate")
   assert.throws(() => t.start(act("again")), /in flight/)
+  assert.throws(() => lib.stories.del(p), /busy/) // its writes would land on nothing
+  lib.stories.delMany([p])
+  assert.ok(lib.exists(p))
   const back = t.attach()!
   assert.deepEqual(
     [back.phase, back.draft!.parent, back.draft!.input, back.draft!.text.length > 0],
@@ -150,7 +153,7 @@ const over = (data: Data, m: () => Model = model) =>
   await Effect.runPromise(Fiber.interrupt(bad)) // gone before narrate is through, so before record fails
   while (t.busy) await new Promise((f) => setTimeout(f, 5))
   const failed = t.attach()
-  assert.deepEqual(failed?.draft, { parent: 2, input: { text: "lost" }, text: "hello world ".repeat(10) })
+  assert.deepEqual(failed?.draft, { parent: 2, input: { text: "lost" }, text: "hello world ".repeat(10), fresh: true })
   const told = await run(failed!.events)
   assert.deepEqual(
     told.map((e) => e.kind),

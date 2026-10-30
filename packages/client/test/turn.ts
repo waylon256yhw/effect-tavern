@@ -163,11 +163,19 @@ playOut()
 assert.deepEqual([registry.get(draft), registry.get(working), registry.get(log).head], [null, false, at])
 turn.attach()
 last().emit(
-  { kind: "attach", phase: null, draft: { ...draftNow, input: { text: "failed" } } },
+  { kind: "attach", phase: null, draft: { ...draftNow, input: { text: "failed" }, fresh: true } },
   {
     kind: "error",
     message: "boom",
   },
 )
 assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", "failed"])
+// a swipe's line is on its node already (no `fresh` from the server): its failure leaves the box alone
+setBoxes({ text: "", note: "", aside: false })
+turn.attach()
+last().emit(
+  { kind: "attach", phase: null, draft: { ...draftNow, input: { text: "rolled" } } },
+  { kind: "error", message: "boom" },
+)
+assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", ""])
 console.log("ok")

@@ -27,7 +27,7 @@ export interface Draft {
  *  turns into a way into Settings → 默认模型. */
 export type Failure = { message: string; code?: string }
 /** The turn in flight as a client that comes back to the story finds it (server GET /turn): its stage and its draft. */
-export type Attach = { kind: "attach"; phase: Phase | null; draft: Omit<Draft, "fresh"> | null }
+export type Attach = { kind: "attach"; phase: Phase | null; draft: Draft | null }
 export type Wire = Event | ({ kind: "error" } & Failure) | Attach
 
 export { registry }
@@ -279,10 +279,12 @@ const drain = () => {
 const applyNow = (e: Wire): void => {
   switch (e.kind) {
     case "attach":
-      // the turn as it stands: its prose so far drawn at once, the live deltas playing on from there. A line that fails
-      // from here goes back in the box, as the player's own would.
-      registry.set(draft, e.draft && { ...e.draft, fresh: true })
+      // the turn as it stands: its prose so far drawn at once, the live deltas playing on from there (the switch here
+      // reset the playout, so the loop is told the prose is still coming). `fresh` is the server's: an act's line that
+      // fails from here goes back in the box, a swipe's or an edit's is already on its node.
+      registry.set(draft, e.draft)
       registry.set(stage, e.phase)
+      if (e.phase === "narrate") play.ended = false
       return
     case "stage":
       registry.set(stage, e.phase)

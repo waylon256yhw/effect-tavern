@@ -3,7 +3,8 @@
 // POST /, DELETE /nodes/<id>) without the header, or with one naming no story, is a 404. The rest (/stories, /cards,
 // /player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
 // one turn at a time (turn.ts): an action on a story whose turn is in flight, a synchronous one too (greet, checkout,
-// setField, a node dropped), is a 409 {error, code: "busy"}; stories run side by side, with no lock across them.
+// setField, a node dropped), is a 409 {error, code: "busy"}, and so is deleting the story (the batch delete skips it);
+// stories run side by side, with no lock across them.
 //   POST /      an Action (src/session.ts `Action`, decoded at this boundary) starts the story's turn and answers its
 //                 events as SSE, one `event:` per kind; a failure is an `error` event {message, code?} (code "no-model":
 //                 no routing pair and no environment model, library.ts `NoModel`). The turn is the story's, not the
@@ -190,8 +191,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
           if (b.starred !== undefined) lib.stories.star(id, b.starred)
           return stories()
         })
-      lib.stories.del(id)
-      return json(200, stories())
+      return reply(() => (lib.stories.del(id), stories()), 409) // busy: a turn runs on it
     }
     if (req.method === "GET" && req.url === "/personas") return json(200, lib.personas.list())
     const personaAt = /^\/personas\/([^/]+)$/.exec(req.url ?? "")

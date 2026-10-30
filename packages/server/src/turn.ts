@@ -20,6 +20,7 @@ export interface Draft {
   input: Input
   text: string
   prev?: string
+  fresh?: boolean // the line is nowhere else (an act): a client that attaches and sees it fail puts it back in the box
 }
 /** What a subscriber reads: the session's events, and the failure as a last element (the wire's `error` event). */
 export type Out = Event | { kind: "error"; cause: Cause.Cause<unknown> }
@@ -35,7 +36,8 @@ const first: Partial<Record<Action["kind"], Phase>> = {
 }
 /** The draft an action puts up, as the client draws it (client turn.ts): none for the ones that narrate nothing. */
 const draftOf = (s: Session, a: Action): Draft | null => {
-  if (a.kind === "act") return { parent: a.parent === undefined ? s.log.head : a.parent, input: a.input, text: "" }
+  if (a.kind === "act")
+    return { parent: a.parent === undefined ? s.log.head : a.parent, input: a.input, text: "", fresh: true }
   if (a.kind !== "swipe" && a.kind !== "reword" && a.kind !== "edit") return null
   const n = s.log.nodes.get(a.node)
   if (!n) return null // the action fails on its own

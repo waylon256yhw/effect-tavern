@@ -262,17 +262,18 @@ export const library = ({
       star: (id: Id, starred: boolean) => data.stories.star(id, starred),
       /** A new, empty story of `card`; throws when there is no such card. */
       create: (card: string): Id => data.stories.create(cards.get(card).id),
-      // ponytail: a story deleted under a turn in flight leaves that turn to fail on its own writes; refuse or stop
-      // first if a client ever deletes the story it is playing
+      /** Refused (throws) while a turn runs on the story: its writes would land on nothing. */
       del: (id: Id) => {
         if (!exists(id)) throw new Error(`no story ${id}`)
+        if (sessions.get(id)?.turn.busy) throw new Error(`story ${id} is busy`)
         data.stories.del(id)
         sessions.delete(id)
       },
       /** The batch cleanup: the card's own among `ids` go (any card's when it is absent), in one transaction, their
-       *  sessions with them; another card's or a stranger's id is left alone. */
+       *  sessions with them; another card's, a stranger's or a busy one's id is left alone. */
       delMany: (ids: readonly Id[], card?: string) => {
-        for (const id of data.stories.delMany(card, ids)) sessions.delete(id)
+        const idle = ids.filter((id) => !sessions.get(id)?.turn.busy)
+        for (const id of data.stories.delMany(card, idle)) sessions.delete(id)
       },
       /** The stories (a card's, or every card's) that hold `q` on their head's line (data.ts `Hit`). The title is the
        *  client's to match. */
