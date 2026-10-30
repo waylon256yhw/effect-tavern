@@ -18,6 +18,8 @@ import type { StoryRow } from "../src/store.ts"
 
 const row = (id: number, p: Partial<StoryRow> = {}): StoryRow => ({
   id,
+  card: "wuxia",
+  busy: null,
   title: null,
   starred: false,
   updated: 100 - id, // newest first, as the listing comes
