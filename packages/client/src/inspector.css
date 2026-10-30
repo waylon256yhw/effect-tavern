@@ -1,8 +1,8 @@
 /* ───────── Inspect: a tool page over the reader (docs/inspector-prototype.html, on the tokens) ─────────
    Two cards on the canvas, like the reader's desktop: the pipeline and the node. The page never scrolls; each card
    does, with the reader's thin hover-only bar and the fade at both ends. A step opens into a well (surface-0, inset)
-   whose one scroller is bounded, so a long head never pushes the pipeline apart. Dense: UI at footnote size,
-   numbers tabular and mono, status green / red on dots and pills, nothing else colored. */
+   whose one scroller fills what the card has left, so a long head never pushes the pipeline apart. Dense: UI at
+   footnote size, numbers tabular and mono, status green / red on dots and pills, nothing else colored. */
 .inspect {
   position: fixed;
   inset: 0;
@@ -243,6 +243,18 @@
 }
 .inspect .knot {
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+/* the open path grows, from the spine down to the well's scroller; everything else keeps its size */
+.inspect .pane > .spine,
+.inspect .knot:has(.step[open]),
+.inspect .tray:has(.step[open]),
+.inspect .step[open],
+.inspect .step[open]::details-content,
+.inspect .step[open] .body,
+.inspect .step[open] .well {
+  flex: 1 1 auto;
 }
 .inspect .knot::before {
   content: "";
@@ -290,6 +302,11 @@
 }
 
 /* a step: flush when closed, raised when open, its head sticky at the card's top */
+.inspect .step,
+.inspect .step::details-content {
+  display: flex;
+  flex-direction: column;
+}
 .inspect .step {
   border-radius: var(--radius);
   background: var(--surface-1);
@@ -403,7 +420,7 @@
   box-shadow:
     inset 0 1px 3px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.5)),
     inset 0 0 0 var(--hairline) var(--line);
-  overflow: clip; /* not a scroll container: its minimum stays its content's, so the floor below holds */
+  overflow: clip; /* not a scroll container: its minimum stays its content's, so the scroller's floor holds */
 }
 .inspect .rtabs {
   flex: none;
@@ -451,47 +468,19 @@
 .inspect .rtabs button[aria-selected="true"] .bp {
   background: var(--ink);
 }
-/* the one scroller inside a step, bounded by the viewport, the fade at its ends */
+/* the one scroller, in the one open step, fills the card to its bottom (a panel: switching steps never moves the rows).
+   contain: size reports only its 8lh floor upward, so every layer above keeps min-height: auto and the floors sum:
+   past the card the card scrolls, otherwise it never does. The fade at its ends. */
 .inspect .wscroll {
   box-sizing: border-box;
-  max-height: 50dvh;
+  flex: 1 1 auto;
+  contain: size;
+  min-height: 8lh;
   overflow-y: auto;
   padding: var(--fade) 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-/* and bounded by the card: an open step's well takes what the card has left, so one open step never makes the card
-   scroll on a short window. Every layer from the card down to the scroller is a flex column that may shrink to
-   nothing (nested flex passes shrink only through min-height: 0); the one floor is on the open step's knot (on the
-   step itself the knots would shrink under their steps and the cards overlap), so nothing inside is ever clipped,
-   and the floors of several open steps add up past the card, which then scrolls.
-   A tray never shrinks (its steps stay at the 50dvh ceiling). Everything beside the well keeps its size. */
-.inspect .pane > :not(.spine),
-.inspect .knot:not(:has(.step[open])),
-.inspect .tray,
-.inspect .step:not([open]),
-.inspect .step > summary,
-.inspect .body > :not(.well),
-.inspect .rtabs {
-  flex: none;
-}
-.inspect .knot,
-.inspect .step,
-.inspect .step::details-content {
-  display: flex;
-  flex-direction: column;
-}
-.inspect .spine,
-.inspect .knot,
-.inspect .step,
-.inspect .step::details-content,
-.inspect .body,
-.inspect .well {
-  min-height: 0;
-}
-.inspect .knot:has(.step[open]) {
-  min-height: 15rem; /* the floor: the step's head, paddings and tab bar, and a few lines of the scroller */
 }
 .inspect .msg {
   padding-left: 9px;
