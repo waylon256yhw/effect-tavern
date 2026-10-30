@@ -63,6 +63,12 @@ export const textOf = (m: Message): string =>
     ? m.content
     : m.content.map((c) => ("text" in c && typeof c.text === "string" ? c.text : "")).join("")
 
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+/** The query as a literal, case-insensitive pattern; `split` with it keeps the matches at the odd indexes. */
+export const pattern = (q: string) => new RegExp(`(${escapeRe(q)})`, "gi")
+/** Matches of the (literal) query in a text; none for an empty query. */
+export const count = (text: string, q: string) => (q ? (text.match(pattern(q)) ?? []).length : 0)
+
 const isBreakpoint = (m: Message): boolean =>
   (m.providerOptions as { anthropic?: { cacheControl?: unknown } } | undefined)?.anthropic?.cacheControl !== undefined
 
@@ -114,4 +120,13 @@ export const totals = (calls: readonly Call[]): Totals => {
     t.ms += c.ms
   }
   return t
+}
+
+/** Each region's matches of the query. */
+export const regionHits = (rs: readonly Region[], q: string): number[] =>
+  rs.map((r) => r.msgs.reduce((n, m) => n + count(textOf(m), q), 0))
+/** The tab a well opens on: with a query the first region with hits; otherwise (or when none hits) the last region. */
+export const defaultTab = (hits: readonly number[], q: string): number => {
+  const first = q ? hits.findIndex((h) => h > 0) : -1
+  return first >= 0 ? first : Math.max(0, hits.length - 1)
 }
