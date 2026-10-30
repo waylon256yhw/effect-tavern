@@ -50,7 +50,7 @@ const asks: Record<Ask["stage"], Ask> = {
     menu: ["strike: attack B", "talk: talk"],
     soFar: [],
   },
-  direct: { stage: "direct", ledger: [], rules: ["B does not die"], open, events: ["strike:hit"] },
+  direct: { stage: "direct", question: "Brief?", ledger: [], rules: ["B does not die"], open, events: ["strike:hit"] },
   narrate: {
     stage: "narrate",
     fiction,
@@ -132,7 +132,7 @@ assert.deepEqual(line.decide.slice(3).map(text), [
 ])
 assert.deepEqual(line.direct.slice(3).map(text), [
   "Rule: B does not die",
-  "Open: li=B is Li. | echo=E2, with a comma\nEvents: strike:hit",
+  "Brief?\nOpen: li=B is Li. | echo=E2, with a comma\nEvents: strike:hit",
   "Player note: 虚晃一招",
   "我拔剑。",
 ])

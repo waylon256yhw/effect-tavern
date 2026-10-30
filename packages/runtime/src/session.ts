@@ -83,13 +83,19 @@ type Emit = (e: Event) => Effect.Effect<void>
 // ───────── The session's own words ─────────
 // Every instruction the loop says to the model, as fragments with ids, in the open. Data lines (State:, Actions:,
 // Open:, Known:, Questions:) are format and stay in code; these are the prose around them. Resolved per id: the
-// player's `asks`, then the card's, then these defaults. Direct and check carry no prose: the schema is the question.
+// player's `asks`, then the card's, then these defaults. Check carries no prose: the schema is the question.
 // Lookup carries one line, since an index and an array read as "fill it": the first Haiku session picked one entry a
-// turn until the index was empty, the innkeeper on a line that spoke to the swordsman.
+// turn until the index was empty, the innkeeper on a line that spoke to the swordsman. Direct carries one line too:
+// `tone` is a free string, and without its genre named the first 理 run wrote a sentence of story into it, a priest
+// guessed out of the setting, which then opened the narrator's draft as `Tone:` (#90).
 export const asks = frags([
   {
     id: "lookup",
     text: "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.",
+  },
+  {
+    id: "direct",
+    text: `Put in "must" only the open entries this scene cannot make sense without; the rest stay in "may", and both are empty when none fits now. "tone" is one line to the narrator, not to the player: the mood, the pace, or where this scene should land, as a phrase or a short sentence. It is a direction, never a sentence of the story: it names no character and writes no one's words, actions or expression.`,
   },
   {
     id: "decide.first",
@@ -499,6 +505,7 @@ export const makeSession = ({
                 BriefOf(openIds),
                 ask(s1, input, {
                   stage: "direct",
+                  question: wording("direct"),
                   ledger: here.ledger(),
                   rules: card.guard,
                   open: told(open),

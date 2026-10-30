@@ -54,6 +54,7 @@ export type Ask =
     }
   | {
       stage: "direct"
+      question: string // the `direct` ask: what must / may / tone each are, before the Open line
       ledger: readonly Msg[]
       rules: readonly string[]
       open: readonly Told[]
@@ -131,7 +132,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...frame,
         ...rules(a.rules),
         ...a.ledger.map(toP(w)),
-        sys(`${openLine(a.open)}\nEvents: ${a.events.join(",")}`),
+        sys(`${a.question}\n${openLine(a.open)}\nEvents: ${a.events.join(",")}`),
         ...noteOf(c.input),
         ...thoughtOf(c),
         said(c.input),
