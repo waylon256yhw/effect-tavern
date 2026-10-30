@@ -1,7 +1,7 @@
 // The pipeline projection: only the calls that ran, the second-draft loop and a stop read off the order, the drafts
 // folded into trays, a request split into regions at its cache breakpoints, one turn's totals.
 import assert from "node:assert/strict"
-import { groups, isTray, regions, rows, totals, type Call } from "../src/inspect.ts"
+import { count, defaultTab, groups, isTray, regionHits, regions, rows, totals, type Call } from "../src/inspect.ts"
 
 const usage = { input: 100, output: 10, cacheRead: 50, cacheWrite: 0 }
 const call = (phase: Call["phase"], ms = 1): Call => ({ kind: "call", phase, msgs: [], out: {}, usage, ms })
@@ -88,6 +88,16 @@ assert.equal(
   regions([{ role: "assistant", content: [{ type: "text", text: "abc" }] } as Call["msgs"][number]])[0]!.chars,
   3,
 )
+
+// search: hits per region (literal, case-insensitive), the well opens on the first region with hits
+const searched = regions([sys("Frame a.b", true), usr("t1"), sys("l", true), usr("A.B go a.b")])
+assert.deepEqual(regionHits(searched, "a.b"), [1, 0, 2])
+assert.deepEqual(regionHits(searched, ""), [0, 0, 0])
+assert.equal(count("axb", "a.b"), 0)
+assert.equal(defaultTab([0, 3, 1], "q"), 1)
+assert.equal(defaultTab([0, 0, 0], "q"), 2) // only the answer hits: the last region
+assert.equal(defaultTab([0, 3, 1], ""), 2) // no query: the last region
+assert.equal(defaultTab([], ""), 0)
 
 assert.deepEqual(totals([call("narrate", 5), call("record", 2)]), {
   calls: 2,

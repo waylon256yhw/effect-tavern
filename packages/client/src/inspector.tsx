@@ -1,8 +1,22 @@
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
-import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Check, Clue, Copy, Next, Prev, Record } from "./icons.tsx"
-import { groups, isTray, regions, rows, textOf, totals, type Call, type Row, type Tray } from "./inspect.ts"
+import {
+  count,
+  defaultTab,
+  groups,
+  isTray,
+  pattern,
+  regionHits,
+  regions,
+  rows,
+  textOf,
+  totals,
+  type Call,
+  type Row,
+  type Tray,
+} from "./inspect.ts"
 import { KeyValues, PinButton, Reading, Shaped } from "./readings.tsx"
 import { channelOf, fields, lineOf, parentOf, versions, whens } from "./record.ts"
 import { calls, card, log, path, pin, registry, type Id } from "./store.ts"
@@ -36,13 +50,9 @@ const tokens = (u: Call["usage"], f: (n: number) => string) =>
   [`↑${f(u.input)}`, `↓${f(u.output)}`, u.cacheRead && `↻${f(u.cacheRead)}`, u.cacheWrite && `+${f(u.cacheWrite)}`]
     .filter(Boolean)
     .join(" ")
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-const count = (text: string, q: string) => (q ? (text.match(new RegExp(escapeRe(q), "gi")) ?? []).length : 0)
 /** Text with every match of the (literal) query marked. */
 const Marked = (props: { text: string; q: string }) => {
-  const pieces = createMemo(() =>
-    props.q ? props.text.split(new RegExp(`(${escapeRe(props.q)})`, "gi")) : [props.text],
-  )
+  const pieces = createMemo(() => (props.q ? props.text.split(pattern(props.q)) : [props.text]))
   return (
     <For each={pieces()} keyed={false}>
       {(p, i) => (
@@ -164,14 +174,37 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
 const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: string; open: boolean }) => {
   const c = () => props.row.call
   const regs = createMemo(() => regions(c().msgs))
-  const hits = createMemo(() => {
-    const q = props.q
-    return c().msgs.reduce((n, m) => n + count(textOf(m), q), 0)
-  })
+  const rhits = createMemo(() => regionHits(regs(), props.q))
+  // the request's hits and the answer's (marked too)
+  const hits = createMemo(
+    () => rhits().reduce((a, b) => a + b, 0) + (typeof c().out === "string" ? count(c().out as string, props.q) : 0),
+  )
   // the brief is the one answer that stays closed without `inspect`; a stage without a body or an answer has nothing to open
   const opens = () => (props.dev && c().msgs.length > 0) || props.row.phase !== "direct"
-  const [tab, setTab] = createSignal<number | null>(null) // a region, or null for all
-  const shownTab = () => (props.q ? null : (tab() ?? Math.max(0, regs().length - 1)))
+  // the reader's pick (a region, or null for all) holds only under the query it was made with: a new query reopens
+  // the well on its first region with hits
+  const [pick, setPick] = createSignal<{ q: string; tab: number | null }>()
+  const shownTab = () => {
+    const p = pick()
+    return p && p.q === props.q ? p.tab : defaultTab(rhits(), props.q)
+  }
+  const setTab = (tab: number | null) => setPick({ q: props.q, tab })
+  // a query (or a tab) brings the well's first mark to its middle, by the well's own scrollTop so the pane stays put
+  let well: HTMLDivElement | undefined
+  createEffect(
+    () => [props.q, shownTab()] as const,
+    ([q]) => {
+      if (!q) return
+      const id = requestAnimationFrame(() => {
+        const m = well?.querySelector("mark")
+        if (!well || !m) return
+        const w = well.getBoundingClientRect()
+        const r = m.getBoundingClientRect()
+        well.scrollTop += r.top - w.top - (well.clientHeight - r.height) / 2
+      })
+      return () => cancelAnimationFrame(id)
+    },
+  )
   const [copied, setCopied] = createSignal(false)
   const copy = () => {
     const out = { regions: regs().map(({ msgs, ...r }) => ({ ...r, messages: msgs })), answer: c().out }
@@ -210,6 +243,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                         <i class="bp" aria-label={t("inspector.breakpoint")} />
                       </Show>
                       {r().name} <span class="chars">{fmt(r().chars)}c</span>
+                      <Show when={rhits()[i]}>{(h) => <span class="hits">{h()}</span>}</Show>
                     </button>
                   )}
                 </For>
@@ -223,7 +257,7 @@ const Step = (props: { row: Row; node: Node; nth: number; dev: boolean; q: strin
                 </button>
               </div>
             </Show>
-            <div class="wscroll">
+            <div class="wscroll" ref={(el) => (well = el)}>
               <Show when={props.dev}>
                 <For each={regs()} keyed={false}>
                   {(r, i) => (
@@ -378,7 +412,8 @@ export const Inspect = (props: { id: Id }) => {
                       placeholder={t("inspector.searchPlaceholder")}
                       autocomplete="off"
                       value={q()}
-                      onInput={(e) => setQ(e.currentTarget.value.trim())}
+                      onInput={(e) => !e.isComposing && setQ(e.currentTarget.value.trim())}
+                      onCompositionEnd={(e) => setQ(e.currentTarget.value.trim())}
                     />
                   </label>
                 </Show>
