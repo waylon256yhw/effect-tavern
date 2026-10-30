@@ -12,8 +12,9 @@ import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
-import { card, error, log, page, personas, pin, player, registry, routing, working } from "./store.ts"
-import { newStory, send } from "./wire.ts"
+import { card, log, page, personas, player, registry, routing, working } from "./store.ts"
+import { turn } from "./turn.ts"
+import { newStory } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
@@ -56,11 +57,8 @@ export const CardPage = () => {
   const opening = () => openings()[at()]
   const back = () => registry.set(page, "reader")
   const begin = async () => {
-    registry.set(pin, null) // the old story's pin and error do not carry into a new one
-    registry.set(error, null)
     if (inStory()) await newStory()
-    if (openings().length) send({ kind: "greet", greeting: at() }) // none: an empty line
-    back()
+    turn.greet(at())
   }
   onSettled(() => {
     const onKey = (e: KeyboardEvent) => {

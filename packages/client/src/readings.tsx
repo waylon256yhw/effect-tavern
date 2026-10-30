@@ -9,7 +9,21 @@ import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { heading, record, status, type Declared, type Element } from "./record.ts"
-import { card, dismiss, draft, error, latest, log, pin, registry, stage, type CardView } from "./store.ts"
+import {
+  card,
+  dismiss,
+  draft,
+  editing,
+  error,
+  type Id,
+  latest,
+  log,
+  pin,
+  registry,
+  working,
+  type CardView,
+} from "./store.ts"
+import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -399,20 +413,15 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
  *  which the row shows the way the line's bubble shows its own (reader.css). 小剧场 is not one of them (`Demand`). */
 export const Rewrite = (props: {
   rerun: boolean // the turn has an input to run the narrator from again; an opening has not, only Edit shows
-  busy: boolean
-  onSwipe: () => void
-  onReword: (note?: string) => void
-  onEdit: () => void
+  node: Id
 }) => {
   const [asking, setAsking] = createSignal(false)
-  // a demand runs a stage without a draft: while any stage runs, the actions wait (a turn's draft already holds them)
-  const phase = read(stage)
-  const busy = () => props.busy || phase() !== null
+  const busy = read(working)
   let direction: HTMLInputElement | undefined
   const reword = () => {
     const note = direction?.value.trim()
     setAsking(false)
-    props.onReword(note || undefined)
+    turn.reword(props.node, note || undefined)
   }
   return (
     <>
@@ -437,7 +446,7 @@ export const Rewrite = (props: {
       </Show>
       <span class="acts" role="toolbar" aria-label={t("readings.turnActions")}>
         <Show when={props.rerun}>
-          <button class="icon" aria-label={t("common.swipe")} disabled={busy()} onClick={() => props.onSwipe()}>
+          <button class="icon" aria-label={t("common.swipe")} disabled={busy()} onClick={() => turn.swipe(props.node)}>
             <Swipe />
           </button>
           <button
@@ -451,7 +460,13 @@ export const Rewrite = (props: {
             <Reword />
           </button>
         </Show>
-        <button class="icon" aria-label={t("common.edit")} disabled={busy()} onClick={() => props.onEdit()}>
+        <button
+          class="icon"
+          aria-label={t("common.edit")}
+          disabled={busy()}
+          // the editor opens on the prose in place (App.tsx `Editor`); a second press closes it
+          onClick={() => registry.set(editing, registry.get(editing) === props.node ? null : props.node)}
+        >
           <Edit />
         </button>
       </span>
@@ -464,13 +479,8 @@ export const Rewrite = (props: {
  *  a sibling action (the demand runs no narrate), and its shape is not settled (#101): it stays at its old places, the
  *  Record sheet's footer on the phone and the right card's on the desktop, until it has a page of its own. A failed
  *  demand has no draft to carry its ghost: the reason shows beside the button until the next action. */
-export const Demand = (props: {
-  busy: boolean
-  demands: readonly Option<string>[]
-  onDemand: (product: string) => void
-}) => {
-  const phase = read(stage)
-  const busy = () => props.busy || phase() !== null
+export const Demand = (props: { node: Id; demands: readonly Option<string>[]; onPick?: () => void }) => {
+  const busy = read(working)
   const d = read(draft)
   const failed = read(error)
   return (
@@ -482,7 +492,7 @@ export const Demand = (props: {
         label={t("readings.aside")}
         value={undefined}
         options={busy() ? [] : props.demands}
-        onPick={(id) => (dismiss(), props.onDemand(id))}
+        onPick={(id) => (props.onPick?.(), dismiss(), turn.demand(props.node, id))}
       />
     </footer>
   )
@@ -490,7 +500,7 @@ export const Demand = (props: {
 
 /** The Record pill under a turn and the readings panel it opens: what the turn changed and produced, by the card's
  *  heading or the turn's number; 小剧场 at its foot. The turn's own actions sit in the row beside the pill (`Rewrite`). */
-export const RecordSheet = (props: { node: Node; n: number; busy: boolean; onDemand: (product: string) => void }) => {
+export const RecordSheet = (props: { node: Node; n: number }) => {
   const all = read(log)
   const view = read(card)
   let dlg!: HTMLDialogElement
@@ -514,9 +524,9 @@ export const RecordSheet = (props: { node: Node; n: number; busy: boolean; onDem
         heading={heading(view()?.heading, props.node) ?? t("common.turnN", { n: props.n })}
         footer={
           <Demand
-            busy={props.busy}
+            node={props.node.id}
             demands={demandable(view()?.products ?? [], props.node)}
-            onDemand={(id) => (dlg.close(), props.onDemand(id))}
+            onPick={() => dlg.close()}
           />
         }
       >

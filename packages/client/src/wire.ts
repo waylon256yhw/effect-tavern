@@ -197,7 +197,7 @@ export const send = (action: Action): (() => void) => {
           buf = buf.slice(i + 2)
           const ev = /^event: (.*)$/m.exec(block)?.[1]
           const data = /^data: (.*)$/m.exec(block)?.[1]
-          if (ev && data) apply({ ...(JSON.parse(data) as object), kind: ev } as Wire)
+          if (ev && data && !ac.signal.aborted) apply({ ...(JSON.parse(data) as object), kind: ev } as Wire)
         }
       }
       void fetchStories() // the open story's row: its size, its last line, its time

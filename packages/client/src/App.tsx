@@ -43,13 +43,7 @@ import { Demand, demandable, RecordSheet, Rewrite, Sheet, StatusTable, TurnRecor
 import { record } from "./record.ts"
 import { Session, Side } from "./side.tsx"
 import {
-  apply,
-  arrived,
-  acting,
-  aside,
-  boxesOf,
   card,
-  clear,
   compose,
   dismiss,
   draft,
@@ -59,22 +53,20 @@ import {
   log,
   page,
   path,
-  pin,
   prose,
-  inputOf,
-  noted,
   registry,
   stories,
+  revise,
   revising,
-  settle,
+  settling,
   stage,
   type Draft,
   type Failure,
   type Id,
-  withdraw,
   working,
 } from "./store.ts"
-import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchRouting, fetchStories, send } from "./wire.ts"
+import { turn } from "./turn.ts"
+import { fetchCard, fetchNodes, fetchPersonas, fetchPlayer, fetchRouting, fetchStories } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
 
 const waiting: Record<string, Key> = {
@@ -250,8 +242,8 @@ const Latest = () => {
  *  默认模型. */
 const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) => {
   onSettled(anchor)
-  const settling = () => props.phase === "check" || props.phase === "polish" || props.phase === "record"
-  const writing = () => !settling() && !props.error
+  const done = () => settling(props.phase)
+  const writing = () => !done() && !props.error
   return (
     <section class={{ draft: true, dead: props.error !== null }}>
       <Said input={props.d.input} />
@@ -283,7 +275,7 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
           />
         </div>
       </div>
-      <Show when={settling()}>
+      <Show when={done()}>
         <footer class="actions">
           <span class="record-pill" role="status" aria-label={t(waiting[props.phase!]!)}>
             <Record aria-hidden="true" />
@@ -321,7 +313,7 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
 /** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
 const Said = (props: {
   input: { text: string; note?: string }
-  onEdit?: (field: "text" | "note") => void
+  node?: Node // a landed turn's: its line can be revised; the draft's keys are disabled
   revising?: "text" | "note" // the field of this line that is in the composer now: that bubble is marked
 }) => {
   // The bubble is text, selectable like any, nothing in it to click (#101). What can be done with it is a row of two
@@ -357,9 +349,9 @@ const Said = (props: {
             type="button"
             class="icon"
             aria-label={field() === "note" ? t("app.reviseNote") : t("app.reviseLine")}
-            disabled={!props.onEdit}
+            disabled={!props.node}
             onClick={() => {
-              props.onEdit!(field())
+              revise(props.node!, field())
               // the note's box opens with the revision: focus it once it is there
               const box = field() === "note" ? ".composer textarea.note" : ".composer textarea:not(.note)"
               requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(box)?.focus())
@@ -367,7 +359,7 @@ const Said = (props: {
           >
             <Edit />
           </button>
-          <button type="button" class="icon" aria-label={t("common.copy")} disabled={!props.onEdit} onClick={copy}>
+          <button type="button" class="icon" aria-label={t("common.copy")} disabled={!props.node} onClick={copy}>
             <Show when={copied()} fallback={<Copy />}>
               <Check />
             </Show>
@@ -424,17 +416,8 @@ const Options = (props: { items: readonly string[] }) => (
   </div>
 )
 
-const Section = (props: {
-  node: Node
-  n: number
-  last: boolean
-  busy: boolean
-  onSwipe: () => void
-  onReword: (note?: string) => void
-  onEdit: (text?: string) => void // without text: open the editor; with it: send the edit; `undefined` from the editor: cancel
-  onRevise: (field: "text" | "note") => void // the player's line back into the composer
-  onDemand: (product: string) => void
-}) => {
+const Section = (props: { node: Node; n: number; last: boolean }) => {
+  const busy = read(working)
   const all = read(log)
   const edited = read(editing)
   const revised = read(revising)
@@ -444,29 +427,34 @@ const Section = (props: {
   let list: HTMLDivElement | undefined
   const at = () => siblings().findIndex((s) => s.id === props.node.id)
   // the version's whole follow-up comes back: the server moves head to its newest leaf
-  const go = (i: number) => send({ kind: "checkout", node: siblings()[i]!.id })
+  const go = (i: number) => turn.checkout(siblings()[i]!.id)
   const options = () => props.node.turn.products.options as readonly string[] | undefined
+  // the editor's close: with text, the edit is sent; without (Escape, unchanged, empty), it is only closed
+  const done = (text?: string) => {
+    registry.set(editing, null)
+    if (text !== undefined) turn.edit(props.node.id, text)
+  }
   return (
     <section id={`node-${props.node.turn.id}`}>
       <Said
         input={props.node.turn.input}
-        onEdit={(f) => props.onRevise(f)}
+        node={props.node}
         revising={revised()?.node === props.node.id ? revised()!.field : undefined}
       />
       <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
-        <Editor text={prose(props.node)} onDone={(t) => props.onEdit(t)} />
+        <Editor text={prose(props.node)} onDone={done} />
       </Show>
       {/* the turn's row (#101): the Record pill, the version count, "stopped"; then, at the right end, this turn's
           actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it
           is over the section, a touch screen always (reader.css) */}
       <footer class="actions">
-        <RecordSheet node={props.node} n={props.n} busy={props.busy} onDemand={props.onDemand} />
+        <RecordSheet node={props.node} n={props.n} />
         <Show when={siblings().length > 1}>
           <span class="siblings">
             <button
               class="icon"
               aria-label={t("app.prevVersion")}
-              disabled={props.busy || at() === 0}
+              disabled={busy() || at() === 0}
               onClick={() => go(at() - 1)}
             >
               <Prev />
@@ -515,7 +503,7 @@ const Section = (props: {
             <button
               class="icon"
               aria-label={t("app.nextVersion")}
-              disabled={props.busy || at() === siblings().length - 1}
+              disabled={busy() || at() === siblings().length - 1}
               onClick={() => go(at() + 1)}
             >
               <Next />
@@ -525,13 +513,7 @@ const Section = (props: {
         <Show when={props.node.turn.end === "stopped"}>
           <span class="end">{t("app.stopped")}</span>
         </Show>
-        <Rewrite
-          rerun={!!(props.node.turn.input.text || props.node.turn.input.note)}
-          busy={props.busy}
-          onSwipe={props.onSwipe}
-          onReword={props.onReword}
-          onEdit={() => props.onEdit()}
-        />
+        <Rewrite rerun={!!(props.node.turn.input.text || props.node.turn.input.note)} node={props.node.id} />
       </footer>
       <Show when={props.last && options()?.length}>
         <Options items={options()!} />
@@ -556,7 +538,6 @@ const Reader = () => {
     },
     { equals: (a, b) => a.length === b.length && a.every((n, i) => n === b[i]) },
   )
-  let stop: (() => void) | null = null
   onSettled(() => {
     // an empty log lands on the card page (pick an opening, or begin); a story in progress lands in the reader
     // the listing first: it names the story every request after is on; the routing is the card page's Model row
@@ -567,97 +548,6 @@ const Reader = () => {
       })
   })
 
-  const start = (
-    parent: Id | null,
-    input: { text: string; note?: string },
-    action: Parameters<typeof send>[0],
-    text = "", // an edit's draft is the player's text, shown while check and record run over it
-  ) => {
-    registry.set(error, null)
-    registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
-    stop = send(action)
-  }
-  const onSend = (text: string, note: string) => {
-    if (registry.get(revising)) {
-      // the line revised and sent again: a new turn beside the old one, under the same parent
-      const { n, input } = revised(text, note)
-      return start(n.parent, input, { kind: "act", parent: n.parent, input })
-    }
-    const pinned = registry.get(pin)
-    const input = { ...inputOf(text, note), ...(pinned ? { pin: pinned } : {}) }
-    registry.set(pin, null)
-    start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
-  }
-  // Revise: the bubble puts the turn's input in the composer, line and note in their boxes (what was there is stashed,
-  // back on cancel); Send makes a new turn, Keep makes a sibling with the prose kept and the record redone over it.
-  const onRevise = (n: Node, field: "text" | "note") => {
-    const r = registry.get(revising)
-    const previous = r?.previous ?? {
-      text: registry.get(compose),
-      note: registry.get(noted),
-      aside: registry.get(aside),
-    }
-    registry.set(revising, { node: n.id, field, previous })
-    const b = boxesOf(n.turn.input)
-    registry.set(compose, b.text)
-    registry.set(noted, b.note)
-    registry.set(aside, acting() && (!!b.note || field === "note"))
-  }
-  /** The revised input (the pin kept, a cleared note gone) and the node. Revising ends when the node lands (store.ts),
-   *  so a failed send puts the input back under the same revision. */
-  const revised = (text: string, note: string) => {
-    const r = registry.get(revising)!
-    const n = L.get(registry.get(log), r.node)
-    const { note: _, ...kept } = n.turn.input
-    return { n, input: { ...kept, ...inputOf(text, note) } }
-  }
-  const onKeep = (text: string, note: string) => {
-    const { n, input } = revised(text, note)
-    start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
-  }
-  const onCancel = () => {
-    const r = registry.get(revising)!
-    registry.set(revising, null)
-    registry.set(compose, r.previous.text)
-    registry.set(noted, r.previous.note)
-    registry.set(aside, r.previous.aside)
-  }
-  const onSwipe = (n: Node) => start(n.turn.parent, n.turn.input, { kind: "swipe", node: n.turn.id })
-  const onReword = (n: Node, note?: string) =>
-    start(
-      n.turn.parent,
-      { ...n.turn.input, note: [n.turn.input.note, note].filter(Boolean).join("\n") || undefined }, // joined as the session joins it
-      { kind: "reword", node: n.turn.id, ...(note !== undefined && { note }) },
-    )
-  // Demand: one product asked for over a node's scene (session `demand`): a record call, the answer kept on the node,
-  // no turn and no draft; the change lands through the stream like any other.
-  const onDemand = (n: Node, product: string) => void send({ kind: "demand", node: n.turn.id, product })
-  // Edit: the first call opens the editor on the node, the editor's call closes it, with the text to send or none.
-  const onEdit = (n: Node, text?: string) => {
-    const open = registry.get(editing) !== n.turn.id
-    registry.set(editing, open ? n.turn.id : null)
-    if (!open && text !== undefined) start(n.turn.parent, n.turn.input, { kind: "edit", node: n.turn.id, text }, text)
-  }
-  const onStop = async () => {
-    if (!stop) return
-    stop()
-    // Before the first character the turn is withdrawn; after it, the server finishes a `stopped` node the closed
-    // response never carried, so read the snapshot back until it shows up.
-    const was = registry.get(log).nodes.size
-    if (!arrived()) {
-      withdraw()
-      return clear() // the revision, if any, stays: its line is back in the box under it
-    }
-    registry.set(stage, "record") // what the server is doing with the cut prose; the Record slot waits for it
-    for (let i = 0; i < 100 && registry.get(log).nodes.size === was; i++) {
-      await new Promise((r) => setTimeout(r, 300))
-      await fetchNodes()
-    }
-    // record failed on the server (the closed response never carried its error): the ghost says so, the line comes back
-    if (registry.get(log).nodes.size === was) return apply({ kind: "error", message: t("app.stoppedNotRecorded") })
-    settle()
-  }
-
   return (
     <>
       <div class="panel">
@@ -665,42 +555,23 @@ const Reader = () => {
           <main>
             {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
             <For each={shown()} keyed={(n) => n.turn.id}>
-              {(n, i) => (
-                <Section
-                  node={n()}
-                  n={i() + 1}
-                  last={!busy() && i() === shown().length - 1}
-                  busy={busy()}
-                  onSwipe={() => onSwipe(n())}
-                  onReword={(note) => onReword(n(), note)}
-                  onEdit={(text) => onEdit(n(), text)}
-                  onRevise={(field) => onRevise(n(), field)}
-                  onDemand={(id) => onDemand(n(), id)}
-                />
-              )}
+              {(n, i) => <Section node={n()} n={i() + 1} last={!busy() && i() === shown().length - 1} />}
             </For>
             <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} error={err()} />}</Show>
           </main>
         </div>
-        <Composer
-          busy={busy()}
-          stoppable={phase() !== "check" && phase() !== "polish" && phase() !== "record"}
-          onSend={onSend}
-          onKeep={onKeep}
-          onCancel={onCancel}
-          onStop={onStop}
-        />
+        <Composer />
         <Latest />
       </div>
-      <Glance busy={busy()} onDemand={onDemand} />
+      <Glance />
     </>
   )
 }
 
 /** Desktop's right card: the Status table and the latest turn's Record, one scroll, 小剧场 at the foot (the phone
- *  sheet's shape). The turn's own actions are in its row under the prose (#101). Rendered by the Reader (the demand is
- *  its), as a sibling of the panel in the canvas grid; the latest section's pill hides. */
-const Glance = (props: { busy: boolean; onDemand: (n: Node, product: string) => void }) => {
+ *  sheet's shape). The turn's own actions are in its row under the prose (#101). Rendered by the Reader as a sibling
+ *  of the panel in the canvas grid; the latest section's pill hides. */
+const Glance = () => {
   const last = read(latest)
   const view = read(card)
   return (
@@ -720,13 +591,7 @@ const Glance = (props: { busy: boolean; onDemand: (n: Node, product: string) => 
         </Show>
       </div>
       <Show when={last()}>
-        {(l) => (
-          <Demand
-            busy={props.busy}
-            demands={demandable(view()?.products ?? [], l().node)}
-            onDemand={(id) => props.onDemand(l().node, id)}
-          />
-        )}
+        {(l) => <Demand node={l().node.id} demands={demandable(view()?.products ?? [], l().node)} />}
       </Show>
     </aside>
   )
