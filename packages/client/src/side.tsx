@@ -242,13 +242,7 @@ export const Sidebar = (props: {
           </section>
           {/* layer B, the workspace: one card's stories */}
           <section class="pane workspace" aria-label={t("side.workspace")} inert={which() !== "workspace"}>
-            <button
-              type="button"
-              class="cardhead"
-              aria-current={pg() === "workshop" ? "page" : undefined}
-              disabled={!card()}
-              onClick={toWorkshop}
-            >
+            <button type="button" class="cardhead" disabled={!card()} onClick={toWorkshop}>
               <h1>{card()?.title ?? at() ?? ""}</h1>
               <span class="enter" aria-hidden="true">
                 <Next />
