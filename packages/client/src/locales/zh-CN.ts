@@ -42,6 +42,7 @@ const zh = {
   },
   common: {
     add: "添加",
+    back: "返回",
     backToStory: "返回故事",
     backToHome: "返回主页",
     cancel: "取消",

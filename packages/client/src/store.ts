@@ -132,15 +132,14 @@ export const error = Atom.make<Failure | null>(null)
 export const working = Atom.make((get) => (get(draft) !== null && get(error) === null) || get(stage) !== null)
 /** The page over the reader: none, the card page, the Timeline, the settings, the Writing page (writing.tsx) or the
  *  Inspect page on one node. The reader stays mounted under it, so a turn in flight keeps streaming. "home" is no page
- *  over a story: the bottom of a home tab's stack (`isHome`), where a fresh start and "+" land (pages.ts, tabs.ts);
- *  "settings" is never over anything either: it is the settings tab's one page (`isSettings`), the install's, of no
- *  story. */
+ *  over a story: the bottom of a home tab's stack (`isHome`), where a fresh start and "+" land (pages.ts, tabs.ts).
+ *  "settings" is an install-wide layer over the canvas (App.tsx, settings.css), with its own three-column skeleton and
+ *  a Back strip in `.shell-top`, returning to the page that opened it. */
 export type Page = "home" | "reader" | "card" | "timeline" | "settings" | "writing" | "status" | { inspect: Id }
 /** A tab on the top strip (docs/shell-brief-2.md, #123): an address, not data. The story it reads (none: a card's
- *  page, home, the settings), the card it is on (its story's card when it has one), its page and the pages under it,
- *  the reader's scroll as it was left, and the tab it was opened from (its × hands back there; not remembered). Every
- *  tab reads the one Reading in the slots (reading.ts); tabs.ts is the one writer of the list. A tab with neither a
- *  story nor a card is a home tab (home at the bottom of its stack) or the settings tab. */
+ *  page, home), the card it is on (its story's card when it has one), its page and the pages under it, and the
+ *  reader's scroll as it was left. Every tab reads the one Reading in the slots (reading.ts); tabs.ts is the one
+ *  writer of the list. A tab with neither a story nor a card is a home tab (home at the bottom of its stack). */
 export interface Tab {
   id: number
   story: Id | null
@@ -148,15 +147,11 @@ export interface Tab {
   page: Page
   under: Page[]
   scroll?: number
-  from?: number
 }
 export type Tabs = { list: readonly Tab[]; active: number }
-/** The settings tab: one at most, opened by every way into the settings (settings.tsx `openSettings`). */
-export const isSettings = (t: Pick<Tab, "page">): boolean => t.page === "settings"
-/** A home tab: no story, no card, not the settings; a card entered from it is pushed over its home (Back returns
- *  there), a story opened from it makes it that story's tab. */
-export const isHome = (t: Pick<Tab, "story" | "card" | "page">): boolean =>
-  t.story === null && t.card === null && !isSettings(t)
+/** A home tab: no story, no card; a card entered from it is pushed over its home (Back returns there), a story opened
+ *  from it makes it that story's tab. */
+export const isHome = (t: Pick<Tab, "story" | "card">): boolean => t.story === null && t.card === null
 export const tabs = Atom.make<Tabs>({
   list: [{ id: 0, story: null, card: null, page: "home", under: [] }],
   active: 0,

@@ -2,9 +2,8 @@
 // story activates it once and a switch to the same story (a mirror) not at all; "+" is always a home tab with nothing
 // in the slots and no story named, so a turn left running and a line half typed stay the story's; the active tab
 // clicked again does nothing; another card browsed from a story tab keeps the story for Escape, and a card entered from
-// a home tab pushes the card page over home (Back returns to home and the shelf); × hands over to the tab it was opened
-// from or its right neighbour first, and on the last tab leaves a home tab; the settings are one tab at most, and the
-// sidebar opens a new tab rather than navigating it; eight at most; a deleted story's tab stays as its card's page over
+// a home tab pushes the card page over home (Back returns to home and the shelf); × hands over to its right neighbour
+// first, and on the last tab leaves a home tab; eight at most; a deleted story's tab stays as its card's page over
 // home, the others stay put; the device's list comes back without the stories the listing does not name; a turn's
 // stages mark its row busy, and its end seen from elsewhere marks it unread until a tab of it is activated; a fresh
 // start lands on a home tab beside the remembered ones.
@@ -20,7 +19,6 @@ import {
   type CardView,
   focus,
   isHome,
-  isSettings,
   layer,
   log,
   page,
@@ -32,7 +30,7 @@ import {
   tabs,
   working,
 } from "../src/store.ts"
-import { add, CAP, home, remove, restore, scroll, select, settingsTab, unread } from "../src/tabs.ts"
+import { add, CAP, home, remove, restore, scroll, select, unread } from "../src/tabs.ts"
 
 const row = (id: number, cardId: string, updated = id): StoryRow =>
   ({ id, card: cardId, busy: null, title: null, starred: false, updated, turns: 1, last: null }) as StoryRow
@@ -184,8 +182,7 @@ assert.deepEqual(
   before,
 )
 
-// the device's list: a story the listing does not name and a card the shelf lacks drop; the settings tab is at most
-// one; the active one by index
+// the device's list: a story the listing does not name and a card the shelf lacks drop; the active one by index
 const lib = { stories: [row(1, "a"), row(3, "a")] }
 const back = restore(
   JSON.stringify({
@@ -194,8 +191,6 @@ const back = restore(
       { story: 9, card: "a" },
       { story: null, card: "b" },
       { story: null, card: "z" },
-      { settings: true },
-      { settings: true },
     ],
     active: 2,
   }),
@@ -207,7 +202,6 @@ assert.deepEqual(
   [
     [1, "a", "reader", []],
     [null, "b", "card", ["home"]],
-    [null, null, "settings", []],
   ],
 )
 assert.equal(back.active, back.list[1]!.id)
@@ -249,29 +243,22 @@ const full = restore(JSON.stringify({ tabs: Array.from({ length: CAP }, () => ({
 await home(full)
 assert.deepEqual([ids().length, ids().includes(full.list[0]!.id), registry.get(page)], [CAP, false, "home"])
 // a card entered from a home tab pushes its card page over home: Back returns to home and puts the sidebar back on the
-// shelf
+// shelf; settings opened from home or a card page returns there on close without adding a tab
 const H = tab().id
+open("settings")
+assert.deepEqual([tab().id, registry.get(page)], [H, "settings"])
+close()
+assert.deepEqual([tab().id, isHome(tab()), registry.get(page)], [H, true, "home"])
 await showCard("b")
 assert.deepEqual(
   [tab().id, tab().card, registry.get(page), tab().under, backOf(tab())],
   [H, "b", "card", ["home"], "home"],
 )
+open("settings")
+close()
+assert.deepEqual([tab().id, tab().card, registry.get(page), backOf(tab())], [H, "b", "card", "home"])
 close()
 assert.deepEqual([tab().id, isHome(tab()), registry.get(page), registry.get(layer)], [H, true, "home", "shelf"])
-// the settings tab: one at most, remembers the tab that opened it for ×, and a card picked from the sidebar while on
-// it opens a new tab instead of navigating the settings tab
-await settingsTab()
-const S = tab().id
-assert.deepEqual([S !== H, isSettings(tab()), registry.get(page), tab().from], [true, true, "settings", H])
-await select(H)
-await settingsTab() // switches to S, no second settings tab
-assert.equal(tab().id, S)
-await showCard("b") // leaves S intact, opens a new tab
-assert.ok(tab().id !== S && registry.get(tabs).list.some((t) => t.id === S && isSettings(t)))
-await remove(tab().id)
-await select(S)
-await remove(S) // returns to H (from)
-assert.equal(tab().id, H)
 // switching to a story tab puts the sidebar on its card's workspace (the newest of the restored ones: "+" on the full
 // strip dropped the oldest)
 await select(full.list.at(-1)!.id)

@@ -536,9 +536,6 @@ export const App = () => {
         <Show when={pg() === "timeline"}>
           <Timeline />
         </Show>
-        <Show when={pg() === "settings"}>
-          <Settings />
-        </Show>
         <Show when={pg() === "writing"}>
           <WritingPage />
         </Show>
@@ -549,6 +546,10 @@ export const App = () => {
           <Inspect id={(pg() as { inspect: Id }).inspect} />
         </Show>
       </Shell>
+      {/* the settings stand on their own three-column skeleton over the canvas, under .shell-top */}
+      <Show when={pg() === "settings"}>
+        <Settings />
+      </Show>
       {/* an agent's tab (a driven browser) told apart from the player's at a glance */}
       <Show when={navigator.webdriver}>
         <div class="automation" aria-hidden="true">

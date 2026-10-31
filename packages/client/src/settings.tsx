@@ -1,12 +1,11 @@
 // The settings page (issue #33; docs/settings-prototype.html and its brief): the player's assets that hold across cards
 // and stories, in four sections: the model providers (模型服务, providers.tsx), which model runs each stage (默认模型),
-// the hats (提示词模板 in the UI) and the personas (玩家人设). Desktop: three cards on the canvas (nav, list, detail),
-// two for the routing; a phone shows the list or the detail under a bar of four icons. A tab of its own (one at most,
-// tabs.ts `settingsTab`), opened by the strip's gear, the drawer's, the draft's missing-model error, the card page's
-// Model row and the persona picker: × on the strip closes it, the phone's Back too (a phone has no strip), and the tab
-// it was opened from comes back. The page holds only the nav, which section is open, which record each
-// section has picked, and the phone's pane; every edit is one write the server answers with the list it changed
-// (wire.ts), text committing on change (blur or Enter). The shared controls and shells are controls.tsx.
+// the hats (提示词模板 in the UI) and the personas (玩家人设). An install-wide configuration layer with its own
+// skeleton: on the desktop three cards fill the canvas under `.shell-top` (nav, list, detail; two for the routing),
+// `.shell-top` showing Back at the left instead of the tab strip; a phone shows the list or the detail under a bar of
+// four icons. Escape or Back returns to the page that opened it. The page holds only the nav, which section is open,
+// which record each section has picked, and the phone's pane; every edit is one write the server answers with the list
+// it changed (wire.ts), text committing on change (blur or Enter). The shared controls and shells are controls.tsx.
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Phase } from "@effect-tavern/runtime/src/session.ts"
 import { Dynamic, type JSX } from "@solidjs/web"
@@ -16,26 +15,21 @@ import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } fr
 import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
 import { pairKey, pairOf, stalePair } from "./connections.ts"
 import { Providers } from "./providers.tsx"
-import { open } from "./pages.ts"
+import { close, open } from "./pages.ts"
 import * as Atom from "./atom.ts"
-import { activeOf, cards, hats, personas, player, providers, registry, routing, tabs, type Pair } from "./store.ts"
-import { remove } from "./tabs.ts"
+import { cards, hats, personas, player, providers, registry, routing, type Pair } from "./store.ts"
 import { type Key, t } from "./i18n.ts"
 import { deleteHat, deletePersona, putHat, putPersona, putRouting } from "./wire.ts"
 
 export type Section = "providers" | "routing" | "templates" | "personas"
-/** The section shown: written by every way in, so a settings tab already open (mounted, or shown again) moves to the
- *  section asked for, not only a fresh one. */
+/** The section shown: written by every way in, so the settings layer moves to the section asked for. */
 const section = Atom.make<Section>("providers").pipe(Atom.keepAlive)
-/** The settings tab on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's error,
- *  the card page). One tab at most: an open one is switched to (tabs.ts `settingsTab`). */
+/** The settings layer on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's
+ *  error, the card page); Back or Escape returns to the page that opened it. */
 export const openSettings = (at: Section = "providers") => {
   registry.set(section, at)
   open("settings")
 }
-/** The settings tab closed: its × on the strip, or the phone's Back (a phone has no strip); the tab it was opened
- *  from comes back. */
-const leave = () => void remove(activeOf(registry.get(tabs)).id)
 
 const SECTIONS: [Section, Key, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element][] = [
   ["providers", "settings.providers", Plugs],
@@ -61,7 +55,7 @@ export const Settings = () => {
   return (
     <div class="settings" data-section={at()} data-pane={at() === "routing" ? "detail" : pane()}>
       <nav class="nav-card" aria-label={t("common.settings")}>
-        {/* no Back on the canvas: the settings are a tab, closed by its × on the strip */}
+        {/* Back on the desktop is in .shell-top above the canvas */}
         <div class="nav-head">
           <h1>{t("common.settings")}</h1>
         </div>
@@ -82,7 +76,7 @@ export const Settings = () => {
         </div>
       </nav>
       <header class="phone-bar">
-        <button type="button" class="icon" aria-label={t("settings.close")} onClick={leave}>
+        <button type="button" class="icon" aria-label={t("settings.close")} onClick={close}>
           <Back />
         </button>
         <span class="title">{title()}</span>

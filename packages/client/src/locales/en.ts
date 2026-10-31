@@ -43,6 +43,7 @@ const en: Dict = {
   },
   common: {
     add: "Add",
+    back: "Back",
     backToStory: "Back to story",
     backToHome: "Back to home",
     cancel: "Cancel",

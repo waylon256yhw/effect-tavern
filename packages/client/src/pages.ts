@@ -1,11 +1,9 @@
 // The page over the reader (review/architecture-review-2026-10-30.html card 8): the one owner of what a page is, over
 // the active tab's page stack (tabs.ts holds the list; a tab switch swaps the stack, #123). Open pushes
-// the page it covers, so close returns there (Writing from the card page back to the card page, Inspect from the
-// Timeline back to the Timeline), the reader when nothing is under it; each page's load list runs on open. The
-// settings are no page in a stack but a tab of their own (tabs.ts `settingsTab`). A fresh start lands on home (a home
-// tab: no story, no card; a card entered from it is pushed over home, and Back there lets the card go; a story opened
-// from it takes the tab over); a reload comes back on the tab it left. The sidebar never navigates the settings tab:
-// it opens a new one. Landing on a
+// the page it covers, so close returns there (Settings or Writing from the card page back to the card page, Inspect
+// from the Timeline back to the Timeline), the reader when nothing is under it; each page's load list runs on open. A
+// fresh start lands on home (a home tab: no story, no card; a card entered from it is pushed over home, and Back there
+// lets the card go; a story opened from it takes the tab over); a reload comes back on the tab it left. Landing on a
 // story (a story opened, made or deleted) decides card or reader once: an empty log lands on the card
 // page, and no story at all lands on the first card's page over home. The sidebar's shelf and workspace (#117) go through here
 // too: `browse` is a card picked on the shelf, `showCard` a card's page by id (no story of it yet), `toReader` the way
@@ -20,7 +18,6 @@ import {
   card,
   cards,
   isHome,
-  isSettings,
   layer,
   log,
   page,
@@ -30,26 +27,24 @@ import {
   type Tab,
   tabs,
 } from "./store.ts"
-import { add, edit, forget, home, load, remembered, select, settingsTab } from "./tabs.ts"
+import { edit, forget, home, load, remembered, select } from "./tabs.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
 
 type Kind = Exclude<Page, object> | "inspect"
 const kindOf = (p: Page): Kind => (typeof p === "object" ? "inspect" : p)
-/** What each page reads when it opens; a page not named reads nothing of its own. The settings read theirs each time
- *  their tab is shown (tabs.ts). */
+/** What each page reads when it opens; a page not named reads nothing of its own. */
 const loads: Partial<Record<Kind, () => unknown>> = {
   inspect: wire.fetchCalls,
+  settings: wire.fetchSettings,
 }
 const tab = () => activeOf(registry.get(tabs)) // the page stack is the active tab's (tabs.ts)
 
-/** A page over the current one. The same page again (the Inspect page walking to another node) replaces it: no
- *  return point, no reload. The reader is under every page, never over one: opening it drops whatever covered it
- *  (Begin on an empty story the player had browsed Writing from). The settings are over nothing: they are their own
- *  tab (tabs.ts `settingsTab`). */
+/** A page over the current one. The same page again (the Inspect page walking to another node, or the settings moved
+ *  to another section) replaces it: no return point, no reload. The reader is under every page, never over one:
+ *  opening it drops whatever covered it (Begin on an empty story the player had browsed Settings or Writing from). */
 export const open = (p: Page): void => {
   if (p === "reader") return toReader()
-  if (p === "settings") return void settingsTab()
   const { page: at, under } = tab()
   if (kindOf(at) === kindOf(p)) return edit({ page: p })
   edit({ page: p, under: at === "reader" ? under : [...under, at] })
@@ -96,17 +91,11 @@ export const toReader = (): void => {
   edit({ page: "reader", under: [], card: cur.card })
   if (registry.get(card)?.id !== cur.card) void wire.fetchCard()
 }
-/** The sidebar's ways onto a card or a story act in the active tab, but never in the settings tab: they go to a new
- *  tab instead (the settings stay where they are). */
-const leaveSettings = async (): Promise<void> => {
-  if (isSettings(tab())) await add()
-}
 /** A card's page, by id: the open story's card as the view holds it, another read by id (no story of it needed). The
  *  tab keeps its story (Escape takes it back); the sidebar's workspace follows the card. Where "新建故事" and a card's
  *  head go: no story is made until Begin (#116). From a home tab the card page is pushed over home: its Back returns
  *  there, and the tab is a home tab again. */
 export const showCard = async (id: string): Promise<void> => {
-  await leaveSettings()
   if (tab().card !== id) edit({ card: id })
   if (registry.get(card)?.id !== id) await wire.fetchCardOf(id)
   open("card")
@@ -118,7 +107,6 @@ export const pick = (id: number): void => {
 /** A card picked on the shelf: its workspace, and the stage on its latest story (the open one when it is this card's,
  *  else the newest), or on its page when it has none. */
 export const browse = async (id: string): Promise<void> => {
-  await leaveSettings()
   registry.set(layer, "workspace")
   const lib = registry.get(stories)
   const mine = lib?.stories.filter((s) => s.card === id) ?? []
@@ -172,7 +160,6 @@ export const onDelete = async (listing: Listing, deleted: readonly number[]): Pr
   if (was !== null && deleted.includes(was)) await reading.activate(null)
 }
 export const openStory = async (id: number): Promise<void> => {
-  await leaveSettings()
   await reading.activate(id) // its own PUT answers the listing
   await arrive()
 }
@@ -193,11 +180,10 @@ export const escaping = (
   if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || el?.isContentEditable) return "blur"
   return "close"
 }
-/** The App's one keydown listener: Escape over any page but the bottoms of a stack (the reader, home, the settings
- *  tab's page: × closes that one). */
+/** The App's one keydown listener: Escape over any page but the bottoms of a stack (the reader, home). */
 export const onKey = (e: KeyboardEvent): void => {
   const at = registry.get(page)
-  if (e.key !== "Escape" || at === "reader" || at === "home" || at === "settings") return
+  if (e.key !== "Escape" || at === "reader" || at === "home") return
   const covered = !!document.querySelector(":popover-open, dialog[open], .side-drawer[data-open='true']")
   const what = escaping(e, covered)
   if (what === "blur") (e.target as HTMLElement).blur()

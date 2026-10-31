@@ -14,7 +14,7 @@ import { read } from "./bridge.ts"
 import { openManager, openPicker } from "./dialogs.tsx"
 import { Archive, Clue, Close, Edit, Next, Prev, Settings, Shade, Snippets, Translate, User } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
-import { browse, openStory, showCard } from "./pages.ts"
+import { browse, close, openStory, showCard } from "./pages.ts"
 import { arranged, busyElsewhere, busyOn, fold, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
 import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
 import { chosen } from "./switches.ts"
@@ -25,36 +25,41 @@ import { flip as flipLocale, locale, t } from "./i18n.ts"
 
 /** The install's keys: settings, the theme (a flip, pressed while the dark side holds) and the interface's language
  *  (a flip, pressed while English holds). `onLeave` is the drawer's, closed before settings opens. */
-export const InstallKeys = (props: { onLeave?: () => void }) => (
-  <>
-    <button
-      type="button"
-      class="icon sm"
-      aria-label={t("common.settings")}
-      onClick={() => (props.onLeave?.(), openSettings())}
-    >
-      <Settings />
-    </button>
-    <button
-      type="button"
-      class="icon sm"
-      aria-label={t("side.darkTheme")}
-      aria-pressed={theme() === "dark" ? "true" : "false"}
-      onClick={flip}
-    >
-      <Shade />
-    </button>
-    <button
-      type="button"
-      class="icon sm"
-      aria-label={t("side.language")}
-      aria-pressed={locale() === "en" ? "true" : "false"}
-      onClick={flipLocale}
-    >
-      <Translate />
-    </button>
-  </>
-)
+export const InstallKeys = (props: { onLeave?: () => void }) => {
+  const pg = read(page)
+  const inSettings = () => pg() === "settings"
+  return (
+    <>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label={t("common.settings")}
+        aria-pressed={inSettings() ? "true" : "false"}
+        onClick={() => (props.onLeave?.(), inSettings() ? close() : openSettings())}
+      >
+        <Settings />
+      </button>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label={t("side.darkTheme")}
+        aria-pressed={theme() === "dark" ? "true" : "false"}
+        onClick={flip}
+      >
+        <Shade />
+      </button>
+      <button
+        type="button"
+        class="icon sm"
+        aria-label={t("side.language")}
+        aria-pressed={locale() === "en" ? "true" : "false"}
+        onClick={flipLocale}
+      >
+        <Translate />
+      </button>
+    </>
+  )
+}
 
 /** `text` with every `q` in a `<mark>`. */
 const Mark = (props: { text: string; q: string }) => (

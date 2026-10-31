@@ -16,6 +16,7 @@ import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
 import {
+  Back,
   Card as CardGlyph,
   Chat,
   Close,
@@ -32,10 +33,10 @@ import {
 import { openInspector } from "./inspector.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
 import { InstallKeys, Sidebar } from "./side.tsx"
-import { card, cards, isHome, isSettings, page, type Page, path, stories, tabs } from "./store.ts"
+import { card, cards, isHome, page, type Page, path, stories, tabs } from "./store.ts"
 import { add, remove, unread } from "./tabs.ts"
 import { openTimeline } from "./timeline.tsx"
-import { open, pick } from "./pages.ts"
+import { close, open, pick } from "./pages.ts"
 import { t } from "./i18n.ts"
 
 const FOLDED = "side-folded"
@@ -225,90 +226,98 @@ export const Shell = (props: { children: JSX.Element }) => {
     <>
       <Show when={wide()}>
         <header class="shell-top">
-          <button
-            type="button"
-            class="icon sm"
-            ref={(el) => (key = el)}
-            aria-label={folded() ? t("side.expand") : t("side.collapse")}
-            aria-expanded={folded() ? "false" : "true"}
-            onClick={toggle}
-            onPointerEnter={holdPeek}
-            onPointerLeave={(e) => leaving(e, space)}
+          <Show
+            when={pg() !== "settings"}
+            fallback={
+              <button type="button" class="shell-back" onClick={close}>
+                <Back />
+                <span>{t("common.back")}</span>
+              </button>
+            }
           >
-            <SidebarGlyph />
-          </button>
-          {/* the tabs (tabs.ts): equal-width; the icon is the route (the page on the stage), the text is where the tab
-            is (card › story, card, 主页, or 设置); another tab clicked switches to it, the active one does nothing */}
-          <For each={strip().list} keyed={(x) => x.id}>
-            {(x) => {
-              const row = () => lib()?.stories.find((s) => s.id === x().story)
-              const on = () => x().id === strip().active
-              // the story is named only while the tab is on its card: another card browsed names that card alone
-              const named = () => (row()?.card === x().card ? row() : undefined)
-              const glyph = (): JSX.Element => {
-                const p: Page = x().page
-                if (typeof p === "object") return <Probe />
-                switch (p) {
-                  case "home":
-                    return <Home />
-                  case "card":
-                    return <CardGlyph />
-                  case "reader":
-                    return <Chat />
-                  case "timeline":
-                    return <Tree />
-                  case "status":
-                    return <Status />
-                  case "writing":
-                    return <Edit />
-                  case "settings":
-                    return <Settings />
+            <button
+              type="button"
+              class="icon sm"
+              ref={(el) => (key = el)}
+              aria-label={folded() ? t("side.expand") : t("side.collapse")}
+              aria-expanded={folded() ? "false" : "true"}
+              onClick={toggle}
+              onPointerEnter={holdPeek}
+              onPointerLeave={(e) => leaving(e, space)}
+            >
+              <SidebarGlyph />
+            </button>
+            {/* the tabs (tabs.ts): equal-width; the icon is the route (the page on the stage), the text is where the tab
+              is (card › story, card, or 主页); another tab clicked switches to it, the active one does nothing */}
+            <For each={strip().list} keyed={(x) => x.id}>
+              {(x) => {
+                const row = () => lib()?.stories.find((s) => s.id === x().story)
+                const on = () => x().id === strip().active
+                // the story is named only while the tab is on its card: another card browsed names that card alone
+                const named = () => (row()?.card === x().card ? row() : undefined)
+                const glyph = (): JSX.Element => {
+                  const p: Page = x().page
+                  if (typeof p === "object") return <Probe />
+                  switch (p) {
+                    case "home":
+                      return <Home />
+                    case "card":
+                      return <CardGlyph />
+                    case "reader":
+                      return <Chat />
+                    case "timeline":
+                      return <Tree />
+                    case "status":
+                      return <Status />
+                    case "writing":
+                      return <Edit />
+                    case "settings":
+                      return <Settings />
+                  }
                 }
-              }
-              return (
-                <div class="shell-tab" aria-current={on() ? "page" : undefined}>
-                  <button type="button" class="name" onClick={() => pick(x().id)}>
-                    {glyph()}
-                    <span class="c">
-                      {isHome(x())
-                        ? t("home.tab")
-                        : isSettings(x())
-                          ? t("common.settings")
+                return (
+                  <div class="shell-tab" aria-current={on() ? "page" : undefined}>
+                    <button type="button" class="name" onClick={() => pick(x().id)}>
+                      {glyph()}
+                      <span class="c">
+                        {isHome(x())
+                          ? t("home.tab")
                           : (shelf().find((c) => c.id === x().card)?.title ?? x().card ?? "")}
-                    </span>
-                    <Show when={named()}>
-                      {(r) => (
-                        <>
-                          <span class="sep" aria-hidden="true">
-                            ›
-                          </span>
-                          <span class={{ s: true, unnamed: r().title === null }}>
-                            {r().title ?? t("stories.newStory")}
-                          </span>
-                        </>
-                      )}
-                    </Show>
-                  </button>
-                  <Show
-                    when={row()?.busy}
-                    fallback={
-                      <Show when={x().story !== null && marked().has(x().story!)}>
-                        <i class="busy-dot still" role="status" aria-label={t("side.unread")} />
+                      </span>
+                      <Show when={named()}>
+                        {(r) => (
+                          <>
+                            <span class="sep" aria-hidden="true">
+                              ›
+                            </span>
+                            <span class={{ s: true, unnamed: r().title === null }}>
+                              {r().title ?? t("stories.newStory")}
+                            </span>
+                          </>
+                        )}
                       </Show>
-                    }
-                  >
-                    <i class="busy-dot" role="status" aria-label={t("side.storyBusy")} />
-                  </Show>
-                  <button type="button" class="x" aria-label={t("side.closeTab")} onClick={() => void remove(x().id)}>
-                    <Close />
-                  </button>
-                </div>
-              )
-            }}
-          </For>
-          <button type="button" class="icon sm" aria-label={t("side.newTab")} onClick={() => void add()}>
-            <Plus />
-          </button>
+                    </button>
+                    <Show
+                      when={row()?.busy}
+                      fallback={
+                        <Show when={x().story !== null && marked().has(x().story!)}>
+                          <i class="busy-dot still" role="status" aria-label={t("side.unread")} />
+                        </Show>
+                      }
+                    >
+                      <i class="busy-dot" role="status" aria-label={t("side.storyBusy")} />
+                    </Show>
+                    <button type="button" class="x" aria-label={t("side.closeTab")} onClick={() => void remove(x().id)}>
+                      <Close />
+                    </button>
+                  </div>
+                )
+              }}
+            </For>
+            <button type="button" class="icon sm" aria-label={t("side.newTab")} onClick={() => void add()}>
+              <Plus />
+            </button>
+          </Show>
           <span class="top-end">
             <InstallKeys />
           </span>

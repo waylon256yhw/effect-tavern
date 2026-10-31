@@ -43,9 +43,8 @@
   background: var(--surface-1);
   container: stage / inline-size; /* the 读数 page's columns follow the stage card, which the sidebar narrows */
 }
-/* a page fills the stage card (its own position is the screen's: inspector.css, settings.css) */
-.stage-card > .inspect,
-.stage-card > .settings {
+/* a page fills the stage card (its own position is the screen's: inspector.css) */
+.stage-card > .inspect {
   position: absolute;
 }
 
@@ -739,6 +738,29 @@ dialog.drawer[open]::backdrop {
   .shell-tab .x svg {
     width: 11px;
     height: 11px;
+  }
+  .shell-back {
+    height: 24px;
+    padding: 0 8px 0 6px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--text-footnote);
+    font-weight: 500;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition:
+      background var(--dur-2) var(--ease),
+      color var(--dur-2) var(--ease);
+  }
+  .shell-back:hover {
+    background: var(--fill);
+    color: var(--ink);
+  }
+  .shell-back svg {
+    width: 14px;
+    height: 14px;
   }
   .busy-dot.still {
     animation: none; /* unread: the turn is done, the dot holds */
