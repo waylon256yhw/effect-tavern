@@ -1,6 +1,6 @@
 // Phosphor Icons from Iconify's `ph` set, under the names the chrome uses (docs/client-design-brief-3.md §3). The bare
 // name is the regular weight, `-fill` the filled one. Sizes come from CSS (`.icon svg`, `.record svg`), nothing here.
-export { default as Swipe } from "~icons/ph/arrow-clockwise"
+export { default as Swipe } from "~icons/ph/arrows-clockwise"
 export { default as Back } from "~icons/ph/arrow-left"
 export { default as Warning } from "~icons/ph/warning"
 export { default as Down } from "~icons/ph/arrow-down"
@@ -21,7 +21,8 @@ export { default as DieFill } from "~icons/ph/dice-five-fill"
 export { default as Tree } from "~icons/ph/tree-structure" // the Timeline: a story's branching, not a repo's
 export { default as Probe } from "~icons/ph/list-magnifying-glass" // the Inspector: looking into the request, not a terminal
 export { default as Reword } from "~icons/ph/magic-wand"
-export { default as Edit } from "~icons/ph/pencil-simple"
+export { default as Edit } from "~icons/ph/note-pencil"
+export { default as Write } from "~icons/ph/feather" // the Writing workbench (side.tsx, shell.tsx), distinct from Edit
 export { default as Clue } from "~icons/ph/magnifying-glass"
 export { default as Record } from "~icons/ph/notepad"
 export { default as Snippets } from "~icons/ph/plus"

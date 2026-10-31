@@ -135,7 +135,16 @@ export const working = Atom.make((get) => (get(draft) !== null && get(error) ===
  *  over a story: the bottom of a home tab's stack (`isHome`), where a fresh start and "+" land (pages.ts, tabs.ts).
  *  "settings" is an install-wide layer over the canvas (App.tsx, settings.css), with its own three-column skeleton and
  *  a Back strip in `.shell-top`, returning to the page that opened it. */
-export type Page = "home" | "reader" | "card" | "timeline" | "settings" | "writing" | "status" | { inspect: Id }
+export type Page =
+  | "home"
+  | "reader"
+  | "card"
+  | "workshop"
+  | "timeline"
+  | "settings"
+  | "writing"
+  | "status"
+  | { inspect: Id }
 /** A tab on the top strip (docs/shell-brief-2.md, #123): an address, not data. The story it reads (none: a card's
  *  page, home), the card it is on (its story's card when it has one), its page and the pages under it, and the
  *  reader's scroll as it was left. Every tab reads the one Reading in the slots (reading.ts); tabs.ts is the one

@@ -367,6 +367,8 @@ const zh = {
     closeTab: "关闭标签页",
     unread: "刚生成完",
     newTab: "新标签页",
+    workshop: "制卡工坊",
+    workshopPending: "待开放",
   },
   stories: {
     kindInput: "玩家台词",

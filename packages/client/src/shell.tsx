@@ -20,15 +20,16 @@ import {
   Card as CardGlyph,
   Chat,
   Close,
-  Edit,
   Home,
   List,
   Probe,
   Settings,
   Sidebar as SidebarGlyph,
+  Sliders,
   Snippets as Plus,
   Status,
   Tree,
+  Write,
 } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
@@ -263,6 +264,8 @@ export const Shell = (props: { children: JSX.Element }) => {
                       return <Home />
                     case "card":
                       return <CardGlyph />
+                    case "workshop":
+                      return <Sliders />
                     case "reader":
                       return <Chat />
                     case "timeline":
@@ -270,7 +273,7 @@ export const Shell = (props: { children: JSX.Element }) => {
                     case "status":
                       return <Status />
                     case "writing":
-                      return <Edit />
+                      return <Write />
                     case "settings":
                       return <Settings />
                   }

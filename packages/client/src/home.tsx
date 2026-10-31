@@ -3,7 +3,10 @@
 // placeholder, a mark and a title in the middle of the stage card, nothing to click. It fills the stage card over the
 // reader like any page, with no head (nothing is under it to go back to); on a phone it leaves the strip above it in
 // view, the drawer's key with it.
-import { Home as Mark } from "./icons.tsx"
+import { read } from "./bridge.ts"
+import { Back, Home as Mark, Sliders } from "./icons.tsx"
+import { close } from "./pages.ts"
+import { cards, focus } from "./store.ts"
 import { t } from "./i18n.ts"
 
 export const Home = () => (
@@ -14,3 +17,27 @@ export const Home = () => (
     </div>
   </div>
 )
+
+/** The card workshop placeholder: opened from the workspace's card head, never a second entry to New story. */
+export const Workshop = () => {
+  const shelf = read(cards)
+  const at = read(focus)
+  const title = () => shelf().find((c) => c.id === at())?.title ?? at() ?? ""
+  return (
+    <div class="status-page workshop-page">
+      <header>
+        <button type="button" class="icon" aria-label={t("common.back")} onClick={close}>
+          <Back />
+        </button>
+        <h1>{t("side.workshop")}</h1>
+      </header>
+      <div class="workshop-body">
+        <div class="home-mark">
+          <Sliders aria-hidden="true" />
+          <h1>{title()}</h1>
+          <p>{t("side.workshopPending")}</p>
+        </div>
+      </div>
+    </div>
+  )
+}

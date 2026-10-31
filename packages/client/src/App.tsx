@@ -17,7 +17,7 @@ import { read } from "./bridge.ts"
 import { CardPage } from "./card.tsx"
 import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
-import { Home } from "./home.tsx"
+import { Home, Workshop } from "./home.tsx"
 import { imeController } from "./ime.ts"
 import { Check, Close, Copy, DieFill, Down, Edit, Insert, Next, Prev, Record, Warning } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
@@ -128,7 +128,13 @@ const Editor = (props: { text: string; onDone: (text?: string) => void }) => {
  *  deviation is the anchor: a new turn lands at its own top, where the last section's min-height puts the column's
  *  end at the scroller's bottom, so following holds from there. Programmatic scrolls are instant: a smooth one fires
  *  many events no one could attribute. The scroller is the column (.scroll), never the page. */
-const follow = { on: true, ours: null as number | null, touched: -Infinity, landing: false }
+const follow = {
+  on: true,
+  ours: null as number | null,
+  touched: -Infinity,
+  landing: false,
+  checkout: null as { index: number; top: number | "start" } | null,
+}
 const scroller = () => document.querySelector(".scroll")!
 const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
 /** How much of the latest turn's content is below the viewport. The last section is at least a screen tall so a
@@ -162,15 +168,29 @@ const Latest = () => {
         follow.on = true
         follow.touched = -Infinity
         follow.landing = true
+        follow.checkout = null
       }
     },
   )
   createEffect(
     () => all(),
     () => {
-      if (!follow.landing) return
-      follow.landing = false
-      stick()
+      if (follow.landing) {
+        follow.landing = false
+        stick()
+        return
+      }
+      if (!follow.checkout) return
+      const { index, top } = follow.checkout
+      follow.checkout = null
+      follow.touched = performance.now()
+      const sec = document.querySelectorAll("main > section")[index]
+      if (!sec) return
+      if (top === "start") sec.scrollIntoView({ block: "start", behavior: "instant" })
+      else scroller().scrollTop += sec.getBoundingClientRect().top - scroller().getBoundingClientRect().top - top
+      follow.ours = scroller().scrollTop
+      follow.on = gap() <= 2
+      setAway(!follow.on && hidden() > 120)
     },
   )
   onSettled(() => {
@@ -200,6 +220,7 @@ const Latest = () => {
     scroll.set = (top) =>
       void requestAnimationFrame(() => {
         follow.landing = false
+        follow.checkout = null
         scroller().scrollTop = top
         follow.ours = scroller().scrollTop
         follow.on = gap() <= 40
@@ -322,6 +343,7 @@ const Said = (props: {
   )
   // the field the row speaks of: the line, or the note when the turn is that word alone
   const field = () => (props.input.text ? "text" : "note")
+  const busy = read(working)
   const [copied, setCopied] = createSignal(false)
   const copy = () =>
     // a plain-http page off localhost (a phone on the LAN) has no clipboard: the key then does nothing
@@ -350,7 +372,7 @@ const Said = (props: {
             type="button"
             class="icon"
             aria-label={field() === "note" ? t("app.reviseNote") : t("app.reviseLine")}
-            disabled={!props.node}
+            disabled={!props.node || busy()}
             onClick={() => {
               revise(props.node!, field())
               // the note's box opens with the revision: focus it once it is there
@@ -397,8 +419,17 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
   const siblings = () => vs().list
   let list: HTMLDivElement | undefined
   const at = () => vs().index
-  // the version's whole follow-up comes back: the server moves head to its newest leaf
-  const go = (i: number) => turn.checkout(siblings()[i]!.id)
+  // the version's whole follow-up comes back: the server moves head to its newest leaf; the turn's top stays put when
+  // already in view, or lands at the column's top when a long version had scrolled it past the head
+  const go = (i: number) => {
+    const sec = document.getElementById(`node-${props.node.turn.id}`)
+    if (sec) {
+      const head = parseFloat(getComputedStyle(sec).scrollMarginTop) || 0
+      const top = sec.getBoundingClientRect().top - scroller().getBoundingClientRect().top
+      follow.checkout = { index: props.n - 1, top: top < head - 2 ? "start" : top }
+    }
+    turn.checkout(siblings()[i]!.id)
+  }
   const options = () => props.node.turn.products.options as readonly string[] | undefined
   // the editor's close: with text, the edit is sent; without (Escape, unchanged, empty), it is only closed
   const done = (text?: string) => {
@@ -431,7 +462,12 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
               <Prev />
             </button>
             {/* the counter opens the list: which action made each version, its opening, how many nodes follow it */}
-            <button class="count" aria-haspopup="menu" popovertarget={`versions-${props.node.turn.id}`}>
+            <button
+              class="count"
+              aria-haspopup="menu"
+              disabled={busy()}
+              popovertarget={`versions-${props.node.turn.id}`}
+            >
               {at() + 1}/{siblings().length}
             </button>
             <div
@@ -447,6 +483,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
                   <button
                     role="menuitem"
                     class="version"
+                    disabled={busy()}
                     aria-current={s().turn.id === props.node.turn.id ? "true" : undefined}
                     onClick={() => (list?.hidePopover(), go(i()))}
                   >
@@ -532,6 +569,9 @@ export const App = () => {
         </Show>
         <Show when={pg() === "card"}>
           <CardPage />
+        </Show>
+        <Show when={pg() === "workshop"}>
+          <Workshop />
         </Show>
         <Show when={pg() === "timeline"}>
           <Timeline />

@@ -369,6 +369,8 @@ const en: Dict = {
     closeTab: "Close tab",
     unread: "Just finished",
     newTab: "New tab",
+    workshop: "Card workshop",
+    workshopPending: "Coming soon",
   },
   stories: {
     kindInput: "Your line",

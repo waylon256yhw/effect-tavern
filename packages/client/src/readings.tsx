@@ -423,7 +423,7 @@ export const Rewrite = (props: {
   }
   return (
     <>
-      <Show when={asking()} fallback={<span class="spacer" />}>
+      <Show when={asking() && !busy()} fallback={<span class="spacer" />}>
         <input
           class="direction"
           placeholder={t("readings.rewordPlaceholder")}

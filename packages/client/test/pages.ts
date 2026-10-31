@@ -39,6 +39,10 @@ const at = () => registry.get(page)
 // on a story in progress, the stack: each page returns to the one it covered
 nodes = [node(0, null)]
 await openStory(1)
+open("workshop")
+assert.equal(at(), "workshop")
+close()
+assert.equal(at(), "reader")
 open("card")
 open("writing")
 assert.equal(at(), "writing")

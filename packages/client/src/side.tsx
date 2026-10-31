@@ -12,9 +12,9 @@
 import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { openManager, openPicker } from "./dialogs.tsx"
-import { Archive, Clue, Close, Edit, Next, Prev, Settings, Shade, Snippets, Translate, User } from "./icons.tsx"
+import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
-import { browse, close, openStory, showCard } from "./pages.ts"
+import { browse, close, open, openStory, showCard } from "./pages.ts"
 import { arranged, busyElsewhere, busyOn, fold, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
 import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
 import { chosen } from "./switches.ts"
@@ -157,6 +157,11 @@ export const Sidebar = (props: {
     props.onLeave?.()
     void showCard(id)
   }
+  const toWorkshop = () => {
+    if (at() === null) return
+    props.onLeave?.()
+    open("workshop")
+  }
   return (
     <div class="sidebar" data-layer={which()}>
       <div class="side-top">
@@ -169,11 +174,24 @@ export const Sidebar = (props: {
             </Show>
           </button>
         </Show>
-        <Show when={props.inDrawer}>
-          <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => props.onLeave?.()}>
-            <Close />
-          </button>
-        </Show>
+        <span class="side-top-end">
+          <Show when={which() === "workspace"}>
+            <button
+              type="button"
+              class="icon sm"
+              aria-label={t("side.manager")}
+              disabled={!card()}
+              onClick={openManager}
+            >
+              <Archive />
+            </button>
+          </Show>
+          <Show when={props.inDrawer}>
+            <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => props.onLeave?.()}>
+              <Close />
+            </button>
+          </Show>
+        </span>
       </div>
       <div class="side-mid">
         <div class="side-track">
@@ -227,29 +245,31 @@ export const Sidebar = (props: {
             <button
               type="button"
               class="cardhead"
-              aria-current={pg() === "card" ? "page" : undefined}
+              aria-current={pg() === "workshop" ? "page" : undefined}
               disabled={!card()}
-              onClick={toCard}
+              onClick={toWorkshop}
             >
               <h1>{card()?.title ?? at() ?? ""}</h1>
               <span class="enter" aria-hidden="true">
                 <Next />
               </span>
             </button>
-            <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openPicker)}>
-              <span class="lbl">
-                <User aria-hidden="true" />
-                <span>{t("common.persona")}</span>
-              </span>
-              <span class="val">{persona()}</span>
-            </button>
-            <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openWriting)}>
-              <span class="lbl">
-                <Edit aria-hidden="true" />
-                <span>{t("side.writing")}</span>
-              </span>
-              <span class="val">{writing()}</span>
-            </button>
+            <div class="workspace-tools">
+              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openPicker)}>
+                <span class="lbl">
+                  <User aria-hidden="true" />
+                  <span>{t("common.persona")}</span>
+                </span>
+                <span class="val">{persona()}</span>
+              </button>
+              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openWriting)}>
+                <span class="lbl">
+                  <Write aria-hidden="true" />
+                  <span>{t("side.writing")}</span>
+                </span>
+                <span class="val">{writing()}</span>
+              </button>
+            </div>
             <div class="input-box sm">
               <Clue aria-hidden="true" />
               <input
@@ -312,19 +332,14 @@ export const Sidebar = (props: {
           </section>
         </div>
       </div>
-      <footer class="side-foot">
-        {/* the phone has no top strip: the install's keys stay at the drawer's foot */}
-        <span class="left">
-          <Show when={props.inDrawer}>
+      <Show when={props.inDrawer}>
+        <footer class="side-foot">
+          {/* the phone has no top strip: the install's keys stay at the drawer's foot */}
+          <span class="left">
             <InstallKeys onLeave={props.onLeave} />
-          </Show>
-        </span>
-        <Show when={which() === "workspace"}>
-          <button type="button" class="icon sm" aria-label={t("side.manager")} disabled={!card()} onClick={openManager}>
-            <Archive />
-          </button>
-        </Show>
-      </footer>
+          </span>
+        </footer>
+      </Show>
     </div>
   )
 }

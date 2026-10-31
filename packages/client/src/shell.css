@@ -159,6 +159,17 @@
   justify-content: space-between;
   flex: none;
 }
+.side-top-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.side-top-end .icon {
+  color: var(--ink-2);
+}
+.side-top-end .icon:hover:not(:disabled) {
+  color: var(--ink);
+}
 .layer-label {
   font-size: var(--text-caption);
   font-weight: 600;
@@ -214,13 +225,21 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 2px var(--space-3) var(--space-2);
+  padding: 2px var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 .pane .input-box {
   flex: none;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.pane .input-box:focus-within {
+  box-shadow: inset 0 0 0 1px var(--ink-2);
+}
+.workspace > .input-box {
+  margin-top: var(--space-1);
 }
 .shelf-list,
 .story-list {
@@ -228,14 +247,17 @@
   min-height: 0;
   list-style: none;
   margin: 0 -4px;
-  padding: 0 4px;
+  padding: 2px 4px;
+  scrollbar-gutter: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .shelf-list .none,
 .story-list .none {
-  padding: 10px 8px;
+  margin: auto 0;
+  padding: var(--space-4) var(--space-2);
+  text-align: center;
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
@@ -251,17 +273,22 @@
   width: 100%;
   text-align: left;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: background var(--dur-2) var(--ease);
+  transition:
+    background var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 .shelf-item:hover {
   background: var(--ghost-hover);
 }
 .shelf-item[aria-current] {
-  background: var(--fill);
+  background: var(--surface-2);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 0 0 var(--hairline) var(--line);
 }
 .shelf-item .head {
   display: flex;
@@ -285,16 +312,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the workspace's head: the card's name, the way into its page beside it */
+/* the workspace's head: the card's name, the way into its workshop right beside it */
 .cardhead {
   box-sizing: border-box;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  justify-content: flex-start;
+  gap: 6px;
   width: 100%;
-  padding: 5px 8px;
-  border-radius: 6px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
   text-align: left;
   flex: none;
   transition: background var(--dur-2) var(--ease);
@@ -303,7 +330,8 @@
   background: var(--ghost-hover);
 }
 .cardhead[aria-current] {
-  background: var(--fill);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
 .cardhead h1 {
   margin: 0;
@@ -320,13 +348,15 @@
   flex: none;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
-  background: var(--alpha-1);
-  color: var(--ink-3);
+  border-radius: 6px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  color: var(--ink-2);
   display: inline-grid;
   place-items: center;
   transition:
     background var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease),
     color var(--dur-2) var(--ease),
     translate var(--dur-2) var(--ease);
 }
@@ -335,44 +365,62 @@
   height: 12px;
 }
 .cardhead:hover:not(:disabled) .enter {
-  translate: 1px 0;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+  translate: 2px 0;
 }
 .cardhead[aria-current] .enter {
-  background: var(--alpha-2);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--surface-1);
+  box-shadow: none;
 }
-/* a row (the workspace's persona and writing): a glyph and a word, the setting in force at the right */
+/* the workspace's persona and writing: two compact entry buttons side by side */
+.workspace-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  flex: none;
+}
 .workspace .row {
   box-sizing: border-box;
-  flex: none;
+  min-width: 0;
   width: 100%;
-  height: var(--control);
-  padding: 0 var(--space-3);
+  padding: 7px 10px;
   border-radius: var(--radius);
-  background: var(--alpha-1);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  transition:
+    background var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 .workspace .row:hover:not(:disabled) {
-  background: var(--fill);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
 }
 .workspace .lbl {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-weight: 500;
+  gap: 5px;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--ink-3);
 }
 .workspace .lbl svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  color: var(--ink-2);
+  width: 13px;
+  height: 13px;
+  color: var(--ink-3);
 }
 .workspace .val {
+  width: 100%;
   min-width: 0;
-  color: var(--ink-2);
+  color: var(--ink);
   font-size: var(--text-footnote);
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -381,21 +429,30 @@
 .story-row {
   box-sizing: border-box;
   width: 100%;
-  min-height: 29px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  color: var(--ink-2);
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
   text-align: left;
-  transition: background var(--dur-2) var(--ease);
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 .story-row:hover {
   background: var(--ghost-hover);
+  color: var(--ink);
 }
 .story-row[aria-current] {
-  background: var(--fill);
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 0 0 var(--hairline) var(--line);
 }
 .story-row .line {
   display: flex;
@@ -417,6 +474,9 @@
 .story-row .name.unnamed {
   color: var(--ink-2);
 }
+.story-row[aria-current] .name.unnamed {
+  color: var(--ink);
+}
 .story-row .hit {
   display: block;
   font-size: var(--text-caption);
@@ -430,30 +490,26 @@
   font-weight: 600;
   margin-right: 4px;
 }
-/* the foot of the workspace: the card's page, where Begin makes a story */
+/* the foot of the workspace: the primary action at the bottom, opening the card's page where Begin makes a story */
 .new-story {
   box-sizing: border-box;
   flex: none;
   width: 100%;
-  height: 30px;
+  height: var(--control);
   padding: 0 var(--space-3);
-  border-radius: 6px;
-  background: var(--alpha-1);
-  color: var(--ink);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-ink);
   font-size: var(--text-footnote);
-  font-weight: 550;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: background var(--dur-2) var(--ease);
+  transition: opacity var(--dur-2) var(--ease);
 }
 .new-story:hover:not(:disabled) {
-  background: var(--fill);
-}
-.new-story[aria-current] {
-  background: var(--ink);
-  color: var(--surface-1);
+  opacity: 0.88;
 }
 .new-story svg {
   width: 14px;
@@ -511,6 +567,17 @@
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--ink-2);
+}
+.home-mark p {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--ink-3);
+}
+.workshop-body {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
 }
 
 .status-page {
