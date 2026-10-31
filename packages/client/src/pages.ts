@@ -10,7 +10,6 @@
 // back from any page, which also puts the open story's card back in the view. Landing reads the story's card (stories of every card
 // share one listing) and picks up a turn in flight there. One Escape rule for every page, mounted once by the App. The
 // reader stays mounted under all of it, so a turn in flight keeps streaming; another story only stops reading it.
-import { layerOf } from "./fold.ts"
 import { latestOf } from "./stories.ts"
 import { reading } from "./reading.ts"
 import {
@@ -18,7 +17,6 @@ import {
   card,
   cards,
   isHome,
-  layer,
   log,
   page,
   type Page,
@@ -50,14 +48,14 @@ export const open = (p: Page): void => {
   edit({ page: p, under: at === "reader" ? under : [...under, at] })
   void loads[kindOf(p)]?.()
 }
-/** Back to the page this one covered, the reader when none. Back onto home is the tab a home tab again: the card it
- *  was on is let go, and the sidebar is back on the shelf. */
+/** Back to the page this one covered, the reader when none. Back onto home resets the active tab to home and the
+ *  sidebar to the shelf (`toHome`). */
 export const close = (): void => {
   const { under } = tab()
   if (!under.length) return toReader()
   const to = under.at(-1)!
-  edit({ page: to, under: under.slice(0, -1), ...(to === "home" ? { card: null } : {}) })
-  if (to === "home") registry.set(layer, "shelf")
+  if (to === "home") return void toHome()
+  edit({ page: to, under: under.slice(0, -1) })
 }
 /** Where a page's Back goes from this tab: the story (or a page over it), home, or nowhere (the bottom of the stack:
  *  the key is not drawn). */
@@ -69,15 +67,14 @@ const current = () => {
   return lib?.stories.find((s) => s.id === lib.current)
 }
 /** On the story as if just opened, in the active tab: an empty log lands on the card page (pick an opening, or
- *  begin), a story in progress in the reader; nothing to go back to. The sidebar is on the story's card (its
- *  workspace). No story at all (an empty library) is the first card's page over home, the sidebar on the shelf. */
+ *  begin), a story in progress in the reader; nothing to go back to. The sidebar follows `focus` onto the card's
+ *  workspace. No story at all (an empty library) is the first card's page over home. */
 const arrive = async (): Promise<void> => {
   const cur = current()
   if (!cur && !registry.get(cards).length) await wire.fetchCards()
   const id = cur?.card ?? registry.get(cards)[0]?.id ?? null
   const at = cur && registry.get(log).nodes.size ? "reader" : "card"
   edit({ story: cur?.id ?? null, card: id, page: at, under: cur ? [] : ["home"] })
-  registry.set(layer, layerOf(cur?.id))
   if (!cur && id !== null && registry.get(card)?.id !== id) await wire.fetchCardOf(id)
 }
 /** Back to the reader from any page: what covered it is dropped, and the card view is the tab's story's again (a card
@@ -104,10 +101,15 @@ export const showCard = async (id: string): Promise<void> => {
 export const pick = (id: number): void => {
   if (id !== tab().id) void select(id)
 }
+/** Back to home and the shelf in the active tab: the story (if any) leaves the slots with its composer recorded,
+ *  and the card is let go (`layer` derives `"shelf"` from `focus === null`). */
+export const toHome = async (): Promise<void> => {
+  edit({ story: null, card: null, page: "home", under: [], scroll: undefined })
+  await reading.activate(null)
+}
 /** A card picked on the shelf: its workspace, and the stage on its latest story (the open one when it is this card's,
  *  else the newest), or on its page when it has none. */
 export const browse = async (id: string): Promise<void> => {
-  registry.set(layer, "workspace")
   const lib = registry.get(stories)
   const mine = lib?.stories.filter((s) => s.card === id) ?? []
   if (!mine.length) return showCard(id)
@@ -131,15 +133,15 @@ const reloaded = (): boolean => {
  *  remembered tabs stay on the strip, a home tab is active, no story is in the slots and the sidebar is on the shelf
  *  (tabs.ts `home`). */
 export const boot = async (): Promise<void> => {
-  await Promise.all([wire.fetchStories(), wire.fetchCards()])
-  const kept = remembered() // the tabs the device holds, on stories and cards still there (tabs.ts)
-  const resumed = kept && reloaded() ? kept : null
   await Promise.all([
-    reading.activate(resumed ? activeOf(resumed).story : null),
+    wire.fetchStories(),
+    wire.fetchCards(),
     wire.fetchPersonas(),
     wire.fetchPlayer(),
     wire.fetchRouting(),
   ])
+  const kept = remembered() // the tabs the device holds, on stories and cards still there (tabs.ts)
+  const resumed = kept && reloaded() ? kept : null
   await (resumed ? load(resumed) : home(kept))
 }
 /** A story made: the client is on the story the listing names, as just opened (reading.ts: the old story out of the

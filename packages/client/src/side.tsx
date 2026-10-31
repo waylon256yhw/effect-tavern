@@ -14,7 +14,7 @@ import { read } from "./bridge.ts"
 import { openManager, openPicker } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
-import { browse, close, open, openStory, showCard } from "./pages.ts"
+import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
 import { arranged, busyElsewhere, busyOn, fold, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
 import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
 import { chosen } from "./switches.ts"
@@ -142,7 +142,7 @@ export const Sidebar = (props: {
     }, 5000)
     return () => clearInterval(id)
   })
-  const toShelf = () => registry.set(layer, "shelf")
+  const toShelf = () => void toHome()
   const pickCard = (id: string) => {
     props.onLeave?.()
     void browse(id)

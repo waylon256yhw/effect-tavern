@@ -9,7 +9,7 @@
 // start lands on a home tab beside the remembered ones.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
-import { backOf, browse, close, onDelete, open, openStory, pick, showCard } from "../src/pages.ts"
+import { backOf, browse, close, onDelete, open, openStory, pick, showCard, toHome } from "../src/pages.ts"
 import { createReading, reading } from "../src/reading.ts"
 import {
   activeOf,
@@ -205,6 +205,27 @@ assert.deepEqual(
   ],
 )
 assert.equal(back.active, back.list[1]!.id)
+// a restored tab keeps its page and return stack (workshop, inspect over timeline, writing over a card tab)
+const stacked = restore(
+  JSON.stringify({
+    tabs: [
+      { story: 1, card: "a", page: { inspect: 0 }, under: ["timeline"] },
+      { story: null, card: "b", page: "workshop", under: ["home", "card"] },
+      { story: null, card: null, page: "settings", under: ["home"] },
+    ],
+    active: 0,
+  }),
+  lib,
+  [{ id: "a" }, { id: "b" }],
+)!
+assert.deepEqual(
+  stacked.list.map((t) => [t.story, t.card, t.page, t.under]),
+  [
+    [1, "a", { inspect: 0 }, ["timeline"]],
+    [null, "b", "workshop", ["home", "card"]],
+    [null, null, "settings", ["home"]],
+  ],
+)
 assert.equal(restore("not json", lib, []), null)
 assert.equal(restore(JSON.stringify({ tabs: [{ story: 9 }] }), lib, []), null)
 
@@ -260,7 +281,15 @@ assert.deepEqual([tab().id, tab().card, registry.get(page), backOf(tab())], [H, 
 close()
 assert.deepEqual([tab().id, isHome(tab()), registry.get(page), registry.get(layer)], [H, true, "home", "shelf"])
 // switching to a story tab puts the sidebar on its card's workspace (the newest of the restored ones: "+" on the full
-// strip dropped the oldest)
+// strip dropped the oldest); `< 所有卡片` (toHome) takes the active tab and the sidebar back to home and the shelf
 await select(full.list.at(-1)!.id)
 assert.equal(registry.get(layer), "workspace")
+setBoxes({ text: "留字", note: "", aside: false })
+await toHome()
+assert.deepEqual(
+  [isHome(tab()), registry.get(page), registry.get(layer), registry.get(stories)?.current, boxes().text],
+  [true, "home", "shelf", null, ""],
+)
+await openStory(1)
+assert.equal(boxes().text, "留字")
 console.log("tabs ok")

@@ -37,7 +37,3 @@ export const remembered = (v: unknown): number => {
   const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN
   return Number.isFinite(n) && n >= SIDE.min && n <= SIDE.max ? Math.round(n) : SIDE.default
 }
-
-/** The sidebar's layer on arriving at a story: the workspace of its card; with no story at all, the shelf. */
-export const layerOf = (current: number | null | undefined): "shelf" | "workspace" =>
-  current == null ? "shelf" : "workspace"

@@ -86,9 +86,6 @@ export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
 /** Every card the install knows (GET /cards), by id and title, with its one-line summary when it has one: the
  *  sidebar's shelf (side.tsx), and what a persona's picks are named by. */
 export const cards = Atom.make<readonly { id: string; title: string; summary?: string }[]>([]).pipe(Atom.keepAlive)
-/** Which of the sidebar's two layers shows: the shelf (every card) or the workspace (one card's stories). Arriving at
- *  a story lands on its workspace, an empty library on the shelf (pages.ts); the back button and a card's row move it. */
-export const layer = Atom.make<"shelf" | "workspace">("workspace").pipe(Atom.keepAlive)
 export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
 /** The model-name table (GET /models/names), read through provider names.ts `lookup`: a model id's name, owner, family. */
 export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)
@@ -172,6 +169,11 @@ export const page = Atom.make((get) => activeOf(get(tabs)).page)
 /** The card the sidebar's workspace layer is on (#117): the active tab's card, its story's card or one browsed from
  *  the shelf (its page shown, no story of it yet). One source for the workspace and the card view. */
 export const focus = Atom.make((get) => activeOf(get(tabs)).card).pipe(Atom.keepAlive)
+/** Which of the sidebar's two depths shows: the global shelf when the active tab has no card, or the card's workspace
+ *  when it has one. Derived from `focus`, so the sidebar and the stage never drift apart. */
+export const layer = Atom.make<"shelf" | "workspace">((get) => (get(focus) === null ? "shelf" : "workspace")).pipe(
+  Atom.keepAlive,
+)
 /** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 

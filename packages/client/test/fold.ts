@@ -1,7 +1,7 @@
 // fold.ts: the sidebar's width under the hand (the band, the detent, the fold, the spring, the unfold) and what the
 // device remembers of it.
 import assert from "node:assert/strict"
-import { drag, layerOf, remembered, SIDE } from "../src/fold.ts"
+import { drag, remembered, SIDE } from "../src/fold.ts"
 
 // docked: the band follows the hand, rounded on release
 assert.deepEqual(drag(250, false), { kind: "width", shown: 250, keep: 250 })
@@ -35,9 +35,4 @@ assert.equal(remembered(280.6), 281)
 assert.equal(remembered("199"), SIDE.default)
 assert.equal(remembered("abc"), SIDE.default)
 assert.equal(remembered(null), SIDE.default)
-
-// the layer on arrival
-assert.equal(layerOf(7), "workspace")
-assert.equal(layerOf(null), "shelf")
-assert.equal(layerOf(undefined), "shelf")
 console.log("fold ok")

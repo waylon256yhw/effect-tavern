@@ -15,7 +15,7 @@ import { untrack } from "solid-js"
 import { registry } from "./atom.ts"
 import * as Atom from "./atom.ts"
 import { reading } from "./reading.ts"
-import { activeOf, card, cards, type Id, isHome, layer, log, stories, type Tab, tabs, type Tabs } from "./store.ts"
+import { activeOf, card, cards, type Id, isHome, log, type Page, stories, type Tab, tabs, type Tabs } from "./store.ts"
 import * as wire from "./wire.ts"
 
 export const CAP = 8
@@ -35,19 +35,27 @@ export const edit = (patch: Partial<Omit<Tab, "id">>): void => {
 
 /** On the tab now active, once the switch before it is done: its story in the slots and its card in the view; a story
  *  tab back on an empty log is on its card page (a restored tab), and the scroll it was left at comes back. The
- *  sidebar is on the tab's card's workspace, on the shelf for a home tab (no card). */
+ *  sidebar's depth (`layer`) derives directly from `focus` (the active tab's `card`). */
 const show = async (id: number): Promise<void> => {
   const t = now().list.find((x) => x.id === id)
   if (!t) return
   seen(t.story)
-  registry.set(layer, t.card === null ? "shelf" : "workspace")
   await reading.activate(t.story) // none: the slots empty, no story named
   if (t.card !== null && registry.get(card)?.id !== t.card) {
     const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
     await (own ? wire.fetchCard() : wire.fetchCardOf(t.card)) // the story's card, or one browsed on this tab
   }
+  if (typeof t.page === "object") await wire.fetchCalls()
+  else if (t.page === "settings") await wire.fetchSettings()
   if (now().active !== id) return
-  if (t.page === "reader" && t.story !== null && !registry.get(log).nodes.size) edit({ page: "card" })
+  if (
+    t.story !== null &&
+    !registry.get(log).nodes.size &&
+    (t.page === "reader" || t.page === "timeline" || t.page === "status" || typeof t.page === "object")
+  )
+    edit({ page: "card", under: [] })
+  else if (typeof t.page === "object" && !registry.get(log).nodes.has(t.page.inspect))
+    edit({ page: "reader", under: [] })
   if (t.scroll !== undefined) scroll.set(t.scroll)
 }
 let last: Promise<void> = Promise.resolve()
@@ -111,10 +119,18 @@ export const forget = (ids: readonly Id[]): void => {
   })
 }
 
+const PAGES = new Set(["home", "reader", "card", "workshop", "timeline", "settings", "writing", "status"])
+const isPage = (p: unknown): p is Page =>
+  (typeof p === "string" && PAGES.has(p)) ||
+  (typeof p === "object" && p !== null && typeof (p as { inspect?: unknown }).inspect === "number")
+const stackOf = (u: unknown, allowHome: boolean): Page[] =>
+  Array.isArray(u)
+    ? u.filter((p): p is Page => isPage(p) && p !== "reader" && (allowHome || p !== "home"))
+    : []
+
 /** The list as the device hands it back: a story the listing does not name, or a story-less tab on a card the shelf
- *  does not have, is dropped; eight at most; the active one by index, the first when it was dropped. No page stack:
- *  a story tab is on its reader (`show` turns an empty one to its card page), a card tab on its card page with home
- *  under it, a home tab (neither) on home. */
+ *  does not have, is dropped; eight at most; the active one by index, the first when it was dropped. Each tab keeps
+ *  its page and return stack (`page`, `under`), falling back to `reader`, `card` (over `home`) or `home` when absent. */
 export const restore = (
   raw: unknown,
   lib: { stories: readonly { id: Id; card: string }[] } | null,
@@ -129,16 +145,28 @@ export const restore = (
   if (!v || !Array.isArray(v.tabs)) return null
   const list: Tab[] = []
   let active: number | undefined
-  v.tabs.slice(0, CAP).forEach((x: { story?: unknown; card?: unknown } | null, i: number) => {
-    const row = typeof x?.story === "number" ? lib?.stories.find((s) => s.id === x.story) : undefined
-    const id = next++
-    if (row) list.push({ id, story: row.id, card: row.card, page: "reader", under: [] })
-    else if (x?.story === null && x.card === null) list.push({ ...homeTab(), id })
-    else if (x?.story === null && shelf.some((c) => c.id === x.card))
-      list.push({ id, story: null, card: x.card as string, page: "card", under: ["home"] })
-    else return
-    if (i === v.active) active = id
-  })
+  v.tabs
+    .slice(0, CAP)
+    .forEach((x: { story?: unknown; card?: unknown; page?: unknown; under?: unknown } | null, i: number) => {
+      const row = typeof x?.story === "number" ? lib?.stories.find((s) => s.id === x.story) : undefined
+      const id = next++
+      if (row) {
+        const cardId = typeof x?.card === "string" && shelf.some((c) => c.id === x.card) ? x.card : row.card
+        const page: Page = isPage(x?.page) && x.page !== "home" ? x.page : "reader"
+        const under = stackOf(x?.under, false)
+        list.push({ id, story: row.id, card: cardId, page, under })
+      } else if (x?.story === null && x.card === null) {
+        const page: Page = x.page === "settings" ? "settings" : "home"
+        list.push({ id, story: null, card: null, page, under: page === "settings" ? ["home"] : [] })
+      } else if (x?.story === null && shelf.some((c) => c.id === x.card)) {
+        const page: Page =
+          x.page === "workshop" || x.page === "writing" || x.page === "settings" ? x.page : "card"
+        const rawUnder = stackOf(x.under, true)
+        const under: Page[] = rawUnder[0] === "home" ? rawUnder : page === "card" ? ["home"] : ["home", "card"]
+        list.push({ id, story: null, card: x.card as string, page, under })
+      } else return
+      if (i === v.active) active = id
+    })
   return list.length ? { list, active: active ?? list[0]!.id } : null
 }
 /** The remembered list, when there is one the device still holds and the library still names. */
@@ -160,7 +188,9 @@ export const load = (s: Tabs): Promise<void> => {
 export const home = (kept: Tabs | null): Promise<void> => {
   let list = kept?.list ?? []
   let at = list.find((t) => isHome(t))
-  if (!at) {
+  if (at) {
+    list = list.map((t) => (t.id === at!.id ? { ...t, page: "home", under: [] } : t))
+  } else {
     at = homeTab()
     list = [...list.slice(Math.max(0, list.length - CAP + 1)), at]
   }
@@ -168,7 +198,12 @@ export const home = (kept: Tabs | null): Promise<void> => {
 }
 registry.subscribe(tabs, (s) => {
   try {
-    const list = s.list.map((t) => ({ story: t.story, card: t.card }))
+    const list = s.list.map((t) => ({
+      story: t.story,
+      card: t.card,
+      page: t.page,
+      ...(t.under.length ? { under: t.under } : {}),
+    }))
     localStorage.setItem(KEY, JSON.stringify({ tabs: list, active: s.list.findIndex((t) => t.id === s.active) }))
   } catch {
     // a browser without storage keeps the tabs for the page's life

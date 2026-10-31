@@ -51,7 +51,7 @@ import {
   working,
 } from "./store.ts"
 import { turn } from "./turn.ts"
-import { boot, onKey } from "./pages.ts"
+import { onKey } from "./pages.ts"
 import { scroll } from "./tabs.ts"
 import { type Key, t } from "./i18n.ts"
 
@@ -553,9 +553,8 @@ const Reader = () => {
 
 export const App = () => {
   const pg = read(page)
-  // the first load lands on home, or on the tab a reload left (pages.ts); one Escape rule for every page over the reader
+  // one Escape rule for every page over the reader
   onSettled(() => {
-    void boot()
     addEventListener("keydown", onKey)
     return () => removeEventListener("keydown", onKey)
   })
