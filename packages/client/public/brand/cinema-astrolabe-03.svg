@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 754 1024">
+<!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <defs>
+    <path id="outer-minute-mark" d="M377 128v11" fill="none" stroke="#fff" stroke-width="1.35"/>
+    <path id="outer-five-minute-mark" d="M377 128v17" fill="none" stroke="#fff" stroke-width="2.1"/>
+    <path id="dial-minute-mark" d="M377 265v21" fill="none" stroke="#fff" stroke-width="1.65"/>
+    <path id="dial-short-mark" d="M377 266v17" fill="none" stroke="#fff" stroke-width="1.25"/>
+    <g id="dial-quadrant">
+      <use href="#dial-minute-mark"/>
+      <use href="#dial-minute-mark" transform="rotate(5 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(10 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(15 377 488)"/>
+      <use href="#dial-short-mark" transform="rotate(20 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(25 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(30 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(35 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(40 377 488)"/>
+      <use href="#dial-short-mark" transform="rotate(45 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(50 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(55 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(60 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(65 377 488)"/>
+      <use href="#dial-short-mark" transform="rotate(70 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(75 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(80 377 488)"/>
+      <use href="#dial-minute-mark" transform="rotate(85 377 488)"/>
+    </g>
+    <g id="outer-tick-sector">
+      <use href="#outer-five-minute-mark"/>
+      <use href="#outer-minute-mark" transform="rotate(1.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(3 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(4.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(6 377 493)"/>
+      <use href="#outer-five-minute-mark" transform="rotate(7.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(9 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(10.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(12 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(13.5 377 493)"/>
+      <use href="#outer-five-minute-mark" transform="rotate(15 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(16.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(18 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(19.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(21 377 493)"/>
+      <use href="#outer-five-minute-mark" transform="rotate(22.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(24 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(25.5 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(27 377 493)"/>
+      <use href="#outer-minute-mark" transform="rotate(28.5 377 493)"/>
+    </g>
+    <clipPath id="tick-border-clip">
+      <path d="M377 119C293 119 217 162 164 218V250C96 308 55 393 55 495C55 598 92 682 164 737V771C226 831 300 865 377 865C456 865 535 831 590 771V737C660 678 700 592 700 495C700 396 661 308 590 250V218C535 161 459 119 377 119Z"/>
+    </clipPath>
+    <radialGradient id="aperture-gray" cx="55%" cy="40%" r="66%">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".54" stop-color="#d7d7d7"/>
+      <stop offset=".78" stop-color="#747474"/>
+      <stop offset="1" stop-color="#191919"/>
+    </radialGradient>
+  </defs>
+  <g id="stepped-art-deco-frame" fill="#030303" stroke="#080808" stroke-width="3">
+    <path id="upper-crown-silhouette" d="M192 184V140H221V107H247V75H276C296 34 332 9 377 9C422 9 460 34 479 72H506V108H533V140H562V183L513 222H240Z"/>
+    <path id="lower-crown-silhouette" d="M188 801V859H216V899H243V934H275C293 981 328 1005 377 1005C425 1005 463 978 481 934H512V900H538V862H567V804L515 766H239Z"/>
+  </g>
+  <g id="crown-inlaid-lines" fill="none" stroke="#f5f5f3">
+    <path d="M199 180V144H226V112H253V80H280C299 39 333 18 377 18C419 18 455 42 474 79H500V113H526V145H555V180" stroke-width="4.5"/>
+    <path d="M282 149V83C301 45 335 21 377 21C418 21 452 45 472 83V148M255 79V160M228 111V175M500 80V158M528 113V176" stroke-width="4.3"/>
+    <path d="M197 808V853H223V892H250V928H280C296 972 329 995 377 995C422 995 458 968 475 928H505V892H532V854H559V807" stroke-width="4.4"/>
+    <path d="M282 843V923C295 966 330 991 377 991C422 991 457 966 472 925V844M251 829V928M224 813V892M504 830V927M532 815V892" stroke-width="4"/>
+    <g stroke-width="1" opacity=".7">
+      <path d="M248 75l7 6M221 107l8 6M193 140l9 6M501 80l7-6M527 112l6-5M556 145l6-6"/>
+      <path d="M190 860l8-7M217 900l8-8M244 934l8-7M505 928l7 6M532 854l7 7M558 853l8 7"/>
+    </g>
+  </g>
+  <g id="main-medallion">
+    <path id="black-outer-body" fill="#020303" d="M377 109C293 109 214 151 155 209L147 212V244C79 304 42 393 42 495C42 598 81 689 147 744V777L155 781C215 842 294 879 377 879C462 879 540 842 600 781L608 777V744C676 685 713 594 713 495C713 394 675 303 608 244V212L600 209C539 150 461 109 377 109Z"/>
+    <path id="outer-silver-keyline" d="M377 114C293 114 215 155 157 215V248C88 307 49 395 49 495C49 596 88 685 157 741V775C217 835 295 873 377 873C461 873 539 835 599 775V741C668 682 706 594 706 495C706 397 668 307 599 248V215C539 154 461 114 377 114Z" fill="none" stroke="#fafaf8" stroke-width="5"/>
+    <g id="perimeter-graduations" clip-path="url(#tick-border-clip)">
+      <g transform="translate(377 493) scale(.874 1) translate(-377 -493)">
+        <use href="#outer-tick-sector"/>
+        <use href="#outer-tick-sector" transform="rotate(30 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(60 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(90 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(120 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(150 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(180 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(210 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(240 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(270 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(300 377 493)"/>
+        <use href="#outer-tick-sector" transform="rotate(330 377 493)"/>
+      </g>
+    </g>
+    <ellipse id="outer-orbit-line" cx="377" cy="490" rx="277" ry="332" fill="none" stroke="#f8f8f6" stroke-width="3"/>
+    <ellipse id="inner-orbit-line" cx="377" cy="486" rx="248" ry="294" fill="none" stroke="#f8f8f6" stroke-width="3"/>
+    <g id="cardinal-connectors" stroke="#f8f8f6" fill="#fff">
+      <path d="M55 496H123M632 496H699M377 176V238M377 735V810" stroke-width="4"/>
+      <circle cx="101" cy="496" r="3.5" stroke="none"/>
+      <circle cx="654" cy="496" r="3.5" stroke="none"/>
+      <circle cx="377" cy="193" r="5" stroke="none"/>
+      <circle cx="377" cy="779" r="5.5" stroke="none"/>
+    </g>
+    <g id="orbit-beads" fill="#fdfdfb">
+      <circle cx="287" cy="216" r="9.5"/>
+      <circle cx="484" cy="224" r="9"/>
+      <circle cx="211" cy="271" r="5.5"/>
+      <circle cx="543" cy="272" r="5.5"/>
+      <circle cx="218" cy="716" r="5"/>
+      <circle cx="533" cy="719" r="5"/>
+      <circle cx="285" cy="761" r="9"/>
+      <circle cx="473" cy="759" r="9"/>
+    </g>
+  </g>
+  <g id="lens-concentric-rim" fill="none">
+    <ellipse cx="377" cy="488" rx="250" ry="247" stroke="#f6f6f4" stroke-width="5"/>
+    <ellipse cx="377" cy="488" rx="243" ry="240" stroke="#fff" stroke-width="6"/>
+    <ellipse cx="377" cy="488" rx="237" ry="234" stroke="#f9f9f7" stroke-width="2"/>
+    <ellipse cx="377" cy="488" rx="230" ry="227" stroke="#f8f8f6" stroke-width="3"/>
+    <ellipse cx="377" cy="488" rx="226" ry="223" stroke="#545654" stroke-width="1"/>
+    <g id="radial-lens-scale">
+      <use href="#dial-quadrant"/>
+      <use href="#dial-quadrant" transform="rotate(90 377 488)"/>
+      <use href="#dial-quadrant" transform="rotate(180 377 488)"/>
+      <use href="#dial-quadrant" transform="rotate(270 377 488)"/>
+      <path d="M377 263V289M577 493h24M377 687v23M152 493h23" stroke="#fff" stroke-width="5"/>
+    </g>
+    <circle cx="377" cy="488" r="193" stroke="#fff" stroke-width="10"/>
+    <circle cx="377" cy="488" r="186" stroke="#939592" stroke-width="1.1"/>
+    <circle cx="377" cy="488" r="179" stroke="#fafaf8" stroke-width="4.7"/>
+  </g>
+  <g id="spiral-shutter-blades" fill="none" stroke="#f9f9f7" stroke-linecap="round" stroke-linejoin="round">
+    <path id="upper-left-blade" d="M297 328C280 369 281 420 288 465C292 493 304 526 329 545" stroke-width="3.3"/>
+    <path id="upper-blade" d="M389 312C363 330 345 362 324 400C308 430 297 460 298 490C298 518 314 540 339 551" stroke-width="3.8"/>
+    <path id="upper-right-blade" d="M477 343C441 344 399 373 364 396C335 416 311 438 303 461" stroke-width="3.8"/>
+    <path id="right-upper-blade" d="M541 416C511 402 463 405 423 407C378 409 333 419 312 443" stroke-width="4"/>
+    <path id="right-middle-blade" d="M556 509C532 486 493 465 454 444C419 425 389 416 367 419" stroke-width="4.3"/>
+    <path id="right-lower-blade" d="M517 599C514 572 492 533 469 496C446 459 421 430 389 422" stroke-width="4"/>
+    <path id="bottom-right-blade" d="M446 653C458 622 458 576 455 536C453 496 443 462 425 446" stroke-width="3.6"/>
+    <path id="bottom-blade" d="M361 663C388 638 410 601 424 565C441 527 448 493 439 474" stroke-width="3.7"/>
+    <path id="bottom-left-blade" d="M276 634C313 628 353 604 385 582C416 560 435 532 440 511" stroke-width="3.9"/>
+    <path id="left-lower-blade" d="M217 572C249 581 294 576 337 571C378 566 414 550 431 529" stroke-width="3.8"/>
+    <path id="left-middle-blade" d="M199 486C219 510 261 530 299 545C334 559 372 565 397 555" stroke-width="4"/>
+    <path id="left-upper-blade" d="M224 393C223 420 247 460 270 491C294 524 321 547 351 555" stroke-width="3.8"/>
+    <g id="blade-fine-edges" stroke="#c3c5c1" stroke-width="1.05">
+      <path d="M387 313C352 346 319 411 307 453"/>
+      <path d="M474 345C429 354 367 395 331 425"/>
+      <path d="M538 415C486 402 419 410 384 415"/>
+      <path d="M552 505C510 474 439 431 398 424"/>
+      <path d="M514 594C501 554 459 484 437 459"/>
+      <path d="M444 649C455 601 449 515 441 493"/>
+      <path d="M365 659C400 617 427 553 434 534"/>
+      <path d="M282 632C333 615 391 577 412 555"/>
+      <path d="M224 570C267 578 342 568 373 560"/>
+      <path d="M204 490C243 520 301 546 332 552"/>
+      <path d="M226 398C232 440 289 515 315 534"/>
+      <path d="M296 332C281 387 289 460 297 489"/>
+    </g>
+  </g>
+  <g id="central-oval-aperture" transform="rotate(14 369 488)">
+    <ellipse cx="369" cy="488" rx="25" ry="68" fill="url(#aperture-gray)"/>
+    <g fill="none" stroke="#f9f9f7" stroke-width=".85">
+      <ellipse cx="369" cy="488" rx="24.4" ry="66.4"/>
+      <ellipse cx="369" cy="486" rx="23.9" ry="65"/>
+      <ellipse cx="369" cy="484" rx="23.3" ry="63.5"/>
+      <ellipse cx="369" cy="482" rx="22.9" ry="62"/>
+      <ellipse cx="369" cy="480" rx="22.5" ry="60.4"/>
+      <ellipse cx="369" cy="478" rx="22.1" ry="58.8"/>
+      <ellipse cx="369" cy="476" rx="21.7" ry="57.2"/>
+      <ellipse cx="369" cy="474" rx="21.3" ry="55.6"/>
+    </g>
+    <ellipse cx="369" cy="477" rx="20.2" ry="49.5" fill="#fff"/>
+    <ellipse cx="403" cy="476" rx="5.9" ry="22.5" fill="#a4a5a1"/>
+    <ellipse cx="402.8" cy="474.5" rx="4.9" ry="19.7" fill="#fff"/>
+  </g>
+  <g id="vertical-star-finials" fill="#fff">
+    <path id="north-star" d="M377 13L383 60L394 52L386 63L417 67L386 71L394 83L383 75L379 147H374L372 75L361 83L369 71L338 67L369 63L362 52L372 60Z"/>
+    <circle id="north-pearl" cx="377.6" cy="163" r="19"/>
+    <path d="M375 179H380V237H375Z" fill="#f8f8f5"/>
+    <path id="south-star" d="M375 834H380L383 917L394 908L386 921L417 925L386 929L394 941L383 933L377 995L372 933L361 941L369 929L338 925L369 921L362 910L372 917Z"/>
+    <circle id="south-pearl" cx="377.6" cy="817.5" r="18.8"/>
+  </g>
+</svg>

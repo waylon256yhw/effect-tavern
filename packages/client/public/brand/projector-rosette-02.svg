@@ -1,0 +1,359 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 964">
+  <defs>
+    <pattern id="fine-diagonal-engraving" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(34)">
+      <rect width="5" height="5" fill="#fff"/>
+      <path d="M0 0V5M2 0V5" fill="none" stroke="#111" stroke-width=".8"/>
+    </pattern>
+    <pattern id="close-oblique-lines" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-57)">
+      <rect width="4" height="4" fill="#fff"/>
+      <path d="M0 0V4" stroke="#000" stroke-width="1.5"/>
+    </pattern>
+    <pattern id="knurled-metal" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(39)">
+      <rect width="6" height="6" fill="#080808"/>
+      <path d="M1 0V6M3 0V6" stroke="#fff" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="hub-metal" cx=".37" cy=".27" r=".77">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".42" stop-color="#fff"/>
+      <stop offset=".59" stop-color="#a4a4a4"/>
+      <stop offset=".66" stop-color="#fff"/>
+      <stop offset=".79" stop-color="#626262"/>
+      <stop offset=".86" stop-color="#e5e5e5"/>
+      <stop offset="1" stop-color="#050505"/>
+    </radialGradient>
+    <linearGradient id="shaft-metal" x1="0" y1="0" x2="1" y2=".6">
+      <stop stop-color="#000"/>
+      <stop offset=".29" stop-color="#5a5a5a"/>
+      <stop offset=".47" stop-color="#fff"/>
+      <stop offset=".57" stop-color="#d3d3d3"/>
+      <stop offset=".8" stop-color="#242424"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <linearGradient id="bezel-glints" x1="0" y1=".25" x2="1" y2=".6">
+      <stop stop-color="#fff"/>
+      <stop offset=".21" stop-color="#fff"/>
+      <stop offset=".275" stop-color="#333"/>
+      <stop offset=".32" stop-color="#fff"/>
+      <stop offset=".48" stop-color="#fff"/>
+      <stop offset=".59" stop-color="#222"/>
+      <stop offset=".65" stop-color="#fff"/>
+      <stop offset=".82" stop-color="#fff"/>
+      <stop offset=".87" stop-color="#555"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <linearGradient id="wheel-glints" x1=".12" y1="0" x2=".85" y2="1">
+      <stop stop-color="#fff"/>
+      <stop offset=".28" stop-color="#fff"/>
+      <stop offset=".4" stop-color="#333"/>
+      <stop offset=".49" stop-color="#fff"/>
+      <stop offset=".7" stop-color="#fff"/>
+      <stop offset=".83" stop-color="#777"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <mask id="bezel-line-shine">
+      <rect x="100" y="20" width="880" height="910" fill="url(#bezel-glints)"/>
+    </mask>
+    <mask id="wheel-line-shine">
+      <rect x="340" y="150" width="530" height="520" fill="url(#wheel-glints)"/>
+    </mask>
+    <g id="concentric-engraving" fill="none" stroke="#131313" stroke-width=".37">
+      <circle r="100"/><circle r="98"/><circle r="96"/><circle r="94"/><circle r="92"/>
+      <circle r="90"/><circle r="88"/><circle r="86"/><circle r="84"/><circle r="82"/>
+      <circle r="80"/><circle r="78"/><circle r="76"/><circle r="74"/><circle r="72"/>
+      <circle r="70"/><circle r="68"/><circle r="66"/><circle r="64"/><circle r="62"/>
+      <circle r="60"/><circle r="58"/><circle r="56"/><circle r="54"/><circle r="52"/>
+      <circle r="50"/><circle r="48"/><circle r="46"/><circle r="44"/><circle r="42"/>
+      <circle r="40"/><circle r="38"/><circle r="36"/><circle r="34"/><circle r="32"/>
+      <circle r="30"/><circle r="28"/><circle r="26"/><circle r="24"/><circle r="22"/>
+      <circle r="20"/><circle r="18"/><circle r="16"/><circle r="14"/><circle r="12"/>
+      <circle r="10"/><circle r="8"/><circle r="6"/><circle r="4"/><circle r="2"/>
+    </g>
+    <g id="outer-ring-lines" fill="none" stroke="#111" stroke-width="1.25">
+      <ellipse rx="371" ry="408"/><ellipse rx="368" ry="405"/>
+      <ellipse rx="365" ry="402"/><ellipse rx="362" ry="399"/>
+      <ellipse rx="359" ry="396"/><ellipse rx="356" ry="393"/>
+      <ellipse rx="353" ry="390"/><ellipse rx="350" ry="387"/>
+      <ellipse rx="347" ry="384"/><ellipse rx="344" ry="381"/>
+      <ellipse rx="341" ry="378"/><ellipse rx="338" ry="375"/>
+      <ellipse rx="335" ry="372"/><ellipse rx="332" ry="369"/>
+    </g>
+    <g id="small-tick" stroke="#141414" fill="none">
+      <path d="M0-345V-328" stroke-width="1.5"/>
+    </g>
+    <g id="medium-tick" stroke="#070707" fill="none">
+      <path d="M0-345V-318" stroke-width="2.1"/>
+    </g>
+    <g id="large-tick" stroke="#000" fill="none">
+      <path d="M0-345V-307" stroke-width="5"/>
+    </g>
+    <g id="tick-sector">
+      <use xlink:href="#large-tick"/>
+      <use xlink:href="#small-tick" transform="rotate(2)"/>
+      <use xlink:href="#small-tick" transform="rotate(4)"/>
+      <use xlink:href="#small-tick" transform="rotate(6)"/>
+      <use xlink:href="#small-tick" transform="rotate(8)"/>
+      <use xlink:href="#medium-tick" transform="rotate(10)"/>
+      <use xlink:href="#small-tick" transform="rotate(12)"/>
+      <use xlink:href="#small-tick" transform="rotate(14)"/>
+      <use xlink:href="#small-tick" transform="rotate(16)"/>
+      <use xlink:href="#small-tick" transform="rotate(18)"/>
+      <use xlink:href="#medium-tick" transform="rotate(20)"/>
+      <use xlink:href="#small-tick" transform="rotate(22)"/>
+      <use xlink:href="#small-tick" transform="rotate(24)"/>
+      <use xlink:href="#small-tick" transform="rotate(26)"/>
+      <use xlink:href="#small-tick" transform="rotate(28)"/>
+    </g>
+    <g id="slotted-screw">
+      <ellipse rx="21" ry="22" fill="#fff" stroke="#000" stroke-width="2"/>
+      <ellipse rx="16.7" ry="18" fill="#000"/>
+      <path d="M-10-13C-20-2-13 14 1 16M-5-15C8-19 17-8 15 5" fill="none" stroke="#fff" stroke-width="1.6"/>
+      <path d="M-15-5L15 4 14 9-16 0Z" fill="#d2d2d2" stroke="#fff" stroke-width="1"/>
+      <path d="M-15-3L14 6" stroke="#000" stroke-width="2"/>
+      <path d="M-9 11Q0 18 10 10" fill="none" stroke="#999" stroke-width="1"/>
+    </g>
+    <clipPath id="lower-case-clip">
+      <path d="M319 108C235 149 184 210 145 280C127 313 70 325 46 357C24 385 27 427 47 452L92 494C112 513 120 528 128 565C163 736 286 871 446 910C606 949 786 874 879 747C962 633 974 451 915 311C818 81 525 8 319 108Z"/>
+    </clipPath>
+    <clipPath id="main-wheel-clip">
+      <path d="M568 181C687 173 803 259 841 373C882 494 820 604 721 630C611 660 466 600 399 488C334 381 350 256 439 204C476 183 522 176 568 181Z"/>
+    </clipPath>
+    <clipPath id="small-wheel-clip">
+      <path d="M310 407C385 378 483 425 522 503C562 584 525 655 457 680C379 706 291 663 254 588C217 509 237 439 310 407Z"/>
+    </clipPath>
+  </defs>
+
+  <g id="mounting-lugs" stroke="#080808" stroke-linejoin="round">
+    <path d="M142 282C122 310 70 324 47 355C26 380 27 423 45 448C67 475 105 491 125 542L171 574 211 330Z" fill="#030303" stroke-width="3"/>
+    <path d="M140 301C122 326 78 330 58 363C39 396 55 439 81 460L128 498C118 448 118 373 140 301Z" fill="url(#close-oblique-lines)" stroke-width="2"/>
+    <path d="M49 366C26 393 34 425 52 445" fill="none" stroke="#eee" stroke-width="2"/>
+    <ellipse cx="95" cy="399" rx="22" ry="26" transform="rotate(-27 95 399)" fill="#000" stroke="#fff" stroke-width="3"/>
+    <path d="M77 397C86 387 104 400 104 413C96 428 75 413 77 397Z" fill="#fff" stroke-width="1"/>
+    <path d="M928 477C955 496 981 536 980 577C981 607 962 624 939 639L902 668 884 594Z" fill="#050505" stroke-width="3"/>
+    <path d="M945 499C966 520 978 553 976 579C975 604 961 620 935 630L913 632 927 592Z" fill="url(#close-oblique-lines)" stroke-width="2"/>
+    <ellipse cx="944" cy="582" rx="19" ry="24" transform="rotate(22 944 582)" fill="#000" stroke="#fff" stroke-width="2"/>
+    <path d="M934 581Q948 584 945 601Q932 602 929 594Z" fill="#fff" stroke="none"/>
+  </g>
+
+  <g id="upper-winding-crown" stroke="#080808">
+    <path d="M767 123L790 98C805 83 832 100 848 122C859 137 866 153 856 163L835 183Z" fill="url(#knurled-metal)" stroke-width="3"/>
+    <path d="M774 118C795 100 842 135 841 172L829 185 765 137Z" fill="#000" stroke-width="2"/>
+    <path d="M779 121C798 115 833 145 834 169M781 126C800 121 827 149 828 171" fill="none" stroke="#eee" stroke-width="1.6"/>
+    <path d="M796 97C819 94 850 128 855 148" fill="none" stroke="#fff" stroke-width="2"/>
+  </g>
+  <g id="lower-winding-crown" stroke="#000">
+    <path d="M858 699L904 727C908 735 876 785 856 797L819 774Z" fill="#050505" stroke-width="3"/>
+    <path d="M873 714L900 730C897 746 877 773 858 788L840 775Z" fill="url(#knurled-metal)" stroke-width="2"/>
+    <path d="M851 782Q881 761 896 730L876 718" fill="none" stroke="#fff" stroke-width="1.5"/>
+  </g>
+
+  <g id="deep-engraved-case">
+    <path d="M319 108C235 149 184 210 145 280C127 313 126 398 121 448C115 611 210 786 347 868C485 951 670 931 797 825C945 705 988 500 915 311C818 81 525 8 319 108Z" fill="#050505" stroke="#000" stroke-width="3"/>
+    <g clip-path="url(#lower-case-clip)" fill="none" stroke="#e6e6e6" stroke-width="1.3">
+      <ellipse cx="531" cy="471" rx="405" ry="441" transform="rotate(-20 531 471)"/>
+      <ellipse cx="533" cy="467" rx="405" ry="441" transform="rotate(-20 533 467)"/>
+      <ellipse cx="535" cy="463" rx="405" ry="441" transform="rotate(-20 535 463)"/>
+      <ellipse cx="537" cy="459" rx="405" ry="441" transform="rotate(-20 537 459)"/>
+      <ellipse cx="539" cy="455" rx="405" ry="441" transform="rotate(-20 539 455)"/>
+      <ellipse cx="541" cy="451" rx="405" ry="441" transform="rotate(-20 541 451)"/>
+      <ellipse cx="543" cy="447" rx="405" ry="441" transform="rotate(-20 543 447)"/>
+      <ellipse cx="545" cy="443" rx="405" ry="441" transform="rotate(-20 545 443)"/>
+      <ellipse cx="547" cy="439" rx="405" ry="441" transform="rotate(-20 547 439)"/>
+      <ellipse cx="549" cy="435" rx="405" ry="441" transform="rotate(-20 549 435)"/>
+      <ellipse cx="551" cy="431" rx="405" ry="441" transform="rotate(-20 551 431)"/>
+      <ellipse cx="553" cy="427" rx="405" ry="441" transform="rotate(-20 553 427)"/>
+      <ellipse cx="555" cy="423" rx="405" ry="441" transform="rotate(-20 555 423)"/>
+      <ellipse cx="557" cy="419" rx="405" ry="441" transform="rotate(-20 557 419)"/>
+      <ellipse cx="559" cy="415" rx="405" ry="441" transform="rotate(-20 559 415)"/>
+      <ellipse cx="561" cy="411" rx="405" ry="441" transform="rotate(-20 561 411)"/>
+      <ellipse cx="563" cy="407" rx="405" ry="441" transform="rotate(-20 563 407)"/>
+      <ellipse cx="565" cy="403" rx="405" ry="441" transform="rotate(-20 565 403)"/>
+      <ellipse cx="567" cy="399" rx="405" ry="441" transform="rotate(-20 567 399)"/>
+    </g>
+    <path d="M159 659C176 698 193 727 217 754L284 705 228 605Z" fill="#000"/>
+    <path d="M369 821L332 866C374 892 431 910 470 916L518 862Z" fill="#000"/>
+    <g fill="none" stroke="#b6b6b6" stroke-width="1">
+      <path d="M215 754L250 721M220 761L257 726M224 766L263 731M229 771L268 736M233 776L272 742M239 782L279 746M244 787L285 751M249 792L291 757M255 797L297 761M261 802L302 766M267 807L308 771M273 812L314 776M279 817L321 780M285 822L326 785M292 827L333 789M298 832L339 794M304 837L345 799M311 841L350 803M318 845L357 807"/>
+      <path d="M337 852L375 822M343 855L381 825M350 858L387 828M357 861L394 831M365 865L400 835M373 868L408 838M381 872L416 841"/>
+    </g>
+  </g>
+
+  <g id="front-bezel" transform="translate(554 454) rotate(-20)">
+    <ellipse rx="383" ry="416" fill="#fff" stroke="#070707" stroke-width="3"/>
+    <ellipse rx="377" ry="409" fill="#fff" stroke="#000" stroke-width="2.5"/>
+    <g mask="url(#local-bezel-mask)">
+      <use xlink:href="#outer-ring-lines"/>
+    </g>
+    <path d="M-131-383L-110-391-100-344-117-338Z" fill="#fff" opacity=".93"/>
+    <path d="M122 336L146 329 156 378 129 388Z" fill="#fff" opacity=".9"/>
+    <path d="M-371-70L-333-64-333-35-374-35Z" fill="#fff" opacity=".94"/>
+    <ellipse rx="329" ry="362" fill="#fff" stroke="#000" stroke-width="3"/>
+    <ellipse rx="282" ry="315" fill="#020202" stroke="#111" stroke-width="2"/>
+  </g>
+
+  <g id="bezel-engraving-soft-highlights" fill="none" stroke="#fff" opacity=".62">
+    <path d="M418 77L438 118M422 75L442 117M426 74L446 115M430 72L450 114" stroke-width="3"/>
+    <path d="M648 801L659 846M653 800L664 845M658 799L669 843M663 797L674 841M668 796L679 839M673 795L684 837" stroke-width="3"/>
+    <path d="M174 393L207 398M173 399L206 404M172 405L206 410" stroke-width="3"/>
+  </g>
+
+  <g id="calibrated-dial" transform="translate(554 454) rotate(-20)">
+    <g transform="scale(.967 1.025) rotate(18)">
+      <use xlink:href="#tick-sector"/>
+      <use xlink:href="#tick-sector" transform="rotate(30)"/>
+      <use xlink:href="#tick-sector" transform="rotate(60)"/>
+      <use xlink:href="#tick-sector" transform="rotate(90)"/>
+      <use xlink:href="#tick-sector" transform="rotate(120)"/>
+      <use xlink:href="#tick-sector" transform="rotate(150)"/>
+      <use xlink:href="#tick-sector" transform="rotate(180)"/>
+      <use xlink:href="#tick-sector" transform="rotate(210)"/>
+      <use xlink:href="#tick-sector" transform="rotate(240)"/>
+      <use xlink:href="#tick-sector" transform="rotate(270)"/>
+      <use xlink:href="#tick-sector" transform="rotate(300)"/>
+      <use xlink:href="#tick-sector" transform="rotate(330)"/>
+    </g>
+    <g fill="none" stroke="#262626" stroke-width=".75">
+      <path d="M-66-349L-61-320M-61-351L-56-323M-56-352L-52-330M-51-352L-47-327M-46-353L-42-330M-41-354L-37-332M-36-354L-32-332M-31-355L-28-334M-26-355L-23-333M-21-355L-19-333"/>
+      <path d="M-315-97L-286-89M-313-103L-288-96M-311-109L-284-100M-309-115L-283-106M-307-121L-281-111M-305-127L-279-117M-302-133L-278-122M-300-139L-276-127M-297-145L-273-132M-294-151L-271-138M-291-157L-269-144M-288-163L-266-150M-285-169L-262-155"/>
+      <path d="M-252-228L-231-208M-248-233L-226-212M-244-238L-224-217M-240-243L-220-222M-236-248L-216-227M-232-253L-212-232M-228-258L-207-237M-224-262L-203-241M-220-267L-200-245M-215-271L-195-251M-210-275L-191-254M-205-279L-186-257M-200-284L-182-262M-195-288L-177-265M-190-292L-173-269"/>
+    </g>
+  </g>
+
+  <g id="recessed-mechanism">
+    <path d="M274 398C294 252 417 163 553 166C712 164 835 281 850 430C869 567 778 701 643 721C487 746 343 647 288 525Z" fill="#000"/>
+    <path d="M306 397C318 277 428 188 557 184C700 184 822 287 838 420C857 547 770 667 639 686C499 705 364 620 322 504Z" fill="#fff" stroke="#000" stroke-width="2"/>
+    <g transform="translate(574 437) rotate(-17) scale(2.68 2.49)">
+      <use xlink:href="#concentric-engraving"/>
+      <use xlink:href="#concentric-engraving" transform="scale(.99)" opacity=".8"/>
+    </g>
+    <path d="M309 399C315 346 342 290 375 266L364 396Z" fill="#000"/>
+    <path d="M472 676C562 719 714 695 784 629C735 705 620 735 491 708Z" fill="#000"/>
+    <g fill="none" stroke="#eee" stroke-width="1">
+      <path d="M533 707C626 732 725 685 770 650M536 711C624 735 713 696 763 657M547 716C626 737 706 703 755 666M559 720C634 736 700 710 744 674"/>
+    </g>
+    <path d="M235 375L286 386 274 405 231 394Z" fill="#151515"/>
+    <path d="M239 378L281 390M237 383L277 395" stroke="#aaa" stroke-width="1"/>
+  </g>
+
+  <g id="lower-four-spoke-wheel">
+    <path d="M304 419C376 387 481 428 523 509C567 592 530 668 461 691C381 718 287 672 250 594C215 518 235 450 304 419Z" fill="#000" stroke="#050505" stroke-width="3"/>
+    <path d="M310 407C385 378 483 425 522 503C562 584 525 655 457 680C379 706 291 663 254 588C217 509 237 439 310 407Z" fill="#fff" stroke="#000" stroke-width="3"/>
+    <g clip-path="url(#small-wheel-clip)">
+      <rect x="220" y="390" width="330" height="300" fill="url(#fine-diagonal-engraving)"/>
+      <g transform="translate(388 542) rotate(34) scale(1.45 1.32)">
+        <use xlink:href="#concentric-engraving" transform="scale(1)" opacity=".43"/>
+      </g>
+      <path d="M273 438C295 447 319 472 316 506C315 534 295 554 262 561C241 516 247 469 273 438Z" fill="#000" stroke="#fff" stroke-width="4"/>
+      <path d="M298 614C322 591 350 582 377 597C405 612 419 643 417 677C372 676 326 654 298 614Z" fill="#000" stroke="#fff" stroke-width="4"/>
+      <path d="M474 654C454 632 439 609 448 583C457 558 484 546 526 548C534 592 512 633 474 654Z" fill="#000" stroke="#fff" stroke-width="4"/>
+      <path d="M309 414C325 439 360 447 388 438L417 412C377 393 337 396 309 414Z" fill="#000" stroke="#fff" stroke-width="3"/>
+      <path d="M257 468C235 526 265 605 314 643M273 454C241 502 258 575 290 613M308 646C350 675 395 685 443 678" fill="none" stroke="#fff" stroke-width="2"/>
+      <path d="M265 452C233 505 256 582 285 617M269 457C242 508 259 571 285 610M314 651C348 674 386 683 423 684" fill="none" stroke="#999" stroke-width="1.4"/>
+    </g>
+    <path d="M310 407C385 378 483 425 522 503C562 584 525 655 457 680C379 706 291 663 254 588C217 509 237 439 310 407Z" fill="none" stroke="#000" stroke-width="2"/>
+    <g id="lower-wheel-bearing" transform="translate(382 525) rotate(-25)">
+      <ellipse cy="5" rx="36" ry="37" fill="#000"/>
+      <ellipse rx="34" ry="35" fill="url(#hub-metal)" stroke="#000" stroke-width="2"/>
+      <ellipse cy="-2" rx="29" ry="30" fill="none" stroke="#fff" stroke-width="2"/>
+      <ellipse cy="-3" rx="26" ry="27" fill="none" stroke="#222" stroke-width="1.2"/>
+      <ellipse cy="-6" rx="20" ry="21" fill="#fff" stroke="#111" stroke-width="2"/>
+      <ellipse cy="-7" rx="16" ry="17" fill="url(#hub-metal)" stroke="#000" stroke-width="1"/>
+      <path d="M-11-18C-18-8-11 7 2 8C14 9 17-3 9-12" fill="none" stroke="#111" stroke-width="1"/>
+      <path d="M-8-18C-12-7-5 1 6 3M-5-19C-8-9-2-2 9 0M-2-19C-4-11 2-5 11-3" fill="none" stroke="#333" stroke-width=".8"/>
+      <path d="M-25 19Q-4 37 19 23" fill="none" stroke="#fff" stroke-width="1.5"/>
+    </g>
+  </g>
+
+  <g id="large-four-bladed-rotor">
+    <path d="M565 185C690 178 810 269 848 384C887 507 823 617 723 644C608 674 462 612 397 499C331 386 350 260 437 210C477 189 522 181 565 185Z" fill="#000" stroke="#000" stroke-width="3"/>
+    <path d="M568 181C687 173 803 259 841 373C882 494 820 604 721 630C611 660 466 600 399 488C334 381 350 256 439 204C476 183 522 176 568 181Z" fill="#fff" stroke="#000" stroke-width="3"/>
+    <g clip-path="url(#main-wheel-clip)">
+      <g mask="url(#wheel-line-shine)">
+        <g transform="translate(613 397) rotate(35) scale(2.43 2.14)">
+          <use xlink:href="#concentric-engraving"/>
+          <use xlink:href="#concentric-engraving" transform="scale(.99)" opacity=".8"/>
+        </g>
+        <g fill="none" stroke="#111" stroke-width="1.2">
+          <path d="M566 184C681 178 797 262 835 373C877 494 815 599 718 624C611 652 471 594 406 485C342 380 358 259 444 209C479 189 521 181 566 184Z"/>
+          <path d="M565 188C677 181 793 265 831 375C872 491 812 595 716 620C610 647 475 592 410 483C348 380 362 262 446 213C482 193 523 185 565 188Z"/>
+          <path d="M565 192C675 186 789 269 826 377C867 490 808 591 714 616C610 642 478 588 415 481C353 381 367 265 450 217C484 197 524 189 565 192Z"/>
+          <path d="M567 196C676 191 784 271 822 379C862 489 805 586 713 612C610 638 481 585 419 479C358 381 372 267 453 222C487 202 526 194 567 196Z"/>
+        </g>
+      </g>
+      <g id="rotor-cutouts" fill="#000" stroke="#fff" stroke-width="4" stroke-linejoin="round">
+        <path d="M566 188C533 181 500 195 490 222C474 271 504 326 568 354L579 340C537 294 545 236 568 196Z"/>
+        <path d="M635 335C653 292 713 270 780 296C796 316 810 341 817 361L810 365C758 327 706 324 660 354Z"/>
+        <path d="M660 414C715 432 755 483 766 528C772 562 738 594 677 602L671 599C703 542 699 488 657 439Z"/>
+        <path d="M439 438C492 457 539 444 576 418L606 435C588 486 537 507 482 501C465 485 449 461 439 438Z"/>
+      </g>
+      <g fill="none" stroke="#fff" stroke-width="1.8" opacity=".8">
+        <path d="M460 243C413 281 402 356 426 411"/>
+        <path d="M456 245C409 282 398 353 421 411"/>
+        <path d="M452 246C405 284 394 350 417 409"/>
+        <path d="M448 248C401 285 391 350 413 408"/>
+        <path d="M694 271C721 276 742 285 757 294M691 276C714 281 731 287 742 293"/>
+        <path d="M736 444C752 478 762 512 757 538"/>
+      </g>
+    </g>
+    <path d="M568 181C687 173 803 259 841 373C882 494 820 604 721 630C611 660 466 600 399 488C334 381 350 256 439 204C476 183 522 176 568 181Z" fill="none" stroke="#000" stroke-width="2.6"/>
+    <path d="M555 164C664 158 771 220 826 315M555 168C662 163 767 225 822 317M556 172C660 168 763 227 817 320" fill="none" stroke="#ddd" stroke-width="1.7"/>
+    <path d="M439 205C393 235 370 275 368 331C362 374 377 427 399 468" fill="none" stroke="#eee" stroke-width="2"/>
+  </g>
+
+  <g id="rotor-central-spindle" transform="translate(617 385) rotate(-27)">
+    <ellipse cy="8" rx="56" ry="56" fill="#000"/>
+    <ellipse cx="1" cy="2" rx="54" ry="55" fill="url(#hub-metal)" stroke="#000" stroke-width="2.4"/>
+    <ellipse cy="0" rx="49.5" ry="50" fill="none" stroke="#f9f9f9" stroke-width="2"/>
+    <ellipse cy="-1" rx="47" ry="47.5" fill="none" stroke="#111" stroke-width="1.4"/>
+    <ellipse cy="-2" rx="44.5" ry="45" fill="none" stroke="#111" stroke-width="1"/>
+    <ellipse cy="-3" rx="42" ry="42.5" fill="none" stroke="#fff" stroke-width="1.8"/>
+    <ellipse cy="-4" rx="39.5" ry="40" fill="none" stroke="#111" stroke-width="1"/>
+    <ellipse cy="-5" rx="37" ry="37.5" fill="none" stroke="#111" stroke-width="1"/>
+    <ellipse cy="-6" rx="34.5" ry="35" fill="#f8f8f8" stroke="#111" stroke-width="1.3"/>
+    <ellipse cy="-6" rx="32" ry="32.5" fill="none" stroke="#555" stroke-width="1"/>
+    <ellipse cy="-6" rx="29.5" ry="30" fill="none" stroke="#222" stroke-width="1"/>
+    <ellipse cy="-6" rx="27" ry="27.5" fill="none" stroke="#333" stroke-width="1"/>
+    <ellipse cy="-6" rx="24.5" ry="25" fill="none" stroke="#333" stroke-width="1"/>
+    <ellipse cy="-6" rx="22" ry="22.5" fill="none" stroke="#555" stroke-width="1"/>
+    <ellipse cx="3" cy="-4" rx="18.5" ry="19" fill="#000" stroke="#aaa" stroke-width="1.3"/>
+    <ellipse cx="4" cy="-4" rx="15.5" ry="16" fill="#000" stroke="#eee" stroke-width=".8"/>
+    <path d="M-7-16C2-23 15-12 16-2" fill="none" stroke="#d0d0d0" stroke-width="1.3"/>
+    <path d="M-32-30C-46-11-37 16-20 24M-28-31C-39-16-36 6-23 18" fill="none" stroke="#fff" stroke-width="2.4"/>
+    <path d="M12-35L25-27M11-32L23-24M10-29L21-21M10-26L19-18" stroke="#fff" stroke-width="2"/>
+    <path d="M-36 26C-19 44 8 46 30 28" fill="none" stroke="#fff" stroke-width="1.7"/>
+  </g>
+
+  <g id="offset-connecting-pin">
+    <path d="M404 394C416 387 439 397 446 411L442 434 418 461C407 473 387 467 378 452C370 440 377 426 384 416Z" fill="#000" stroke="#000" stroke-width="2"/>
+    <path d="M398 403L436 427 415 454C405 468 384 456 380 443C378 433 388 418 398 403Z" fill="url(#shaft-metal)" stroke="#000" stroke-width="2"/>
+    <g fill="none" stroke="#141414" stroke-width="1">
+      <path d="M386 420Q384 441 416 450M389 416Q386 439 419 446M392 412Q390 436 422 442M395 409Q394 433 426 438M398 406Q396 429 429 434"/>
+    </g>
+    <g fill="none" stroke="#ddd" stroke-width=".8">
+      <path d="M382 431Q380 449 404 458M384 427Q381 446 408 455M386 423Q384 444 412 452"/>
+    </g>
+    <g transform="translate(427 413) rotate(-28)">
+      <ellipse rx="28" ry="27" fill="url(#hub-metal)" stroke="#000" stroke-width="2"/>
+      <ellipse cy="-1" rx="24" ry="23" fill="#fff" stroke="#333" stroke-width="1"/>
+      <ellipse cy="-1" rx="21.5" ry="20.5" fill="none" stroke="#444" stroke-width=".8"/>
+      <ellipse cy="-1" rx="19" ry="18" fill="none" stroke="#555" stroke-width=".8"/>
+      <ellipse cy="-1" rx="16.5" ry="15.5" fill="none" stroke="#777" stroke-width=".8"/>
+      <ellipse cy="-1" rx="14" ry="13" fill="none" stroke="#777" stroke-width=".8"/>
+      <ellipse cx="2" rx="4" ry="3.7" fill="#fff" stroke="#000" stroke-width="1"/>
+      <path d="M3-2L1 1 5 2" fill="none" stroke="#000" stroke-width=".8"/>
+    </g>
+  </g>
+
+  <g id="bezel-fasteners">
+    <use xlink:href="#slotted-screw" transform="translate(523 76) rotate(60) scale(.9)"/>
+    <use xlink:href="#slotted-screw" transform="translate(202 359) rotate(7) scale(.94)"/>
+    <use xlink:href="#slotted-screw" transform="translate(284 679) rotate(13) scale(.95)"/>
+    <use xlink:href="#slotted-screw" transform="translate(797 763) rotate(14) scale(.93)"/>
+  </g>
+
+  <g id="edge-finishing-lines" fill="none" stroke-linecap="round">
+    <path d="M306 119C382 68 473 40 554 45C712 45 853 152 914 309C972 459 951 618 864 743" stroke="#000" stroke-width="2"/>
+    <path d="M168 393C157 512 203 644 290 733C386 831 520 882 648 850" stroke="#000" stroke-width="2"/>
+    <path d="M150 286C172 229 209 184 255 150" stroke="#fff" stroke-width="1.7"/>
+    <path d="M462 911C576 934 696 896 784 831" stroke="#aaa" stroke-width="1"/>
+  </g>
+</svg>

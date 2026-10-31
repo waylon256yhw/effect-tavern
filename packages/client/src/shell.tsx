@@ -15,12 +15,12 @@ import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
+import { BrandGlyph } from "./home.tsx"
 import {
   Back,
   Card as CardGlyph,
   Chat,
   Close,
-  Home,
   List,
   Probe,
   Settings,
@@ -261,7 +261,7 @@ export const Shell = (props: { children: JSX.Element }) => {
                   if (typeof p === "object") return <Probe />
                   switch (p) {
                     case "home":
-                      return <Home />
+                      return <BrandGlyph />
                     case "card":
                       return <CardGlyph />
                     case "workshop":

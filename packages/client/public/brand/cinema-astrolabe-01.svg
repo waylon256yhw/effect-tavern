@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1018">
+<!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <title>Black circular aperture emblem with concentric graduated rings</title>
+  <defs>
+    <g id="outer-graduation-sector" fill="none" stroke="#fff" stroke-width="3">
+      <path d="M511 126V151" stroke-width="5"/>
+      <path d="M511 127V143" transform="rotate(2.5 511 503)"/>
+      <path d="M511 127V143" transform="rotate(5 511 503)"/>
+      <path d="M511 127V143" transform="rotate(7.5 511 503)"/>
+      <path d="M511 127V143" transform="rotate(10 511 503)"/>
+      <path d="M511 127V143" transform="rotate(12.5 511 503)"/>
+      <path d="M511 127V146" transform="rotate(15 511 503)"/>
+      <path d="M511 127V143" transform="rotate(17.5 511 503)"/>
+      <path d="M511 127V143" transform="rotate(20 511 503)"/>
+      <path d="M511 127V143" transform="rotate(22.5 511 503)"/>
+      <path d="M511 127V143" transform="rotate(25 511 503)"/>
+      <path d="M511 127V143" transform="rotate(27.5 511 503)"/>
+    </g>
+    <g id="inner-graduation-sector" fill="none" stroke="#fff" stroke-width="4">
+      <path d="M511 157V198" stroke-width="7"/>
+      <path d="M511 179V196" transform="rotate(3.5 511 503)"/>
+      <path d="M511 179V196" transform="rotate(7 511 503)"/>
+      <path d="M511 179V196" transform="rotate(10.5 511 503)"/>
+      <path d="M511 179V196" transform="rotate(14 511 503)"/>
+      <path d="M511 179V196" transform="rotate(17.5 511 503)"/>
+      <path d="M511 179V196" transform="rotate(21 511 503)"/>
+      <path d="M511 179V196" transform="rotate(24.5 511 503)"/>
+    </g>
+    <path id="aperture-blade-seam" d="M519 228C474 277 417 392 399 480" fill="none" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+    <path id="cardinal-star" d="M512 43L519 70L544 79L519 86L512 112L505 86L480 79L505 71Z" fill="#fff"/>
+    <g id="orbital-marker">
+      <path d="M278 149L298 182" fill="none" stroke="#fff" stroke-width="1" opacity=".65"/>
+      <circle cx="278" cy="149" r="10.2" fill="#fff"/>
+    </g>
+  </defs>
+  <g id="black-medallion">
+    <ellipse cx="511.5" cy="504.5" rx="470" ry="471.5" fill="#020303"/>
+  </g>
+  <g id="outer-orbital-rings" fill="none" stroke="#fff">
+    <ellipse cx="511.5" cy="504" rx="446.5" ry="447.5" stroke-width="3.5"/>
+    <ellipse cx="511.5" cy="503" rx="422" ry="423" stroke-width="3.5"/>
+    <circle cx="511" cy="503" r="387" stroke-width="10"/>
+    <circle cx="511" cy="503" r="347" stroke-width="4"/>
+  </g>
+  <g id="orbital-dots">
+    <use xlink:href="#orbital-marker"/>
+    <g transform="translate(1023 0) scale(-1 1)">
+      <use xlink:href="#orbital-marker"/>
+    </g>
+    <g transform="translate(0 1004) scale(1 -1)">
+      <use xlink:href="#orbital-marker"/>
+    </g>
+    <g transform="translate(1023 1004) scale(-1 -1)">
+      <use xlink:href="#orbital-marker"/>
+    </g>
+    <g fill="#fff" stroke="#fff">
+      <path d="M137 299L116 289M885 300L906 289M137 704L116 716M884 703L905 715" fill="none" stroke-width="1" opacity=".7"/>
+      <circle cx="137" cy="299" r="10"/>
+      <circle cx="885" cy="300" r="10"/>
+      <circle cx="137" cy="704" r="10"/>
+      <circle cx="884" cy="703" r="10"/>
+    </g>
+  </g>
+  <g id="four-compass-stars">
+    <use xlink:href="#cardinal-star"/>
+    <path d="M88 473L96 495L120 503L96 511L88 536L81 511L58 503L81 495Z" fill="#fff"/>
+    <path d="M933 471L941 495L966 503L941 511L933 537L926 511L902 503L926 495Z" fill="#fff"/>
+    <path d="M512 891L520 916L545 924L520 932L512 959L504 932L480 924L504 917Z" fill="#fff"/>
+  </g>
+  <g id="outer-fine-scale">
+    <use xlink:href="#outer-graduation-sector"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(30 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(60 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(90 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(120 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(150 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(180 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(210 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(240 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(270 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(300 511 503)"/>
+    <use xlink:href="#outer-graduation-sector" transform="rotate(330 511 503)"/>
+  </g>
+  <g id="inner-bold-scale">
+    <use xlink:href="#inner-graduation-sector"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(30 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(60 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(90 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(120 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(150 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(180 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(210 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(240 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(270 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(300 511 503)"/>
+    <use xlink:href="#inner-graduation-sector" transform="rotate(330 511 503)"/>
+  </g>
+  <g id="aperture-surround" fill="none" stroke="#fff">
+    <ellipse cx="511" cy="498" rx="295" ry="293" stroke-width="10"/>
+    <ellipse cx="511" cy="498" rx="272" ry="270" stroke-width="8"/>
+  </g>
+  <g id="twelve-curved-aperture-blades">
+    <use xlink:href="#aperture-blade-seam"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(30 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(60 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(90 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(120 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(150 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(180 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(210 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(240 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(270 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(300 511 498)"/>
+    <use xlink:href="#aperture-blade-seam" transform="rotate(330 511 498)"/>
+  </g>
+  <g id="central-lens">
+    <ellipse cx="510.5" cy="497" rx="112" ry="110" fill="#020303" stroke="#fff" stroke-width="6"/>
+    <ellipse cx="462.5" cy="459" rx="49" ry="19" transform="rotate(-42 462.5 459)" fill="#fff"/>
+  </g>
+</svg>

@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1010" height="1024" viewBox="0 0 1010 1024">
+<!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <defs>
+    <pattern id="edge-engraving" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(43)">
+      <rect width="7" height="7" fill="#080909"/>
+      <path d="M1 0V7 M3 0V7" stroke="#f8f8f5" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="glass-shading" cx="70%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".36" stop-color="#eee"/>
+      <stop offset=".58" stop-color="#92938f"/>
+      <stop offset=".78" stop-color="#282a28"/>
+      <stop offset="1" stop-color="#020303"/>
+    </radialGradient>
+    <pattern id="glass-etching" width="8" height="4.5" patternUnits="userSpaceOnUse">
+      <path d="M0 1H8" stroke="#080909" stroke-width="2"/>
+      <path d="M0 3.1H8" stroke="#fff" stroke-width=".7"/>
+    </pattern>
+    <g id="radial-major-mark">
+      <path d="M0-434V-411" stroke="#080909" stroke-width="2.5"/>
+      <path d="M0-410V-337" stroke="#151615" stroke-width="1"/>
+      <path d="M-6-395H6 M-5-354H5" stroke="#111" stroke-width="1.4"/>
+      <circle cy="-395" r="2" fill="#fff" stroke="#151515" stroke-width="1"/>
+    </g>
+    <g id="radial-mark-quadrant">
+      <use href="#radial-major-mark"/>
+      <use href="#radial-major-mark" transform="rotate(15)"/>
+      <use href="#radial-major-mark" transform="rotate(30)"/>
+      <use href="#radial-major-mark" transform="rotate(45)"/>
+      <use href="#radial-major-mark" transform="rotate(60)"/>
+      <use href="#radial-major-mark" transform="rotate(75)"/>
+    </g>
+    <g id="round-ring-stud">
+      <path d="M-22 0H22 M0-22V22" stroke="#101211" stroke-width="1.4"/>
+      <circle r="16" fill="#fafaf7" stroke="#070908" stroke-width="1.8"/>
+      <circle r="12.5" fill="#161917" stroke="#080909" stroke-width="1"/>
+      <circle r="10" fill="#030504" stroke="#d1d2cb" stroke-width="1"/>
+      <path d="M-9-8Q0-16 9-8" fill="none" stroke="#fff" stroke-width=".7"/>
+    </g>
+    <g id="small-ring-rivet">
+      <circle r="6.5" fill="#f4f4ef" stroke="#090b0a" stroke-width="1.4"/>
+      <circle r="4.4" fill="#171b18"/>
+      <path d="M-3-3L2-4" stroke="#b6b8b1" stroke-width="1"/>
+    </g>
+    <g id="compass-star">
+      <path d="M0-27 4-8 13-13 8-4 25 0 8 4 13 13 4 8 0 27-4 8-13 13-8 4-25 0-8-4-13-13-4-8Z" fill="#070908" stroke="#080908" stroke-width=".9"/>
+      <path d="M0-24V0L-10-10 0-5 10-10 4 0 20 0 3 4 0 22V0L-10 10-4 0-20 0-3-4Z" fill="#c8cac4"/>
+      <path d="M0-22V22 M-20 0H20 M-10-10 10 10 M10-10-10 10" fill="none" stroke="#080909" stroke-width=".9"/>
+    </g>
+    <g id="spiral-blade">
+      <path d="M0-318A318 318 0 0 1 186.92-257.27C317-165 212 36 88.99 64.66A110 110 0 0 0 110 0C180-95 180-310 0-318Z" fill="#030504"/>
+      <g fill="none" stroke="#f4f4ef" stroke-width="1.15">
+        <path d="M6-317.9C184-305 181-91 109.9 2.3"/>
+        <path d="M12-317.8C189-300 182-87 109.8 4.6"/>
+        <path d="M18-317.5C193-295 184-82 109.7 6.9"/>
+        <path d="M24-317.1C198-290 185-78 109.5 9.2"/>
+        <path d="M30-316.6C202-285 186-74 109.3 11.5"/>
+        <path d="M36-316C207-280 187-69 109.1 13.8"/>
+        <path d="M42-315.2C211-275 188-65 108.8 16"/>
+        <path d="M48-314.4C216-270 189-61 108.4 18.3"/>
+        <path d="M54-313.4C220-265 190-56 108 20.6"/>
+        <path d="M60-312.3C225-260 191-52 107.6 22.8"/>
+        <path d="M66-311.1C229-255 192-48 107.1 25.1"/>
+        <path d="M72-309.7C234-250 194-43 106.5 27.3"/>
+        <path d="M78-308.3C238-245 195-39 105.9 29.6"/>
+        <path d="M84-306.7C243-240 196-35 105.3 31.8"/>
+        <path d="M90-305C247-235 197-30 104.6 34"/>
+        <path d="M96-303.2C252-230 198-26 103.9 36.2"/>
+        <path d="M102-301.2C256-225 199-22 103.1 38.4"/>
+        <path d="M108-299.1C261-220 200-17 102.3 40.5"/>
+        <path d="M114-296.9C265-215 201-13 101.4 42.7"/>
+        <path d="M120-294.4C270-210 202-9 100.5 44.8"/>
+        <path d="M126-291.9C274-205 203-4 99.5 46.9"/>
+        <path d="M132-289.3C279-200 205 0 98.5 49"/>
+        <path d="M138-286.5C283-195 206 4 97.5 51.1"/>
+        <path d="M144-283.5C288-190 207 9 96.4 53.1"/>
+        <path d="M150-280.4C292-185 208 13 95.3 55.1"/>
+        <path d="M156-277.1C297-180 209 17 94.1 57.1"/>
+      </g>
+      <path d="M0-318C180-310 180-95 110 0" fill="none" stroke="#fff" stroke-width="3.2"/>
+      <path d="M3-317C183-309 183-94 112 0" fill="none" stroke="#a7a9a3" stroke-width=".7"/>
+    </g>
+    <clipPath id="lens-clip">
+      <ellipse cx="0" cy="0" rx="69" ry="105"/>
+    </clipPath>
+  </defs>
+  <g id="engraved-metal-body" transform="translate(518 489) rotate(-26) scale(.97 1.06)">
+    <g id="thick-rear-edge" transform="translate(-27 14)">
+      <circle r="448" fill="#090b0a" stroke="#050706" stroke-width="5"/>
+      <circle r="443" fill="url(#edge-engraving)" stroke="#e1e2dd" stroke-width="1.8"/>
+      <circle r="426" fill="#0a0b0a" stroke="#030504" stroke-width="3"/>
+      <path d="M-440-66A445 445 0 0 1-217-387" fill="none" stroke="#f4f4ef" stroke-width="1.2"/>
+      <path d="M-445 10A445 445 0 0 0-90 435" fill="none" stroke="#b5b7b1" stroke-width="1.5"/>
+      <path d="M145 419A443 443 0 0 0 430 95" fill="none" stroke="#f5f5ef" stroke-width="1.1"/>
+    </g>
+    <g id="outer-machined-bezel">
+      <circle r="441" fill="#fcfcfa" stroke="#050706" stroke-width="5"/>
+      <circle r="435.5" fill="none" stroke="#333632" stroke-width="1"/>
+      <circle r="429" fill="none" stroke="#080a09" stroke-width="3"/>
+      <circle r="421.5" fill="none" stroke="#080a09" stroke-width="13" stroke-dasharray="2.4 3.55"/>
+      <circle r="415" fill="none" stroke="#0c0e0c" stroke-width="1.7"/>
+      <circle r="406" fill="none" stroke="#30332f" stroke-width="5" stroke-dasharray="1.3 24.2"/>
+      <circle r="379" fill="none" stroke="#090b09" stroke-width="2.6"/>
+      <circle r="351" fill="none" stroke="#0a0d0a" stroke-width="5.7" stroke-dasharray=".1 16.1" stroke-linecap="round"/>
+      <circle r="338" fill="none" stroke="#080a08" stroke-width="2.1"/>
+      <g id="graduated-index-lines">
+        <use href="#radial-mark-quadrant"/>
+        <use href="#radial-mark-quadrant" transform="rotate(90)"/>
+        <use href="#radial-mark-quadrant" transform="rotate(180)"/>
+        <use href="#radial-mark-quadrant" transform="rotate(270)"/>
+      </g>
+      <g id="inner-knurled-border">
+        <circle r="330.5" fill="none" stroke="#0b0d0b" stroke-width="13"/>
+        <circle r="330.5" fill="none" stroke="#f8f8f4" stroke-width="13" stroke-dasharray="1.8 2.3"/>
+        <circle r="333.5" fill="none" stroke="#080a08" stroke-width="1.7"/>
+        <circle r="329" fill="none" stroke="#0b0d0a" stroke-width="1.1"/>
+        <circle r="323" fill="none" stroke="#0b0d0a" stroke-width="1.9"/>
+        <circle r="320" fill="#050706" stroke="#f8f8f4" stroke-width="3.1"/>
+      </g>
+    </g>
+    <g id="iris-diaphragm">
+      <use href="#spiral-blade" transform="rotate(-6)"/>
+      <use href="#spiral-blade" transform="rotate(30)"/>
+      <use href="#spiral-blade" transform="rotate(66)"/>
+      <use href="#spiral-blade" transform="rotate(102)"/>
+      <use href="#spiral-blade" transform="rotate(138)"/>
+      <use href="#spiral-blade" transform="rotate(174)"/>
+      <use href="#spiral-blade" transform="rotate(210)"/>
+      <use href="#spiral-blade" transform="rotate(246)"/>
+      <use href="#spiral-blade" transform="rotate(282)"/>
+      <use href="#spiral-blade" transform="rotate(318)"/>
+      <circle r="317.8" fill="none" stroke="#fff" stroke-width="2"/>
+      <circle r="315.4" fill="none" stroke="#161915" stroke-width="1"/>
+    </g>
+    <g id="bezel-symbols">
+      <use href="#round-ring-stud" transform="translate(-116 -360)"/>
+      <use href="#round-ring-stud" transform="translate(304 -226)"/>
+      <use href="#round-ring-stud" transform="translate(163 342)"/>
+      <use href="#round-ring-stud" transform="translate(-352 140)"/>
+      <use href="#small-ring-rivet" transform="translate(-272 -264)"/>
+      <use href="#small-ring-rivet" transform="translate(-35 -377)"/>
+      <use href="#small-ring-rivet" transform="translate(365 -102)"/>
+      <use href="#small-ring-rivet" transform="translate(273 263)"/>
+      <use href="#small-ring-rivet" transform="translate(34 377)"/>
+      <use href="#compass-star" transform="translate(166 -340) rotate(26)"/>
+      <use href="#compass-star" transform="translate(340 166) rotate(26)"/>
+      <use href="#compass-star" transform="translate(-166 340) rotate(26)"/>
+      <use href="#compass-star" transform="translate(-340 -166) rotate(26)"/>
+    </g>
+  </g>
+  <g id="central-optical-aperture" transform="translate(529 472) rotate(-23)">
+    <ellipse rx="108" ry="134" fill="#030504" stroke="#f8f8f4" stroke-width="3.5"/>
+    <ellipse rx="100" ry="127" fill="none" stroke="#7c8079" stroke-width="1.1"/>
+    <ellipse rx="94" ry="120" fill="#030504" stroke="#ededE7" stroke-width="1.8"/>
+    <ellipse cx="-4" cy="1" rx="83" ry="113" fill="#080a08" stroke="#777c73" stroke-width="1"/>
+    <g transform="translate(-7 0)">
+      <ellipse rx="69" ry="105" fill="url(#glass-shading)" stroke="#8e9488" stroke-width="1"/>
+      <g clip-path="url(#lens-clip)">
+        <g transform="rotate(23)">
+          <rect x="-140" y="-150" width="280" height="300" fill="url(#glass-etching)"/>
+          <path d="M37-102C52-95 66-77 70-56L73 49C69 65 62 72 55 66 43 56 41 31 38 8 31-24 27-66 29-88Z" fill="#fff"/>
+          <path d="M34-83C37-72 38-64 40-59" fill="none" stroke="#fff" stroke-width="4"/>
+        </g>
+      </g>
+      <ellipse rx="69" ry="105" fill="none" stroke="#0a0d09" stroke-width="2.2"/>
+    </g>
+    <g id="lens-rim-reflections" fill="#fff">
+      <path d="M36-101C56-88 71-65 78-34L64-39C61-63 51-85 36-101Z"/>
+      <path d="M80 2C81 18 78 34 72 47L60 37C64 25 66 13 66 1Z"/>
+      <path d="M67 52 62 64 52 73 58 56Z" fill="#bfc3b9"/>
+      <path d="M24-110 33-106 40-100 33-102Z" fill="#c5c8c0"/>
+    </g>
+    <path d="M-73-76C-100-30-93 42-65 78" fill="none" stroke="#c3c7bd" stroke-width=".9"/>
+    <path d="M-60 97C-21 133 33 122 62 88" fill="none" stroke="#f8f8f1" stroke-width="1.1"/>
+  </g>
+</svg>

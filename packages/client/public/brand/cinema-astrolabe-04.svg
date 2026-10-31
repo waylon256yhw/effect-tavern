@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1024">
+<!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <defs>
+    <mask id="mounting-hole-cutouts">
+      <rect width="980" height="1024" fill="white"/>
+      <ellipse cx="232.5" cy="92.7" rx="15.8" ry="16.2" fill="black"/>
+      <ellipse cx="850.8" cy="811.2" rx="15.7" ry="16" fill="black"/>
+    </mask>
+  </defs>
+  <g id="camera-aperture-emblem" mask="url(#mounting-hole-cutouts)">
+    <path id="outer-housing-and-mounting-tabs" fill="#090a08" d="M193 117C180 88 198 58 222 53C243 48 257 58 271 75C288 95 318 79 355 67C435 40 509 38 580 56C739 94 858 214 911 370C952 491 939 614 888 737C878 758 870 776 882 794C899 817 891 841 871 849C858 855 845 853 832 847C811 837 789 855 768 873C688 944 599 980 495 980C369 980 251 913 168 817C87 724 43 610 44 494C44 367 94 264 171 173C188 153 198 135 193 117Z"/>
+    <g id="outer-rim-inlays" fill="#fff">
+      <path id="upper-left-swept-rim" d="M86 353C133 244 228 154 340 108C407 81 471 71 532 77L545 95C476 88 398 101 332 128C228 169 145 250 86 353Z"/>
+      <path id="right-and-lower-rim" d="M573 99C705 122 819 223 871 344C918 451 911 566 870 672C816 812 713 903 581 933C529 944 481 945 432 937L435 918C530 933 628 910 704 858C809 787 870 680 891 569C912 450 880 334 804 240C744 166 662 117 573 99Z"/>
+      <path id="left-and-bottom-rim" d="M83 397L107 404C81 492 96 590 131 672C185 802 297 887 435 918L432 937C292 908 177 821 116 692C72 599 57 497 83 397Z"/>
+    </g>
+    <g id="outer-dial-track" fill="none" stroke="#fff">
+      <path id="dial-hairline" stroke-width="5.5" d="M587 171C491 144 407 157 338 190C213 249 128 375 125 509C120 645 194 764 309 824C407 876 522 863 619 819C740 764 812 647 822 523"/>
+    </g>
+    <g id="upper-index-panel">
+      <path fill="#fff" d="M327 147C405 114 483 100 575 115L585 169C503 148 432 153 364 172C354 159 342 151 327 147Z"/>
+      <g stroke="#090a08" stroke-width="2.7">
+        <path d="M383 141L385 147M410 136L412 142M437 131L439 147M465 130L466 147"/>
+        <path d="M493 123L493 147" stroke-width="4"/>
+        <path d="M519 131L516 148M543 130L539 154M566 139L562 159"/>
+      </g>
+    </g>
+    <g id="right-dial-graduations" fill="none" stroke="#fff" stroke-width="2.7">
+      <path d="M590 145L584 165M627 163L619 181M640 163L628 191M643 188L640 194"/>
+      <path d="M668 169L652 200" stroke-width="4"/>
+      <path d="M672 200L667 209M694 192L679 216M697 218L692 225"/>
+      <path d="M721 206L702 235" stroke-width="4"/>
+      <path d="M723 236L716 245M742 233L725 252M742 256L735 263"/>
+      <path d="M780 238L744 272" stroke-width="6"/>
+      <path d="M766 272L754 283M780 284L765 295M782 301L774 309"/>
+      <path d="M804 304L780 321" stroke-width="3.5"/>
+      <path d="M803 330L790 337M816 342L797 352M817 359L805 366"/>
+      <path d="M854 362L813 379" stroke-width="6"/>
+      <path d="M829 391L816 396M835 406L820 410M839 424L824 427M842 445L827 447M845 463L829 465M846 477L830 479"/>
+      <path d="M880 488L830 490" stroke-width="6.5"/>
+      <path d="M846 511L830 510M845 530L829 528M842 551L827 548M838 571L824 568"/>
+      <path d="M866 601L819 590" stroke-width="6"/>
+      <path d="M828 614L813 609M821 633L807 628M813 653L799 647M805 672L790 664"/>
+      <path d="M822 708L780 682" stroke-width="5"/>
+      <path d="M783 709L770 700M773 724L760 715M760 742L747 731M749 757L735 745M737 770L721 756M722 782L711 772M709 794L698 781M697 803L686 790M685 812L675 799M673 821L664 807"/>
+      <path d="M667 853L648 818" stroke-width="4.5"/>
+      <path d="M636 840L629 826M618 848L612 834M602 854L597 839M589 860L584 845"/>
+      <path d="M574 887L565 851" stroke-width="4.5"/>
+    </g>
+    <g id="broad-inner-bezel" fill="#fff">
+      <path d="M527 173C626 183 720 238 774 318C846 423 836 584 751 702L730 685C797 590 807 477 765 379C725 284 626 209 525 194Z"/>
+      <path d="M484 200C652 200 787 336 787 503C787 671 652 807 484 807C314 807 173 671 173 503C173 335 314 200 484 200ZM484 213C322 213 190 343 190 503C190 664 322 792 484 792C645 792 777 664 777 503C777 343 645 213 484 213Z" fill-rule="evenodd"/>
+    </g>
+    <g id="fine-bezel-edge" fill="none" stroke="#fff" stroke-width="7">
+      <ellipse cx="483.5" cy="502" rx="281.5" ry="277.5"/>
+    </g>
+    <g id="aperture-blades" fill="#fff">
+      <path id="blade-upper-left" d="M389 240L413 232C378 301 347 382 356 473C377 418 411 376 455 334C485 304 518 272 552 237L575 244C502 286 444 343 397 406C446 375 492 371 539 382C581 392 613 427 620 469C630 519 610 569 574 596C540 625 489 635 445 619C380 598 345 552 312 502C282 454 264 399 252 351L270 326C277 391 304 470 359 541C342 452 342 336 389 240ZM484 386C419 386 365 435 365 501C365 564 418 616 484 616C550 616 603 565 603 501C603 438 550 386 484 386Z" fill-rule="evenodd"/>
+      <path id="blade-upper-right" d="M398 406C471 352 593 307 692 316L704 338C627 327 545 343 474 374C569 376 673 416 749 461L756 488C681 435 611 407 550 390C491 367 440 378 398 406Z"/>
+      <path id="blade-right" d="M571 409C647 461 705 536 741 619L720 646C701 570 652 494 603 448C629 512 641 624 630 731L607 747C628 660 627 583 613 520C609 474 594 438 571 409Z"/>
+      <path id="blade-lower-right" d="M613 520C602 618 548 714 482 779L459 776C512 722 558 649 583 582C514 660 425 718 347 743L323 732C409 705 479 659 527 620C565 605 601 570 613 520Z"/>
+      <path id="blade-lower-left" d="M527 620C425 646 331 659 245 646L231 622C309 647 398 638 461 626C374 608 270 550 203 497L205 472C255 526 328 566 395 595C436 620 480 627 527 620Z"/>
+    </g>
+    <g id="central-lens">
+      <circle cx="484" cy="502" r="112" fill="#090a08"/>
+      <circle cx="484" cy="502" r="105.5" fill="none" stroke="#fff" stroke-width="3"/>
+      <circle cx="484" cy="502" r="93.5" fill="none" stroke="#fff" stroke-width="2.4"/>
+      <ellipse id="oval-lens-reflection" cx="471.8" cy="503.6" rx="69.7" ry="14.1" fill="#fff"/>
+      <circle id="point-lens-reflection" cx="536.6" cy="472.9" r="11.8" fill="#fff"/>
+    </g>
+    <g id="bezel-dot-indices" fill="#fff">
+      <circle cx="371" cy="201.5" r="2.4"/>
+      <circle cx="345" cy="211" r="2.5"/>
+      <circle cx="319" cy="222.5" r="2.8"/>
+      <circle cx="294" cy="237" r="2.6"/>
+      <circle cx="270" cy="254" r="2.5"/>
+      <circle cx="247" cy="274" r="2.6"/>
+      <circle cx="226.5" cy="296" r="2.7"/>
+      <circle cx="208.5" cy="320.5" r="2.8"/>
+      <circle cx="192.5" cy="347" r="2.7"/>
+      <circle cx="179" cy="375.5" r="2.8"/>
+      <circle cx="168.6" cy="404.7" r="2.8"/>
+      <circle cx="160.4" cy="435.3" r="2.8"/>
+      <circle cx="155.8" cy="466.5" r="2.9"/>
+      <circle cx="153.6" cy="498.4" r="2.9"/>
+      <circle cx="155" cy="530.8" r="2.9"/>
+      <circle cx="159" cy="562.3" r="2.9"/>
+      <circle cx="166.7" cy="594" r="2.9"/>
+      <circle cx="178.4" cy="630.1" r="2.6"/>
+      <circle cx="192.4" cy="659.2" r="2.6"/>
+      <circle cx="208.2" cy="686.3" r="2.5"/>
+      <circle cx="226.7" cy="711.4" r="2.5"/>
+      <circle cx="260.3" cy="748.3" r="2.6"/>
+      <circle cx="282.3" cy="766.2" r="2.9"/>
+      <circle cx="305.8" cy="782.1" r="2.9"/>
+      <circle cx="331.2" cy="795.9" r="2.8"/>
+      <circle cx="357.4" cy="807.5" r="2.9"/>
+      <circle cx="384.6" cy="817" r="2.9"/>
+      <circle cx="412.3" cy="823.5" r="2.8"/>
+      <circle cx="439.8" cy="827.7" r="2.7"/>
+      <circle cx="467.3" cy="829.5" r="2.8"/>
+      <circle cx="494.4" cy="829.4" r="2.7"/>
+      <circle cx="495.8" cy="874.4" r="2.3"/>
+      <circle cx="524.3" cy="872.4" r="2.7"/>
+      <circle cx="771" cy="737.8" r="2"/>
+    </g>
+    <g id="light-band-dark-indices" fill="#090a08">
+      <circle cx="686" cy="252.5" r="2"/>
+      <circle cx="741.6" cy="314.7" r="1.7"/>
+      <circle cx="756.2" cy="337.6" r="2.5"/>
+      <circle cx="770.3" cy="363.5" r="2.1"/>
+      <circle cx="781" cy="391.2" r="2.5"/>
+      <circle cx="788.2" cy="415.3" r="2.1"/>
+      <circle cx="794.4" cy="439.5" r="2.4"/>
+      <circle cx="798.7" cy="463.8" r="2"/>
+      <circle cx="799.8" cy="490.1" r="2.6"/>
+    </g>
+    <g id="large-track-studs" fill="#fff">
+      <circle cx="337.9" cy="190" r="12.8"/>
+      <circle cx="169" cy="335.4" r="12.8"/>
+      <circle cx="127.6" cy="533.9" r="12.7"/>
+      <circle cx="380.2" cy="844.9" r="12.9"/>
+    </g>
+    <g id="four-point-glints" fill="#fff">
+      <path id="upper-rim-glint" d="M634 81L627 111L660 129L625 121L603 180L617 118L581 105L620 111Z"/>
+      <path id="lower-left-glint" d="M191 721L226 747L260 716L233 754L259 784L224 762L184 796L216 754Z"/>
+    </g>
+  </g>
+</svg>

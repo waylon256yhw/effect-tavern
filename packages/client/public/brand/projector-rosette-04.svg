@@ -1,0 +1,315 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="686" height="1024" viewBox="0 0 686 1024">
+<defs>
+  <radialGradient id="steel" cx="43%" cy="36%" r="64%">
+    <stop offset="0" stop-color="#fff"/>
+    <stop offset=".65" stop-color="#f7f7f4"/>
+    <stop offset=".88" stop-color="#d9d9d5"/>
+    <stop offset="1" stop-color="#fff"/>
+  </radialGradient>
+  <radialGradient id="dark-metal" cx="35%" cy="28%" r="75%">
+    <stop stop-color="#3d3e3b"/>
+    <stop offset=".44" stop-color="#181917"/>
+    <stop offset="1" stop-color="#080908"/>
+  </radialGradient>
+  <radialGradient id="hub-metal" cx="32%" cy="25%" r="75%">
+    <stop stop-color="#fff"/>
+    <stop offset=".23" stop-color="#f4f4ef"/>
+    <stop offset=".52" stop-color="#9d9e98"/>
+    <stop offset=".7" stop-color="#191a18"/>
+    <stop offset=".82" stop-color="#070807"/>
+    <stop offset="1" stop-color="#4e504b"/>
+  </radialGradient>
+  <pattern id="fine-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+    <path d="M0 0V5 M2.5 0V5" stroke="#242521" stroke-width=".65"/>
+  </pattern>
+  <pattern id="blade-grain" width="16" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)">
+    <rect width="16" height="12" fill="#10110f"/>
+    <path d="M-3 1C2-1 5 4 10 1S17 1 20 1 M-3 4C3 2 5 7 10 4S17 4 20 4 M-3 7C2 5 5 10 10 7S17 7 20 7 M-3 10C3 8 5 13 10 10S17 10 20 10" fill="none" stroke="#f0f0eb" stroke-width="1.15"/>
+  </pattern>
+  <pattern id="horizontal-grain" width="20" height="8" patternUnits="userSpaceOnUse">
+    <rect width="20" height="8" fill="#eee"/>
+    <path d="M-2 1Q3-1 8 1T18 1T28 1 M-2 4Q3 2 8 4T18 4T28 4 M-2 7Q3 5 8 7T18 7T28 7" fill="none" stroke="#383a35" stroke-width=".8"/>
+  </pattern>
+  <g id="minute-tick" stroke="#222320" stroke-width="1.65">
+    <path d="M343 230V252"/>
+  </g>
+  <g id="five-minute-tick" stroke="#1a1b18" stroke-width="2">
+    <path d="M343 222V251"/>
+  </g>
+  <g id="quadrant-ticks">
+    <use xlink:href="#minute-tick" transform="rotate(4.5 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(9 343 482)"/>
+    <use xlink:href="#five-minute-tick" transform="rotate(13.5 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(18 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(22.5 343 482)"/>
+    <use xlink:href="#five-minute-tick" transform="rotate(27 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(31.5 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(36 343 482)"/>
+    <use xlink:href="#five-minute-tick" transform="rotate(40.5 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(45 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(49.5 343 482)"/>
+    <use xlink:href="#five-minute-tick" transform="rotate(54 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(58.5 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(63 343 482)"/>
+    <use xlink:href="#five-minute-tick" transform="rotate(67.5 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(72 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(76.5 343 482)"/>
+    <use xlink:href="#five-minute-tick" transform="rotate(81 343 482)"/>
+    <use xlink:href="#minute-tick" transform="rotate(85.5 343 482)"/>
+  </g>
+  <g id="fastener">
+    <circle r="14.3" fill="#f8f8f4" stroke="#11120f" stroke-width="2.5"/>
+    <circle r="10" fill="#141512" stroke="#85867e" stroke-width="1.2"/>
+    <ellipse cx="-1" cy="-1" rx="6.6" ry="7.1" fill="#f3f3ee"/>
+    <path d="M-8 5Q-9-4-2-8" fill="none" stroke="#fff" stroke-width=".8"/>
+  </g>
+  <g id="small-screw">
+    <ellipse rx="11.1" ry="12" fill="#fafaf5" stroke="#7b7d74" stroke-width=".8"/>
+    <ellipse rx="8.8" ry="9.6" fill="#11130f" stroke="#181a15" stroke-width="1"/>
+    <ellipse cx="-.7" cy="-1" rx="5.8" ry="6.4" fill="#a0a298"/>
+    <ellipse cx="-.5" cy="-.7" rx="3.8" ry="4.6" fill="#171913"/>
+    <path d="M-4 2L2-4 M-4 3L3-3" stroke="#e0e1d8" stroke-width=".8"/>
+    <path d="M-7 2Q-8-5-2-7 M1 7Q6 5 6-1" fill="none" stroke="#e6e7df" stroke-width=".75"/>
+  </g>
+  <g id="tiny-bolt">
+    <circle r="4.8" fill="#171915"/>
+    <circle cy="-.4" r="2.1" fill="#b3b4aa"/>
+    <path d="M-1.8-2L1-1" stroke="#fff" stroke-width=".8"/>
+  </g>
+  <path id="upper-aperture" d="M319 40C330 36 356 36 366 40C377 45 371 57 365 68L355 82Q343 93 331 82C326 75 313 57 314 49Q314 43 319 40Z"/>
+  <clipPath id="upper-hole-clip">
+    <use xlink:href="#upper-aperture"/>
+  </clipPath>
+  <g id="upper-hole">
+    <use xlink:href="#upper-aperture" fill="url(#dark-metal)" stroke="#080a07" stroke-width="2"/>
+    <g clip-path="url(#upper-hole-clip)" fill="none" stroke="#a2a49b" stroke-width=".7" opacity=".85">
+      <path d="M313 68Q341 49 373 68 M313 71Q341 52 373 71 M313 74Q341 55 373 74 M313 77Q341 58 373 77 M313 80Q341 61 373 80 M313 83Q341 64 373 83 M313 86Q341 67 373 86 M313 89Q341 70 373 89 M313 92Q341 73 373 92 M313 95Q341 76 373 95 M313 98Q341 79 373 98 M313 101Q341 82 373 101"/>
+    </g>
+    <path d="M318 42Q344 34 366 43" fill="none" stroke="#41433b" stroke-width=".7"/>
+  </g>
+  <path id="lower-aperture" d="M316 786C328 781 354 780 365 785Q379 791 368 811L356 831Q343 844 331 831L315 805Q308 792 316 786Z"/>
+  <clipPath id="lower-hole-clip">
+    <use xlink:href="#lower-aperture"/>
+  </clipPath>
+  <g id="lower-hole">
+    <use xlink:href="#lower-aperture" fill="url(#dark-metal)" stroke="#0a0b09" stroke-width="2"/>
+    <g clip-path="url(#lower-hole-clip)" fill="none" stroke="#c3c4b9" stroke-width=".72">
+      <path d="M307 815Q340 794 377 815 M307 818Q340 797 377 818 M307 821Q340 800 377 821 M307 824Q340 803 377 824 M307 827Q340 806 377 827 M307 830Q340 809 377 830 M307 833Q340 812 377 833 M307 836Q340 815 377 836 M307 839Q340 818 377 839 M307 842Q340 821 377 842 M307 845Q340 824 377 845 M307 848Q340 827 377 848 M307 851Q340 830 377 851"/>
+    </g>
+  </g>
+  <path id="reel-hole-shape" d="M319 349C302 344 265 363 242 385C225 401 210 427 207 445C202 463 215 468 233 465C263 461 288 447 307 423C325 401 337 359 319 349Z"/>
+  <clipPath id="reel-hole-clip">
+    <use xlink:href="#reel-hole-shape"/>
+  </clipPath>
+  <g id="reel-opening">
+    <use xlink:href="#reel-hole-shape" fill="url(#dark-metal)" stroke="#9b9d94" stroke-width="2"/>
+    <g clip-path="url(#reel-hole-clip)" fill="none" stroke="#c3c4bb" stroke-width="1.05">
+      <path d="M210 481C215 433 260 389 326 378 M211 486C219 434 263 392 329 381 M214 490C223 437 267 394 332 384 M217 494C226 440 270 397 335 387 M220 497C230 443 273 400 338 390 M224 500C234 446 277 403 341 393 M228 503C238 449 280 406 344 396 M232 506C242 452 283 409 347 399 M236 509C246 455 286 412 350 402 M240 512C250 458 289 415 353 405 M244 515C254 461 292 418 356 408 M248 518C258 464 295 421 359 411 M252 521C262 467 298 424 362 414 M256 524C266 470 301 427 365 417 M260 527C270 473 304 430 368 420 M264 530C274 476 307 433 371 423 M268 533C278 479 310 436 374 426 M272 536C282 482 313 439 377 429 M276 539C286 485 316 442 380 432"/>
+    </g>
+    <path d="M216 426C238 387 278 358 311 352" fill="none" stroke="#3c3e37" stroke-width=".75"/>
+    <path d="M207 448Q202 470 230 468C271 463 308 433 322 399Q337 361 321 350" fill="none" stroke="#fff" stroke-width="1.7"/>
+  </g>
+  <clipPath id="center-disc-clip">
+    <circle cx="343" cy="482" r="143"/>
+  </clipPath>
+  <g id="face-groove" fill="none" stroke="#666960" stroke-width=".75">
+    <path d="M342 357C337 391 341 413 365 433C387 451 426 473 473 480C430 487 388 505 368 527C345 551 340 575 342 605C344 570 335 544 314 524C289 501 248 485 212 481C249 477 293 456 314 434C337 409 344 385 342 357Z"/>
+  </g>
+</defs>
+
+<g id="upper-mounting-bracket" stroke="#151612">
+  <path d="M235 127C235 163 222 169 211 182C203 194 201 209 200 225L283 219L343 196L407 219L486 225C486 207 482 190 470 178C455 168 450 154 452 128Z" fill="#f7f7f2" stroke-width="3.1"/>
+  <path d="M235 145C235 166 227 175 215 186L208 214L272 199L343 183L417 199L478 214C475 195 473 187 461 179L451 148Z" fill="#12130f" stroke-width="1.4"/>
+  <path d="M236 152Q232 174 216 187L211 207L267 198 M450 152Q453 175 469 187L475 208L418 199" fill="none" stroke="#b8bab0" stroke-width="1.2"/>
+  <path d="M234 161L263 198L212 207L218 187Z M451 160L423 198L475 208L468 187Z" fill="url(#fine-hatch)" stroke="#d5d7ce" stroke-width="1"/>
+  <use xlink:href="#fastener" transform="translate(225 193)"/>
+  <use xlink:href="#fastener" transform="translate(461 193)"/>
+  <path d="M238 181L248 197L258 199L240 201 M448 180L439 197L428 200L447 202" fill="none" stroke="#f4f4ee" stroke-width=".9"/>
+</g>
+
+<g id="upper-five-spoke-wheel">
+  <circle cx="343" cy="122" r="115" fill="#11120f" stroke="#090a08" stroke-width="3"/>
+  <circle cx="343" cy="122" r="111" fill="#f9f9f5" stroke="#c0c1b9" stroke-width="1.1"/>
+  <circle cx="343" cy="122" r="107.5" fill="#10120e"/>
+  <circle cx="343" cy="122" r="103" fill="#efefeb" stroke="#93958b" stroke-width="1.3"/>
+  <circle cx="343" cy="122" r="98.4" fill="#fdfdfa" stroke="#131510" stroke-width="2.5"/>
+  <path d="M249 119A94 94 0 0 1 434 102 M253 147A94 94 0 0 0 424 170" fill="none" stroke="#b1b3a9" stroke-width=".7"/>
+  <use xlink:href="#upper-hole"/>
+  <use xlink:href="#upper-hole" transform="rotate(72 343 122)"/>
+  <use xlink:href="#upper-hole" transform="rotate(144 343 122)"/>
+  <use xlink:href="#upper-hole" transform="rotate(216 343 122)"/>
+  <use xlink:href="#upper-hole" transform="rotate(288 343 122)"/>
+  <g fill="none" stroke="#c4c6bc" stroke-width=".65">
+    <path d="M319 64L328 86L334 91 M365 65L357 86L351 92 M387 125L370 128L367 134 M302 125L316 130L320 135 M343 151V170 M261 131L302 127 M385 128L429 132"/>
+  </g>
+  <g id="upper-hub">
+    <circle cx="343" cy="122" r="20.5" fill="#777a70" stroke="#d2d4c9" stroke-width="1"/>
+    <circle cx="343" cy="121" r="17.6" fill="#fafaf6" stroke="#10120e" stroke-width="2"/>
+    <circle cx="343" cy="121" r="11.2" fill="#12140f"/>
+    <circle cx="342" cy="120" r="7.1" fill="#363930"/>
+    <path d="M333 120Q335 110 345 112" fill="none" stroke="#92958a" stroke-width="1.3"/>
+    <use xlink:href="#tiny-bolt" transform="translate(343 95)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(358 99)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(370 122)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(343 148)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(316 122)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(329 99)"/>
+    <g fill="#30332a">
+      <circle cx="328" cy="143" r="2.4"/><circle cx="358" cy="143" r="2.4"/>
+      <circle cx="365" cy="107" r="1.7"/><circle cx="321" cy="107" r="1.7"/>
+      <circle cx="319" cy="137" r="1.5"/><circle cx="366" cy="137" r="1.5"/>
+    </g>
+  </g>
+</g>
+
+<g id="lower-mounting-bracket">
+  <path d="M200 735C200 758 204 778 219 791C233 804 225 827 220 846L267 868L420 867L463 846C457 824 448 807 465 792C481 777 485 758 486 736L408 731L341 756L273 733Z" fill="#f6f6f0" stroke="#141611" stroke-width="3.1"/>
+  <path d="M206 742C206 763 213 778 227 789Q244 808 231 832L266 853L417 852L454 831Q442 805 458 789C474 775 479 761 479 742L409 744L343 765L274 744Z" fill="#171914" stroke="#777a6f" stroke-width="1"/>
+  <path d="M211 750L269 761L240 808L225 788Z M475 750L418 761L447 810L460 788Z" fill="url(#fine-hatch)" stroke="#e7e8df" stroke-width="1.3"/>
+  <path d="M213 756L255 766L236 798 M472 756L431 767L451 798" fill="none" stroke="#f8f8f2" stroke-width=".9"/>
+  <use xlink:href="#fastener" transform="translate(225 771)"/>
+  <use xlink:href="#fastener" transform="translate(461 771)"/>
+</g>
+
+<g id="main-circular-housing">
+  <circle cx="343" cy="482" r="300" fill="#10110e" stroke="#0b0c0a" stroke-width="3.2"/>
+  <circle cx="343" cy="482" r="295.5" fill="none" stroke="#f7f7f2" stroke-width="2.4"/>
+  <circle cx="343" cy="482" r="290" fill="none" stroke="#85877d" stroke-width="1.1"/>
+  <circle cx="343" cy="482" r="285.5" fill="#fdfdf9" stroke="#f4f4ee" stroke-width="2"/>
+  <circle cx="343" cy="482" r="278.5" fill="none" stroke="#141611" stroke-width="3"/>
+  <circle cx="343" cy="482" r="270.7" fill="#fffffc" stroke="#a5a79d" stroke-width="1"/>
+  <g id="dial-division-marks">
+    <use xlink:href="#quadrant-ticks"/>
+    <use xlink:href="#quadrant-ticks" transform="rotate(90 343 482)"/>
+    <use xlink:href="#quadrant-ticks" transform="rotate(180 343 482)"/>
+    <use xlink:href="#quadrant-ticks" transform="rotate(270 343 482)"/>
+    <path d="M343 220V261 M343 703V742 M81 482H122 M564 482H604" fill="none" stroke="#11130e" stroke-width="4.2"/>
+    <g stroke="#63665b" stroke-width=".9" fill="none">
+      <path d="M506 309L522 294L518 302 M164 296L171 304L161 298 M546 345L557 337L552 343 M531 637L542 648 M180 662L173 669"/>
+    </g>
+  </g>
+  <circle cx="343" cy="482" r="223.5" fill="#0b0c09" stroke="#11130e" stroke-width="1.7"/>
+  <circle cx="343" cy="482" r="209.8" fill="#f9f9f4" stroke="#9c9f92" stroke-width="1.2"/>
+  <circle cx="343" cy="482" r="204.5" fill="#11130e" stroke="#fff" stroke-width="1.6"/>
+  <circle cx="343" cy="482" r="199.6" fill="url(#blade-grain)" stroke="#7a7d70" stroke-width="1.3"/>
+</g>
+
+<g id="engraved-iris-blades" stroke-linejoin="round">
+  <path d="M206 337C251 294 312 279 372 285L319 335L260 369L208 432Z" fill="url(#blade-grain)" stroke="#161813" stroke-width="2.3"/>
+  <path d="M206 337L209 433L198 478L147 466C151 415 172 369 206 337Z" fill="url(#blade-grain)" stroke="#171a13" stroke-width="2.3"/>
+  <path d="M147 466L210 534L256 593L179 596C153 556 141 512 147 466Z" fill="url(#blade-grain)" stroke="#13150f" stroke-width="2.4"/>
+  <path d="M179 596L268 604L367 625L311 675C256 667 209 641 179 596Z" fill="url(#horizontal-grain)" stroke="#151711" stroke-width="2.4"/>
+  <path d="M311 675L378 614L481 554L482 621C435 664 372 686 311 675Z" fill="url(#blade-grain)" stroke="#0f110c" stroke-width="2.5"/>
+  <path d="M482 621L483 515L485 435L541 487C539 539 518 586 482 621Z" fill="url(#blade-grain)" stroke="#141610" stroke-width="2.5"/>
+  <path d="M541 487L476 421L429 349L487 347C521 387 539 433 541 487Z" fill="url(#blade-grain)" stroke="#11140d" stroke-width="2.5"/>
+  <path d="M487 347L398 346L319 335L372 285C418 292 460 313 487 347Z" fill="url(#horizontal-grain)" stroke="#10130c" stroke-width="2.5"/>
+  <g fill="none" stroke="#f6f7ef" stroke-width="1.5">
+    <path d="M204 343L204 436 M150 471L212 540 M183 598L263 608 M315 674L379 618 M485 615L486 520 M537 480L476 416 M481 344L401 343 M365 288L318 332"/>
+  </g>
+  <g fill="none" stroke="#11140d" stroke-width=".7">
+    <path d="M193 354L193 453 M189 359L188 459 M184 367L183 455 M179 375L177 449 M174 385L171 443 M169 397L165 439"/>
+    <path d="M496 491L494 599 M501 498L499 590 M506 504L503 584 M511 510L507 579 M516 515L511 573"/>
+  </g>
+  <circle cx="343" cy="482" r="197.2" fill="none" stroke="#f0f1e8" stroke-width="1.2"/>
+</g>
+
+<g id="four-spoke-center-reel">
+  <circle cx="343" cy="482" r="151.5" fill="#12150e" stroke="#090c06" stroke-width="2.2"/>
+  <circle cx="343" cy="482" r="147.5" fill="#fff" stroke="#b7baad" stroke-width="1.2"/>
+  <circle cx="343" cy="482" r="141.8" fill="url(#steel)" stroke="#30362a" stroke-width="1.6"/>
+  <g id="machined-face-contours" clip-path="url(#center-disc-clip)">
+    <use xlink:href="#face-groove"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.97) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.94) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.91) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.88) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.85) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.82) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.79) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.76) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.73) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.70) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.67) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.64) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.61) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.58) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.55) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.52) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.49) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.46) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.43) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.4) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.37) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.34) translate(-343 -482)"/>
+    <use xlink:href="#face-groove" transform="translate(343 482) scale(.31) translate(-343 -482)"/>
+    <g fill="none" stroke="#8b8f81" stroke-width=".6" opacity=".8">
+      <path d="M332 350Q337 377 330 397 M328 349Q333 378 326 398 M323 350Q329 374 322 394 M354 350Q349 378 356 398 M358 350Q353 376 360 399 M362 351Q357 376 364 396"/>
+      <path d="M210 471Q234 474 255 465 M210 475Q234 478 254 469 M210 488Q236 485 257 493 M210 492Q235 489 257 497 M475 470Q449 475 430 466 M476 474Q448 479 428 470 M476 488Q451 484 430 493 M475 492Q450 488 430 497"/>
+      <path d="M332 610Q336 585 330 564 M328 609Q332 584 326 564 M354 610Q350 585 356 565 M358 609Q354 584 360 565"/>
+    </g>
+  </g>
+  <use xlink:href="#reel-opening"/>
+  <use xlink:href="#reel-opening" transform="translate(686 0) scale(-1 1)"/>
+  <use xlink:href="#reel-opening" transform="translate(0 964) scale(1 -1)"/>
+  <use xlink:href="#reel-opening" transform="translate(686 964) scale(-1 -1)"/>
+  <path d="M319 346C335 348 337 360 333 379 M354 377Q350 348 367 345 M206 460Q205 473 219 473 M467 473Q480 473 480 458 M206 502Q206 489 220 490 M466 490Q480 489 480 502 M320 617Q336 615 333 590 M354 590Q350 616 366 617" fill="none" stroke="#b4b8a9" stroke-width="1"/>
+  <use xlink:href="#small-screw" transform="translate(343 350)"/>
+  <use xlink:href="#small-screw" transform="translate(206 481) rotate(-15)"/>
+  <use xlink:href="#small-screw" transform="translate(479 481) rotate(15)"/>
+  <use xlink:href="#small-screw" transform="translate(343 614)"/>
+  <g id="central-raised-spindle">
+    <ellipse cx="342" cy="475" rx="29" ry="29" fill="#74796b" opacity=".35"/>
+    <ellipse cx="342" cy="472" rx="27" ry="27.5" fill="#161a12" stroke="#c4c8b8" stroke-width="1.4"/>
+    <path d="M317 459L317 475C319 499 361 503 367 476L368 460Z" fill="#171a13" stroke="#080c05" stroke-width="1.3"/>
+    <path d="M319 474C325 495 359 496 366 475 M319 478C328 496 356 497 364 481 M322 484Q343 500 361 486" fill="none" stroke="#8f9486" stroke-width=".9"/>
+    <ellipse cx="341.5" cy="458.5" rx="26.2" ry="25.3" fill="#fff" stroke="#0b0e07" stroke-width="2.5"/>
+    <ellipse cx="342" cy="458.5" rx="22.5" ry="21.5" fill="url(#hub-metal)" stroke="#7b8071" stroke-width="1.1"/>
+    <path d="M323 466C316 454 327 438 340 439C352 438 361 449 361 459" fill="none" stroke="#e9ebdf" stroke-width="1.2"/>
+    <path d="M325 462C321 452 330 441 339 442 M327 460C324 451 332 444 340 445 M330 458Q328 447 340 447" fill="none" stroke="#777d6b" stroke-width=".75"/>
+    <ellipse cx="342" cy="458" rx="9.4" ry="10" fill="#d0d4c6" stroke="#f6f8ed" stroke-width="1"/>
+    <ellipse cx="342.5" cy="458.5" rx="6.7" ry="7.6" fill="#464d3d" stroke="#141b0c" stroke-width=".75"/>
+    <ellipse cx="342" cy="457" rx="4.5" ry="5.6" fill="none" stroke="#d5d9cb" stroke-width="1"/>
+    <path d="M338 453L345 463 M340 452L347 461 M337 457L342 464" stroke="#b5bcaa" stroke-width=".8"/>
+    <path d="M327 443Q337 435 350 443" fill="none" stroke="#fff" stroke-width="1.3"/>
+  </g>
+</g>
+
+<g id="lower-five-spoke-wheel">
+  <circle cx="343" cy="875" r="126" fill="#0b0d09" stroke="#151812" stroke-width="2.8"/>
+  <circle cx="343" cy="875" r="121.4" fill="#fafaf5" stroke="#a9ad9f" stroke-width="1.2"/>
+  <circle cx="343" cy="875" r="117.3" fill="#11150e" stroke="#32382b" stroke-width="1.1"/>
+  <circle cx="343" cy="875" r="110.8" fill="#fbfbf7" stroke="#d2d5ca" stroke-width="1.5"/>
+  <circle cx="343" cy="875" r="105.5" fill="#fffffc" stroke="#171b12" stroke-width="2.4"/>
+  <path d="M242 869A101 101 0 0 1 443 866 M244 892A101 101 0 0 0 441 898" fill="none" stroke="#a7ad9d" stroke-width=".85"/>
+  <use xlink:href="#lower-hole"/>
+  <use xlink:href="#lower-hole" transform="rotate(72 343 875)"/>
+  <use xlink:href="#lower-hole" transform="rotate(144 343 875)"/>
+  <use xlink:href="#lower-hole" transform="rotate(216 343 875)"/>
+  <use xlink:href="#lower-hole" transform="rotate(288 343 875)"/>
+  <g fill="none" stroke="#b7bcad" stroke-width=".8">
+    <path d="M252 878L302 876 M386 876L437 878 M317 814L329 835L333 840 M369 815L357 836L353 841 M321 901L311 917 M365 902L376 918"/>
+    <path d="M304 825Q309 837 316 844 M382 824Q376 838 370 843 M300 891L313 887 M388 891L375 887"/>
+  </g>
+  <g id="lower-wheel-hub">
+    <circle cx="343" cy="875" r="21.5" fill="#dadfd0" stroke="#8d9583" stroke-width="1"/>
+    <circle cx="343" cy="874.5" r="18.5" fill="#fff" stroke="#10160a" stroke-width="2.3"/>
+    <circle cx="343" cy="874" r="11.2" fill="#10160b"/>
+    <circle cx="342.4" cy="873.2" r="7.2" fill="#353d2c"/>
+    <path d="M333 874Q333 864 344 864" fill="none" stroke="#969f8b" stroke-width="1.1"/>
+    <use xlink:href="#tiny-bolt" transform="translate(343 846)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(357 849)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(328 849)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(314 875)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(371 875)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(343 903)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(328 899) scale(.7)"/>
+    <use xlink:href="#tiny-bolt" transform="translate(357 899) scale(.7)"/>
+    <g fill="#3d4633">
+      <circle cx="320" cy="860" r="1.5"/><circle cx="366" cy="860" r="1.5"/>
+      <circle cx="317" cy="889" r="1.8"/><circle cx="369" cy="890" r="1.8"/>
+      <circle cx="322" cy="895" r="1.3"/><circle cx="363" cy="895" r="1.3"/>
+    </g>
+  </g>
+  <path d="M229 870C231 808 282 759 344 759 M233 904C250 963 306 997 364 987 M456 875C455 930 419 974 370 985" fill="none" stroke="#f3f5eb" stroke-width="1.1"/>
+</g>
+</svg>
