@@ -18,6 +18,8 @@ permissions:
     skills: true
   "@solidjs/web":
     skills: true
+  "@x18n/cli":
+    skills: true
   solid-js:
     skills: true
 # ponytail: temporary, lets the ai-sdk pins pass ~/.npmrc's min-release-age=7; drop once the pins are a week old.
