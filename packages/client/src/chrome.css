@@ -37,6 +37,8 @@
   flex-direction: column;
   background: var(--surface-3);
   color: inherit;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
   box-shadow: var(--shadow-pop);
   outline: none;
@@ -72,7 +74,8 @@
 .sheet header {
   display: flex;
   align-items: center;
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
   font-size: var(--text-heading);
   font-weight: 600;
 }
@@ -84,6 +87,27 @@
   min-width: 0;
   margin: 0;
   font: inherit;
+}
+.sheet header h2 > .btn,
+.sheet header h2 > .picked-bar {
+  margin-left: auto;
+}
+.sheet header h2 > .picked-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sheet header h2 > .picked-bar .turns {
+  font-family: var(--font-mono);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.sheet header h2 > .picked-bar .icon.danger {
+  color: var(--danger);
+}
+.sheet header h2 > .picked-bar .icon.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
 }
 .sheet .record {
   flex: 1;
@@ -611,15 +635,15 @@
 }
 
 /* the stories manager (manager.tsx): the picker's sheet one step wider (32rem on desktop), a search over the turns
-   beside the 全部 / 收藏 toggle, three-line cards (checkbox, star, name and its actions; the preview or the search's
-   hit; turns and time), and the cleanup's footer; the list alone scrolls */
+   beside the 全部 / 收藏 toggle, and story cards (star, name, time and actions; preview when present); the list alone
+   scrolls */
 .manager {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-1) var(--space-4) var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-4);
 }
 .manager .search {
   flex: none;
@@ -634,64 +658,66 @@
 .manager .filter {
   flex: none;
   display: inline-flex;
-  gap: 4px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
 }
 .manager .filter button {
   height: 26px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: var(--radius-pill);
-  background: var(--alpha-1);
   color: var(--ink-2);
   font-size: var(--text-footnote);
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  font-weight: 550;
+  white-space: nowrap;
 }
 .manager .filter button:hover {
-  background: var(--alpha-2);
   color: var(--ink);
 }
 .manager .filter button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--surface-1);
-  font-weight: 600;
-}
-.manager .filter svg {
-  width: 12px;
-  height: 12px;
-}
-.manager .filter .n {
-  font-family: var(--font-mono);
-  font-size: var(--text-caption);
-  opacity: 0.75;
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
 }
 .manager .list {
   flex: 1;
   min-height: 0;
+  max-height: calc(7 * 40px + 6 * var(--space-2));
   overflow-y: auto;
+  scroll-snap-type: y proximity;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   margin: 0 calc(-1 * var(--space-2));
-  padding: 2px var(--space-2);
+  padding: 0 var(--space-2);
 }
-/* a card: the checkbox and the star in their columns, the three lines beside them; the open one on the tint, a
-   checked one on the warning tint */
+/* a card: the title row and optional preview; in selection mode, a toggle box at the left */
 .manager .card {
   flex: none;
+  scroll-snap-align: start;
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  column-gap: 8px;
-  align-items: start;
-  padding: 8px 8px 8px var(--space-2);
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: center;
+  min-height: 40px;
+  padding: 6px var(--space-3);
   border-radius: var(--radius-card);
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
   cursor: pointer;
+  user-select: none;
   transition:
     background var(--dur-2) var(--ease),
     box-shadow var(--dur-2) var(--ease);
+}
+.manager[data-selecting] .card {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.manager .card:has(.preview) {
+  align-items: start;
+  padding-block: 10px;
 }
 .manager .card:hover {
   background: var(--ghost-hover);
@@ -699,70 +725,91 @@
 }
 .manager .card[aria-current] {
   background: var(--alpha-1);
-  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 .manager .card[data-checked] {
-  background: var(--warn-soft);
-  box-shadow: inset 0 0 0 1.5px var(--warn);
+  background: var(--alpha-2);
+  box-shadow: inset 0 0 0 1px var(--ink-2);
 }
 .manager .card .box {
-  width: 15px;
-  height: 15px;
-  margin: 5px 0 0;
-  accent-color: var(--ink);
-  cursor: pointer;
-}
-.manager .card .star {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  display: inline-grid;
+  display: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  color: var(--primary-ink);
   place-items: center;
-  color: var(--ink-3);
+  transition:
+    background var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
-.manager .card .star:hover {
-  background: var(--alpha-2);
-  color: var(--ink);
+.manager[data-selecting] .card .box {
+  display: inline-grid;
 }
-.manager .card .star[aria-pressed="true"] {
-  color: var(--warn);
+.manager .card:has(.preview) .box {
+  margin-top: 4px;
 }
-.manager .card .star svg {
-  width: 14px;
-  height: 14px;
+.manager .card .box svg {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+  scale: 0.75;
+  transition:
+    opacity var(--dur-2) var(--ease),
+    scale var(--dur-2) var(--ease);
+}
+.manager .card[data-checked] .box {
+  background: var(--primary);
+  box-shadow: none;
+}
+.manager .card[data-checked] .box svg {
+  opacity: 1;
+  scale: 1;
 }
 .manager .card .body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 .manager .card .top {
   min-width: 0;
   min-height: 24px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .manager .card .name {
+  flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 500;
+  font-weight: 400;
 }
 .manager .card .name.unnamed {
   color: var(--ink-2);
-  font-weight: 400;
 }
 .manager .card[aria-current] .name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--primary);
 }
 .manager .card .acts {
-  margin-left: auto;
   flex: none;
   display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  translate: 0 2px;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-3) var(--ease),
+    translate var(--dur-3) var(--ease);
+}
+.manager:not([data-selecting]) .card:is(:hover, :focus-within) .acts {
+  opacity: 1;
+  translate: 0 0;
+  pointer-events: auto;
 }
 .manager .card .acts .icon {
   width: 24px;
@@ -776,6 +823,9 @@
 .manager .card .acts .icon:hover:not(:disabled) {
   color: var(--ink);
 }
+.manager .card .acts .icon.star[aria-pressed="true"] {
+  color: var(--warn);
+}
 .manager .card .acts .icon.danger:hover:not(:disabled) {
   color: var(--danger);
 }
@@ -788,9 +838,6 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-.manager .card .preview.none {
-  color: var(--ink-3);
 }
 .manager .card .where {
   display: inline-flex;
@@ -812,13 +859,23 @@
   color: var(--ink);
   font-weight: 600;
 }
+.manager .card .turns {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.manager .card .turns.zero {
+  font-weight: 400;
+  color: var(--ink-3);
+}
 .manager .card .meta {
+  flex: none;
   font-size: var(--text-caption);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .manager .empty {
   margin: var(--space-1) 0;
@@ -833,29 +890,6 @@
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
-/* the cleanup's footer, always there: the quick picks, and the delete of what is checked */
-.sheet footer.manage {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  padding-inline: var(--space-4);
-  padding-top: var(--space-2);
-  font-size: var(--text-caption);
-  color: var(--ink-3);
-}
-.sheet footer.manage .quick {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.sheet footer.manage .chip.danger {
-  height: 26px;
-  padding: 0 10px;
-  font-size: var(--text-footnote);
-}
 /* the export: the question, its line, the two formats as links */
 .confirm .sub {
   margin-top: calc(-1 * var(--space-2));
@@ -866,23 +900,14 @@
   text-decoration: none;
 }
 /* the persona picker (dialogs.tsx): a sheet (rising on a phone; on desktop a centred card of 25rem) with a search
-   over the player's personas and two-line rows, the card's own first; the list alone scrolls */
+   over the player's personas and their rows, the card's own first; the list alone scrolls */
 .picker {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-1) var(--space-4) var(--space-3);
-}
-.picker .search {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.picker .search .input-box {
-  flex: 1;
+  padding: var(--space-1) var(--space-4) var(--space-4);
 }
 .picker .list {
   flex: 1;
@@ -890,58 +915,64 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
   margin: 0 calc(-1 * var(--space-2));
-  padding: 0 var(--space-2);
+  padding: 2px var(--space-2);
 }
-/* a row: the name, under it the text's first line, the check at the right on the pick in force */
+/* a row: a surface card, the name over an optional bio line, the check at the right on the pick in force */
 .picker .item {
   flex: none;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--space-2);
-  row-gap: 1px;
+  row-gap: 2px;
   align-items: center;
   width: 100%;
-  padding: 6px var(--space-2);
+  min-height: 40px;
+  padding: 6px var(--space-3);
   border: 0;
-  border-radius: var(--radius);
-  background: none;
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
   color: inherit;
   font: inherit;
   text-align: left;
+  transition:
+    background var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 .picker .item:hover,
 .picker .item:focus-visible {
   background: var(--ghost-hover);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
   outline: none;
 }
+.picker .item[aria-checked="true"] {
+  background: var(--alpha-1);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
 .picker .item .name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
-  font-weight: 500;
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .picker .item[aria-checked="true"] .name {
-  font-weight: 600;
-  color: var(--primary);
-}
-.picker .item .name .tag {
-  height: 18px;
-  padding: 0 5px;
   font-weight: 500;
+  color: var(--primary);
 }
 .picker .item .check {
   grid-column: 2;
-  grid-row: 1 / span 2;
-  width: 14px;
-  height: 14px;
+  grid-row: 1;
+  width: 15px;
+  height: 15px;
   color: var(--ink);
   visibility: hidden;
+}
+.picker .item:has(.bio) .check {
+  grid-row: 1 / span 2;
 }
 .picker .item[aria-checked="true"] .check {
   visibility: visible;
@@ -953,13 +984,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.picker hr {
-  flex: none;
-  margin: 2px var(--space-2);
-  border: 0;
-  height: var(--hairline);
-  background: var(--line);
 }
 .picker .empty {
   margin: var(--space-1) 0;
@@ -973,9 +997,6 @@
   text-align: center;
   color: var(--ink-3);
   font-size: var(--text-footnote);
-}
-.sheet footer .btn.ghost {
-  gap: 4px;
 }
 /* the pick in force among the menu's names */
 .snippets [aria-checked="true"] .name {

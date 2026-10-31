@@ -1,17 +1,14 @@
 // The stories manager (#75): every story of one card (the sidebar's workspace, #117) in one sheet, the picker's
-// mechanism one step wider. A search
-// over the title here and over the turns on the server (the stories are unnamed as a rule, so a title search finds
-// nothing: the hit is a turn's line, note or prose, shown in the card's preview line in place of the last line
-// written), the 全部 / 收藏 toggle, three-line cards (checkbox, star, name and its three actions; the preview; the
-// turns and the time), and the cleanup's footer: the issue's two quick picks and 删除选中. Opening, renaming, deleting
-// and exporting a story are the library's dialogs (dialogs.tsx); this file holds the list and what is checked.
+// mechanism one step wider. A search over the title here and over the turns on the server (the stories are unnamed as a
+// rule, so a title search finds nothing: the hit is a turn's line, note or prose, shown in the card's preview line in
+// place of the last line written), the 全部 / 收藏 toggle, and story cards (star, name, time and actions; preview when
+// present). Opening, renaming, deleting and exporting a story are the library's dialogs (dialogs.tsx).
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Clue, Edit, Export, Snippets, Star, StarFill, Trash } from "./icons.tsx"
+import { Check, Clue, Edit, Export, Star, StarFill, Trash } from "./icons.tsx"
 import { Sheet } from "./readings.tsx"
-import { ago, empty, kindLabel, matches, pieces, preview, ranked, turnLabel, unnamed, type Hit } from "./stories.ts"
-import { focus, registry, stories, type StoryRow, working } from "./store.ts"
-import { showCard } from "./pages.ts"
+import { ago, kindLabel, matches, pieces, preview, ranked, turnLabel, type Hit } from "./stories.ts"
+import { focus, stories, type StoryRow, working } from "./store.ts"
 import { searchStories, starStory } from "./wire.ts"
 import { t } from "./i18n.ts"
 
@@ -42,7 +39,7 @@ export const Manager = (props: {
   const [hits, setHits] = createSignal<ReadonlyMap<number, Hit>>(new Map())
   const [filter, setFilter] = createSignal<"all" | "starred">("all")
   const [picked, setPicked] = createSignal<ReadonlySet<number>>(new Set())
-  let dialog!: HTMLDialogElement
+  const [anchor, setAnchor] = createSignal<number | null>(null)
   let search!: HTMLInputElement
   // the search: the title at once, the turns from the server after a pause in the typing; an answer to an older
   // query than the one typed is dropped
@@ -66,87 +63,86 @@ export const Manager = (props: {
       .filter((s) => filter() === "all" || s.starred)
       .filter((s) => matches(s, q(), hits())),
   )
-  const starred = createMemo(() => rows().filter((s) => s.starred).length)
-  const empties = createMemo(() => rows().filter(empty).length)
-  const unnameds = createMemo(() => rows().filter(unnamed).length)
-  /** The checked rows still there: a deleted story leaves the set by itself. */
+  /** The selected rows still present on this card: a deleted story leaves the set on its own. */
   const chosen = createMemo(() => rows().filter((s) => picked().has(s.id)))
-  const toggle = (id: number) =>
+  const selecting = () => chosen().length > 0
+  const toggle = (id: number) => {
     setPicked((p) => {
       const next = new Set(p)
       if (!next.delete(id)) next.add(id)
       return next
     })
-  const pickAll = (keep: (s: StoryRow) => boolean) =>
-    setPicked(
-      (p) =>
-        new Set([
-          ...p,
-          ...rows()
-            .filter(keep)
-            .map((s) => s.id),
-        ]),
-    )
-  /** Shown: the search and the checks start over, the field takes the focus (the dialog's own toggle event). */
+    setAnchor(id)
+  }
+  const rangeTo = (id: number) => {
+    const cur = list()
+    const a = anchor() !== null ? cur.findIndex((s) => s.id === anchor()) : -1
+    const b = cur.findIndex((s) => s.id === id)
+    if (a < 0 || b < 0) return toggle(id)
+    const [lo, hi] = a < b ? [a, b] : [b, a]
+    setPicked((p) => new Set([...p, ...cur.slice(lo, hi + 1).map((s) => s.id)]))
+    setAnchor(id)
+  }
+  // long-press (~350ms) on a card enters or toggles selection without firing the follow-up click
+  let holdTimer: ReturnType<typeof setTimeout> | undefined
+  let held = false
+  let startX = 0
+  let startY = 0
+  const clearHold = () => clearTimeout(holdTimer)
+  /** Shown: the search and selection start over, the field takes the focus (the dialog's own toggle event). */
   const reset = () => {
     ask("")
     search.value = ""
     setFilter("all")
     setPicked(new Set<number>())
+    setAnchor(null)
     search.focus()
-  }
-  /** The card's page, where Begin makes the story (#116: nothing is made before that moment). */
-  const make = () => {
-    dialog.close()
-    const id = registry.get(focus)
-    if (id !== null) void showCard(id)
   }
   return (
     <Sheet
       dialog={(el) => {
-        dialog = el
         el.addEventListener("toggle", (e) => void ((e as ToggleEvent).newState === "open" && reset()))
+        el.addEventListener("cancel", (e) => {
+          if (selecting()) {
+            e.preventDefault()
+            setPicked(new Set<number>())
+            setAnchor(null)
+          }
+        })
         props.dialog(el)
       }}
       heading={
         <>
           <span>{t("manager.allStories")}</span>
-          <span class="tag mono">{rows().length}</span>
-          <button type="button" class="btn sm ghost" onClick={make}>
-            <Snippets aria-hidden="true" />
-            <span>{t("common.new")}</span>
-          </button>
+          <Show when={chosen().length}>
+            <span class="picked-bar">
+              <span class="turns">#{chosen().length}</span>
+              <button
+                type="button"
+                class="icon danger"
+                aria-label={t("common.delete")}
+                disabled={busy()}
+                onClick={() => props.onDelete(chosen())}
+              >
+                <Trash />
+              </button>
+            </span>
+          </Show>
         </>
       }
-      footer={
-        <footer class="manage">
-          <span class="quick">
-            <span>{t("manager.quickPick")}</span>
-            <button type="button" class="btn xs" onClick={() => pickAll(empty)} title={t("manager.emptyHint")}>
-              {t("manager.empty")} {empties()}
-            </button>
-            <button type="button" class="btn xs" onClick={() => pickAll(unnamed)} title={t("manager.unnamedHint")}>
-              {t("manager.unnamed")} {unnameds()}
-            </button>
-            <Show when={chosen().length}>
-              <button type="button" class="btn xs ghost" onClick={() => setPicked(new Set<number>())}>
-                {t("manager.clear")}
-              </button>
-            </Show>
-          </span>
-          <button
-            type="button"
-            class="chip danger"
-            disabled={!chosen().length || busy()}
-            onClick={() => props.onDelete(chosen())}
-          >
-            {t("manager.deleteSelected")}
-            {chosen().length ? ` ${chosen().length}` : ""}
-          </button>
-        </footer>
-      }
     >
-      <div class="manager">
+      <div
+        class="manager"
+        data-selecting={selecting() ? "" : undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && selecting()) {
+            e.preventDefault()
+            e.stopPropagation()
+            setPicked(new Set<number>())
+            setAnchor(null)
+          }
+        }}
+      >
         <div class="search">
           <div class="input-box sm">
             <Clue aria-hidden="true" />
@@ -160,17 +156,14 @@ export const Manager = (props: {
           </div>
           <div class="filter" role="group" aria-label={t("manager.filterLabel")}>
             <button type="button" aria-pressed={filter() === "all" ? "true" : "false"} onClick={() => setFilter("all")}>
-              <span>{t("manager.all")}</span>
-              <span class="n">{rows().length}</span>
+              {t("manager.all")}
             </button>
             <button
               type="button"
               aria-pressed={filter() === "starred" ? "true" : "false"}
               onClick={() => setFilter("starred")}
             >
-              <StarFill aria-hidden="true" />
-              <span>{t("manager.starred")}</span>
-              <span class="n">{starred()}</span>
+              {t("manager.starred")}
             </button>
           </div>
         </div>
@@ -179,49 +172,73 @@ export const Manager = (props: {
             {(s) => {
               const hit = () => hits().get(s().id)
               const line = () => preview(s())
+              const checked = () => picked().has(s().id)
               return (
                 <div
                   class="card"
                   role="listitem"
                   aria-current={s().id === lib()?.current ? "true" : undefined}
-                  data-checked={picked().has(s().id) ? "" : undefined}
-                  title={t("manager.openStory")}
-                  onClick={() => props.onOpen(s())}
+                  data-checked={checked() ? "" : undefined}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return
+                    held = false
+                    startX = e.clientX
+                    startY = e.clientY
+                    clearHold()
+                    holdTimer = setTimeout(() => {
+                      held = true
+                      toggle(s().id)
+                    }, 350)
+                  }}
+                  onPointerMove={(e) => {
+                    if (holdTimer && Math.hypot(e.clientX - startX, e.clientY - startY) > 6) clearHold()
+                  }}
+                  onPointerUp={clearHold}
+                  onPointerCancel={clearHold}
+                  onPointerLeave={clearHold}
+                  onClick={(e) => {
+                    if (held) {
+                      held = false
+                      return
+                    }
+                    if (e.shiftKey) {
+                      e.preventDefault()
+                      rangeTo(s().id)
+                      return
+                    }
+                    if (e.metaKey || e.ctrlKey || selecting()) {
+                      toggle(s().id)
+                      return
+                    }
+                    props.onOpen(s())
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    class="box"
-                    aria-label={t("manager.select", { title: s().title ?? t("stories.newStory") })}
-                    checked={picked().has(s().id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => toggle(s().id)}
-                  />
-                  <button
-                    type="button"
-                    class="star"
-                    aria-label={s().starred ? t("manager.unstar") : t("manager.star")}
-                    aria-pressed={s().starred ? "true" : "false"}
-                    title={s().starred ? t("manager.starredHint") : t("manager.starHint")}
-                    onClick={(e) => (e.stopPropagation(), void starStory(s().id, !s().starred))}
-                  >
-                    <Show when={s().starred} fallback={<Star aria-hidden="true" />}>
-                      <StarFill aria-hidden="true" />
-                    </Show>
-                  </button>
+                  <span class="box" aria-hidden="true">
+                    <Check />
+                  </span>
                   <div class="body">
                     <div class="top">
                       <span class={{ name: true, unnamed: s().title === null }}>
                         <Mark text={s().title ?? t("stories.newStory")} q={q()} />
                       </span>
-                      <Show when={s().id === lib()?.current}>
-                        <span class="tag ok">{t("manager.current")}</span>
-                      </Show>
+                      <span class={{ turns: true, zero: s().turns === 0 }}>#{s().turns}</span>
+                      <span class="meta">{ago(s().updated)}</span>
                       <span class="acts" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          class="icon star"
+                          aria-label={s().starred ? t("manager.unstar") : t("manager.star")}
+                          aria-pressed={s().starred ? "true" : "false"}
+                          onClick={() => void starStory(s().id, !s().starred)}
+                        >
+                          <Show when={s().starred} fallback={<Star aria-hidden="true" />}>
+                            <StarFill aria-hidden="true" />
+                          </Show>
+                        </button>
                         <button
                           type="button"
                           class="icon"
                           aria-label={t("manager.rename")}
-                          title={t("manager.rename")}
                           onClick={() => props.onRename(s())}
                         >
                           <Edit />
@@ -230,7 +247,6 @@ export const Manager = (props: {
                           type="button"
                           class="icon"
                           aria-label={t("common.export")}
-                          title={t("manager.exportHint")}
                           onClick={() => props.onExport(s())}
                         >
                           <Export />
@@ -239,7 +255,6 @@ export const Manager = (props: {
                           type="button"
                           class="icon danger"
                           aria-label={t("common.delete")}
-                          title={t("manager.deleteStory")}
                           disabled={busy()}
                           onClick={() => props.onDelete([s()])}
                         >
@@ -247,11 +262,10 @@ export const Manager = (props: {
                         </button>
                       </span>
                     </div>
-                    {/* the preview: the turn the search hit, else the last line written, else the opening alone */}
                     <Show
                       when={hit()}
                       fallback={
-                        <Show when={line()} fallback={<div class="preview none">{t("manager.notStarted")}</div>}>
+                        <Show when={line()}>
                           {(l) => (
                             <div class="preview">
                               <Mark text={l()} q={q()} />
@@ -264,17 +278,11 @@ export const Manager = (props: {
                         <div class="preview">
                           <span class="where">
                             {turnLabel(h())} · {kindLabel(h().kind)}
-                            {h().count > 1 ? t("manager.hits", { n: h().count }) : ""}
                           </span>
                           <Mark text={h().text} q={q()} />
                         </div>
                       )}
                     </Show>
-                    <div class="meta">
-                      {s().turns
-                        ? t("manager.turnsUpdated", { turns: s().turns, when: ago(s().updated) })
-                        : t("manager.noTurns", { when: ago(s().updated) })}
-                    </div>
                   </div>
                 </div>
               )

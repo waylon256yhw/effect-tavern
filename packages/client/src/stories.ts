@@ -2,7 +2,7 @@
 // the card's four rows; the manager's search over the title here and over the turns on the server (its hits by
 // story id), the quick picks of the cleanup (#75), the preview a row carries. Pure over the rows the wire holds.
 import type { StoryRow } from "./store.ts"
-import { locale as current, t } from "./i18n.ts"
+import { t } from "./i18n.ts"
 
 /** A search hit as the server answers it (server data.ts `Hit`): the earliest turn on the head's line whose player
  *  line, note or prose holds the query (turn 0 is the greeting), a snippet of that field, and how many nodes hit. */
@@ -17,19 +17,14 @@ export interface Hit {
 /** ASCII case folded, as the server's search folds (SQLite's lower()): the title here and the turns there match
  *  the same way, and a fold never moves an index (JS's toLowerCase can lengthen a string: İ becomes two units). */
 export const fold = (s: string): string => s.replace(/[A-Z]+/g, (m) => m.toLowerCase())
-const units: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["day", 864e5],
-  ["hour", 36e5],
-  ["minute", 6e4],
-]
-const formats = new Map<string, Intl.RelativeTimeFormat>()
-/** "2 hours ago", "yesterday", "now" in the locale given (the card's rows are English, the manager Chinese). */
-export const ago = (at: number, locale: string = current(), now = Date.now()): string => {
-  let rel = formats.get(locale)
-  if (!rel) formats.set(locale, (rel = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })))
-  const d = at - now
-  const u = units.find(([, ms]) => Math.abs(d) >= ms)
-  return u ? rel.format(Math.round(d / u[1]), u[0]) : locale.startsWith("zh") ? "刚刚" : "now"
+const pad = (n: number): string => String(n).padStart(2, "0")
+/** Standard `YYYY/MM/DD` date, with `HH:mm:ss` when touched within the last 24 hours. */
+export const ago = (at: number, now = Date.now()): string => {
+  const d = new Date(at)
+  const day = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
+  return Math.abs(now - at) < 864e5
+    ? `${day} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    : day
 }
 /** Starred first; within each, the listing's own order (newest first). */
 export const ranked = (rows: readonly StoryRow[]): StoryRow[] =>

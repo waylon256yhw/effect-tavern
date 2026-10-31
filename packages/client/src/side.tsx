@@ -290,7 +290,10 @@ export const Sidebar = (props: {
                           <span class={{ name: true, unnamed: s().title === null }}>
                             <Mark text={s().title ?? t("stories.newStory")} q={sq()} />
                           </span>
-                          <Show when={s().busy}>
+                          <Show
+                            when={s().busy}
+                            fallback={<span class={{ turns: true, zero: s().turns === 0 }}>#{s().turns}</span>}
+                          >
                             <i class="busy-dot" role="status" aria-label={t("side.storyBusy")} />
                           </Show>
                         </span>

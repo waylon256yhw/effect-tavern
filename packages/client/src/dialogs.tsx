@@ -6,7 +6,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { roam } from "./controls.tsx"
-import { Check, Clue, Jump, Snippets } from "./icons.tsx"
+import { Check, Clue, Jump } from "./icons.tsx"
 import { Manager } from "./manager.tsx"
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
@@ -182,79 +182,63 @@ export const StoryDialogs = () => {
         onDelete={(rows) => bound.del(rows)}
         onExport={(s) => bound.exp(s)}
       />
-      {/* the picker: a search over the player's personas and two-line rows, the card's own first; made and edited on
+      {/* the picker: a search over the player's personas and their rows, the card's own first; made and edited on
         the settings page */}
       <Sheet
         dialog={(el) => (picker = el)}
-        heading={t("side.pickPersona")}
-        footer={
-          <footer>
-            <button type="button" class="btn ghost" onClick={manage}>
+        heading={
+          <>
+            <span>{t("side.pickPersona")}</span>
+            <button type="button" class="btn sm ghost" onClick={manage}>
               <span>{t("side.managePersonas")}</span>
               <Jump aria-hidden="true" />
             </button>
-          </footer>
+          </>
         }
       >
         <div class="picker">
-          <div class="search">
-            <div class="input-box sm">
-              <Clue aria-hidden="true" />
-              <input
-                type="search"
-                ref={(el) => (search = el)}
-                placeholder={t("side.searchPersonas")}
-                aria-label={t("side.searchPersonasLabel")}
-                onInput={(e) => setQ(e.currentTarget.value)}
-              />
-            </div>
-            <span class="tag mono">{people().length}</span>
+          <div class="input-box sm">
+            <Clue aria-hidden="true" />
+            <input
+              type="search"
+              ref={(el) => (search = el)}
+              placeholder={t("side.searchPersonas")}
+              aria-label={t("side.searchPersonasLabel")}
+              onInput={(e) => setQ(e.currentTarget.value)}
+            />
           </div>
           <div class="list scroller" role="menu" onKeyDown={roam}>
             <Show when={showDefault()}>
               <button
                 type="button"
                 role="menuitemradio"
-                class="item default"
+                class="item"
                 aria-checked={current() ? "false" : "true"}
                 onClick={() => (picker.close(), pick(undefined))}
               >
-                <span class="name">
-                  {t("side.cardDefault")}
-                  <span class="tag">{t("side.withCard")}</span>
-                </span>
+                <span class="name">{t("side.cardDefault")}</span>
                 <Check class="check" aria-hidden="true" />
-                <span class="bio">{t("side.cardPersonaBio")}</span>
               </button>
-              <Show when={hits().length}>
-                <hr />
-              </Show>
             </Show>
             <For each={hits()} keyed={(p) => p.id}>
-              {(p) => (
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  class="item"
-                  aria-checked={p().id === current()?.id ? "true" : "false"}
-                  onClick={() => (picker.close(), pick(p().id))}
-                >
-                  <span class="name">{p().name}</span>
-                  <Check class="check" aria-hidden="true" />
-                  <span class="bio">{p().text.split("\n")[0]}</span>
-                </button>
-              )}
+              {(p) => {
+                const bio = () => p().text.split("\n")[0]?.trim() ?? ""
+                return (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    class="item"
+                    aria-checked={p().id === current()?.id ? "true" : "false"}
+                    onClick={() => (picker.close(), pick(p().id))}
+                  >
+                    <span class="name">{p().name}</span>
+                    <Check class="check" aria-hidden="true" />
+                    <Show when={bio()}>{(b) => <span class="bio">{b()}</span>}</Show>
+                  </button>
+                )
+              }}
             </For>
-            <Show when={!people().length}>
-              <div class="empty">
-                <span>{t("side.noPersonas")}</span>
-                <button type="button" class="btn sm" onClick={manage}>
-                  <Snippets aria-hidden="true" />
-                  <span>{t("side.makeOne")}</span>
-                </button>
-              </div>
-            </Show>
-            <Show when={people().length && q().trim() && !hits().length && !showDefault()}>
+            <Show when={q().trim() && !hits().length && !showDefault()}>
               <div class="empty">
                 <span>{t("side.noPersonaMatch", { q: q().trim() })}</span>
               </div>

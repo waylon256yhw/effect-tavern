@@ -73,16 +73,10 @@ assert.deepEqual(pieces("İstanbul", "stan"), [
 ]) // only ASCII folds, so the marks land where the text is
 assert.deepEqual(pieces("Ärger", "ärger"), [{ text: "Ärger", hit: false }]) // as the server would not match it either
 assert.equal(matches(row(9, { title: "Ärger" }), "ärger", new Map()), false)
-const now = 1_000_000_000_000
+const now = new Date(2026, 9, 31, 22, 55, 12).getTime()
 assert.deepEqual(
-  [
-    ago(now - 16 * 6e4, "en", now),
-    ago(now - 16 * 6e4, "zh", now),
-    ago(now - 864e5, "en", now),
-    ago(now, "en", now),
-    ago(now, "zh", now),
-  ],
-  ["16 minutes ago", "16分钟前", "yesterday", "now", "刚刚"],
+  [ago(now, now), ago(now - 16 * 6e4, now), ago(now - 3 * 864e5, now)],
+  ["2026/10/31 22:55:12", "2026/10/31 22:39:12", "2026/10/28"],
 )
 
 assert.deepEqual(rows.map(empty), [false, false, false, false, false, false])

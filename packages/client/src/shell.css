@@ -225,7 +225,7 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 2px var(--space-3) var(--space-3);
+  padding: 2px var(--space-3) var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -252,6 +252,14 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.story-list {
+  padding: 0 4px;
+  max-height: calc(7 * 32px + 6 * 2px);
+  scroll-snap-type: y proximity;
+}
+.story-list > li {
+  scroll-snap-align: start;
 }
 .shelf-list .none,
 .story-list .none {
@@ -417,12 +425,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* a story: its name (or "New story" in ink-2), a dot while its turn runs; under a search, the line that hit */
+/* a story: its name (or "New story" in ink-2), its turn count or a dot while its turn runs; under a search, the line
+   that hit */
 .story-row {
   box-sizing: border-box;
   width: 100%;
-  min-height: 30px;
-  padding: 5px 8px;
+  min-height: 32px;
+  padding: 6px 8px;
   border-radius: var(--radius);
   color: var(--ink-2);
   display: flex;
@@ -452,6 +461,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   min-width: 0;
+  line-height: 20px;
 }
 .story-row .name {
   flex: 1;
@@ -469,6 +479,15 @@
 .story-row[aria-current] .name.unnamed {
   color: var(--ink);
 }
+.story-row .turns {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--ink-2);
+}
+.story-row .turns.zero {
+  color: var(--ink-3);
+}
 .story-row .hit {
   display: block;
   font-size: var(--text-caption);
@@ -482,12 +501,13 @@
   font-weight: 600;
   margin-right: 4px;
 }
-/* the foot of the workspace: the primary action at the bottom, opening the card's page where Begin makes a story */
+/* the foot of the workspace: the primary action under the story list, opening the card's page where Begin makes a story */
 .new-story {
   box-sizing: border-box;
   flex: none;
   width: 100%;
   height: var(--control);
+  margin-top: var(--space-1);
   padding: 0 var(--space-3);
   border-radius: var(--radius);
   background: var(--primary);
