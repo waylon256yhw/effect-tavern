@@ -1,8 +1,10 @@
 // The settings page (issue #33; docs/settings-prototype.html and its brief): the player's assets that hold across cards
 // and stories, in four sections: the model providers (模型服务, providers.tsx), which model runs each stage (默认模型),
 // the hats (提示词模板 in the UI) and the personas (玩家人设). Desktop: three cards on the canvas (nav, list, detail),
-// two for the routing; a phone shows the list or the detail under a bar of four icons. Opened from the session's
-// tools, Escape or Back returns to the story. The page holds only the nav, which section is open, which record each
+// two for the routing; a phone shows the list or the detail under a bar of four icons. A tab of its own (one at most,
+// tabs.ts `settingsTab`), opened by the strip's gear, the drawer's, the draft's missing-model error, the card page's
+// Model row and the persona picker: × on the strip closes it, the phone's Back too (a phone has no strip), and the tab
+// it was opened from comes back. The page holds only the nav, which section is open, which record each
 // section has picked, and the phone's pane; every edit is one write the server answers with the list it changed
 // (wire.ts), text committing on change (blur or Enter). The shared controls and shells are controls.tsx.
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
@@ -14,18 +16,26 @@ import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } fr
 import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
 import { pairKey, pairOf, stalePair } from "./connections.ts"
 import { Providers } from "./providers.tsx"
-import { close, open } from "./pages.ts"
-import { cards, hats, personas, player, providers, routing, type Pair } from "./store.ts"
+import { open } from "./pages.ts"
+import * as Atom from "./atom.ts"
+import { activeOf, cards, hats, personas, player, providers, registry, routing, tabs, type Pair } from "./store.ts"
+import { remove } from "./tabs.ts"
 import { type Key, t } from "./i18n.ts"
 import { deleteHat, deletePersona, putHat, putPersona, putRouting } from "./wire.ts"
 
 export type Section = "providers" | "routing" | "templates" | "personas"
-let opening: Section = "providers"
-/** The page on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's error, the card page). */
+/** The section shown: written by every way in, so a settings tab already open (mounted, or shown again) moves to the
+ *  section asked for, not only a fresh one. */
+const section = Atom.make<Section>("providers").pipe(Atom.keepAlive)
+/** The settings tab on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's error,
+ *  the card page). One tab at most: an open one is switched to (tabs.ts `settingsTab`). */
 export const openSettings = (at: Section = "providers") => {
-  opening = at
-  open("settings") // Back returns to where it was opened from: the card page keeps its Begin
+  registry.set(section, at)
+  open("settings")
 }
+/** The settings tab closed: its × on the strip, or the phone's Back (a phone has no strip); the tab it was opened
+ *  from comes back. */
+const leave = () => void remove(activeOf(registry.get(tabs)).id)
 
 const SECTIONS: [Section, Key, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element][] = [
   ["providers", "settings.providers", Plugs],
@@ -35,7 +45,7 @@ const SECTIONS: [Section, Key, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.E
 ]
 
 export const Settings = () => {
-  const [section, setSection] = createSignal<Section>(opening)
+  const at = read(section)
   const [pane, setPane] = createSignal<"list" | "detail">("list")
   const [picked, setPicked] = createSignal<Partial<Record<Section, string>>>({})
   const paneOf = (s: Section): Pane => ({
@@ -45,16 +55,14 @@ export const Settings = () => {
     onPick: (id) => (setPicked((p) => ({ ...p, [s]: id })), setPane("detail")),
     onBack: () => setPane("list"),
   })
-  const switchTo = (s: Section) => (setSection(s), setPane("list"))
-  const title = () => t(SECTIONS.find(([s]) => s === section())![1])
+  const switchTo = (s: Section) => (registry.set(section, s), setPane("list"))
+  const title = () => t(SECTIONS.find(([s]) => s === at())![1])
 
   return (
-    <div class="settings" data-section={section()} data-pane={section() === "routing" ? "detail" : pane()}>
+    <div class="settings" data-section={at()} data-pane={at() === "routing" ? "detail" : pane()}>
       <nav class="nav-card" aria-label={t("common.settings")}>
+        {/* no Back on the canvas: the settings are a tab, closed by its × on the strip */}
         <div class="nav-head">
-          <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
-            <Back />
-          </button>
           <h1>{t("common.settings")}</h1>
         </div>
         <div class="nav-list">
@@ -63,7 +71,7 @@ export const Settings = () => {
               <button
                 type="button"
                 class="nav-item"
-                aria-current={section() === s()[0] ? "page" : undefined}
+                aria-current={at() === s()[0] ? "page" : undefined}
                 onClick={() => switchTo(s()[0])}
               >
                 <Dynamic component={s()[2]} aria-hidden="true" />
@@ -74,7 +82,7 @@ export const Settings = () => {
         </div>
       </nav>
       <header class="phone-bar">
-        <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
+        <button type="button" class="icon" aria-label={t("settings.close")} onClick={leave}>
           <Back />
         </button>
         <span class="title">{title()}</span>
@@ -85,7 +93,7 @@ export const Settings = () => {
                 type="button"
                 role="tab"
                 aria-label={t(s()[1])}
-                aria-selected={section() === s()[0] ? "true" : "false"}
+                aria-selected={at() === s()[0] ? "true" : "false"}
                 onClick={() => switchTo(s()[0])}
               >
                 <Dynamic component={s()[2]} aria-hidden="true" />
@@ -94,16 +102,16 @@ export const Settings = () => {
           </For>
         </div>
       </header>
-      <Show when={section() === "providers"}>
+      <Show when={at() === "providers"}>
         <Providers {...paneOf("providers")} />
       </Show>
-      <Show when={section() === "routing"}>
+      <Show when={at() === "routing"}>
         <Routing />
       </Show>
-      <Show when={section() === "templates"}>
+      <Show when={at() === "templates"}>
         <Templates {...paneOf("templates")} />
       </Show>
-      <Show when={section() === "personas"}>
+      <Show when={at() === "personas"}>
         <Personas {...paneOf("personas")} />
       </Show>
       <Confirm />

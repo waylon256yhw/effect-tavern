@@ -1,10 +1,11 @@
 // The player's block shrink-wrapped (docs/pretext-reading.md §4's one use so far): a line that fills the column and
 // drops two characters onto a second row leaves the bubble wide and mostly empty at its right. pretext measures the
 // text off the DOM (`prepare` once per bubble, `measureLineStats` per probe, pure arithmetic after the first), so the
-// tightest width that keeps the line count the column gave can be found by bisection and set on the block, and the
+// tightest width that keeps the line count the lane gave can be found by bisection and set on the bubble, and the
 // browser wraps the same text into the same number of rows, each about as full as the next. Nothing in the block's
-// DOM changes: the width is one inline style on `.spoke`, cleared when the block leaves. The column's width is read
-// once per resize (one ResizeObserver on the reader's `main`), every block refits from it; a font that lands late
+// DOM changes: the width is one inline style on each `.said` (the line's bubble and the note, each to its own words),
+// cleared when the block leaves. The lane (the column's width under `LANE`) is read once per resize (one
+// ResizeObserver on the reader's `main`), every block refits from it; a font that lands late
 // refits too. `tight` is the arithmetic, over any measurer, so test/shrinkwrap.ts can walk it without a canvas.
 import { measureLineStats, prepare, type PreparedText } from "@chenglou/pretext"
 
@@ -38,15 +39,19 @@ const blocks = new Set<HTMLElement>()
 const texts = new WeakMap<HTMLElement, { font: string; prepared: PreparedText }>()
 let column: HTMLElement | null = null
 let watching: ResizeObserver | undefined
-let available = 0 // the column's content width, as last read
+let available = 0 // the player's lane: the column's content width under the cap below, as last read
+/** The lane the player's block stands in at the column's right: this share of the column, and no wider than this
+ *  many rem. reader.css `.spoke` writes the same cap as its max-width; the two change together. */
+export const LANE = { share: 0.8, rem: 36 }
 
 /** The canvas font of an element, from the four parts the shorthand needs (the computed shorthand is empty in some
  *  browsers); the same stack the CSS paints with, so the measure is the browser's own. */
 const fontOf = (s: CSSStyleDeclaration) => `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`
 const pad = (s: CSSStyleDeclaration) => parseFloat(s.paddingLeft) + parseFloat(s.paddingRight)
+/** Each of the block's pieces (the line's bubble, the note under it) to its own tightest wrap: the bubble hugs its
+ *  own words whatever the note's width, and the block is as wide as the wider of them. */
 const fit = (block: HTMLElement) => {
   if (available <= 0) return
-  let w = 0
   for (const bubble of block.querySelectorAll<HTMLElement>(".said")) {
     const s = getComputedStyle(bubble)
     const inner = available - pad(s)
@@ -58,14 +63,16 @@ const fit = (block: HTMLElement) => {
       texts.set(bubble, t)
     }
     const { prepared } = t
-    w = Math.max(w, tight((width) => measureLineStats(prepared, width), inner) + pad(s))
+    const w = tight((width) => measureLineStats(prepared, width), inner) + pad(s)
+    bubble.style.width = `${Math.min(available, w)}px`
   }
-  block.style.width = w > 0 ? `${Math.min(available, w)}px` : ""
 }
 const refit = () => {
   if (!column) return
   const s = getComputedStyle(column)
-  available = column.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+  const content = column.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
+  available = Math.min(content * LANE.share, LANE.rem * rem)
   for (const b of blocks) fit(b)
 }
 
@@ -83,6 +90,6 @@ export const shrinkwrap = (block: HTMLElement): (() => void) => {
   } else fit(block)
   return () => {
     blocks.delete(block)
-    block.style.width = ""
+    for (const bubble of block.querySelectorAll<HTMLElement>(".said")) bubble.style.width = ""
   }
 }

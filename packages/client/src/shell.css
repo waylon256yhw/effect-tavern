@@ -484,6 +484,36 @@
 /* ── 读数 (readings.tsx `StatusPage`): a page over the reader, the world's standing slice at the left (the pin,
    Status), this turn's change at the right (its Record, 小剧场). Each column bounded to 22–26rem and scrolling on its
    own; one column over the other when the stage card has no room for two ── */
+/* ── home (home.tsx): a placeholder until what it holds is settled, a mark and a title in the middle of the stage
+   card. It covers the reader like a page; on a phone it starts under the strip, so the drawer's key stays in view ── */
+.home-page {
+  position: absolute;
+  inset: calc(var(--strip) + var(--safe-top)) 0 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: var(--surface-1);
+  color: var(--ink-3);
+}
+.home-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: 8vh; /* the optical centre sits a little above the box's */
+}
+.home-mark svg {
+  width: 40px;
+  height: 40px;
+}
+.home-mark h1 {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+}
+
 .status-page {
   position: absolute;
   inset: 0;
@@ -613,11 +643,12 @@ dialog.drawer[open]::backdrop {
 /* ── from 72rem: the canvas, the sidebar in its space, the stage card raised ── */
 @media (min-width: 72rem) {
   /* the strip over the canvas: the fold key at the far left, the tab naming what is read; the install's keys at the
-     right end, there whether the sidebar is folded or not */
+     right end, there whether the sidebar is folded or not. Its right inset is the stage keys' (the canvas's 8px
+     margin and their 12px inset): the two rows of keys share one right edge */
   .shell-top {
     box-sizing: border-box;
     height: calc(var(--shell-top) + var(--safe-top));
-    padding: var(--safe-top) 10px 0;
+    padding: var(--safe-top) calc(8px + var(--space-3)) 0 10px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -625,42 +656,69 @@ dialog.drawer[open]::backdrop {
     background: var(--surface-0);
     user-select: none;
   }
-  /* the tabs (tabs.ts): the active one raised on a hairline, the others flat; each shrinks, the names truncating,
-     never wrapping */
+  /* the tabs (tabs.ts): equal width across the strip, shrinking together when the strip fills; the active one raised on
+     a hairline, the inactive ones separated by a short vertical rule; each has its route icon at the left and × at the
+     right, the names truncating, never wrapping */
   .shell-tab {
+    position: relative;
     box-sizing: border-box;
     height: 24px;
-    max-width: 18rem;
-    min-width: 0;
-    flex: 0 1 auto;
-    padding: 0 4px 0 9px;
+    width: 10.5rem;
+    flex: 0 1 10.5rem;
+    min-width: 4.5rem;
+    padding: 0 4px 0 8px;
     border-radius: 6px;
     font-size: var(--text-footnote);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     transition: background var(--dur-2) var(--ease);
   }
   .shell-tab[aria-current="page"] {
     background: var(--alpha-1);
     box-shadow: inset 0 0 0 var(--hairline) var(--line);
   }
-  .shell-tab:hover:has(.name[data-back="true"]) {
+  .shell-tab:not([aria-current="page"]):hover {
     background: var(--fill);
   }
+  .shell-tab:not([aria-current="page"]) + .shell-tab:not([aria-current="page"])::before {
+    content: "";
+    position: absolute;
+    left: -3.5px;
+    top: 5px;
+    bottom: 5px;
+    width: var(--hairline);
+    background: var(--line);
+    pointer-events: none;
+  }
+  .shell-tab:not([aria-current="page"]):hover::before,
+  .shell-tab:not([aria-current="page"]):hover + .shell-tab::before {
+    opacity: 0;
+  }
   .shell-tab .name {
+    flex: 1;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
     height: 100%;
     cursor: pointer;
   }
-  .shell-tab .name[data-back="false"] {
-    cursor: default; /* the active tab in its reader only names what is read */
+  .shell-tab[aria-current="page"] .name {
+    cursor: default;
+  }
+  .shell-tab .name > svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+    color: var(--ink-3);
+  }
+  .shell-tab[aria-current="page"] .name > svg {
+    color: var(--ink-2);
   }
   .shell-tab .c {
     flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -685,19 +743,33 @@ dialog.drawer[open]::backdrop {
   .busy-dot.still {
     animation: none; /* unread: the turn is done, the dot holds */
   }
+  .home-page {
+    inset: 0; /* no strip on the canvas: home fills the stage card */
+  }
   .top-end {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px; /* the stage keys' pitch: the two rows match key for key */
   }
-  /* the reader's keys in the stage card's corner (shell.tsx for the 98px ceiling); the column's head is their row */
+  /* two rows of keys, two layers: the strip's are the ground's (the install's, touched rarely), in ink-3 and a step
+     up when pressed or under the pointer; the stage keys stand on the card (this story's, touched in play) in the
+     icon's own ink-2. One right edge, one pitch, two weights: aligned, never read as one 2×3 toolbar */
+  .shell-top .icon {
+    color: var(--ink-3);
+  }
+  .shell-top .icon:is(:hover, [aria-pressed="true"]):not(:disabled) {
+    color: var(--ink-2);
+  }
+  /* the reader's keys in the stage card's corner (shell.tsx for the 98px ceiling), on the centre line of the
+     sidebar's top row beside them; the column's head is that row's height, so the first line starts level with the
+     sidebar's first control */
   .stage-card {
-    --head: calc(2 * var(--space-2) + 26px);
+    --head: var(--strip);
   }
   .stage-keys {
     position: absolute;
-    top: var(--space-2);
+    top: calc((var(--strip) - 26px) / 2);
     right: var(--space-3);
     z-index: 4;
     display: flex;

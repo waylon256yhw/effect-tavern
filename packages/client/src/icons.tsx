@@ -37,6 +37,9 @@ export { default as Translate } from "~icons/ph/translate" // the locale flip (i
 export { default as Plugs } from "~icons/ph/plugs"
 export { default as Sliders } from "~icons/ph/sliders-horizontal"
 export { default as Archive } from "~icons/ph/archive" // a card's story manager (side.tsx)
+export { default as Home } from "~icons/ph/books" // home's placeholder mark (home.tsx) and tab icon
+export { default as Card } from "~icons/ph/cards" // a card page's tab icon (shell.tsx)
+export { default as Chat } from "~icons/ph/chat-circle" // the reader's tab icon (shell.tsx)
 export { default as Template } from "~icons/ph/brackets-curly"
 export { default as User } from "~icons/ph/user"
 export { default as Minus } from "~icons/ph/minus"

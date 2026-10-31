@@ -15,14 +15,27 @@ import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
-import { Close, List, Probe, Sidebar as SidebarGlyph, Snippets as Plus, Status, Tree } from "./icons.tsx"
+import {
+  Card as CardGlyph,
+  Chat,
+  Close,
+  Edit,
+  Home,
+  List,
+  Probe,
+  Settings,
+  Sidebar as SidebarGlyph,
+  Snippets as Plus,
+  Status,
+  Tree,
+} from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
 import { InstallKeys, Sidebar } from "./side.tsx"
-import { card, cards, page, path, stories, tabs } from "./store.ts"
+import { card, cards, isHome, isSettings, page, type Page, path, stories, tabs } from "./store.ts"
 import { add, remove, unread } from "./tabs.ts"
 import { openTimeline } from "./timeline.tsx"
-import { close, open, pick } from "./pages.ts"
+import { open, pick } from "./pages.ts"
 import { t } from "./i18n.ts"
 
 const FOLDED = "side-folded"
@@ -167,8 +180,6 @@ export const Shell = (props: { children: JSX.Element }) => {
       store(WIDTH, String(keep))
     }
   }
-  /** 读数: a page like the others (readings.tsx `StatusPage`); the key again closes it. */
-  const readings = () => (pg() === "status" ? close() : open("status"))
   // ── what the strips name ──
   const current = createMemo(() => lib()?.stories.find((s) => s.id === lib()?.current))
   const storyCard = () => {
@@ -182,7 +193,9 @@ export const Shell = (props: { children: JSX.Element }) => {
   // ── the phone's drawer ──
   let drawer: HTMLDialogElement | undefined
   const leaveDrawer = () => drawer?.close()
-  /** The reader's three keys: Timeline, Inspector, 读数; small on the canvas, the strip's size on the phone. */
+  /** The reader's three keys: Timeline, Inspector, 读数, one behaviour (a page in place, Escape and Back to return);
+   *  small on the canvas, the strip's size on the phone. They are the reader's, so no page they open is ever under
+   *  them: no key of the three has a pressed state. */
   const Keys = () => (
     <>
       <button type="button" class={{ icon: true, sm: wide() }} aria-label={t("common.timeline")} onClick={openTimeline}>
@@ -202,8 +215,7 @@ export const Shell = (props: { children: JSX.Element }) => {
         class={{ icon: true, sm: wide() }}
         aria-label={t("side.readings")}
         disabled={line().length === 0}
-        aria-pressed={pg() === "status" ? "true" : "false"}
-        onClick={readings}
+        onClick={() => open("status")}
       >
         <Status />
       </button>
@@ -225,23 +237,45 @@ export const Shell = (props: { children: JSX.Element }) => {
           >
             <SidebarGlyph />
           </button>
-          {/* the tabs (tabs.ts): each names its card › story, whatever its stage shows (a page names itself in its own
-            head); the active one on a page is the way back to its story, another one is a switch to it */}
+          {/* the tabs (tabs.ts): equal-width; the icon is the route (the page on the stage), the text is where the tab
+            is (card › story, card, 主页, or 设置); another tab clicked switches to it, the active one does nothing */}
           <For each={strip().list} keyed={(x) => x.id}>
             {(x) => {
               const row = () => lib()?.stories.find((s) => s.id === x().story)
               const on = () => x().id === strip().active
               // the story is named only while the tab is on its card: another card browsed names that card alone
               const named = () => (row()?.card === x().card ? row() : undefined)
+              const glyph = (): JSX.Element => {
+                const p: Page = x().page
+                if (typeof p === "object") return <Probe />
+                switch (p) {
+                  case "home":
+                    return <Home />
+                  case "card":
+                    return <CardGlyph />
+                  case "reader":
+                    return <Chat />
+                  case "timeline":
+                    return <Tree />
+                  case "status":
+                    return <Status />
+                  case "writing":
+                    return <Edit />
+                  case "settings":
+                    return <Settings />
+                }
+              }
               return (
                 <div class="shell-tab" aria-current={on() ? "page" : undefined}>
-                  <button
-                    type="button"
-                    class="name"
-                    data-back={!on() || (x().story !== null && pg() !== "reader") ? "true" : "false"}
-                    onClick={() => pick(x().id)}
-                  >
-                    <span class="c">{shelf().find((c) => c.id === x().card)?.title ?? x().card ?? ""}</span>
+                  <button type="button" class="name" onClick={() => pick(x().id)}>
+                    {glyph()}
+                    <span class="c">
+                      {isHome(x())
+                        ? t("home.tab")
+                        : isSettings(x())
+                          ? t("common.settings")
+                          : (shelf().find((c) => c.id === x().card)?.title ?? x().card ?? "")}
+                    </span>
                     <Show when={named()}>
                       {(r) => (
                         <>
@@ -265,11 +299,9 @@ export const Shell = (props: { children: JSX.Element }) => {
                   >
                     <i class="busy-dot" role="status" aria-label={t("side.storyBusy")} />
                   </Show>
-                  <Show when={strip().list.length > 1}>
-                    <button type="button" class="x" aria-label={t("side.closeTab")} onClick={() => void remove(x().id)}>
-                      <Close />
-                    </button>
-                  </Show>
+                  <button type="button" class="x" aria-label={t("side.closeTab")} onClick={() => void remove(x().id)}>
+                    <Close />
+                  </button>
                 </div>
               )
             }}
@@ -332,13 +364,17 @@ export const Shell = (props: { children: JSX.Element }) => {
                     <List />
                   </button>
                   <div class="crumb">
-                    <span class="c">{storyCard()}</span>
-                    <span class="sep" aria-hidden="true">
-                      ›
-                    </span>
-                    <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
+                    <Show when={pg() !== "home"} fallback={<span class="s">{t("home.tab")}</span>}>
+                      <span class="c">{storyCard()}</span>
+                      <span class="sep" aria-hidden="true">
+                        ›
+                      </span>
+                      <span class={{ s: true, unnamed: current()?.title === null }}>{storyTitle()}</span>
+                    </Show>
                   </div>
-                  <Keys />
+                  <Show when={pg() !== "home"}>
+                    <Keys />
+                  </Show>
                 </header>
               }
             >
@@ -346,8 +382,10 @@ export const Shell = (props: { children: JSX.Element }) => {
                 the prose column, and go with the reader when a page covers it. Their footprint is bounded: at 72rem
                 with the sidebar dragged to its 320px ceiling the stage card is about 824px, `main` clamps to 672px,
                 76px of blank plus main's own inline padding is about 100px a side; so three 26px keys, two 4px gaps
-                and the 12px right inset are 98px, the ceiling. The column's head (reader.css `--head`) is the row's
-                height, so the first line starts under them and the prose passes under them in the top fade */}
+                and the 12px right inset are 98px, the ceiling. They sit on the centre line of the sidebar's top row,
+                their right edge under the install keys' on the strip above (shell.css); the column's head (reader.css
+                `--head`) is that row's height, so the first line starts under them and the prose passes under them in
+                the top fade */}
               <Show when={pg() === "reader"}>
                 <div class="stage-keys">
                   <Keys />

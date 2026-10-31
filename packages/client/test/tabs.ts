@@ -1,14 +1,16 @@
 // The tabs (src/tabs.ts) over one Reading on a faked wire: a tab keeps its page stack and scroll, a switch to another
-// story activates it once and a switch to the same story (a mirror) not at all; "+" is a card tab on the workspace's
-// card with nothing in the slots and no story named, so a turn left running and a line half typed stay the story's;
-// a card tab has no reader under it (Escape and its own click do nothing); another card browsed from a story tab
-// keeps the story for Escape; × hands over to the right neighbour first and never takes the last tab; eight at most;
-// a deleted story's tab stays as its card's page, the others stay put; the device's list comes back without the
-// stories the listing does not name; a turn's stages mark its row busy, and its end seen from elsewhere marks it unread
-// until a tab of it is activated.
+// story activates it once and a switch to the same story (a mirror) not at all; "+" is always a home tab with nothing
+// in the slots and no story named, so a turn left running and a line half typed stay the story's; the active tab
+// clicked again does nothing; another card browsed from a story tab keeps the story for Escape, and a card entered from
+// a home tab pushes the card page over home (Back returns to home and the shelf); × hands over to the tab it was opened
+// from or its right neighbour first, and on the last tab leaves a home tab; the settings are one tab at most, and the
+// sidebar opens a new tab rather than navigating it; eight at most; a deleted story's tab stays as its card's page over
+// home, the others stay put; the device's list comes back without the stories the listing does not name; a turn's
+// stages mark its row busy, and its end seen from elsewhere marks it unread until a tab of it is activated; a fresh
+// start lands on a home tab beside the remembered ones.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
-import { browse, close, onDelete, open, openStory, pick, showCard } from "../src/pages.ts"
+import { backOf, browse, close, onDelete, open, openStory, pick, showCard } from "../src/pages.ts"
 import { createReading, reading } from "../src/reading.ts"
 import {
   activeOf,
@@ -17,6 +19,9 @@ import {
   card,
   type CardView,
   focus,
+  isHome,
+  isSettings,
+  layer,
   log,
   page,
   registry,
@@ -27,7 +32,7 @@ import {
   tabs,
   working,
 } from "../src/store.ts"
-import { add, CAP, remove, restore, scroll, select, unread } from "../src/tabs.ts"
+import { add, CAP, home, remove, restore, scroll, select, settingsTab, unread } from "../src/tabs.ts"
 
 const row = (id: number, cardId: string, updated = id): StoryRow =>
   ({ id, card: cardId, busy: null, title: null, starred: false, updated, turns: 1, last: null }) as StoryRow
@@ -67,18 +72,21 @@ top = 120
 setBoxes({ text: "半句", note: "", aside: false })
 apply({ kind: "stage", phase: "lookup" })
 assert.deepEqual([registry.get(working), busy(1)], [true, "lookup"])
-// "+": a card tab on the workspace's card, never a mirror of A: the slots empty, no story named (so the card page's
-// Begin makes a new story), A's row still busy
+// "+": always a home tab, never a mirror of A: the slots empty, no story named, the sidebar on the shelf, A's row still
+// busy
 await add()
-assert.deepEqual([tab().story, tab().card, registry.get(page), opened], [null, "a", "card", [1]])
+assert.deepEqual(
+  [tab().story, tab().card, registry.get(page), registry.get(layer), opened],
+  [null, null, "home", "shelf", [1]],
+)
 assert.deepEqual(
   [boxes().text, registry.get(working), registry.get(log).nodes.size, registry.get(stories)?.current, busy(1)],
   ["", false, 0, null, "lookup"],
 )
-// a card tab has no reader: Escape and its own click leave it on its card page
+// a home tab is the bottom of its stack: Escape and its own click leave it on home
 close()
 pick(tab().id)
-assert.equal(registry.get(page), "card")
+assert.equal(registry.get(page), "home")
 // A's turn ends, read by a listing refresh while this tab is active: A is unread
 rows = rows.map((s) => ({ ...s, busy: null }))
 registry.set(stories, { current: null, stories: rows })
@@ -93,10 +101,10 @@ pick(A)
 await select(A) // the switch pick started, done
 assert.deepEqual([registry.get(page), registry.get(focus), registry.get(card)?.id], ["timeline", "a", "a"])
 assert.deepEqual([opened, restored, boxes().text, registry.get(unread).size], [[1, 2, 1], [120], "半句", 0])
-// the active tab clicked on a page over its story: the reader
+// the active tab clicked again does nothing; each page's own Back returns to the reader
 pick(A)
-assert.equal(registry.get(page), "reader")
-pick(A) // in the reader: nothing
+assert.equal(registry.get(page), "timeline")
+close()
 assert.equal(registry.get(page), "reader")
 // another card's page browsed from A's tab: the tab keeps A, and Escape takes it back with its card
 await showCard("b")
@@ -118,18 +126,21 @@ await select(B)
 await select(M)
 assert.deepEqual(opened.slice(n), [2, 1])
 
-// ×: the active one hands over to its right neighbour first, the left at the end; one not active goes alone
+// ×: the active one hands over to its right neighbour first, the left at the end; on the last tab it resets to a home
+// tab (a home tab already on home is untouched)
 assert.deepEqual(ids(), [A, B, M])
 await select(B)
 await remove(B)
 assert.deepEqual([ids(), tab().id], [[A, M], M])
 await remove(M)
 assert.deepEqual([ids(), tab().id], [[A], A])
-await add()
+await remove(A) // the last tab, on story 1: replaced by a fresh home tab
 const N = tab().id
-await remove(A)
-assert.deepEqual([ids(), tab().id], [[N], N])
-await remove(N) // the last tab stays
+assert.deepEqual(
+  [ids(), N !== A, isHome(tab()), registry.get(page), registry.get(layer)],
+  [[N], true, true, "home", "shelf"],
+)
+await remove(N) // already a home tab on home: nothing
 assert.deepEqual(ids(), [N])
 
 // eight at most: a "+" on a full strip drops the oldest tab but the active one
@@ -150,22 +161,31 @@ await add()
 const F = tab().id
 await onDelete({ current: 1, stories: rows.filter((s) => s.id !== 2) }, [2])
 const d = registry.get(tabs).list.find((t) => t.id === D)!
-assert.deepEqual([d.story, d.card, d.page], [null, "b", "card"]) // story 2's tab: its card's page
+assert.deepEqual([d.story, d.card, d.page, d.under], [null, "b", "card", ["home"]]) // story 2's tab: its card's page over home
 assert.deepEqual([tab().id, tab().story, registry.get(stories)?.current], [F, null, null])
-// the active tab's story deleted: that tab is a card tab on its card, the slots empty, the other tabs intact
+// the active tab's story deleted: that tab is a card tab on its card over home, the slots empty, the other tabs intact
 await select(E)
 const before = registry.get(tabs).list.filter((t) => t.id !== E)
 await onDelete({ current: 1, stories: rows.filter((s) => s.id !== 2 && s.id !== 3) }, [3])
 assert.deepEqual(
-  [tab().id, tab().story, tab().card, registry.get(page), registry.get(stories)?.current, registry.get(log).nodes.size],
-  [E, null, "a", "card", null, 0],
+  [
+    tab().id,
+    tab().story,
+    tab().card,
+    registry.get(page),
+    backOf(tab()),
+    registry.get(stories)?.current,
+    registry.get(log).nodes.size,
+  ],
+  [E, null, "a", "card", "home", null, 0],
 )
 assert.deepEqual(
   registry.get(tabs).list.filter((t) => t.id !== E),
   before,
 )
 
-// the device's list: a story the listing does not name and a card the shelf lacks drop; the active one by index
+// the device's list: a story the listing does not name and a card the shelf lacks drop; the settings tab is at most
+// one; the active one by index
 const lib = { stories: [row(1, "a"), row(3, "a")] }
 const back = restore(
   JSON.stringify({
@@ -174,6 +194,8 @@ const back = restore(
       { story: 9, card: "a" },
       { story: null, card: "b" },
       { story: null, card: "z" },
+      { settings: true },
+      { settings: true },
     ],
     active: 2,
   }),
@@ -181,10 +203,11 @@ const back = restore(
   [{ id: "a" }, { id: "b" }],
 )!
 assert.deepEqual(
-  back.list.map((t) => [t.story, t.card, t.page]),
+  back.list.map((t) => [t.story, t.card, t.page, t.under]),
   [
-    [1, "a", "reader"],
-    [null, "b", "card"],
+    [1, "a", "reader", []],
+    [null, "b", "card", ["home"]],
+    [null, null, "settings", []],
   ],
 )
 assert.equal(back.active, back.list[1]!.id)
@@ -196,4 +219,61 @@ await openStory(1)
 apply({ kind: "stage", phase: "narrate" })
 apply({ kind: "error", message: "x" })
 assert.deepEqual([busy(1), registry.get(unread).size], [null, 0])
+
+// home: a home tab (no story, no card) comes back from the device as one; a fresh start keeps the remembered list
+// and lands on a home tab, the one it has or a new one at the end (on a full strip the oldest goes), the slots empty
+const homed = restore(
+  JSON.stringify({
+    tabs: [
+      { story: 1, card: "a" },
+      { story: null, card: null },
+    ],
+    active: 0,
+  }),
+  lib,
+  [],
+)!
+assert.deepEqual(
+  homed.list.map((t) => [t.story, t.card, t.page]),
+  [
+    [1, "a", "reader"],
+    [null, null, "home"],
+  ],
+)
+await home(homed)
+assert.deepEqual(
+  [ids(), tab().id, registry.get(page), registry.get(layer), registry.get(stories)?.current],
+  [homed.list.map((t) => t.id), homed.list[1]!.id, "home", "shelf", null],
+)
+const full = restore(JSON.stringify({ tabs: Array.from({ length: CAP }, () => ({ story: 1, card: "a" })) }), lib, [])!
+await home(full)
+assert.deepEqual([ids().length, ids().includes(full.list[0]!.id), registry.get(page)], [CAP, false, "home"])
+// a card entered from a home tab pushes its card page over home: Back returns to home and puts the sidebar back on the
+// shelf
+const H = tab().id
+await showCard("b")
+assert.deepEqual(
+  [tab().id, tab().card, registry.get(page), tab().under, backOf(tab())],
+  [H, "b", "card", ["home"], "home"],
+)
+close()
+assert.deepEqual([tab().id, isHome(tab()), registry.get(page), registry.get(layer)], [H, true, "home", "shelf"])
+// the settings tab: one at most, remembers the tab that opened it for ×, and a card picked from the sidebar while on
+// it opens a new tab instead of navigating the settings tab
+await settingsTab()
+const S = tab().id
+assert.deepEqual([S !== H, isSettings(tab()), registry.get(page), tab().from], [true, true, "settings", H])
+await select(H)
+await settingsTab() // switches to S, no second settings tab
+assert.equal(tab().id, S)
+await showCard("b") // leaves S intact, opens a new tab
+assert.ok(tab().id !== S && registry.get(tabs).list.some((t) => t.id === S && isSettings(t)))
+await remove(tab().id)
+await select(S)
+await remove(S) // returns to H (from)
+assert.equal(tab().id, H)
+// switching to a story tab puts the sidebar on its card's workspace (the newest of the restored ones: "+" on the full
+// strip dropped the oldest)
+await select(full.list.at(-1)!.id)
+assert.equal(registry.get(layer), "workspace")
 console.log("tabs ok")

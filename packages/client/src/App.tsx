@@ -4,7 +4,7 @@
 // foot; the version count; Swipe / Reword / Edit); the last section carries the Options container, whose rows fill
 // the composer and never send. The frame around it is the shell's (shell.tsx, #117): the sidebar of cards and
 // stories with the persona and writing rows, the reader's keys (Timeline, Inspector, 读数), and under 72rem the
-// phone's drawer and sheets. The pages (card, Timeline, Settings, Writing, 读数: Status, this turn's Record, 小剧场;
+// phone's drawer and sheets. The pages (home, card, Timeline, Settings, Writing, 读数: Status, this turn's Record, 小剧场;
 // Inspect) fill the stage card over the reader, which stays mounted under them so
 // a turn in flight keeps streaming. Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the
 // canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet menu a popover anchored to its button:
@@ -17,6 +17,7 @@ import { read } from "./bridge.ts"
 import { CardPage } from "./card.tsx"
 import { Composer } from "./composer.tsx"
 import { dust } from "./dust.ts"
+import { Home } from "./home.tsx"
 import { imeController } from "./ime.ts"
 import { Check, Close, Copy, DieFill, Down, Edit, Insert, Next, Prev, Record, Warning } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
@@ -328,11 +329,11 @@ const Said = (props: {
       setCopied(true)
       setTimeout(() => setCopied(false), 1200)
     })
-  // one block: the line's bubble, close under it the note as a marginal line (a word on the side, not a second
-  // speech), then the row; the block keeps the turn's gap to the prose. An opening has no input: no block at all, so
-  // no row of keys hangs over prose the player never wrote. The block is shrink-wrapped (shrinkwrap.ts): as wide as
-  // the tightest wrap that keeps its rows, so a line that spills two characters onto a second row is two even rows,
-  // not a bubble wide open at its right
+  // one block at the column's right: the line's bubble, close under it the note as a marginal line (a word on the
+  // side, not a second speech), then the row; the block keeps the turn's gap to the prose. An opening has no input: no
+  // block at all, so no row of keys hangs over prose the player never wrote. Each piece is shrink-wrapped
+  // (shrinkwrap.ts): as wide as the tightest wrap that keeps its rows, so a line that spills two characters onto a
+  // second row is two even rows, not a bubble wide open at one side, and a short line is not widened by a long note
   let block: HTMLDivElement | undefined
   onSettled(() => (block ? shrinkwrap(block) : undefined))
   return (
@@ -515,7 +516,7 @@ const Reader = () => {
 
 export const App = () => {
   const pg = read(page)
-  // the first load lands on the card page or the reader (pages.ts); one Escape rule for every page over the reader
+  // the first load lands on home, or on the tab a reload left (pages.ts); one Escape rule for every page over the reader
   onSettled(() => {
     void boot()
     addEventListener("keydown", onKey)
@@ -525,7 +526,10 @@ export const App = () => {
     <>
       <Shell>
         <Reader />
-        {/* the pages fill the stage card over the reader (shell.css), each with its own head and Back */}
+        {/* the pages fill the stage card over the reader (shell.css), each with its own head and Back; home has none */}
+        <Show when={pg() === "home"}>
+          <Home />
+        </Show>
         <Show when={pg() === "card"}>
           <CardPage />
         </Show>

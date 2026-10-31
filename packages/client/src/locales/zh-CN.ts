@@ -43,6 +43,7 @@ const zh = {
   common: {
     add: "添加",
     backToStory: "返回故事",
+    backToHome: "返回主页",
     cancel: "取消",
     chars: "{n} 字",
     close: "关闭",
@@ -90,6 +91,10 @@ const zh = {
   },
   controls: {
     backToList: "返回列表",
+  },
+  home: {
+    tab: "主页",
+    title: "effect-tavern",
   },
   inspector: {
     all: "全部",
@@ -272,6 +277,7 @@ const zh = {
     turnActions: "这一轮的动作",
   },
   settings: {
+    close: "关闭设置",
     addMessage: "添加消息",
     byStage: "按阶段指定模型",
     confirmDeleteHat: "删除模板「{name}」？",
@@ -357,7 +363,7 @@ const zh = {
     withCard: "随卡",
     workspace: "单卡工作区",
     writing: "写作",
-    closeTab: "关闭此局",
+    closeTab: "关闭标签页",
     unread: "刚生成完",
     newTab: "新标签页",
   },

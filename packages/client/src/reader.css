@@ -29,8 +29,17 @@ body {
   scrollbar-color: transparent transparent;
   transition: scrollbar-color var(--dur-3) var(--ease);
   /* the prose fades out over the column's padding at both ends, like the composer's text, instead of cutting
-     under the bar or the composer; the head is `--head` where the stage card sets one (the canvas: the reader's keys) */
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--head), #000 calc(100% - var(--fade)), transparent);
+     under the bar or the composer; the head is `--head` where the stage card sets one (the canvas: the reader's keys).
+     At the top the fade lives inside the turn gap above the head: a turn anchored at the head (App.tsx `anchor`) has
+     the turn before it ending a gap higher, wholly in the clear band, so not a sliver of its action row shows over
+     the new one; prose scrolled up still fades out over the gap, under the keys */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent calc(var(--head) - var(--gap-turn)),
+    #000 var(--head),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
 }
 .scroll:hover {
   scrollbar-color: var(--alpha-2) transparent;
@@ -321,9 +330,12 @@ section:has(> .editor) > .actions {
 }
 
 /* the reader's line: a sunken block, the only framed thing in the flow, and plain (#101): its text on its tint, nothing
-   in it to click. The block (.spoke) is as wide as its text wants and no wider than the column: a short line is a
-   short bubble, and a wrapped one is shrink-wrapped to its tightest even wrap by shrinkwrap.ts (an inline width);
-   the keys under it end at the bubble's own right edge either way */
+   in it to click. The block (.spoke) stands at the column's right (the turn alternates: the player's line on the
+   right, the prose from the left), in a lane of 80% of the column and no more than 36rem (shrinkwrap.ts `LANE`), so
+   a long line is still a bubble on the right and not a band across the column. Each piece of it is as wide as its
+   own words: a short line is a short bubble even over a longer note, and a wrapped one is shrink-wrapped to its
+   tightest even wrap by shrinkwrap.ts (an inline width on each .said); the keys under it end at the bubble's own
+   right edge either way. The words inside stay left-aligned: a ragged right edge on a CJK paragraph reads as broken */
 .said {
   background: var(--alpha-1);
   border-radius: var(--radius-card);
@@ -332,17 +344,21 @@ section:has(> .editor) > .actions {
   line-height: 1.6;
   text-align: left;
   white-space: pre-wrap;
+  box-sizing: border-box;
+  max-width: 100%;
+  align-self: flex-end;
 }
 .spoke {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  align-self: flex-start;
+  align-self: flex-end;
   box-sizing: border-box;
-  max-width: 100%;
+  max-width: min(80%, 36rem);
 }
-/* the note to the narrator is not speech: no bubble, its words on the bubble's own text axis (14px in), smaller and
-   lighter; the prose under it starts at the margin, so the indent alone parts them */
+/* the note to the narrator is not speech: no bubble, its words smaller and lighter, ending on the bubble's own text
+   axis (14px in from the block's right edge); the prose under it starts at the column's left margin, so the sides
+   alone part them */
 .said.note {
   background: none;
   border-radius: 0;

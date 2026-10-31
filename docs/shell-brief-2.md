@@ -33,6 +33,7 @@
 - 点：listing 里 `busy !== null` 的故事，其每枚 tab 显示 `.busy-dot`（侧栏同一元素）。`busy` 由客户端也写：打开的那局收到 stage / attach 事件时把它的行写成该阶段，收到节点或错误时写回 null（离开一局时行保持，服务端的下一次 listing 刷新它），否则 "+" 之后没有 PUT、点永远不亮。listing 的读和改名、星标的回复**保留客户端自己的 `current`**（wire.ts `keep`）：对不报故事的请求服务端答它最新的一局，而在哪一局是 tab 的事；只有 boot 的第一份 listing 照服务端给的。**未读点**按故事记（内存）：某局 `busy` 从非空变 null 时它不是活跃 tab 的故事 → 记未读；它的所有 tab 一起亮，切到其中任一枚时一起灭。零服务端改动。
 - 门住的副作用：Escape 与页面栈只对活跃 tab；滚动位置只在离开 tab 时写；activate / deactivate 只由切 tab 和故事调用触发。没有后台 DOM，所以没有别的要门。
 - 没有任何局时顶条左端是一枚空 tab（第一张卡的卡片页，`boot` 已经这么落）。
+- **10-31 改（主页、等宽 tab 与设置 tab）**：`boot` 区分刷新与新开（`performance` 的 navigation type）。刷新回到记住的活跃 tab；新开页面时记住的 tab 留在顶条，活跃的是一枚**主页 tab** `{ story: null, card: null, page: "home" }`（复用已有的，没有就补在末尾，满 8 枚丢最早的），槽位空、左栏在卡架层。"+"永远开一枚主页 tab，最后一枚 tab 也带 ×（点击重置回主页 tab）。tab 等宽（`flex: 0 1 10.5rem`），非活跃 tab 间加短竖线；前置图标表示当前路由页面（`home` / `card` / `reader` / `timeline` / `inspect` / `status` / `writing` / `settings`），文字表示所在位置（`主页` / `卡名` / `卡名 › 局名` / `设置`）；点击活跃 tab 无事，回退统一走各页自己的 `←` 或 Esc。无故事的卡片页（从主页进卡、删档、恢复）栈底垫 `"home"`，`←` 退回主页并把左栏切回卡架。**设置**不再压栈，而是全局至多一枚的独立 tab（`settingsTab`，记住 `from` 以便 × 退回原 tab，桌面端无 `←`；设置 tab 激活时点左栏卡片或故事会先开新 tab，不覆盖设置）。主页内容暂为占位，另议。
 
 ### Reading（新文件 `reading.ts`：一局在客户端的全部持有物）
 
@@ -51,6 +52,7 @@ pages.ts 的 `land` 缩成 `reading.activate(listing.current)` + `arrive`；`on(
 - 宽屏分支删掉整条 `.strip`（crumb、人设 chip、写法 chip、`.strip-right`）。`--strip` token 留给手机顶条。
 - 三枚图标 `position: absolute; top/right` 在舞台卡右上角，`.icon.sm` 三枚含间距与右距 **不超过 98px**。算术：72rem 窗口、左栏拖到上限 320px 时舞台约 824px，`main` 被 clamp 到 672px，纯留白 76px 加 `main` 的内边距约 100px，98px 是这组图标的占宽上限，写成注释。读数键 `aria-pressed` 表示读数页开着；`changed` 的点删掉（轮末 Record pill 已带同一个点）。Inspector 禁用条件不变。
 - 正文的滚动区顶部留出图标行的高度（padding-top，不是一行 flex），第一行起笔在图标之下；滚动时正文在顶部 `--fade` 里从图标底下穿过。不许出现一条横线或一条空白死带。
+- **10-31 改（对齐）**：`--head` 取 `--strip`（44px，左栏顶行的高度），三键 `top` 落在这一行的中线上，正文首行与左栏第一个控件同高；顶部 mask 的渐变只在 `--head − --gap-turn` 到 `--head` 之间，新一轮停靠时上一轮的动作行整段在全透明区里。顶条右 padding 取 8 + 12 = 20px，两组三键共用一根右边线、同一键距（4px）；顶条的安装级键为 ink-3（地面），舞台三键保持 ink-2（实体卡）。读数键的按下态与"再点关闭"删除（读数页打开时三键不在）。
 - 页面（card、timeline、settings、writing、inspect、status）盖住舞台时这三枚图标不显示（它们是阅读器的）。
 
 ### 左栏工作区 `.workspace`（side.tsx、shell.css）

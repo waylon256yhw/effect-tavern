@@ -12,8 +12,8 @@ import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
-import { close, newStory, open } from "./pages.ts"
-import { card, log, personas, player, routing, stories, working } from "./store.ts"
+import { backOf, close, newStory, open } from "./pages.ts"
+import { activeOf, card, log, personas, player, routing, stories, tabs, working } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
@@ -47,6 +47,8 @@ export const CardPage = () => {
   const people = read(personas)
   const route = read(routing)
   const lib = read(stories)
+  const strip = read(tabs)
+  const back = () => backOf(activeOf(strip()))
   /** The persona the player is on this card: the player's pick by name, none when the card's own holds. */
   const persona = () => {
     const id = me()?.persona?.[view()?.id ?? ""]
@@ -78,9 +80,19 @@ export const CardPage = () => {
             <section class="about" aria-label={t("card.card")}>
               <div class="head">
                 <div class="title">
-                  <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
-                    <Back />
-                  </button>
+                  {/* Back only where there is somewhere to go: the story, or home under a card entered from it */}
+                  <Show when={back()}>
+                    {(to) => (
+                      <button
+                        type="button"
+                        class="icon"
+                        aria-label={to() === "home" ? t("common.backToHome") : t("common.backToStory")}
+                        onClick={close}
+                      >
+                        <Back />
+                      </button>
+                    )}
+                  </Show>
                   <h1>{c().title}</h1>
                 </div>
                 <Show when={c().summary}>

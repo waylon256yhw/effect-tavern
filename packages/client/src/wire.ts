@@ -166,6 +166,10 @@ export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
   registry.set(hats, await checked(call(`${base}/hats/${enc(id)}`, json("PUT", body))))
 export const deleteHat = async (id: string): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
+/** What the settings page reads when its tab is shown (tabs.ts): every list it draws, the cards and the model names
+ *  its menus name things by. */
+export const fetchSettings = (): Promise<unknown> =>
+  Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards(), fetchNames()])
 
 /** Sends one action; returns what closes its stream (the turn goes on on the server). */
 export const send = (action: Action): (() => void) =>

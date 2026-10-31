@@ -3,8 +3,8 @@
 // story's card and picks up its turn in flight; no story at all lands on the first card's page; a delete of another
 // story moves nothing, of the open one leaves its tab on the card's page with nothing in the slots; one Escape rule.
 import assert from "node:assert/strict"
-import { close, deleteStory, escaping, land, open, openStory } from "../src/pages.ts"
-import { card, log, page, registry, stories, type StoryRow } from "../src/store.ts"
+import { backOf, close, deleteStory, escaping, land, open, openStory } from "../src/pages.ts"
+import { activeOf, card, focus, layer, log, page, registry, stories, type StoryRow, tabs } from "../src/store.ts"
 import { turn } from "../src/turn.ts"
 
 const node = (id: number, parent: number | null) =>
@@ -40,17 +40,18 @@ const at = () => registry.get(page)
 nodes = [node(0, null)]
 await openStory(1)
 open("card")
-open("settings")
-assert.equal(at(), "settings")
+open("writing")
+assert.equal(at(), "writing")
 close()
 assert.equal(at(), "card")
+assert.equal(backOf(activeOf(registry.get(tabs))), "story")
 close()
 assert.equal(at(), "reader")
 close()
 assert.equal(at(), "reader") // nothing under the reader
-// the reader is under every page: opening it drops what covered it (Begin after browsing Settings from the card page)
+// the reader is under every page: opening it drops what covered it (Begin after browsing Writing from the card page)
 open("card")
-open("settings")
+open("writing")
 open("card")
 open("reader")
 assert.equal(at(), "reader")
@@ -80,24 +81,36 @@ await openStory(2)
 assert.deepEqual([at(), abandoned, registry.get(stories)?.current, registry.get(log).nodes.size], ["reader", 3, 2, 1])
 assert.deepEqual([attached, asked.includes("/api/card")], [3, true]) // the story's own card read, its turn picked up
 
-// no story at all (an empty library): the first card's page over an empty log, no story route asked, nothing attached
+// no story at all (an empty library): the first card's page over home, no story route asked, nothing attached
 asked.length = 0
 await land(listing(null))
 assert.deepEqual(
-  [at(), registry.get(card)?.id, registry.get(log).nodes.size, attached, asked.includes("/api/nodes")],
-  ["card", "first", 0, 3, false],
+  [
+    at(),
+    backOf(activeOf(registry.get(tabs))),
+    registry.get(card)?.id,
+    registry.get(log).nodes.size,
+    attached,
+    asked.includes("/api/nodes"),
+  ],
+  ["card", "home", "first", 0, 3, false],
 )
 await openStory(2)
 
 // a delete of another story: nothing moves, whatever the server picks; of the open one, its tab stays on the card's
-// page with the slots empty, and its id named again (a library made before autoincrement hands a deleted id on) is
-// read afresh
+// page over home with the slots empty, and its id named again (a library made before autoincrement hands a deleted id
+// on) is read afresh
 await openStory(1)
 open("timeline")
 await deleteStory(7)
 assert.deepEqual([at(), abandoned, registry.get(log).nodes.size, registry.get(stories)?.current], ["timeline", 6, 1, 1])
 await deleteStory(1)
-assert.deepEqual([at(), abandoned, registry.get(log).nodes.size, registry.get(stories)?.current], ["card", 7, 0, null])
+assert.deepEqual(
+  [at(), backOf(activeOf(registry.get(tabs))), abandoned, registry.get(log).nodes.size, registry.get(stories)?.current],
+  ["card", "home", 7, 0, null],
+)
+close()
+assert.deepEqual([at(), registry.get(focus), registry.get(layer)], ["home", null, "shelf"])
 nodes = [node(0, null), node(1, 0)]
 await openStory(1)
 assert.deepEqual([at(), abandoned, registry.get(log).nodes.size], ["reader", 8, 2])

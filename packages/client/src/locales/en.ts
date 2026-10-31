@@ -44,6 +44,7 @@ const en: Dict = {
   common: {
     add: "Add",
     backToStory: "Back to story",
+    backToHome: "Back to home",
     cancel: "Cancel",
     chars: "{n} chars",
     close: "Close",
@@ -91,6 +92,10 @@ const en: Dict = {
   },
   controls: {
     backToList: "Back to the list",
+  },
+  home: {
+    tab: "Home",
+    title: "effect-tavern",
   },
   inspector: {
     all: "All",
@@ -273,6 +278,7 @@ const en: Dict = {
     turnActions: "Actions on this turn",
   },
   settings: {
+    close: "Close settings",
     addMessage: "Add message",
     byStage: "Model per stage",
     confirmDeleteHat: "Delete template “{name}”?",
@@ -359,7 +365,7 @@ const en: Dict = {
     withCard: "with the card",
     workspace: "Card workspace",
     writing: "Writing",
-    closeTab: "Close this story",
+    closeTab: "Close tab",
     unread: "Just finished",
     newTab: "New tab",
   },
