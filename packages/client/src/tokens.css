@@ -111,11 +111,11 @@
   --gap-turn: calc(var(--line-prose) * 0.75); /* between a reader's line and the card, and between turns */
   --gap-item: calc(var(--line-prose) * 0.5); /* inside a turn */
   --measure: 42rem; /* the prose column at its narrowest; on the canvas it widens with the stage card (shell.css) */
-  --measure-max: 62rem; /* and no wider than this */
+  --measure-max: 54rem; /* and no wider than this */
   --topbar: 48px; /* a page's own head on a phone (inspector.css), under the safe area */
   --strip: 44px; /* the stage card's strip (the reader's head), and the sidebar's top row beside it */
   --shell-top: 38px; /* the thin strip over the canvas: the fold key, the card › story tab */
-  --side-w: 260px; /* the sidebar's width; shell.tsx sets it on the canvas as the hand moves it (fold.ts) */
+  --side-w: 248px; /* the sidebar's width; shell.tsx sets it on the canvas as the hand moves it (fold.ts) */
   --peek-dim: light-dark(rgb(15 15 15 / 0.14), rgb(0 0 0 / 0.42)); /* the stage under a floating sidebar */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);

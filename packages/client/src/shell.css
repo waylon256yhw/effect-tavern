@@ -945,7 +945,7 @@ dialog.drawer[open]::backdrop {
   /* the prose widens with the stage card (the 10-31 decision): a fold or a narrower sidebar is more words to a
      line, between the phone's measure and a ceiling; the composer keeps the measure (reader.css), an anchor under it */
   main {
-    max-width: clamp(var(--measure), 76%, var(--measure-max));
+    max-width: clamp(var(--measure), 65%, var(--measure-max));
     padding-inline: var(--space-6);
   }
   .composer {

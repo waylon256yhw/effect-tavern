@@ -8,7 +8,7 @@
 // threshold docks it again. Every fold forgets the band: the next open is at the default, wherever the hand had it.
 
 /** Pixels: the default and the band the hand may set; the fold and unfold thresholds under the pointer. */
-export const SIDE = { default: 260, min: 200, max: 320, close: 96, open: 136 } as const
+export const SIDE = { default: 248, min: 200, max: 320, close: 96, open: 136 } as const
 const DETENT = 0.17 // how far the track follows the hand under the floor: a fifth of the pull
 const GIVE = 0.12 // the spring past the ceiling
 const GIVE_MAX = 14 // the most the track passes the ceiling, in pixels
