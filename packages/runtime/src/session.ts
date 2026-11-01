@@ -307,7 +307,9 @@ export const makeSession = ({
   const held = Log.hold<Turn>(store)
   const chain = (id: number | null) => Log.chain(held.log, id)
   const turnOf = (id: number) => Log.get(held.log, id)
-  let seeds = 0
+  let seeds = [...held.log.nodes.values()].reduce((n, t) => t.beats.reduce((n, b) => Math.max(n, b.seed), n), 0)
+  let policy: Policy | undefined // one read for a synchronous snapshot; never retained across requests
+  const policyOf = () => (typeof P === "function" ? P() : P)
 
   const wording = (id: string) => wordingOf(player, card, id)
   const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
@@ -319,7 +321,7 @@ export const makeSession = ({
     L,
     lore: card.lore,
     products: () => products,
-    policy: () => (typeof P === "function" ? P() : P),
+    policy: () => policy ?? policyOf(),
   })
   const project = (t: Turn): Node => derived.at(chain(t.id)).node()
   /** A committed change, projected for the wire: the node as the client sees it, the dropped ids, head. */
@@ -453,10 +455,12 @@ export const makeSession = ({
       // lore). Nothing to pick → no call.
       // The pin: the entry's deepest unseen layer, forced open below, so the lookup is not offered it as well; the
       // unseen layers under it are read this turn, as an opened entry's always are (issue #9).
-      const pinned = input.pin === undefined ? [] : deliver(g0, seen, [input.pin])
+      const readable = here.readable()
+      const pinned =
+        input.pin !== undefined && readable.some((e) => e.id === input.pin) ? deliver(g0, seen, [input.pin]) : []
       if (input.pin !== undefined && !pinned.length) throw new Error(`${input.pin}: nothing to pin`)
       const forced = pinned.slice(-1)
-      const untold = here.readable().filter((e) => e.id !== input.pin)
+      const untold = readable.filter((e) => e.id !== input.pin)
       const idx = untold.map((e) => e.id)
       const looked =
         from !== "lookup"
@@ -737,11 +741,14 @@ export const makeSession = ({
       ),
     node: (id: number): Node => project(turnOf(id)),
     /** Every node projected, and head: what a client opens with. */
-    snapshot: (): Log.Snapshot<Node> => ({
-      nodes: [...held.log.nodes.values()].map(project),
-      head: held.log.head,
-      next: held.log.next,
-    }),
+    snapshot: (): Log.Snapshot<Node> => {
+      policy = policyOf()
+      try {
+        return { nodes: [...held.log.nodes.values()].map(project), head: held.log.head, next: held.log.next }
+      } finally {
+        policy = undefined
+      }
+    },
     /** The log as it stands: head, and every turn by id. */
     get log() {
       return held.log
@@ -815,8 +822,15 @@ export const makeSession = ({
     setField: (nodeId: number, effects: readonly (typeof Effect_.Type)[]): Change => {
       const t = turnOf(nodeId)
       const adjust = [...(t.adjust ?? []), ...effects]
-      derived.at(chain(t.parent)).settle({ ...t, adjust })
-      return change(held.commit(Log.amend(held.log, nodeId, { adjust })))
+      const amended = Log.amend(held.log, nodeId, { adjust })
+      const next = amended[0]
+      const affected = new Set([nodeId])
+      for (const t of [...next.nodes.values()].sort((a, b) => a.id - b.id)) {
+        if (t.id !== nodeId && (t.parent === null || !affected.has(t.parent))) continue
+        derived.at(Log.chain(next, t.parent)).settle(t)
+        affected.add(t.id)
+      }
+      return change(held.commit(amended))
     },
     /** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
      *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner

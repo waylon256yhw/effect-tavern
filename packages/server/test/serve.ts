@@ -9,7 +9,7 @@ import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.t
 import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
 import assert from "node:assert/strict"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
-import { createServer } from "node:http"
+import { createServer, request } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -535,6 +535,40 @@ await run(false)
   }
 }
 
+// An oversized body closes its socket; the handler must finish without writing headers to that closed response.
+{
+  let writes = 0
+  const done = Promise.withResolvers<void>()
+  const api = handle(lib)
+  const server = createServer((req, res) => {
+    const write = res.writeHead.bind(res)
+    res.writeHead = ((...args: Parameters<typeof write>) => {
+      writes++
+      return write(...args)
+    }) as typeof res.writeHead
+    void api(req, res).then(done.resolve, done.reject)
+  }).listen(0, "127.0.0.1")
+  await new Promise<void>((resolve) => server.once("listening", resolve))
+  try {
+    const code = await new Promise<string | undefined>((resolve) => {
+      const req = request(
+        { host: "127.0.0.1", port: (server.address() as AddressInfo).port, path: "/stories", method: "POST" },
+        (res) => {
+          res.resume()
+          res.on("end", () => resolve(undefined))
+        },
+      )
+      req.on("error", (e: NodeJS.ErrnoException) => resolve(e.code))
+      req.end(JSON.stringify({ card: "x".repeat((1 << 20) + 1) }))
+    })
+    await done.promise
+    assert.equal(code, "ECONNRESET")
+    assert.equal(writes, 0)
+  } finally {
+    server.close()
+  }
+}
+
 // The app on one port: /api is the session with the prefix stripped; a path with an extension is a file of the build
 // (hashed assets cached for good) or a 404; any other path is the client's index.html.
 {
@@ -550,6 +584,8 @@ await run(false)
       return [r.status, r.headers.get("content-type"), r.headers.get("cache-control"), await r.text()] as const
     }
     const index = [200, "text/html; charset=utf-8", "no-cache", "<!doctype html><title>t</title>"]
+    for (const path of ["/%", "/%E0%A4%A", "/api/cards/%", "/api/personas/%", "/api/providers/%/models"])
+      assert.equal((await got(path))[0], 400)
     assert.deepEqual(await got("/"), index)
     assert.deepEqual(await got("/stories"), index) // the client's route, not the session's
     assert.deepEqual(await got("/assets/a.js"), [

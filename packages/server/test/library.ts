@@ -237,6 +237,37 @@ const over = (data: Data, m: () => Model = model) =>
   assert.deepEqual([lib.policy(), lib.policy().budget], [policyFor(16000), 0]) // a 16k window folds everything it may
   lib.providers.put({ ...relay, models: [{ id: "m", contextTokens: 200000 }, { id: "n" }] })
   assert.ok(lib.policy().budget > 0) // a 200k one keeps the tail
+  const story = lib.stories.create(chat.id)
+  const session = lib.session(story)
+  for (let i = 0; i < 100; i++) session.greet({ text: "opening" })
+  const read = data.routing.read,
+    list = data.providers.list,
+    stories = data.stories.list
+  let routes = 0,
+    providers = 0
+  data.routing.read = () => {
+    routes++
+    return read()
+  }
+  data.providers.list = () => {
+    providers++
+    return list()
+  }
+  data.stories.list = () => {
+    throw new Error("recursive listing not needed")
+  }
+  assert.equal(lib.exists(story), true)
+  assert.equal(lib.exists(999), false)
+  assert.equal(lib.cardOf(story), chat.id)
+  assert.equal(session.snapshot().nodes.length, 100)
+  assert.deepEqual([routes, providers], [1, 1])
+  data.routing.write({})
+  session.snapshot()
+  assert.deepEqual([routes, providers], [2, 1]) // the next snapshot reads the changed route
+  data.routing.read = read
+  data.providers.list = list
+  data.stories.list = stories
+  lib.routing.write({ default: pair("m"), stages: { lookup: pair("n") } })
   const pinned = library({ data, cards: chats, player, model, pinned: true })
   assert.deepEqual([on(pinned.model("lookup")), pinned.policy().budget], ["env", 8000])
   assert.throws(() => library({ data: open(":memory:"), cards: chats, player }).model("narrate"), NoModel)

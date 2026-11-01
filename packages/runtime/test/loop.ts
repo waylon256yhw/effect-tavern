@@ -4,6 +4,8 @@
 import { fake, fakeText, type FakeCall, type Message } from "@effect-tavern/provider"
 import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
+import * as Log from "../src/log.ts"
+import type { Turn } from "../src/session.ts"
 import { prose, splitAside } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
@@ -182,6 +184,15 @@ const program = Effect.gen(function* () {
   assert.ok(str(lastNarr()).includes(full.fiction[1]!.text!) && !/bond/.test(str(lastNarr())))
   assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
   assert.equal(t1.products.notes, "NOTE#2") // one sentence a turn (#82)
+
+  // Recall pins must be readable: neither a row still in the tail nor an invented index reaches the model.
+  const beforePin = calls().length
+  for (const pin of [`people@${t1.id}#0`, `people@${t1.id}#999`, "people@999#0"]) {
+    const failed = yield* Effect.exit(go(S.act(t1.id, { text: "pin", pin })))
+    assert.equal(failed._tag, "Failure")
+    if (failed._tag === "Failure") assert.match(Cause.pretty(failed.cause), /nothing to pin/)
+  }
+  assert.equal(calls().length, beforePin)
 
   // Turn 2: no lookup: li#1 is on the path and t1's people row is not readable while t1 is in the unfolded tail (its
   // prose is still verbatim in the transcript); strikes settle, window opens, director, reveal fired. The narrator gets the feed record as `Current:` after the outcome.
@@ -633,6 +644,75 @@ const program = Effect.gen(function* () {
     { type: "text", text: "x" },
     { type: "aside", id: "aside", text: "y" },
   ])
+  // A real recall row in the folded prefix remains pinnable.
+  yield* go(S.act(t5.id, { text: "wait", pin: `people@${t1.id}#0` }))
+  assert.match(str(lastNarr()), /MUST reveal: name=Li, note=/)
+  assert.doesNotMatch(str(lastNarr()), /undefined/)
+
+  // An ancestor edit validates every branch before writing. Reopening keeps both the tree and the beat sequence.
+  let saved: Log.Snapshot<Turn> | undefined
+  let writes = 0
+  const store: Log.Store<Turn> = {
+    read: () => saved,
+    write: (_, log) => {
+      saved = Log.snapshot(log)
+      writes++
+    },
+  }
+  const opts = {
+    card: {
+      ...chat,
+      frame: [],
+      fiction: [],
+      rules: {
+        fields: [{ path: "hp", type: "int" as const, initial: 10, min: 0, max: 10 }],
+        actions: [{ id: "strike", text: "strike", when: { path: "hp", op: "gt" as const, value: 0 }, roll: 0.5 }],
+      },
+    },
+    player,
+    model: () =>
+      fake((o) =>
+        readStage(o).phase === "decide"
+          ? { text: JSON.stringify({ next: /strike/.test(fakeText(o.prompt.at(-1)!)) ? "strike" : "end" }) }
+          : script(o),
+      ),
+    store,
+  }
+  const tree = makeSession(opts)
+  const root = tree.greet({ text: "opening" }).node!.id
+  const branch = yield* go(tree.act(root, { text: "strike" }))
+  yield* go(tree.act(root, { text: "rest" })) // head is on a branch with no gated beat
+  const beforeEdit = saved
+  const written = writes
+  assert.throws(() => tree.setField(root, [{ path: "hp", set: 0 }]), /not an available action/)
+  assert.equal(saved, beforeEdit)
+  assert.equal(writes, written)
+  assert.equal(tree.snapshot().nodes.length, 3)
+  tree.setField(root, [{ path: "hp", set: 5 }])
+  assert.equal(tree.node(branch.id).state.hp, 5)
+  const reopened = makeSession(opts)
+  assert.deepEqual(reopened.snapshot(), tree.snapshot())
+  const max = Math.max(...[...tree.log.nodes.values()].flatMap((t) => t.beats.map((b) => b.seed)))
+  const next = yield* go(reopened.act(branch.id, { text: "strike" }))
+  assert.equal(next.beats[0]!.seed, max + 1)
+
+  // The provider's structured-output validation rejects a judged choice without chance, before narration or a write.
+  let chance: number | undefined
+  const judge = makeSession({
+    card: {
+      ...opts.card,
+      rules: { fields: [], actions: [{ id: "jump", text: "jump", roll: { judge: "difficulty" } }] },
+    },
+    player,
+    model: () =>
+      fake((o) => (readStage(o).phase === "decide" ? { text: JSON.stringify({ next: "jump", chance }) } : script(o))),
+  })
+  const failed = yield* Effect.exit(go(judge.act(null, { text: "jump" })))
+  assert.equal(failed._tag, "Failure")
+  assert.equal(judge.log.nodes.size, 0)
+  chance = 0.5
+  const jumped = yield* go(judge.act(null, { text: "jump" }))
+  assert.equal(jumped.beats[0]!.chance, 0.5)
 })
 
 await Effect.runPromise(program)

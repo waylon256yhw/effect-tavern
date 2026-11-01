@@ -124,9 +124,7 @@ const isPage = (p: unknown): p is Page =>
   (typeof p === "string" && PAGES.has(p)) ||
   (typeof p === "object" && p !== null && typeof (p as { inspect?: unknown }).inspect === "number")
 const stackOf = (u: unknown, allowHome: boolean): Page[] =>
-  Array.isArray(u)
-    ? u.filter((p): p is Page => isPage(p) && p !== "reader" && (allowHome || p !== "home"))
-    : []
+  Array.isArray(u) ? u.filter((p): p is Page => isPage(p) && p !== "reader" && (allowHome || p !== "home")) : []
 
 /** The list as the device hands it back: a story the listing does not name, or a story-less tab on a card the shelf
  *  does not have, is dropped; eight at most; the active one by index, the first when it was dropped. Each tab keeps
@@ -159,8 +157,7 @@ export const restore = (
         const page: Page = x.page === "settings" ? "settings" : "home"
         list.push({ id, story: null, card: null, page, under: page === "settings" ? ["home"] : [] })
       } else if (x?.story === null && shelf.some((c) => c.id === x.card)) {
-        const page: Page =
-          x.page === "workshop" || x.page === "writing" || x.page === "settings" ? x.page : "card"
+        const page: Page = x.page === "workshop" || x.page === "writing" || x.page === "settings" ? x.page : "card"
         const rawUnder = stackOf(x.under, true)
         const under: Page[] = rawUnder[0] === "home" ? rawUnder : page === "card" ? ["home"] : ["home", "card"]
         list.push({ id, story: null, card: x.card as string, page, under })

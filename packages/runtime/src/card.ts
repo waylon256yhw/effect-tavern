@@ -184,17 +184,22 @@ export const makeCard = (r: Rules) => {
    *  loop asks after each outcome (§10.2). A model asked "another?" after every beat answers the input again. */
   const decideSchema = (s: State) => {
     const acts = available(s)
-    const judged = acts.some((a) => a.roll !== undefined && typeof a.roll === "object" && "judge" in a.roll)
+    const judged = acts.filter((a) => a.roll !== undefined && typeof a.roll === "object" && "judge" in a.roll)
     const next = Schema.Literals([...acts.map((a) => a.id), "end"])
     const again = Schema.optionalKey(Schema.Boolean)
-    return judged
+    return judged.length
       ? Schema.Struct({
           next,
           again,
           chance: Schema.optionalKey(Num.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
-        })
+        }).check(
+          Schema.makeFilter((d) =>
+            d.chance === undefined && judged.some((a) => a.id === d.next) ? "judge chance missing" : undefined,
+          ),
+        ) // keep an object schema on the wire; require chance when decoding a judged choice
       : Schema.Struct({ next, again })
   }
+
   const menu = (s: State) =>
     available(s).map(
       (a) =>

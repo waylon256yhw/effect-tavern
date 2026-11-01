@@ -6,7 +6,7 @@
 // pick starts a new story beside the old one. A card with no opening begins on an empty line,
 // the player's first words start it.
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
-import { createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
 import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
@@ -54,7 +54,9 @@ export const CardPage = () => {
     const id = me()?.persona?.[view()?.id ?? ""]
     return id === undefined ? undefined : people().find((p) => p.id === id)?.name
   }
-  const [at, setAt] = createSignal(0)
+  const id = createMemo(() => view()?.id)
+  const [at, setAt] = createSignal(() => (id(), 0))
+  const [starting, setStarting] = createSignal(false)
   const inStory = () => all().nodes.size > 0
   /** Begin lands in the open story: it is empty and of this card. Otherwise (a story in progress, none yet, an empty
    *  story of another card: this one was browsed from the shelf) Begin makes a new story of this card first. */
@@ -66,11 +68,17 @@ export const CardPage = () => {
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const begin = async () => {
+    if (starting()) return
+    setStarting(true)
     // a story in progress, none yet (an empty library), or an empty story of another card (this one was browsed from
     // the shelf): a new, empty one of this card, landing on the card page
-    if (!fresh()) await newStory(view()!.id)
-    turn.greet(at())
-    open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
+    try {
+      if (!fresh()) await newStory(view()!.id)
+      turn.greet(at())
+      open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
+    } finally {
+      setStarting(false)
+    }
   }
   return (
     <div class="inspect manifest">
@@ -223,7 +231,7 @@ export const CardPage = () => {
                 <button
                   type="button"
                   class={{ begin: true, primary: fresh() }}
-                  disabled={busy()}
+                  disabled={busy() || starting()}
                   onClick={() => void begin()}
                 >
                   {fresh() ? t("card.begin") : t("stories.newStory")}

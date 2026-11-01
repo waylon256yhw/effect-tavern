@@ -134,10 +134,16 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
   const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
   return async (req: IncomingMessage, res: ServerResponse) => {
     const json = (status: number, v: unknown) => {
+      if (req.socket.destroyed || res.destroyed) return // body() already closed an oversized request's socket
       res.writeHead(status, { "content-type": "application/json" })
       res.end(JSON.stringify(v))
     }
     const bad = (e: unknown, status = 400) => json(status, { error: e instanceof Error ? e.message : String(e) })
+    try {
+      decodeURIComponent((req.url ?? "").split("?")[0]!)
+    } catch (e) {
+      return bad(e)
+    }
     /** The body, decoded; `empty` stands in for a blank one. Throws on a bad or too-large body, for `reply`. */
     const read = async <T>(decode: (u: unknown) => T, empty?: string): Promise<T> =>
       decode(JSON.parse((await body(req)) || (empty ?? "")))
@@ -337,7 +343,13 @@ export const app = (api: (req: IncomingMessage, res: ServerResponse) => Promise<
       req.url = url.slice(4) || "/"
       return api(req, res)
     }
-    const path = decodeURIComponent(new URL(url, "http://x").pathname)
+    let path: string
+    try {
+      path = decodeURIComponent(new URL(url, "http://x").pathname)
+    } catch {
+      res.writeHead(400)
+      return void res.end("bad path")
+    }
     const file = resolve(root, `.${path}`)
     const page = !extname(path) || !file.startsWith(root + sep)
     const asset = page ? join(root, "index.html") : file

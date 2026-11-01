@@ -22,9 +22,7 @@ const pad = (n: number): string => String(n).padStart(2, "0")
 export const ago = (at: number, now = Date.now()): string => {
   const d = new Date(at)
   const day = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
-  return Math.abs(now - at) < 864e5
-    ? `${day} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-    : day
+  return Math.abs(now - at) < 864e5 ? `${day} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` : day
 }
 /** Starred first; within each, the listing's own order (newest first). */
 export const ranked = (rows: readonly StoryRow[]): StoryRow[] =>

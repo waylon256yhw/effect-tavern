@@ -358,11 +358,12 @@ const applyNow = (e: Wire): void => {
       made.push(e)
       return
     case "change": {
+      const amended = e.node !== undefined && registry.get(log).nodes.has(e.node.id)
       registry.update(log, (l) => L.apply(l, e))
       const id = e.node?.id
       if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made]))
       if (id !== undefined || !registry.get(draft)) {
-        settle() // a checkout while a turn streams moves head, not the draft
+        settle(!amended) // an amend leaves a typed revision alone
         running(null)
       }
       return
@@ -387,9 +388,9 @@ export const clear = (): void => {
   registry.set(stage, null)
 }
 /** A node landed: the draft, the revision it came from and the error it displaced are over. */
-export const settle = (): void => {
+export const settle = (revision = true): void => {
   clear()
-  registry.set(revising, null)
+  if (revision) registry.set(revising, null)
   registry.set(error, null)
 }
 /** The ghost of a failed turn put away. */

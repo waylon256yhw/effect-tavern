@@ -49,7 +49,13 @@ const call = (url: string, init: RequestInit = {}): Promise<Response> => {
   headers.set("x-tavern-story", String(id))
   return fetch(url, { ...init, headers })
 }
-const got = async (res: Promise<Response>) => (await res).json()
+/** A body or its {error}: a non-2xx answer throws the server's reason. */
+const got = async <T>(res: Promise<Response>): Promise<T> => {
+  const r = await res
+  const v = (await r.json()) as T & { error?: string }
+  if (!r.ok) throw new Error(v.error ?? `HTTP ${r.status}`)
+  return v
+}
 
 export const fetchNodes = async (): Promise<void> =>
   registry.set(log, L.of((await got(call(`${base}/nodes`))) as L.Snapshot<Node>))
@@ -111,18 +117,11 @@ export const putPlayer = async (p: Player): Promise<void> =>
 // the eye and copy read one value on purpose (secretValue).
 const json = (method: string, v: unknown): RequestInit => ({ method, body: JSON.stringify(v) })
 const enc = encodeURIComponent
-/** A body or its {error}: a non-2xx answer throws the server's reason. */
-const checked = async <T>(res: Promise<Response>): Promise<T> => {
-  const r = await res
-  const v = (await r.json()) as T & { error?: string }
-  if (!r.ok) throw new Error(v.error ?? `HTTP ${r.status}`)
-  return v
-}
 export const fetchCards = async (): Promise<void> => registry.set(cards, await got(call(`${base}/cards`)))
 export const fetchNames = async (): Promise<void> => registry.set(names, await got(call(`${base}/models/names`)))
 export const fetchProviders = async (): Promise<void> => registry.set(providers, await got(call(`${base}/providers`)))
 export const putProvider = async ({ id, ...body }: Provider): Promise<void> => {
-  registry.set(providers, await checked(call(`${base}/providers/${enc(id)}`, json("PUT", body))))
+  registry.set(providers, await got(call(`${base}/providers/${enc(id)}`, json("PUT", body))))
   await fetchRouting() // a pair on a model it no longer lists went with it
 }
 export const deleteProvider = async (id: string): Promise<void> => {
@@ -136,34 +135,34 @@ export interface Listed {
   format?: Format
 }
 /** The service's own model list, each with the format it goes under when that is not the provider's default. */
-export const listModels = (id: string): Promise<Listed[]> => checked(call(`${base}/providers/${enc(id)}/models`))
+export const listModels = (id: string): Promise<Listed[]> => got(call(`${base}/providers/${enc(id)}/models`))
 /** The probes (provider `Probe`): with a model one request for a few tokens' answer, without one the listing from
  *  every endpoint the provider has, one per distinct listing URL. A completed probe is one whatever it found; what
  *  throws is the provider's configuration (no key, no endpoint, a bad URL), the server's message. */
 export const testProvider = (id: string, model?: string): Promise<Probe[]> =>
-  checked(call(`${base}/providers/${enc(id)}/test`, json("POST", model === undefined ? {} : { model })))
+  got(call(`${base}/providers/${enc(id)}/test`, json("POST", model === undefined ? {} : { model })))
 export const fetchSecrets = async (): Promise<void> => registry.set(secrets, await got(call(`${base}/secrets`)))
 /** Without a type, the server reads it off the key (`sk-ant-oat…` is a bearer). */
 export const addSecret = async (s: { name: string; type?: SecretView["type"]; value: string }): Promise<SecretView> => {
-  const made = await checked<SecretView>(call(`${base}/secrets`, json("POST", s)))
+  const made = await got<SecretView>(call(`${base}/secrets`, json("POST", s)))
   await fetchSecrets()
   return made
 }
 export const setSecret = async (
   id: string,
   s: { name: string; type?: SecretView["type"]; value?: string }, // a value replaces the key in place, and retypes it when no type is given
-): Promise<void> => registry.set(secrets, await checked(call(`${base}/secrets/${enc(id)}`, json("PUT", s))))
+): Promise<void> => registry.set(secrets, await got(call(`${base}/secrets/${enc(id)}`, json("PUT", s))))
 /** The one key the server answers (GET /secrets/<id>/value): read per click for the eye or copy, kept nowhere. */
 export const secretValue = async (id: string): Promise<string> =>
-  (await checked<{ value: string }>(call(`${base}/secrets/${enc(id)}/value`))).value
+  (await got<{ value: string }>(call(`${base}/secrets/${enc(id)}/value`))).value
 export const deleteSecret = async (id: string): Promise<void> =>
   registry.set(secrets, await got(call(`${base}/secrets/${enc(id)}`, { method: "DELETE" })))
 export const fetchRouting = async (): Promise<void> => registry.set(routing, await got(call(`${base}/routing`)))
 export const putRouting = async (r: Routing): Promise<void> =>
-  registry.set(routing, await checked(call(`${base}/routing`, json("PUT", r))))
+  registry.set(routing, await got(call(`${base}/routing`, json("PUT", r))))
 export const fetchHats = async (): Promise<void> => registry.set(hats, await got(call(`${base}/hats`)))
 export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
-  registry.set(hats, await checked(call(`${base}/hats/${enc(id)}`, json("PUT", body))))
+  registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, json("PUT", body))))
 export const deleteHat = async (id: string): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
 /** What the settings page reads when it opens (pages.ts): every list it draws, the cards and the model names its

@@ -86,12 +86,16 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
       .map(([k, v]) => (Array.isArray(v) ? `${k} (${v.length})` : k))
       .join(" · ")
   // polish: the sentences sent (the marks in the request, when the trace carries it) against the ones that came back changed
-  const sent = () =>
-    new Map(
-      props.row.call.msgs.flatMap((m) =>
-        [...textOf(m).matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(([, id, s]) => [id!, s!] as const),
+  const sent = createMemo(
+    () =>
+      new Map(
+        props.row.call.msgs.flatMap((m) =>
+          [...textOf(m).matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(
+            ([, id, s]) => [id!, s!] as const,
+          ),
+        ),
       ),
-    )
+  )
   const changed = () => Object.entries(out()).filter(([k, v]) => sent().has(k) && sent().get(k) !== v).length
   const answers = () =>
     Object.entries((out().answers as Record<string, string> | undefined) ?? {}).map(([k, v]) => `${k}=${v}`)
@@ -382,6 +386,7 @@ export const Inspect = (props: { id: Id }) => {
   )
   onSettled(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
       const tag = (e.target as HTMLElement).tagName
       if (tag === "INPUT" || tag === "TEXTAREA") return
       if (e.key === "[") go(-1)

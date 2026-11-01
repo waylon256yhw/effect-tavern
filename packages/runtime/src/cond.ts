@@ -20,7 +20,7 @@ export const Cond: Schema.Codec<Cond> = Schema.Union([
 
 export type State = Record<string, unknown>
 const lookup = (s: State, path: string) => {
-  const v = path.split(".").reduce<unknown>((o, k) => (o as State | undefined)?.[k], s)
+  const v = path in s ? s[path] : path.split(".").reduce<unknown>((o, k) => (o as State | undefined)?.[k], s)
   if (v === undefined) throw new Error(`unknown state path ${path}`)
   return v
 }

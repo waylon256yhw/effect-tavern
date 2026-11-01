@@ -117,12 +117,7 @@ export const Home = () => {
             </figure>
           }
         >
-          <img
-            class={{ "home-emblem": true, tall: Boolean(cur().tall) }}
-            src={cur().src}
-            alt=""
-            aria-hidden="true"
-          />
+          <img class={{ "home-emblem": true, tall: Boolean(cur().tall) }} src={cur().src} alt="" aria-hidden="true" />
         </Show>
         <h1>{t("home.title")}</h1>
       </div>

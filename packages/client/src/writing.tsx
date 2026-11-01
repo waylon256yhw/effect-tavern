@@ -26,9 +26,9 @@ import {
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
 import { close, open } from "./pages.ts"
-import { card, player } from "./store.ts"
+import { card, player, registry, stories } from "./store.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
-import { fetchCard, putPlayer } from "./wire.ts"
+import { fetchCard, fetchCardOf, putPlayer } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
 
 export const openWriting = () => open("writing")
@@ -565,7 +565,8 @@ const Inputs = () => {
   // the composer reads the card view's merged lists: a write to the player's is followed by a read of the view
   const put = async (p: Player) => {
     await putPlayer(p)
-    await fetchCard()
+    if (registry.get(stories)?.current != null) await fetchCard()
+    else await fetchCardOf(view()!.id)
   }
   const setKeys = (list: readonly Format[]) => {
     const { format: _format, ...p } = me() ?? { global: [], forCard: {} }

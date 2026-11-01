@@ -195,6 +195,16 @@ const INLINE: Entry[] = [
 const HOOK = 40 // ponytail: characters; a hook is the player's own words for the thing, one short sentence
 
 const rules: Rule[] = [
+  // `lore` is the gate's derived counters, not a card field.
+  (card) =>
+    card.rules.fields
+      .filter((f) => f.path === "lore" || f.path.startsWith("lore."))
+      .map((f) => ({
+        rule: "reserved-path",
+        level: "error" as const,
+        path: `rules.fields.${f.path}`,
+        message: `${f.path} is reserved for lore counters`,
+      })),
   // The frame is the head of every stage's document, the structured ones included, and its ids are the slots the
   // player's layer meets it on (fragment.ts SLOTS). A frame fragment under any other id is most often a person or a
   // world put where every stage reads it: ri's npc sat in the frame, and the director wrote the old priest's reaction

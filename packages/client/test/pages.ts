@@ -5,6 +5,7 @@
 import assert from "node:assert/strict"
 import { backOf, close, deleteStory, escaping, land, open, openStory } from "../src/pages.ts"
 import { activeOf, card, focus, layer, log, page, registry, stories, type StoryRow, tabs } from "../src/store.ts"
+import { fetchCard, fetchCardOf, fetchNodes } from "../src/wire.ts"
 import { turn } from "../src/turn.ts"
 
 const node = (id: number, parent: number | null) =>
@@ -129,4 +130,12 @@ assert.equal(escaping({ defaultPrevented: false, target: target("TEXTAREA") }, f
 assert.equal(escaping({ defaultPrevented: false, target: target("DIV", true) }, false), "blur")
 assert.equal(escaping({ defaultPrevented: false, target: target("BUTTON") }, false), "close")
 assert.equal(escaping({ defaultPrevented: false, target: null }, false), "close")
+// Failed reads reject before replacing the last good view or tree.
+const saved = [registry.get(card), registry.get(log)]
+for (const status of [404, 409, 500]) {
+  ;(globalThis as any).fetch = async () => Response.json({ error: "read failed" }, { status })
+  for (const read of [fetchCard, () => fetchCardOf("missing"), fetchNodes]) await assert.rejects(read(), /read failed/)
+  assert.equal(registry.get(card), saved[0])
+  assert.equal(registry.get(log), saved[1])
+}
 console.log("pages ok")

@@ -46,6 +46,17 @@ assert.equal(tavern.fold({ ...tavern.initial, hp: 95 }, [{ next: "rest", seed: 0
 assert.throws(() => tavern.settle(tavern.initial, { next: "fight", seed: 1 }), /judge chance missing/)
 // The decide schema carries `chance` only because an available action is judged; its enum is the gate.
 assert.ok(Schema.decodeUnknownSync(tavern.decideSchema(tavern.initial))({ next: "fight", chance: 0.5 }))
+const decide = Schema.decodeUnknownSync(tavern.decideSchema(tavern.initial))
+assert.throws(() => decide({ next: "fight" }), /judge chance missing/)
+assert.throws(() => decide({ next: "fight", chance: 1.1 }))
+assert.deepEqual(decide({ next: "rest" }), { next: "rest" })
+assert.deepEqual(decide({ next: "end" }), { next: "end" })
+assert.equal(
+  Schema.toStandardJSONSchemaV1(tavern.decideSchema(tavern.initial))["~standard"].jsonSchema.input({
+    target: "draft-07",
+  }).type,
+  "object",
+)
 assert.throws(() => Schema.decodeUnknownSync(tavern.decideSchema(tavern.initial))({ next: "steal" }))
 assert.throws(() => Schema.decodeUnknownSync(tavern.decideSchema(tavern.initial))({ next: "fight", chance: 1.5 }))
 
@@ -103,6 +114,10 @@ assert.ok(duel.over(d.s) && d.events.includes("fled"))
 assert.equal(duel.cap, 4)
 
 // ───────── Cond's one new leaf: this turn's events, for lore windows (§19.1) ─────────
+// Declared fields are flat paths; the derived lore counters are nested. A flat field wins when both exist.
+assert.equal(holds({ path: "npc.trust", is: 3 }, { "npc.trust": 3, npc: { trust: 1 } }), true)
+assert.equal(holds({ path: "lore.li.since", op: "gte", value: 2 }, { lore: { li: { since: 2 } } }), true)
+assert.throws(() => holds({ path: "npc.missing", is: 0 }, {}), /unknown state path/)
 assert.equal(holds({ event: "strike:hit" }, {}, ["strike:hit"]), true)
 assert.equal(
   holds({ all: [{ event: "strike:hit" }, { path: "foe", op: "gt", value: 0 }] }, { foe: 20 }, ["strike:miss"]),

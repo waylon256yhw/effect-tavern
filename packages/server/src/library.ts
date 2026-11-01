@@ -213,7 +213,7 @@ export const library = ({
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
   const sessions = new Map<Id, { session: Session; turn: Turn }>()
-  const row = (id: Id) => data.stories.list(undefined, id)[0] // one story's line, not the card's
+  const row = (id: Id) => data.stories.get(id)
   const exists = (id: Id) => row(id) !== undefined
   /** A story's session and its turn, opened on its first request on the story's card, the same ones after. */
   const open = (id: Id) => {
@@ -281,7 +281,7 @@ export const library = ({
       search: (q: string, card?: string) => data.stories.search(card, q),
       /** One story whole for export.ts: its row, the card it is of, and its log tree; none when there is no story. */
       export: (id: Id): Exported | undefined => {
-        const story = row(id)
+        const story = data.stories.list(undefined, id)[0]
         if (!story) return undefined
         const card = cards.list().find((c) => c.id === story.card) ?? { id: story.card, title: story.card }
         return { card, story, snapshot: data.store<Logged>(id).read()! }

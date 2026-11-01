@@ -13,6 +13,17 @@ const base: Card = {
   lore: [],
   guard: [],
 }
+
+// The lore namespace is reserved for derived counters, including paths a card tries to declare below it.
+for (const path of ["lore", "lore.li.since", "lore.custom"]) {
+  const ds = lint({ ...base, rules: { fields: [{ path, type: "int", initial: 0 }], actions: [] } })
+  assert.ok(ds.some((d) => d.rule === "reserved-path" && d.level === "error" && d.path === `rules.fields.${path}`))
+}
+assert.ok(
+  !lint({ ...base, rules: { fields: [{ path: "lorekeeper", type: "int", initial: 0 }], actions: [] } }).some(
+    (d) => d.rule === "reserved-path",
+  ),
+)
 const of = (card: Card) => lint(card).map((d) => `${d.level} ${d.rule} ${d.path}`)
 const said = (card: Card, rule: string) =>
   lint(card)

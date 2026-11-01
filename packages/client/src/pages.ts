@@ -12,19 +12,7 @@
 // reader stays mounted under all of it, so a turn in flight keeps streaming; another story only stops reading it.
 import { latestOf } from "./stories.ts"
 import { reading } from "./reading.ts"
-import {
-  activeOf,
-  card,
-  cards,
-  isHome,
-  log,
-  page,
-  type Page,
-  registry,
-  stories,
-  type Tab,
-  tabs,
-} from "./store.ts"
+import { activeOf, card, cards, isHome, log, page, type Page, registry, stories, type Tab, tabs } from "./store.ts"
 import { edit, forget, home, load, remembered, select } from "./tabs.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"

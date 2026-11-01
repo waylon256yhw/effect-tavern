@@ -73,7 +73,12 @@ export default {
       "API Key Header",
       "刚刚",
     ],
-    ignoreByFile: { "src/dust.ts": ["/.*/"], "src/phrase.ts": ["/.*/"], "src/probe.ts": ["no probe"], "src/home.tsx": ["/.*/"] },
+    ignoreByFile: {
+      "src/dust.ts": ["/.*/"],
+      "src/phrase.ts": ["/.*/"],
+      "src/probe.ts": ["no probe"],
+      "src/home.tsx": ["/.*/"],
+    },
     templates: [
       { template: '{t("{key}"{args})}', kinds: ["jsx-text"], imports: ['import { t } from "./i18n.ts"'] },
       { template: '{attr}={t("{key}"{args})}', kinds: ["jsx-attribute"], imports: ['import { t } from "./i18n.ts"'] },

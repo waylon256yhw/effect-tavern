@@ -245,6 +245,9 @@ export const open = (asked: string) => {
      *  `last` is its input: what the manager previews, since every story of a card opens on the same greeting. Every
      *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
+      /** Identity alone: existence and card lookup never walk the story's line. */
+      get: (id: Id): { id: Id; card: string } | undefined =>
+        q("select id, card from story where id = ?").get(id) as { id: Id; card: string } | undefined,
       /** The card's rows (every card's when `card` is absent), or the one of them `only` names (none when that is
        *  another card's or no story): the walk starts from that story's head alone, so one row costs one line. */
       list: (card?: string, only?: Id): StoryRow[] =>

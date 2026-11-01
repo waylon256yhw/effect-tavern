@@ -147,11 +147,22 @@ playOut()
 assert.deepEqual([registry.get(draft), registry.get(log).nodes.size], [null, size])
 
 // (g) a demand runs a stage with no draft: the composer is held all the same, until the answer lands
+revise(L.get(registry.get(log), 1), "text")
+const revision = registry.get(revising)
 turn.demand(1, "aside")
 last().emit({ kind: "stage", phase: "record" })
 assert.deepEqual([registry.get(draft), registry.get(working)], [null, true])
-last().emit({ kind: "change", head: registry.get(log).head } as Wire)
+last().emit({ kind: "change", node: node(1, 0, "hello", "hi"), head: registry.get(log).head } as Wire)
 assert.equal(registry.get(working), false)
+assert.equal(registry.get(revising), revision)
+turn.setField(1, [{ path: "hp", set: 5 }])
+last().emit({ kind: "change", node: node(1, 0, "hello", "hi"), head: registry.get(log).head } as Wire)
+assert.equal(registry.get(revising), revision)
+turn.act("revised", "")
+setBoxes({ text: "", note: "", aside: false })
+assert.deepEqual(last().action, { kind: "act", parent: 0, input: { text: "revised" } })
+last().emit({ kind: "change", node: node(10, 0, "new", "revised"), head: 10 } as Wire)
+assert.equal(registry.get(revising), null)
 
 // (h) back on a story whose turn runs on: the attach draws it as it stands (the prose so far at once), the live deltas
 // play on, the node lands; one that failed while nobody listened gives its line back

@@ -368,8 +368,9 @@ export const Sheet = (props: {
   heading: JSX.Element
   children: JSX.Element
   footer?: JSX.Element
+  onClose?: () => void
 }) => (
-  <dialog id={props.id} class="sheet" ref={props.dialog} closedby="any">
+  <dialog id={props.id} class="sheet" ref={props.dialog} closedby="any" onClose={() => props.onClose?.()}>
     <header>
       <h2>{props.heading}</h2>
       <button class="icon" aria-label={t("common.close")} onClick={(e) => e.currentTarget.closest("dialog")!.close()}>
@@ -501,11 +502,12 @@ export const Demand = (props: { node: Id; demands: readonly Option<string>[]; on
 export const RecordSheet = (props: { node: Node; n: number }) => {
   const all = read(log)
   const view = read(card)
+  const [shown, setShown] = createSignal(false)
   let dlg!: HTMLDialogElement
   const prev = () => parentOf(all(), props.node)
   return (
     <>
-      <button class="record-pill" aria-label={t("common.record")} onClick={() => dlg.showModal()}>
+      <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
         <Record aria-hidden="true" />
         <Show when={marked(view()?.rules, props.node, prev(), view()?.products)}>
           <i class="dot" />
@@ -513,16 +515,21 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
       </button>
       <Sheet
         dialog={(el) => (dlg = el)}
+        onClose={() => setShown(false)}
         heading={heading(view()?.heading, props.node) ?? t("common.turnN", { n: props.n })}
         footer={
-          <Demand
-            node={props.node.id}
-            demands={demandable(view()?.products ?? [], props.node)}
-            onPick={() => dlg.close()}
-          />
+          <Show when={shown()}>
+            <Demand
+              node={props.node.id}
+              demands={demandable(view()?.products ?? [], props.node)}
+              onPick={() => dlg.close()}
+            />
+          </Show>
         }
       >
-        <TurnRecord node={props.node} prev={prev()} />
+        <Show when={shown()}>
+          <TurnRecord node={props.node} prev={prev()} />
+        </Show>
       </Sheet>
     </>
   )
