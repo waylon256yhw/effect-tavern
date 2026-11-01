@@ -36,18 +36,20 @@ export const edit = (patch: Partial<Omit<Tab, "id">>): void => {
 /** On the tab now active, once the switch before it is done: its story in the slots and its card in the view; a story
  *  tab back on an empty log is on its card page (a restored tab), and the scroll it was left at comes back. The
  *  sidebar's depth (`layer`) derives directly from `focus` (the active tab's `card`). */
-const show = async (id: number): Promise<void> => {
+const show = async (id: number, current: () => boolean): Promise<void> => {
   const t = now().list.find((x) => x.id === id)
   if (!t) return
   seen(t.story)
   await reading.activate(t.story) // none: the slots empty, no story named
+  if (!current()) return
   if (t.card !== null && registry.get(card)?.id !== t.card) {
     const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
-    await (own ? wire.fetchCard() : wire.fetchCardOf(t.card)) // the story's card, or one browsed on this tab
+    await (own ? wire.fetchCard(current) : wire.fetchCardOf(t.card, current)) // the story's card, or one browsed on this tab
   }
+  if (!current()) return
   if (typeof t.page === "object") await wire.fetchCalls()
   else if (t.page === "settings") await wire.fetchSettings()
-  if (now().active !== id) return
+  if (!current()) return
   if (
     t.story !== null &&
     !registry.get(log).nodes.size &&
@@ -59,12 +61,24 @@ const show = async (id: number): Promise<void> => {
   if (t.scroll !== undefined) scroll.set(t.scroll)
 }
 let last: Promise<void> = Promise.resolve()
+let navigation = 0
+/** Pages and tab switches share this queue. A later destination invalidates late view/page commits, even A → B → A. */
+export const navigate = (work: (current: () => boolean) => Promise<void>): Promise<void> => {
+  const mine = ++navigation
+  const id = now().active
+  const current = () => navigation === mine && now().active === id
+  return (last = last
+    .catch(() => {})
+    .then(async () => {
+      if (current()) await work(current)
+    }))
+}
 /** `list` with `id` active: the tab left (when it is still on the strip) keeps its scroll; then the way in. */
 const go = (list: readonly Tab[], id: number): Promise<void> => {
   const s = now()
   const top = scroll.get()
   registry.set(tabs, { list: list.map((t) => (t.id === s.active ? { ...t, scroll: top } : t)), active: id })
-  return (last = last.catch(() => {}).then(() => show(id)))
+  return navigate((current) => show(id, current))
 }
 /** Another tab: its page stack, its scroll, its story. The active one again does nothing here (pages.ts `pick`). */
 export const select = (id: number): Promise<void> => {
@@ -95,7 +109,7 @@ export const remove = (id: number): Promise<void> => {
     if (isHome(only) && only.page === "home") return last
     const fresh = homeTab()
     registry.set(tabs, { list: [fresh], active: fresh.id })
-    return (last = last.catch(() => {}).then(() => show(fresh.id)))
+    return navigate((current) => show(fresh.id, current))
   }
   const list = s.list.filter((t) => t.id !== id)
   if (id !== s.active) {
@@ -104,7 +118,7 @@ export const remove = (id: number): Promise<void> => {
   }
   // the closed tab's scroll goes with it
   registry.set(tabs, { list, active: (s.list[i + 1] ?? s.list[i - 1])!.id })
-  return (last = last.catch(() => {}).then(() => show(now().active)))
+  return navigate((current) => show(now().active, current))
 }
 /** Deleted stories: a tab on one stays, on its card's page with no story and home under it. */
 export const forget = (ids: readonly Id[]): void => {
@@ -177,7 +191,7 @@ export const remembered = (): Tabs | null => {
 /** A list restored at boot: in place, and on its active tab (boot activates its story first). */
 export const load = (s: Tabs): Promise<void> => {
   registry.set(tabs, s)
-  return (last = show(s.active))
+  return navigate((current) => show(s.active, current))
 }
 /** A fresh start: the remembered tabs (if any) stay on the strip, and a home tab is active: the one among them, else
  *  a new one at the end (on a full strip the oldest goes). Nothing is read for the tabs left behind until one of them

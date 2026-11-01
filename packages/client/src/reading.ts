@@ -32,6 +32,7 @@ const cap = 8 // the tab cap
 export const createReading = (d: Deps) => {
   const records = new Map<Id, Kept>() // insertion order is age: a write moves the story to the newest end
   let active: Id | null | undefined // undefined: nothing in the slots (before the first activate, after a deactivate)
+  let loaded = false // draft ownership begins before the reads; only a completed activation can be skipped
   /** The story out of the slots: what the server does not hold into its record, the streams closed, the slots empty. */
   const deactivate = (): void => {
     if (active != null) {
@@ -40,6 +41,7 @@ export const createReading = (d: Deps) => {
       if (records.size > cap) records.delete(records.keys().next().value!)
     }
     active = undefined
+    loaded = false
     d.abandon() // the streams, the draft and its queue, the revision, the error
     setBoxes({ text: "", note: "", aside: false })
     registry.set(pin, null)
@@ -47,13 +49,14 @@ export const createReading = (d: Deps) => {
     registry.set(calls, new Map())
   }
   const run = async (id: Id | null): Promise<void> => {
-    if (id === active) return
+    if (id === active && loaded) return
     deactivate()
     active = id
     if (id === null) {
       registry.set(log, L.of<Node>())
       const lib = registry.get(stories)
       if (lib) registry.set(stories, { ...lib, current: null }) // no story named: requests are the install's
+      loaded = true
       return
     }
     const r = records.get(id) // before any read: the reads touch neither the boxes nor the pin
@@ -62,8 +65,11 @@ export const createReading = (d: Deps) => {
       registry.set(pin, r.pin)
     }
     registry.set(stories, await d.openStory(id)) // `stories.current`: every request after names this story
-    await Promise.all([d.fetchNodes(), d.fetchCard()])
+    // A rejected read must not release the activation queue while its sibling can still write the slots.
+    const reads = await Promise.allSettled([d.fetchNodes(), d.fetchCard()])
+    for (const read of reads) if (read.status === "rejected") throw read.reason
     d.attach()
+    loaded = true
   }
   let last: Promise<void> = Promise.resolve()
   /** A story into the slots, once any activate before it is done; the same one again does nothing. Null is no story

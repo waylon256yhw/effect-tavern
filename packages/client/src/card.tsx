@@ -73,7 +73,7 @@ export const CardPage = () => {
     // a story in progress, none yet (an empty library), or an empty story of another card (this one was browsed from
     // the shelf): a new, empty one of this card, landing on the card page
     try {
-      if (!fresh()) await newStory(view()!.id)
+      if (!fresh() && !(await newStory(view()!.id))) return
       turn.greet(at())
       open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
     } finally {

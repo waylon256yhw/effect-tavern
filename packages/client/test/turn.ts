@@ -194,4 +194,32 @@ last().emit(
   { kind: "error", message: "boom" },
 )
 assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", ""])
+
+// A stop belongs to the story whose streams it was sent on, even when its reply arrives after a switch.
+for (const result of ["withdrawn", "halted"] as const) {
+  turn.abandon()
+  let answer!: (value: typeof result) => void
+  const delayed = createTurn({
+    send: open,
+    attach: () => open(),
+    stop: () =>
+      new Promise((resolve) => {
+        answer = resolve
+      }),
+  })
+  delayed.act("A", "")
+  const stopping = delayed.stop()
+  delayed.abandon()
+  delayed.act("B", "")
+  last().emit({ kind: "stage", phase: "narrate" })
+  const before = registry.get(draft)
+  answer(result)
+  await stopping
+  assert.equal(registry.get(draft), before)
+  assert.equal(registry.get(stage), "narrate")
+  assert.equal(last().aborted, false)
+  last().emit({ kind: "stage", phase: "record" })
+  assert.equal(registry.get(stage), "record")
+  delayed.abandon()
+}
 console.log("ok")

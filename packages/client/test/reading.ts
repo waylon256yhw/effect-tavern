@@ -78,4 +78,79 @@ assert.deepEqual(
 assert.ok(abandoned > 0)
 await reading.activate(20)
 assert.deepEqual(boxes(), line("left"))
+
+// Ownership starts before loading succeeds: retries and leaving a failed load keep edits made while loading.
+for (const failure of ["open", "nodes", "card"] as const) {
+  let fail = true
+  let opens = 0
+  let attaches = 0
+  const r = createReading({
+    openStory: async (id) => {
+      opens++
+      if (fail && failure === "open") throw new Error("offline")
+      return { current: id, stories: [] }
+    },
+    fetchNodes: async () => {
+      if (fail && failure === "nodes") throw new Error("offline")
+    },
+    fetchCard: async () => {
+      if (fail && failure === "card") throw new Error("offline")
+    },
+    attach: () => void attaches++,
+    abandon: () => {},
+  })
+  await assert.rejects(r.activate(100), /offline/)
+  setBoxes(line("typed after failure"))
+  registry.set(pin, "kept")
+  fail = false
+  await r.activate(100)
+  assert.deepEqual([opens, attaches, boxes().text, registry.get(pin)], [2, 1, "typed after failure", "kept"])
+  await r.activate(100)
+  assert.equal(opens, 2)
+  fail = true
+  await assert.rejects(r.activate(101), /offline/)
+  setBoxes(line("belongs to 101"))
+  fail = false
+  await r.activate(102)
+  await r.activate(101)
+  assert.equal(boxes().text, "belongs to 101")
+  r.deactivate()
+}
+// A failed read cannot release the queue while the other read is still in flight.
+let release!: () => void
+let entered!: () => void
+const started = new Promise<void>((resolve) => {
+  entered = resolve
+})
+let first = true
+const order: string[] = []
+const partial = createReading({
+  openStory: async (id) => {
+    order.push(`open ${id}`)
+    return { current: id, stories: [] }
+  },
+  fetchNodes: async () => {
+    if (first) throw new Error("offline")
+  },
+  fetchCard: async () => {
+    if (first) {
+      entered()
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      order.push("old card finished")
+    }
+  },
+  attach: () => {},
+  abandon: () => {},
+})
+const failed = assert.rejects(partial.activate(201), /offline/)
+await started
+const next = partial.activate(202)
+await Promise.resolve()
+assert.deepEqual(order, ["open 201"])
+first = false
+release()
+await Promise.all([failed, next])
+assert.deepEqual(order, ["open 201", "old card finished", "open 202"])
 console.log("reading ok")

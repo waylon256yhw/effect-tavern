@@ -97,7 +97,9 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
     demand: (id: Id, product: string): void => go({ kind: "demand", node: id, product }),
     stop: async (): Promise<void> => {
       if (!registry.get(working)) return
+      const mine = streams
       const how = await stop()
+      if (streams !== mine) return // abandon left this story while its stop was in flight
       if (how === "withdrawn") {
         for (const close of streams) close() // the turn is gone: nothing late on its stream lands after the clear
         streams = []

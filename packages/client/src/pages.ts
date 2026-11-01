@@ -13,7 +13,7 @@
 import { latestOf } from "./stories.ts"
 import { reading } from "./reading.ts"
 import { activeOf, card, cards, isHome, log, page, type Page, registry, stories, type Tab, tabs } from "./store.ts"
-import { edit, forget, home, load, remembered, select } from "./tabs.ts"
+import { edit, forget, home, load, navigate, remembered, select } from "./tabs.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
 
@@ -57,13 +57,14 @@ const current = () => {
 /** On the story as if just opened, in the active tab: an empty log lands on the card page (pick an opening, or
  *  begin), a story in progress in the reader; nothing to go back to. The sidebar follows `focus` onto the card's
  *  workspace. No story at all (an empty library) is the first card's page over home. */
-const arrive = async (): Promise<void> => {
+const arrive = async (valid: () => boolean): Promise<void> => {
   const cur = current()
   if (!cur && !registry.get(cards).length) await wire.fetchCards()
+  if (!valid()) return
   const id = cur?.card ?? registry.get(cards)[0]?.id ?? null
   const at = cur && registry.get(log).nodes.size ? "reader" : "card"
   edit({ story: cur?.id ?? null, card: id, page: at, under: cur ? [] : ["home"] })
-  if (!cur && id !== null && registry.get(card)?.id !== id) await wire.fetchCardOf(id)
+  if (!cur && id !== null && registry.get(card)?.id !== id) await wire.fetchCardOf(id, valid)
 }
 /** Back to the reader from any page: what covered it is dropped, and the card view is the tab's story's again (a card
  *  browsed from the shelf had replaced it), as is the sidebar's workspace. A tab with no story has no reader: a home
@@ -71,19 +72,26 @@ const arrive = async (): Promise<void> => {
 export const toReader = (): void => {
   const t = tab()
   if (isHome(t)) return edit({ page: "home", under: [] })
-  const cur = current() // the tab's story: a tab with one has it in the slots
+  const cur = registry.get(stories)?.stories.find((s) => s.id === t.story) // the tab can change before its reads finish
   if (t.story === null || !cur) return
   edit({ page: "reader", under: [], card: cur.card })
-  if (registry.get(card)?.id !== cur.card) void wire.fetchCard()
+  void navigate(async (valid) => {
+    await reading.activate(t.story)
+    if (valid() && registry.get(card)?.id !== cur.card) await wire.fetchCard(valid)
+  })
 }
 /** A card's page, by id: the open story's card as the view holds it, another read by id (no story of it needed). The
  *  tab keeps its story (Escape takes it back); the sidebar's workspace follows the card. Where "新建故事" and a card's
  *  head go: no story is made until Begin (#116). From a home tab the card page is pushed over home: its Back returns
  *  there, and the tab is a home tab again. */
-export const showCard = async (id: string): Promise<void> => {
+export const showCard = (id: string): Promise<void> => {
   if (tab().card !== id) edit({ card: id })
-  if (registry.get(card)?.id !== id) await wire.fetchCardOf(id)
-  open("card")
+  const target = tab()
+  return navigate(async (valid) => {
+    await reading.activate(target.story)
+    if (valid() && registry.get(card)?.id !== id) await wire.fetchCardOf(id, valid)
+    if (valid() && tab() === target) open("card") // never reopen over a page chosen while the card loaded
+  })
 }
 /** A tab clicked: another one is switched to; the active one again is nothing (each page has its own Back). */
 export const pick = (id: number): void => {
@@ -93,7 +101,7 @@ export const pick = (id: number): void => {
  *  and the card is let go (`layer` derives `"shelf"` from `focus === null`). */
 export const toHome = async (): Promise<void> => {
   edit({ story: null, card: null, page: "home", under: [], scroll: undefined })
-  await reading.activate(null)
+  await navigate(() => reading.activate(null))
 }
 /** A card picked on the shelf: its workspace, and the stage on its latest story (the open one when it is this card's,
  *  else the newest), or on its page when it has none. */
@@ -134,11 +142,12 @@ export const boot = async (): Promise<void> => {
 }
 /** A story made: the client is on the story the listing names, as just opened (reading.ts: the old story out of the
  *  slots, this one in). */
-export const land = async (listing: Listing): Promise<void> => {
+const landHere = async (listing: Listing, valid: () => boolean): Promise<void> => {
   registry.set(stories, listing)
   await reading.activate(listing.current)
-  await arrive()
+  if (valid()) await arrive(valid)
 }
+export const land = (listing: Listing): Promise<void> => navigate((valid) => landHere(listing, valid))
 /** A delete answered: nothing lands. A tab on a deleted story stays, on its card's page with no story (home under
  *  it); when that is the active tab, the slots empty under it. Every other tab, the active one included, stays where
  *  it is. */
@@ -147,13 +156,27 @@ export const onDelete = async (listing: Listing, deleted: readonly number[]): Pr
   reading.drop(deleted) // no record of a dead story; its id named again is read afresh
   forget(deleted)
   registry.set(stories, { ...listing, current: tab().story }) // the server's pick is not the tab's
-  if (was !== null && deleted.includes(was)) await reading.activate(null)
+  if (was !== null && deleted.includes(was)) await navigate(() => reading.activate(null))
 }
-export const openStory = async (id: number): Promise<void> => {
-  await reading.activate(id) // its own PUT answers the listing
-  await arrive()
+export const openStory = (id: number): Promise<void> =>
+  navigate(async (valid) => {
+    await reading.activate(id) // its own PUT answers the listing
+    if (valid()) await arrive(valid)
+  })
+/** False means the player left while creation was pending: its caller must not greet another story. */
+export const newStory = async (card: string): Promise<boolean> => {
+  let landed = false
+  await navigate(async (valid) => {
+    const listing = await wire.newStory(card)
+    if (!valid()) {
+      await wire.fetchStories()
+      return
+    }
+    await landHere(listing, valid)
+    landed = valid()
+  })
+  return landed
 }
-export const newStory = async (card: string): Promise<void> => land(await wire.newStory(card))
 export const deleteStory = async (id: number): Promise<void> => onDelete(await wire.deleteStory(id), [id])
 export const deleteStories = async (ids: readonly number[]): Promise<void> =>
   onDelete(await wire.deleteStories(ids), ids)

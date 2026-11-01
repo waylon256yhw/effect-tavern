@@ -59,10 +59,18 @@ const got = async <T>(res: Promise<Response>): Promise<T> => {
 
 export const fetchNodes = async (): Promise<void> =>
   registry.set(log, L.of((await got(call(`${base}/nodes`))) as L.Snapshot<Node>))
-export const fetchCard = async (): Promise<void> => registry.set(card, (await got(call(`${base}/card`))) as CardView)
+let cardRead = 0 // a newer card read supersedes an older refresh, even on the same tab
+export const fetchCard = async (current: () => boolean = () => true): Promise<void> => {
+  const request = ++cardRead
+  const view = await got<CardView>(call(`${base}/card`))
+  if (request === cardRead && current()) registry.set(card, view)
+}
 /** A card's page by id, no story needed: where an empty library lands. */
-export const fetchCardOf = async (id: string): Promise<void> =>
-  registry.set(card, (await got(call(`${base}/cards/${encodeURIComponent(id)}`))) as CardView)
+export const fetchCardOf = async (id: string, current: () => boolean = () => true): Promise<void> => {
+  const request = ++cardRead
+  const view = await got<CardView>(call(`${base}/cards/${encodeURIComponent(id)}`))
+  if (request === cardRead && current()) registry.set(card, view)
+}
 export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(call(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
   registry.update(log, (l) => L.apply(l, c))
@@ -109,8 +117,16 @@ export const deletePersona = async (id: string): Promise<void> => {
   registry.set(personas, await got(call(at(id), { method: "DELETE" })))
   await fetchPlayer() // the pick on any card it held is gone with it
 }
-export const putPlayer = async (p: Player): Promise<void> =>
-  registry.set(player, await got(call(`${base}/player`, { method: "PUT", body: JSON.stringify(p) })))
+let playerWrite: Promise<void> = Promise.resolve()
+/** Apply each edit to the last acknowledged document, including edits queued in the same blur/click sequence. */
+export const putPlayer = (edit: (p: Player) => Player): Promise<void> =>
+  (playerWrite = playerWrite
+    .catch(() => {})
+    .then(async () => {
+      const p = registry.get(player)
+      if (!p) return
+      registry.set(player, await got(call(`${base}/player`, { method: "PUT", body: JSON.stringify(edit(p)) })))
+    }))
 
 // The settings (/providers, /secrets, /routing, /hats): each write answers the list it changed, which replaces the
 // atom; nothing is optimistic. A key goes up once (POST /secrets) and comes back as a hint only;

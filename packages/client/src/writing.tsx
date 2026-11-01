@@ -26,7 +26,7 @@ import {
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
 import { close, open } from "./pages.ts"
-import { card, player, registry, stories } from "./store.ts"
+import { activeOf, card, player, registry, stories, tabs } from "./store.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
 import { fetchCard, fetchCardOf, putPlayer } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
@@ -92,8 +92,7 @@ export const WritingPage = () => {
 const useWriting = () => {
   const me = read(player)
   const write = (f: (w: Writing) => Writing) => {
-    const p = me()
-    if (p) void putPlayer({ ...p, writing: f(p.writing ?? {}) })
+    if (me()) void putPlayer((p) => ({ ...p, writing: f(p.writing ?? {}) }))
   }
   return { me, write }
 }
@@ -104,18 +103,19 @@ const Switches = () => {
   const { me, write } = useWriting()
   const view = read(card)
   const w = () => me()?.writing
-  const set = (key: SwitchKey, value: string | boolean | undefined) => write((x) => ({ ...x, [key]: value })) // an undefined value leaves the JSON: unset
+  const set = (key: SwitchKey, value: string | boolean) => write((x) => ({ ...x, [key]: pressing(key, x, value) })) // undefined leaves the JSON: unset
   const reset = () => write(({ pov: _p, echo: _e, agency: _a, verbosity: _v, ...rest }) => rest)
   const products = () => view()?.products ?? []
   const onOf = (p: { id: string; on: boolean }) => me()?.products?.[p.id] ?? p.on
   /** The toggle back to the declared default leaves the JSON (the player's map holds only what differs). */
   const flip = (prod: { id: string; on: boolean }) => {
-    const p = me()
-    if (!p) return
-    const want = !onOf(prod)
-    const { [prod.id]: _, ...rest } = p.products ?? {}
-    const next = want === prod.on ? rest : { ...rest, [prod.id]: want }
-    void putPlayer({ ...p, products: Object.keys(next).length ? next : undefined })
+    if (!me()) return
+    void putPlayer((p) => {
+      const want = !(p.products?.[prod.id] ?? prod.on)
+      const { [prod.id]: _, ...rest } = p.products ?? {}
+      const next = want === prod.on ? rest : { ...rest, [prod.id]: want }
+      return { ...p, products: Object.keys(next).length ? next : undefined }
+    })
   }
   const lit = () => products().filter((p) => onOf(p)).length
   return (
@@ -143,7 +143,7 @@ const Switches = () => {
                         aria-pressed={w()?.[s().key] === v()[0] ? "true" : "false"}
                         title={sentence(s().key, v()[0])}
                         disabled={!me()}
-                        onClick={() => set(s().key, pressing(s().key, w(), v()[0]))}
+                        onClick={() => set(s().key, v()[0])}
                       >
                         {t(v()[1])}
                       </button>
@@ -201,8 +201,7 @@ const Prose = () => {
   const extra = () => (me() ? extraOf(me()!, cardId()) : "")
   const globals = () => me()?.global ?? []
   const put = (f: (p: Player) => Player) => {
-    const p = me()
-    if (p) void putPlayer(f(p))
+    if (me()) void putPlayer(f)
   }
   // a new requirement: a row at the top of the list, kept here until it is left with text (then it is the player's)
   const [draft, setDraft] = createSignal<string | null>(null)
@@ -230,7 +229,11 @@ const Prose = () => {
               placeholder={t("writing.extraPlaceholder", { card: title() })}
               disabled={!me()}
               value={extra()}
-              onChange={(e) => put((p) => withExtra(p, cardId(), e.currentTarget.value))}
+              onChange={(e) => {
+                const id = cardId()
+                const text = e.currentTarget.value
+                put((p) => withExtra(p, id, text))
+              }}
               onKeyDown={leaveArea}
             />
           </div>
@@ -286,21 +289,39 @@ const Prose = () => {
               </div>
             </Show>
             <For each={globals()} keyed={false}>
-              {(f, i) => (
+              {(f) => (
                 <div class="frag-row">
                   <div class="frag-bar">
                     <div class="at-toggle" role="group" aria-label={t("writing.position")}>
                       <button
                         type="button"
                         aria-pressed={atOf(f()) === "tail" ? "true" : "false"}
-                        onClick={() => put((p) => setGlobalAt(p, i, "tail"))}
+                        onClick={() => {
+                          const id = f().id
+                          put((p) =>
+                            setGlobalAt(
+                              p,
+                              p.global.findIndex((row) => row.id === id),
+                              "tail",
+                            ),
+                          )
+                        }}
                       >
                         {t("writing.atTail")}
                       </button>
                       <button
                         type="button"
                         aria-pressed={atOf(f()) === "head" ? "true" : "false"}
-                        onClick={() => put((p) => setGlobalAt(p, i, "head"))}
+                        onClick={() => {
+                          const id = f().id
+                          put((p) =>
+                            setGlobalAt(
+                              p,
+                              p.global.findIndex((row) => row.id === id),
+                              "head",
+                            ),
+                          )
+                        }}
                       >
                         {t("writing.atHead")}
                       </button>
@@ -311,7 +332,15 @@ const Prose = () => {
                       type="button"
                       class="icon sm"
                       aria-label={t("writing.removeRequirement")}
-                      onClick={() => put((p) => removeGlobal(p, i))}
+                      onClick={() => {
+                        const id = f().id
+                        put((p) =>
+                          removeGlobal(
+                            p,
+                            p.global.findIndex((row) => row.id === id),
+                          ),
+                        )
+                      }}
                     >
                       <Close />
                     </button>
@@ -321,7 +350,17 @@ const Prose = () => {
                       aria-label={t("writing.requirement")}
                       placeholder={t("writing.emptyRemoves")}
                       value={f().text ?? ""}
-                      onChange={(e) => put((p) => setGlobalText(p, i, e.currentTarget.value))}
+                      onChange={(e) => {
+                        const text = e.currentTarget.value
+                        const id = f().id
+                        put((p) =>
+                          setGlobalText(
+                            p,
+                            p.global.findIndex((row) => row.id === id),
+                            text,
+                          ),
+                        )
+                      }}
                       onKeyDown={leaveArea}
                     />
                   </div>
@@ -352,14 +391,15 @@ const Polish = () => {
   const { me, write } = useWriting()
   const lex = (): readonly Entry[] => me()?.writing?.lexicon ?? []
   const on = () => me()?.writing?.polish !== false
-  const setLex = (entries: readonly Entry[]) =>
-    write(({ lexicon: _lexicon, ...w }) => (entries.length ? { ...w, lexicon: entries } : w))
-  const flip = () => write(({ polish: _polish, ...w }) => (on() ? { ...w, polish: false } : w)) // on is the default: unset
-  const edit = (i: number, patch: Partial<Entry>) => {
-    const next = lex().map((e, j) => (j === i ? clean({ ...e, ...patch }) : e))
-    setLex(next.filter((e) => e.pattern)) // a pattern cleared is the row removed
-  }
-  const remove = (i: number) => setLex(lex().filter((_, j) => j !== i))
+  const setLex = (edit: (entries: readonly Entry[]) => readonly Entry[]) =>
+    write(({ lexicon, ...w }) => {
+      const entries = edit(lexicon ?? [])
+      return entries.length ? { ...w, lexicon: entries } : w
+    })
+  const flip = () => write(({ polish, ...w }) => (polish !== false ? { ...w, polish: false } : w)) // on is the default: unset
+  const edit = (i: number, patch: Partial<Entry>) =>
+    setLex((entries) => entries.map((e, j) => (j === i ? clean({ ...e, ...patch }) : e)).filter((e) => e.pattern))
+  const remove = (i: number) => setLex((entries) => entries.filter((_, j) => j !== i))
   // the search: a glass that opens to a field in the title row, filtering by pattern or hint
   const [q, setQ] = createSignal("")
   const [searching, setSearching] = createSignal(false)
@@ -375,7 +415,7 @@ const Polish = () => {
     const d = draft()
     if (!d) return
     setDraft(null)
-    if (d.pattern.trim()) setLex([clean(d), ...lex()])
+    if (d.pattern.trim()) setLex((entries) => [clean(d), ...entries])
   }
   // the file: 导入 adds a file's entries after the player's, 导出 downloads the list (lexicon.ts)
   let file!: HTMLInputElement
@@ -383,9 +423,11 @@ const Polish = () => {
   const onFile = async (f: File) => {
     const r = parseLexicon(await f.text())
     if ("error" in r) return setNotice(r.error)
-    const merged = mergeLexicon(lex(), r.entries)
-    setNotice(t("writing.importN", { n: merged.length - lex().length }))
-    setLex(merged)
+    setLex((entries) => {
+      const merged = mergeLexicon(entries, r.entries)
+      setNotice(t("writing.importN", { n: merged.length - entries.length }))
+      return merged
+    })
   }
   const exportFile = () => {
     const url = URL.createObjectURL(new Blob([serializeLexicon(lex())], { type: "application/json" }))
@@ -563,18 +605,27 @@ const Inputs = () => {
   const keyDefaults = () => defaultsOf(view()?.format ?? [], keys(), (k) => `${k.label}\0${k.text}`)
   const snipDefaults = () => defaultsOf(view()?.snippets ?? [], snips(), (s) => s.name)
   // the composer reads the card view's merged lists: a write to the player's is followed by a read of the view
-  const put = async (p: Player) => {
-    await putPlayer(p)
-    if (registry.get(stories)?.current != null) await fetchCard()
-    else await fetchCardOf(view()!.id)
+  const put = async (edit: (p: Player) => Player) => {
+    const t = activeOf(registry.get(tabs))
+    const valid = () => activeOf(registry.get(tabs)) === t
+    await putPlayer(edit)
+    if (!valid() || t.card === null) return
+    const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
+    await (own ? fetchCard(valid) : fetchCardOf(t.card, valid))
   }
-  const setKeys = (list: readonly Format[]) => {
-    const { format: _format, ...p } = me() ?? { global: [], forCard: {} }
-    if (me()) void put(list.length ? { ...p, format: list } : p)
+  const setKeys = (edit: (list: readonly Format[]) => readonly Format[]) => {
+    if (me())
+      void put(({ format, ...p }) => {
+        const list = edit(format ?? [])
+        return list.length ? { ...p, format: list } : p
+      })
   }
-  const setSnips = (list: readonly Snippet[]) => {
-    const { snippets: _snippets, ...p } = me() ?? { global: [], forCard: {} }
-    if (me()) void put(list.length ? { ...p, snippets: list } : p)
+  const setSnips = (edit: (list: readonly Snippet[]) => readonly Snippet[]) => {
+    if (me())
+      void put(({ snippets, ...p }) => {
+        const list = edit(snippets ?? [])
+        return list.length ? { ...p, snippets: list } : p
+      })
   }
   // the editor: one modal for both kinds, over the page
   const [editing, setEditing] = createSignal<Editing | null>(null)
@@ -590,15 +641,15 @@ const Inputs = () => {
     const v = made()
     if (!e || !v) return
     // a new one goes first, at hand in the menu; an edit replaces its row
-    if (e.snippet) setSnips(placed(snips(), v as Snippet, e.at))
-    else setKeys(placed(keys(), v as Format, e.at))
+    if (e.snippet) setSnips((list) => placed(list, v as Snippet, e.at))
+    else setKeys((list) => placed(list, v as Format, e.at))
     dlg.close()
   }
   const remove = () => {
     const e = editing()
     if (!e || e.at < 0) return
-    if (e.snippet) setSnips(snips().filter((_, i) => i !== e.at))
-    else setKeys(keys().filter((_, i) => i !== e.at))
+    if (e.snippet) setSnips((list) => list.filter((_, i) => i !== e.at))
+    else setKeys((list) => list.filter((_, i) => i !== e.at))
     dlg.close()
   }
   return (

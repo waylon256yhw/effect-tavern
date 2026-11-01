@@ -59,12 +59,13 @@ export const StoryDialogs = () => {
     openSettings("personas")
   }
   const pick = (id: string | undefined) => {
-    const p = me()
     const c = cardId()
-    if (!p || c === null) return
-    const { [c]: _, ...rest } = p.persona ?? {}
-    const next = id === undefined ? rest : { ...rest, [c]: id }
-    void putPlayer({ ...p, persona: Object.keys(next).length ? next : undefined }) // an empty map leaves the JSON like any unset key
+    if (!me() || c === null) return
+    void putPlayer((p) => {
+      const { [c]: _, ...rest } = p.persona ?? {}
+      const next = id === undefined ? rest : { ...rest, [c]: id }
+      return { ...p, persona: Object.keys(next).length ? next : undefined }
+    }) // an empty map leaves the JSON like any unset key
   }
   // the rename dialog: the confirm's shape with a field; Enter or Save names it, blank clears the name back to
   // "New story", Escape or Cancel keeps it
