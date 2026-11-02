@@ -35,23 +35,33 @@
   .manifest {
     overflow: hidden;
   }
+  /* two columns: the name, the introduction and the chips, and under them the openings' list, on the left; the
+     opening on the right. The list's own column waits for a stage wide enough to give the prose its measure beside
+     it (the 84rem block): 18 + 16 + 3 of chrome plus 42 + 3 of prose */
   .cardsheet {
     flex: 1;
     grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: var(--space-6);
     padding: var(--space-6);
   }
-  .cardsheet.many {
-    grid-template-columns: minmax(13rem, 18rem) minmax(12rem, 16rem) minmax(0, 1fr);
+  .manifest .about {
+    grid-area: 1 / 1 / -1 / 2;
+  }
+  .cardsheet.many .about {
+    grid-row-end: 2; /* the list takes the rest of the column; the introduction keeps its ceiling */
   }
   .manifest .openings {
     display: flex;
+    grid-area: 2 / 1;
+  }
+  .manifest .opening {
+    grid-area: 1 / 2 / -1 / 3;
   }
   .manifest .siblings {
-    display: none; /* the list column is the picker */
+    display: none; /* the list is the picker */
   }
-  .manifest .about .intro {
+  .cardsheet:not(.many) .about .intro {
     flex: 0 1 auto; /* the column's height is the stage's: the introduction gives way, the chips stay in view */
     max-height: none;
   }
@@ -65,6 +75,26 @@
   }
   .manifest .foot {
     flex-wrap: nowrap;
+  }
+}
+/* a stage wide enough for the list's own column and the prose at its measure beside it */
+@container stage (width >= 84rem) {
+  .cardsheet.many {
+    grid-template-columns: minmax(13rem, 18rem) minmax(12rem, 16rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .cardsheet.many .about {
+    grid-area: 1 / 1 / -1 / 2;
+  }
+  .cardsheet.many .about .intro {
+    flex: 0 1 auto;
+    max-height: none;
+  }
+  .cardsheet.many .openings {
+    grid-area: 1 / 2 / -1 / 3;
+  }
+  .cardsheet.many .opening {
+    grid-area: 1 / 3 / -1 / 4;
   }
 }
 .manifest .title {
@@ -203,7 +233,7 @@
 .manifest .opening .well {
   height: 16.5rem;
   border-radius: var(--radius-card);
-  background: var(--surface-2);
+  background: var(--alpha-1); /* a tint, not a line: the two surfaces are 1% apart in light, the tint reads in both */
   box-shadow: none;
 }
 .manifest .opening .wscroll {
