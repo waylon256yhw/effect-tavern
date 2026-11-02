@@ -229,7 +229,6 @@ export const Sidebar = (props: {
               <input
                 type="search"
                 ref={(el) => (shelfSearch = el)}
-                value={cq()}
                 placeholder={t("side.searchCards")}
                 aria-label={t("side.searchCards")}
                 onInput={(e) => setCq(e.currentTarget.value)}
