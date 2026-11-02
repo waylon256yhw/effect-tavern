@@ -1,8 +1,8 @@
-// The card page's rows and opening lines on the template cards' shapes: a variant folds away, a hidden field is not
-// a state, an unlabelled module is not named, an opening's tag prefers the route it sets.
+// The card page's chips and opening lines on the template cards' shapes: a fiction label is not a chip, a hidden
+// field is not a state, an opening's tag prefers the route it sets.
 import { full } from "@effect-tavern/runtime/test/cards/index.ts"
 import assert from "node:assert/strict"
-import { firstLine, openingTag, specs } from "../src/manifest.ts"
+import { chips, firstLine, openingTag } from "../src/manifest.ts"
 import type { CardView } from "../src/store.ts"
 
 const view = (over: Partial<CardView>): CardView => ({
@@ -36,12 +36,8 @@ const ri = view({
     actions: [],
   },
 })
-assert.deepEqual(specs(ri), [
-  { key: "card.specSetting", items: ["理"] },
-  { key: "card.specMode", items: ["参与者"] },
-  { key: "card.specState", items: ["好感度"] },
-])
-assert.deepEqual(specs(view({ input: "note" })), [{ key: "card.specMode", items: ["作者"] }]) // nothing named, nothing tracked
+assert.deepEqual(chips(ri), [{ label: "参与者" }, { label: "状态", hint: "好感度" }]) // no module label, no hidden field
+assert.deepEqual(chips(view({ input: "note" })), [{ label: "作者" }]) // nothing tracked
 const yandao = view({
   rules: {
     fields: [
@@ -62,7 +58,5 @@ assert.equal(openingTag(yandao, { text: "x", do: [{ path: "局势", set: 7 }] })
 assert.equal(openingTag(yandao, { text: "x" }), undefined)
 assert.equal(firstLine("  黄昏。盐津镇的石板街上\r\n第二段"), "黄昏。盐津镇的石板街上")
 assert.equal(firstLine("**午后的阳光**从彩绘玻璃窗渗入\n\n*第二段*"), "午后的阳光从彩绘玻璃窗渗入")
-assert.ok(
-  specs(view({ rules: full.rules, fiction: [] })).some((r) => r.key === "card.specState" && r.items.includes("体力")),
-)
+assert.ok(chips(view({ rules: full.rules })).some((c) => c.label === "状态" && c.hint?.includes("体力")))
 console.log("manifest ok")

@@ -1,55 +1,101 @@
-/* ───────── Card: the card page over the reader (docs/card-page-prototype.html, on the tokens) ─────────
-   One bounded sheet centred on the canvas. Left, the name, the introduction and the derived rows, which sink to the
-   bottom like a colophon; right, the opening in a well that scrolls behind the Inspector's fade, the picker and the
-   token readout under it, the one action at the corner. On a phone the columns stack and each well keeps its height.
-   Nothing on the page wraps but the two proses; a row of names ends in "and N more". */
+/* ───────── Card: the new-story page over the reader (design/new-story-and-tags.md §3, on the tokens) ─────────
+   The page is the stage card. On a stage of 52rem or more, columns on its whole height: the name, the introduction,
+   the chips and the prompt's size; with two openings or more (`.many`) their list; then the opening in a well at the
+   reader's measure and size, its size and the one action under it. The regions part by surface and space, no rules.
+   The page never scrolls there: the introduction, the list and the well each scroll inside their share of the stage's
+   height. On a narrower stage the regions stack, the well keeps a bounded height, the page scrolls, and the openings
+   are a stepper with a sheet. Nothing on the page wraps but the two proses. */
 .manifest {
-  align-items: center;
-  overflow-y: auto; /* a phone shorter than the sheet scrolls the page; the sheet keeps its size */
-  padding: var(--space-4);
+  overflow-y: auto;
   font-size: var(--text-body);
 }
 .cardsheet {
+  box-sizing: border-box;
   flex: none;
-  margin: auto;
-  width: 100%;
-  max-width: 56rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  border-radius: var(--radius-dialog);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-2);
-  overflow: hidden;
+  gap: var(--space-5);
+  padding: var(--space-4);
+}
+.cardsheet > * {
+  min-height: 0;
 }
 .cardsheet section {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-4);
-  min-height: 0;
-  padding: var(--space-5);
+  gap: var(--space-3);
 }
-.cardsheet .about {
-  border-bottom: var(--hairline) solid var(--line);
+.manifest .about > * {
+  flex: none;
 }
-@media (min-width: 52rem) {
-  .cardsheet {
-    grid-template-columns: minmax(0, 9fr) minmax(0, 13fr);
-    height: 24.5rem;
+.manifest .openings {
+  display: none;
+}
+@container stage (width >= 52rem) {
+  .manifest {
+    overflow: hidden;
   }
-  .cardsheet section {
+  /* two columns: the name, the introduction and the chips, and under them the openings' list, on the left; the
+     opening on the right. The list's own column waits for a stage wide enough to give the prose its measure beside
+     it (the 84rem block): 18 + 16 + 3 of chrome plus 42 + 3 of prose */
+  .cardsheet {
+    flex: 1;
+    grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-6);
     padding: var(--space-6);
   }
-  .cardsheet .about {
-    border-bottom: 0;
-    border-right: var(--hairline) solid var(--line);
+  .manifest .about {
+    grid-area: 1 / 1 / -1 / 2;
+  }
+  .cardsheet.many .about {
+    grid-row-end: 2; /* the list takes the rest of the column; the introduction keeps its ceiling */
+  }
+  .manifest .openings {
+    display: flex;
+    grid-area: 2 / 1;
+  }
+  .manifest .opening {
+    grid-area: 1 / 2 / -1 / 3;
+  }
+  .manifest .siblings {
+    display: none; /* the list is the picker */
+  }
+  .cardsheet:not(.many) .about .intro {
+    flex: 0 1 auto; /* the column's height is the stage's: the introduction gives way, the chips stay in view */
+    max-height: none;
+  }
+  .manifest .opening .well {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+  .manifest .opening .wscroll {
+    padding-inline: var(--space-6);
+  }
+  .manifest .foot {
+    flex-wrap: nowrap;
   }
 }
-.manifest .head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-height: 0;
+/* a stage wide enough for the list's own column and the prose at its measure beside it */
+@container stage (width >= 84rem) {
+  .cardsheet.many {
+    grid-template-columns: minmax(13rem, 18rem) minmax(12rem, 16rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .cardsheet.many .about {
+    grid-area: 1 / 1 / -1 / 2;
+  }
+  .cardsheet.many .about .intro {
+    flex: 0 1 auto;
+    max-height: none;
+  }
+  .cardsheet.many .openings {
+    grid-area: 1 / 2 / -1 / 3;
+  }
+  .cardsheet.many .opening {
+    grid-area: 1 / 3 / -1 / 4;
+  }
 }
 .manifest .title {
   display: flex;
@@ -65,9 +111,14 @@
   font-weight: 650;
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* the introduction: prose, so it wraps, and past its height it scrolls behind the fade */
+/* the introduction: prose, so it wraps, and past its height it scrolls behind the fade; its height is its text's */
 .manifest .intro {
+  contain: none;
+  min-height: 0;
   max-height: 11rem;
   padding: var(--fade) 0;
 }
@@ -77,37 +128,36 @@
   line-height: 1.68;
   white-space: pre-line;
 }
-.manifest .specs {
+/* one row of chips, never two: the tag step's chips join it */
+.manifest .chips {
   margin: 0;
+  padding: 0;
+  list-style: none;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: var(--hairline) solid var(--line);
-  font-size: var(--text-footnote);
-}
-.manifest .specs .row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.manifest .specs dt {
-  flex: none;
-  color: var(--ink-3);
-}
-.manifest .specs dd {
-  margin: 0;
-  min-width: 0;
-  color: var(--ink-2);
-  font-weight: 500;
-  text-align: right;
-  white-space: nowrap;
+  gap: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+.manifest .chips li {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.manifest .chips li[title] {
+  cursor: help;
+}
+.manifest .nomodel {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+  white-space: nowrap;
 }
 .manifest .more {
-  margin-left: 4px;
+  margin-left: 6px;
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
@@ -119,24 +169,72 @@
   background: var(--alpha-2);
   color: var(--ink);
 }
-.manifest .names {
-  padding: var(--space-3);
-  font-size: var(--text-footnote);
-  line-height: var(--leading-body);
-  color: var(--ink-2);
-}
 .manifest .mono {
   font-family: var(--font-mono);
 }
-/* the opening */
+/* a size: the word small, the number at body size and weight */
+.manifest .size {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+}
+.manifest .size .mono {
+  color: var(--ink);
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+/* the openings' list column: the selection follows ↑ ↓, the prose follows the selection */
+.manifest .openings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  outline: none;
+}
+.manifest .openings:focus-visible {
+  box-shadow: 0 0 0 2px var(--line-strong);
+  border-radius: var(--radius);
+}
+.manifest .openings .version {
+  flex: none;
+  cursor: pointer;
+}
+.manifest .openings .version[aria-selected="true"] {
+  background: var(--alpha-1);
+  font-weight: 600;
+}
+.manifest .version .tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-1);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.manifest .version .est {
+  flex: none;
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+/* the opening: the reader's measure (shell.css `main`) plus the well's own inline padding, centred in its column */
+.manifest .opening {
+  width: 100%;
+  max-width: calc(clamp(var(--measure), 65cqi, var(--measure-max)) + 2 * var(--space-6));
+  justify-self: center;
+}
 .manifest .opening .well {
   height: 16.5rem;
   border-radius: var(--radius-card);
-}
-@media (min-width: 52rem) {
-  .manifest .opening .well {
-    flex: 1; /* the sheet has a height: the well takes what the foot leaves */
-  }
+  background: var(--alpha-1); /* a tint, not a line: the two surfaces are 1% apart in light, the tint reads in both */
+  box-shadow: none;
 }
 .manifest .opening .wscroll {
   flex: 1;
@@ -161,13 +259,14 @@
   line-height: var(--leading-body);
 }
 .manifest .foot {
+  flex: none;
   display: flex;
-  flex-wrap: wrap; /* a phone with a picker: the action takes the next line, still at the right */
+  flex-wrap: wrap; /* a phone with a stepper: the action takes the next line, still at the right */
   align-items: center;
   gap: var(--space-3);
 }
 .manifest .versions {
-  position-area: top span-right; /* up from the trigger, rightward: never over the other column */
+  position-area: top span-right; /* up from the trigger, rightward */
 }
 .manifest .count {
   display: inline-flex;
@@ -181,20 +280,6 @@
   width: 11px;
   height: 11px;
   color: var(--ink-3);
-}
-.manifest .est {
-  font-size: var(--text-footnote);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.manifest .version .tag {
-  flex: none;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--alpha-1);
-  font-size: var(--text-caption);
-  font-weight: 500;
-  color: var(--ink-2);
 }
 .manifest .begin {
   margin-left: auto;

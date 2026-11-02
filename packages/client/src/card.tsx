@@ -1,7 +1,8 @@
-// The card page: the card on the player's side (docs/card-page-brief.md, docs/card-page-prototype.html). One bounded
-// sheet: the name and the introduction, three derived rows (manifest.ts), the openings in a well that scrolls, and one
-// action. Landed on when the story is empty; opened from the session's card head any time, Escape or Back returns
-// (the empty reader is a valid place to be: its composer waits for an opening while the card has any).
+// The card page, as the new-story page (design/new-story-and-tags.md §3, #120): the whole stage card. Left, the name,
+// the introduction, one row of chips (manifest.ts) and the prompt's size; with two openings or more, their list; then
+// the opening in the reader's measure, its size and the one action. Landed on when the story is empty, and from the
+// sidebar's new story; Escape or Back returns (the empty reader is a valid place to be: its composer waits for an
+// opening while the card has any).
 // Browsing openings writes nothing: Begin greets the one shown, and it lands as the story's root; mid-story the same
 // pick starts a new story beside the old one. A card with no opening begins on an empty line,
 // the player's first words start it.
@@ -9,51 +10,47 @@ import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
-import { firstLine, openingTag, SHOWN, specs } from "./manifest.ts"
+import { chips, firstLine, openingTag } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { backOf, close, newStory, open } from "./pages.ts"
-import { activeOf, card, log, personas, player, routing, stories, tabs, working } from "./store.ts"
+import { activeOf, card, log, routing, stories, tabs, working } from "./store.ts"
+import type { Greeting } from "@effect-tavern/runtime/src/card.ts"
+import type { CardView } from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
 export const openCard = () => open("card")
 
-/** A list of names, the first few inline and the rest behind "and N more" (a popover, since a phone cannot hover). */
-let lists = 0
-const Bounded = (props: { items: readonly string[] }) => {
-  const id = `names-${lists++}`
-  return (
-    <>
-      {props.items.slice(0, SHOWN).join(" · ")}
-      <Show when={props.items.length > SHOWN}>
-        <button type="button" class="more" popovertarget={id}>
-          {t("card.andMore", { n: props.items.length - SHOWN })}
-        </button>
-        <div id={id} class="versions names" popover>
-          {props.items.join(" · ")}
-        </div>
-      </Show>
-    </>
-  )
-}
+/** A size readout: the word, then `~N tokens`. */
+const Size = (props: { label: string; n: number }) => (
+  <span class="size">
+    {props.label}
+    <span class="mono">
+      ~{compact.format(props.n)} {t("card.tokens")}
+    </span>
+  </span>
+)
+
+/** One opening in a list (the desktop column, the phone's sheet): its index, first line, what it sets, its size. */
+const Line = (props: { c: CardView; g: Greeting; i: number }) => (
+  <>
+    <span class="below">{String(props.i + 1).padStart(2, "0")}</span>
+    <span class="first">{firstLine(props.g.text)}</span>
+    <Show when={openingTag(props.c, props.g)}>{(tag) => <span class="tag">{tag()}</span>}</Show>
+    <span class="est mono">~{compact.format(tokens(props.g.text))}</span>
+  </>
+)
 
 export const CardPage = () => {
   const view = read(card)
   const all = read(log)
   const busy = read(working) // no new root under a turn in flight
-  const me = read(player)
-  const people = read(personas)
   const route = read(routing)
   const lib = read(stories)
   const strip = read(tabs)
   const back = () => backOf(activeOf(strip()))
-  /** The persona the player is on this card: the player's pick by name, none when the card's own holds. */
-  const persona = () => {
-    const id = me()?.persona?.[view()?.id ?? ""]
-    return id === undefined ? undefined : people().find((p) => p.id === id)?.name
-  }
   const id = createMemo(() => view()?.id)
   const [at, setAt] = createSignal(() => (id(), 0))
   const [starting, setStarting] = createSignal(false)
@@ -80,76 +77,94 @@ export const CardPage = () => {
       setStarting(false)
     }
   }
+  /** The list column's keys: ↑ ↓ move the selection (Home / End to the ends), the prose follows. */
+  const onKey = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
+    const last = openings().length - 1
+    const to =
+      e.key === "ArrowDown"
+        ? Math.min(at() + 1, last)
+        : e.key === "ArrowUp"
+          ? Math.max(at() - 1, 0)
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : undefined
+    if (to === undefined) return
+    e.preventDefault()
+    setAt(to)
+    e.currentTarget.children[to]?.scrollIntoView({ block: "nearest" })
+  }
   return (
     <div class="inspect manifest">
       <Show when={view()}>
         {(c) => (
-          <article class="cardsheet">
+          <article class={{ cardsheet: true, many: openings().length > 1 }}>
             <section class="about" aria-label={t("card.card")}>
-              <div class="head">
-                <div class="title">
-                  {/* Back only where there is somewhere to go: the story, or home under a card entered from it */}
-                  <Show when={back()}>
-                    {(to) => (
-                      <button
-                        type="button"
-                        class="icon"
-                        aria-label={to() === "home" ? t("common.backToHome") : t("common.backToStory")}
-                        onClick={close}
-                      >
-                        <Back />
-                      </button>
-                    )}
-                  </Show>
-                  <h1>{c().title}</h1>
-                </div>
-                <Show when={c().summary}>
-                  {(s) => (
-                    <div class="intro wscroll">
-                      <p>{s()}</p>
-                    </div>
+              <div class="title">
+                {/* Back only where there is somewhere to go: the story, or home under a card entered from it */}
+                <Show when={back()}>
+                  {(to) => (
+                    <button
+                      type="button"
+                      class="icon"
+                      aria-label={to() === "home" ? t("common.backToHome") : t("common.backToStory")}
+                      onClick={close}
+                    >
+                      <Back />
+                    </button>
                   )}
                 </Show>
+                <h1>{c().title}</h1>
               </div>
-              <dl class="specs">
-                <For each={specs(c())} keyed={(r) => r.key}>
-                  {(r) => (
-                    <div class="row">
-                      <dt>{t(r().key)}</dt>
-                      <dd>
-                        <Bounded items={r().items} />
-                      </dd>
-                    </div>
+              <Show when={c().summary}>
+                {(s) => (
+                  <div class="intro wscroll">
+                    <p>{s()}</p>
+                  </div>
+                )}
+              </Show>
+              {/* one row: the tag step appends the facets and the card's own tags here */}
+              <ul class="chips">
+                <For each={chips(c())} keyed={false}>
+                  {(chip) => <li title={chip().hint}>{chip().label}</li>}
+                </For>
+              </ul>
+              {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}
+              <Show when={!route().default}>
+                <p class="nomodel">
+                  {t("card.model")} · {t("card.noDefault")}
+                  <button type="button" class="more" onClick={() => openSettings("routing")}>
+                    {t("app.goDefaultModel")}
+                  </button>
+                </p>
+              </Show>
+              <Size label={t("card.prompt")} n={c().tokens.head} />
+            </section>
+            <Show when={openings().length > 1}>
+              <ul
+                class="openings"
+                role="listbox"
+                tabindex="0"
+                aria-label={t("card.pickOpening")}
+                aria-activedescendant={`opening-${at()}`}
+                onKeyDown={onKey}
+              >
+                <For each={openings()} keyed={false}>
+                  {(g, i) => (
+                    <li
+                      id={`opening-${i}`}
+                      role="option"
+                      class="version"
+                      aria-selected={i === at() ? "true" : "false"}
+                      onClick={() => setAt(i)}
+                    >
+                      <Line c={c()} g={g()} i={i} />
+                    </li>
                   )}
                 </For>
-                <Show when={persona()}>
-                  {(name) => (
-                    <div class="row">
-                      <dt>{t("common.persona")}</dt>
-                      <dd>{name()}</dd>
-                    </div>
-                  )}
-                </Show>
-                {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}
-                <Show when={!route().default}>
-                  <div class="row">
-                    <dt>{t("card.model")}</dt>
-                    <dd>
-                      {t("card.noDefault")}
-                      <button type="button" class="more" onClick={() => openSettings("routing")}>
-                        {t("app.goDefaultModel")}
-                      </button>
-                    </dd>
-                  </div>
-                </Show>
-                <div class="row">
-                  <dt>{t("card.prompt")}</dt>
-                  <dd class="mono">
-                    ~{compact.format(c().tokens.head)} {t("card.tokens")}
-                  </dd>
-                </div>
-              </dl>
-            </section>
+              </ul>
+            </Show>
             <section class="opening" aria-label={t("card.opening")}>
               <Show
                 when={opening()}
@@ -168,6 +183,7 @@ export const CardPage = () => {
                 )}
               </Show>
               <footer class="foot">
+                {/* the phone's stepper and its sheet; the desktop has the list column instead (card.css) */}
                 <Show when={openings().length > 1}>
                   <span class="siblings">
                     <button
@@ -204,9 +220,7 @@ export const CardPage = () => {
                               e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()
                             }}
                           >
-                            <span class="below">{String(i + 1).padStart(2, "0")}</span>
-                            <span class="first">{firstLine(g().text)}</span>
-                            <Show when={openingTag(c(), g())}>{(t) => <span class="tag">{t()}</span>}</Show>
+                            <Line c={c()} g={g()} i={i} />
                           </button>
                         )}
                       </For>
@@ -221,13 +235,7 @@ export const CardPage = () => {
                     </button>
                   </span>
                 </Show>
-                <Show when={opening()}>
-                  {(g) => (
-                    <span class="est mono">
-                      ~{compact.format(tokens(g().text))} {t("card.tokens")}
-                    </span>
-                  )}
-                </Show>
+                <Show when={opening()}>{(g) => <Size label={t("card.opening")} n={tokens(g().text)} />}</Show>
                 <button
                   type="button"
                   class={{ begin: true, primary: fresh() }}
