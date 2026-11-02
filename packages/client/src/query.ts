@@ -50,17 +50,21 @@ export const admits = (c: ShelfCard, terms: readonly Term[], words: readonly str
   return terms.every((x) => (x.tag ? tags.includes(x.word) : text.some((s) => s.includes(x.word))) !== x.not)
 }
 
-/** The player's words on `card` rewritten by `f`: trimmed, deduped, an empty list deletes the key, an empty map the
- *  field (written whole by `PUT /player`, wire.ts `putPlayer`). */
+/** Maximum filing words on one card: bounds the workspace tag strip to ~2–3 rows. */
+export const MAX_TAGS = 8
+
+/** The player's words on `card` rewritten by `f`: trimmed, deduped, capped at `MAX_TAGS`, an empty list deletes the
+ *  key, an empty map the field (written whole by `PUT /player`, wire.ts `putPlayer`). */
 export const retag = (p: Player, card: string, f: (words: readonly string[]) => readonly string[]): Player => {
   const { [card]: was = [], ...rest } = p.tags ?? {}
-  const words = [...new Set(f(was).map((w) => w.trim()))].filter(Boolean)
+  const words = [...new Set(f(was).map((w) => w.trim()))].filter(Boolean).slice(0, MAX_TAGS)
   const next = words.length ? { ...rest, [card]: words } : rest
   return { ...p, tags: Object.keys(next).length ? next : undefined }
 }
 /** The player's words on other cards and not on `card`, holding `q` by folded substring: what one tap attaches. */
 export const spare = (tags: Player["tags"], card: string, q: string): string[] => {
   const mine = new Set(tags?.[card] ?? [])
+  if (mine.size >= MAX_TAGS) return []
   const f = fold(q.trim())
   return [...new Set(Object.values(tags ?? {}).flat())].filter((w) => !mine.has(w) && fold(w).includes(f))
 }

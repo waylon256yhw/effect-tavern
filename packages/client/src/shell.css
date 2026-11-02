@@ -425,29 +425,58 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the tags row: both columns, one line; the words are unbounded, so they ellipsize and never wrap the sidebar */
-.workspace .row.tags {
-  grid-column: 1 / -1;
-  flex-direction: row;
+/* the card's tags right under its head: real wrapping chips on the sidebar surface (no outer card box, no middle-dot
+   truncation). Clicking the word filters the shelf by `#word`, × removes it in place, + opens the popover */
+.workspace-tags {
+  anchor-name: --tags-side;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-}
-.workspace .row.tags .lbl {
+  gap: 5px;
+  max-height: 5.25rem;
+  overflow-y: auto;
   flex: none;
 }
-.workspace .row.tags .val {
-  flex: 1;
-  width: auto;
-  text-align: right;
+.workspace-tags:has(#tags-drawer) {
+  anchor-name: --tags-drawer;
 }
-.workspace .val.none {
-  color: var(--ink-3);
+.workspace-tags > .chip {
+  height: 24px;
+  padding: 0 5px 0 9px;
+  gap: 3px;
+}
+.workspace-tags .chip .word {
+  color: var(--ink-2);
   font-weight: 500;
 }
-/* its editor floats under the row (the resting height stays): the attached words with × , the field, the player's
-   other words to tap on (the chip, reader.css) */
+.workspace-tags .chip .word:hover {
+  color: var(--ink);
+}
+.workspace-tags .chip .del {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-3);
+}
+.workspace-tags .chip .del:hover {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.workspace-tags > button.chip.add {
+  padding: 0 7px;
+  color: var(--ink-3);
+}
+.workspace-tags > button.chip.add.empty {
+  padding: 0 9px;
+  gap: 5px;
+}
+.workspace-tags > button.chip.add:hover:not(:disabled) {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+/* its adder floats under `.workspace-tags`: the field, the player's other words to tap on, and the way to the manager */
 .tag-pop {
-  position-anchor: auto;
+  position-anchor: --tags-side;
   position-area: bottom span-right;
   position-try-fallbacks: flip-block;
   inset: auto;
@@ -463,6 +492,9 @@
     var(--shadow-pop),
     inset 0 0 0 var(--hairline) var(--line);
 }
+#tags-drawer {
+  position-anchor: --tags-drawer;
+}
 .tag-pop:popover-open {
   display: flex;
   flex-direction: column;
@@ -475,18 +507,13 @@
   max-height: 8rem;
   overflow-y: auto;
 }
-.tag-chips .chip button {
-  display: inline-flex;
-  color: var(--ink-3);
-}
-.tag-chips .chip button:hover {
-  color: var(--ink);
-}
 .tag-chips button.chip {
+  height: 24px;
   padding: 0 10px;
 }
 .tag-chips button.chip:hover {
   background: var(--alpha-2);
+  color: var(--ink);
 }
 /* the foot: the way to the tag manager */
 .tag-pop .manage {

@@ -155,7 +155,7 @@ export const CardPage = () => {
                             <button type="button" popovertarget={`spec-${i}`}>
                               {chip().label}
                             </button>
-                            <div id={`spec-${i}`} class="spec-pop" popover>
+                            <div id={`spec-${i}`} class="spec-pop scroller" popover>
                               <ul>
                                 <For each={items()} keyed={false}>
                                   {(x) => <li>{x()}</li>}

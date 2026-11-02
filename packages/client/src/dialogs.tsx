@@ -199,17 +199,24 @@ export const StoryDialogs = () => {
       />
       <Sheet dialog={(el) => (tagman = el)} heading={<span>{t("tags.manage")}</span>}>
         <div class="manager tagman">
-          <div class="list scroller" role="list">
-            <For each={counts()} keyed={([w]) => w}>
-              {(row) => (
-                <div class="card" role="listitem">
-                  <div class="top">
+          <Show
+            when={counts().length}
+            fallback={
+              <div class="empty">
+                <span>{t("tags.empty")}</span>
+              </div>
+            }
+          >
+            <div class="tagman-chips scroller" role="list">
+              <For each={counts()} keyed={([w]) => w}>
+                {(row) => (
+                  <span class="chip" role="listitem">
                     <Show
                       when={editing() === row()[0]}
                       fallback={
                         <button
                           type="button"
-                          class="name"
+                          class="word"
                           aria-label={`${row()[0]} · ${t("tags.rename")}`}
                           onClick={() => setEditing(row()[0])}
                         >
@@ -220,6 +227,7 @@ export const StoryDialogs = () => {
                       <input
                         class="field"
                         value={row()[0]}
+                        size={Math.max(row()[0].length + 2, 4)}
                         aria-label={t("tags.rename")}
                         ref={(el) => queueMicrotask(() => el.select())}
                         onBlur={() => setEditing(null)}
@@ -239,25 +247,22 @@ export const StoryDialogs = () => {
                         }}
                       />
                     </Show>
-                    <span class="meta">{t("tags.cards", { n: row()[1] })}</span>
+                    <span class="count" title={t("tags.cards", { n: row()[1] })}>
+                      {row()[1]}
+                    </span>
                     <button
                       type="button"
-                      class="icon danger"
+                      class="del"
                       aria-label={`${row()[0]} · ${t("common.delete")}`}
                       onClick={() => void putPlayer((p) => dropTag(p, row()[0]))}
                     >
-                      <Close />
+                      <Close aria-hidden="true" />
                     </button>
-                  </div>
-                </div>
-              )}
-            </For>
-            <Show when={!counts().length}>
-              <div class="empty">
-                <span>{t("tags.empty")}</span>
-              </div>
-            </Show>
-          </div>
+                  </span>
+                )}
+              </For>
+            </div>
+          </Show>
         </div>
       </Sheet>
       {/* the picker: a search over the player's personas and their rows, the card's own first; made and edited on

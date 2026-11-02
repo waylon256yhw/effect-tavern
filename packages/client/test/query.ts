@@ -3,7 +3,7 @@
 // dropTag, tagCounts for the tag manager) (stories.ts `pieces` over several words). Under Bun the locale is zh-CN.
 import assert from "node:assert/strict"
 import type { Player } from "@effect-tavern/runtime/src/fragment.ts"
-import { admits, dropTag, parse, plain, renameTag, retag, spare, tagCounts } from "../src/query.ts"
+import { admits, dropTag, MAX_TAGS, parse, plain, renameTag, retag, spare, tagCounts } from "../src/query.ts"
 import type { ShelfCard } from "../src/store.ts"
 import { pieces } from "../src/stories.ts"
 import en from "../src/locales/en.ts"
@@ -61,11 +61,16 @@ const me: Player = { global: [], forCard: {}, tags: { wuxia: ["武侠"] } }
 assert.deepEqual(retag(me, "wuxia", (ws) => [...ws, " 对峙 ", "武侠", ""]).tags, { wuxia: ["武侠", "对峙"] })
 assert.deepEqual(retag(me, "banxing", (ws) => [...ws, "日常"]).tags, { wuxia: ["武侠"], banxing: ["日常"] })
 assert.equal(retag(me, "wuxia", () => []).tags, undefined)
+assert.equal(
+  retag(me, "wuxia", () => ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]).tags?.wuxia?.length,
+  MAX_TAGS,
+)
 // what one tap attaches: the player's words elsewhere, not on this card, filtered by the field
 const all = { wuxia: ["武侠", "对峙"], banxing: ["日常", "武侠"], yandao: ["Noir"] }
 assert.deepEqual(spare(all, "banxing", ""), ["对峙", "Noir"])
 assert.deepEqual(spare(all, "banxing", "no"), ["Noir"]) // folded substring
 assert.deepEqual(spare(undefined, "banxing", ""), [])
+assert.deepEqual(spare({ wuxia: ["1", "2", "3", "4", "5", "6", "7", "8"], banxing: ["9"] }, "wuxia", ""), [])
 // the tag manager's ops over every card: rename merges into a word already on, drop empties keys and then the field
 const lib: Player = {
   global: [],

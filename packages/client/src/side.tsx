@@ -1,8 +1,9 @@
 // The sidebar (#117, docs/sidebar-brief-1.md): the install's navigation, cards → stories, and nothing of one story's
 // (that is the reader's strip, shell.tsx). Two layers, one shown at a time, sliding sideways: the shelf (every card,
 // with a search; a card's row has a dot while a turn runs on any of its stories) and the workspace (one card: its
-// head, which opens its page; three rows under it, the persona and the writing in force on this card (both are the
-// card's, not a story's) and the player's filing words on it (`Player.tags`, #133, edited in a popover); a search; its stories, starred first then newest, the open one on a tint, a dot on one
+// head, which opens its page; the player's filing words on it (`Player.tags`, #133) as wrapping chips right under the
+// head (click a word to filter the shelf by `#word`, × to remove, + to add or open the tag manager); two rows under it,
+// the persona and the writing in force on this card (both are the card's, not a story's); a search; its stories, starred first then newest, the open one on a tint, a dot on one
 // with a turn in flight; "新建故事" at the foot, which opens the card's page and makes no story: a story begins at
 // Begin). The top strip (the way back to the shelf, with a dot when another card is busy) and the foot (this card's
 // story manager at the right end) are one DOM for both layers: only the middle moves. Settings, theme and language
@@ -15,7 +16,7 @@ import { openManager, openPicker, openTagManager } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
-import { admits, parse, plain, retag, spare } from "./query.ts"
+import { admits, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
 import { arranged, busyElsewhere, busyOn, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
 import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
 import { chosen } from "./switches.ts"
@@ -94,8 +95,8 @@ export const Sidebar = (props: {
     () =>
       chosen(me()?.writing, !!me()?.forCard[at() ?? ""]?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard"),
   )
-  // the player's filing words on this card: the row shows them joined, the popover attaches and removes; each change
-  // is one PUT /player over the last acknowledged layer (query.ts `retag`)
+  // the player's filing words on this card: wrapping chips under the head (click a word to filter the shelf by `#word`,
+  // × to remove, + to open the popover); each change is one PUT /player over the last acknowledged layer (query.ts `retag`)
   const words = createMemo(() => me()?.tags?.[at() ?? ""] ?? [])
   const [tq, setTq] = createSignal("")
   const offered = createMemo(() => spare(me()?.tags, at() ?? "", tq()))
@@ -105,6 +106,7 @@ export const Sidebar = (props: {
   }
   const attach = (w: string) => tagsOf((ws) => [...ws, w])
   let tagBox: HTMLInputElement | undefined
+  let shelfSearch: HTMLInputElement | undefined
   // after a word lands (Enter or a tap on an offered chip) the box empties and keeps the focus: the next word follows
   const clear = () => {
     if (tagBox) tagBox.value = ""
@@ -119,6 +121,12 @@ export const Sidebar = (props: {
   // the shelf's search (query.ts): plain words over title, summary and the player's words on the card, `#` on one of
   // those words or a facet, `-` negates; the plain words are what the rows mark
   const [cq, setCq] = createSignal("")
+  const filterByTag = (w: string) => {
+    const q = `#${w}`
+    setCq(q)
+    if (shelfSearch) shelfSearch.value = q
+    toShelf()
+  }
   const terms = createMemo(() => parse(cq()))
   const marked = createMemo(() => plain(terms()))
   const shown = createMemo(() => shelf().filter((c) => admits(c, terms(), me()?.tags?.[c.id] ?? [])))
@@ -220,6 +228,8 @@ export const Sidebar = (props: {
               <Clue aria-hidden="true" />
               <input
                 type="search"
+                ref={(el) => (shelfSearch = el)}
+                value={cq()}
                 placeholder={t("side.searchCards")}
                 aria-label={t("side.searchCards")}
                 onInput={(e) => setCq(e.currentTarget.value)}
@@ -267,29 +277,42 @@ export const Sidebar = (props: {
                 <Next />
               </span>
             </button>
-            <div class="workspace-tools">
-              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openPicker)}>
-                <span class="lbl">
-                  <User aria-hidden="true" />
-                  <span>{t("common.persona")}</span>
-                </span>
-                <span class="val">{persona()}</span>
-              </button>
-              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openWriting)}>
-                <span class="lbl">
-                  <Write aria-hidden="true" />
-                  <span>{t("side.writing")}</span>
-                </span>
-                <span class="val">{writing()}</span>
-              </button>
-              <button type="button" class="row tags" disabled={!me() || at() === null} popovertarget={tagPop()}>
-                <span class="lbl">
-                  <Tag aria-hidden="true" />
-                  <span>{t("side.tags")}</span>
-                </span>
-                <span class={{ val: true, none: !words().length }}>
-                  {words().length ? words().join(" · ") : t("side.noTags")}
-                </span>
+            <div class="workspace-tags scroller">
+              <For each={words()} keyed={false}>
+                {(w) => (
+                  <span class="chip">
+                    <button type="button" class="word" onClick={() => filterByTag(w())}>
+                      {w()}
+                    </button>
+                    <button
+                      type="button"
+                      class="del"
+                      aria-label={`${w()} · ${t("side.removeTag")}`}
+                      onClick={() => tagsOf((ws) => ws.filter((x) => x !== w()))}
+                    >
+                      <Close aria-hidden="true" />
+                    </button>
+                  </span>
+                )}
+              </For>
+              <button
+                type="button"
+                class={{ chip: true, add: true, empty: !words().length }}
+                disabled={!me() || at() === null}
+                aria-label={t("side.addTag")}
+                popovertarget={tagPop()}
+              >
+                <Show
+                  when={words().length}
+                  fallback={
+                    <>
+                      <Tag aria-hidden="true" />
+                      <span>{t("side.addTag")}</span>
+                    </>
+                  }
+                >
+                  <Snippets aria-hidden="true" />
+                </Show>
               </button>
               <div
                 id={tagPop()}
@@ -301,28 +324,11 @@ export const Sidebar = (props: {
                   if (tagBox) tagBox.value = ""
                 }}
               >
-                <Show when={words().length}>
-                  <div class="tag-chips">
-                    <For each={words()} keyed={false}>
-                      {(w) => (
-                        <span class="chip">
-                          {w()}
-                          <button
-                            type="button"
-                            aria-label={t("side.removeTag")}
-                            onClick={() => tagsOf((ws) => ws.filter((x) => x !== w()))}
-                          >
-                            <Close aria-hidden="true" />
-                          </button>
-                        </span>
-                      )}
-                    </For>
-                  </div>
-                </Show>
                 <div class="input-box sm">
                   <input
                     type="text"
                     ref={(el) => (tagBox = el)}
+                    disabled={words().length >= MAX_TAGS}
                     placeholder={t("side.addTag")}
                     aria-label={t("side.addTag")}
                     onInput={(e) => setTq(e.currentTarget.value)}
@@ -336,7 +342,7 @@ export const Sidebar = (props: {
                   />
                 </div>
                 <Show when={offered().length}>
-                  <div class="tag-chips">
+                  <div class="tag-chips scroller">
                     <For each={offered()} keyed={false}>
                       {(w) => (
                         <button
@@ -363,6 +369,22 @@ export const Sidebar = (props: {
                   {t("tags.manage")}
                 </button>
               </div>
+            </div>
+            <div class="workspace-tools">
+              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openPicker)}>
+                <span class="lbl">
+                  <User aria-hidden="true" />
+                  <span>{t("common.persona")}</span>
+                </span>
+                <span class="val">{persona()}</span>
+              </button>
+              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openWriting)}>
+                <span class="lbl">
+                  <Write aria-hidden="true" />
+                  <span>{t("side.writing")}</span>
+                </span>
+                <span class="val">{writing()}</span>
+              </button>
             </div>
             <div class="input-box sm">
               <Clue aria-hidden="true" />

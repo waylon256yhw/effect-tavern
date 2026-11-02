@@ -346,8 +346,6 @@ const zh = {
     storyName: "故事名",
     workspace: "单卡工作区",
     writing: "写作",
-    tags: "标签",
-    noTags: "无标签",
     addTag: "添加标签",
     removeTag: "移除",
     closeTab: "关闭标签页",

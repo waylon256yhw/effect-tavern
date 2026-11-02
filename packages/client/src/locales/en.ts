@@ -348,8 +348,6 @@ const en: Dict = {
     storyName: "Story name",
     workspace: "Card workspace",
     writing: "Writing",
-    tags: "Tags",
-    noTags: "No tags",
     addTag: "Add a tag",
     removeTag: "Remove",
     closeTab: "Close tab",

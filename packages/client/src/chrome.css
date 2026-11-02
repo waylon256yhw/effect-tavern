@@ -890,29 +890,50 @@
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
-/* the tag manager (dialogs.tsx): the manager's rows, the word a button that turns into a field, its count, an × always
-   shown (no hover on a phone) */
-.tagman .card {
-  cursor: default;
+/* the tag manager (dialogs.tsx): a wrapping wall of capsules (not full-width story rows), each with the word (click to
+   rename inline), its card count, and × to delete across all cards */
+.tagman-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
 }
-.tagman .card .name {
-  text-align: start;
+.tagman .chip {
+  height: 30px;
+  padding: 0 6px 0 11px;
+  gap: 6px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
-.tagman .card .field {
-  flex: 1;
-  min-width: 0;
-  padding-block: 2px;
+.tagman .chip .word {
+  color: var(--ink);
+  font-weight: 500;
 }
-.tagman .card .icon {
-  width: 24px;
-  height: 24px;
+.tagman .chip .word:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tagman .chip .field {
+  min-width: 3rem;
+  max-width: 10rem;
+  padding: 1px 6px;
+  font-size: var(--text-footnote);
+}
+.tagman .chip .count {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3);
 }
-.tagman .card .icon svg {
-  width: 14px;
-  height: 14px;
+.tagman .chip .del {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-3);
 }
-.tagman .card .icon.danger:hover {
+.tagman .chip .del:hover {
+  background: var(--alpha-2);
   color: var(--danger);
 }
 /* the export: the question, its line, the two formats as links */
