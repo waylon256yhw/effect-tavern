@@ -382,6 +382,12 @@ const zh = {
     verbosityDetailed: "详尽",
     verbosityMedium: "适中",
   },
+  tags: {
+    cards: "{n} 张卡",
+    empty: "还没有标签",
+    manage: "标签管理",
+    rename: "重命名",
+  },
   timeline: {
     atNode: "在 #{id}",
     belowN: "下方 {n} 个",

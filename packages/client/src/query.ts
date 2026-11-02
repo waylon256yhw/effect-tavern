@@ -64,3 +64,18 @@ export const spare = (tags: Player["tags"], card: string, q: string): string[] =
   const f = fold(q.trim())
   return [...new Set(Object.values(tags ?? {}).flat())].filter((w) => !mine.has(w) && fold(w).includes(f))
 }
+/** Every card's `from` becomes `to` (trimmed; no duplicate where `to` is already on; an empty `to` changes nothing). */
+export const renameTag = (p: Player, from: string, to: string): Player => {
+  const w = to.trim()
+  if (!w || w === from) return p
+  return Object.keys(p.tags ?? {}).reduce((q, c) => retag(q, c, (ws) => ws.map((x) => (x === from ? w : x))), p)
+}
+/** `word` off every card; an emptied list and an emptied map go as `retag` drops them. */
+export const dropTag = (p: Player, word: string): Player =>
+  Object.keys(p.tags ?? {}).reduce((q, c) => retag(q, c, (ws) => ws.filter((x) => x !== word)), p)
+/** Every word with the number of cards carrying it, most cards first, then by word: the tag manager's one order. */
+export const tagCounts = (tags: Player["tags"]): [string, number][] => {
+  const n = new Map<string, number>()
+  for (const ws of Object.values(tags ?? {})) for (const w of ws) n.set(w, (n.get(w) ?? 0) + 1)
+  return [...n].sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
+}

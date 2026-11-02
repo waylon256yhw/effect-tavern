@@ -890,6 +890,31 @@
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
+/* the tag manager (dialogs.tsx): the manager's rows, the word a button that turns into a field, its count, an × always
+   shown (no hover on a phone) */
+.tagman .card {
+  cursor: default;
+}
+.tagman .card .name {
+  text-align: start;
+}
+.tagman .card .field {
+  flex: 1;
+  min-width: 0;
+  padding-block: 2px;
+}
+.tagman .card .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--ink-3);
+}
+.tagman .card .icon svg {
+  width: 14px;
+  height: 14px;
+}
+.tagman .card .icon.danger:hover {
+  color: var(--danger);
+}
 /* the export: the question, its line, the two formats as links */
 .confirm .sub {
   margin-top: calc(-1 * var(--space-2));

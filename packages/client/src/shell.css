@@ -488,6 +488,10 @@
 .tag-chips button.chip:hover {
   background: var(--alpha-2);
 }
+/* the foot: the way to the tag manager */
+.tag-pop .manage {
+  align-self: flex-end;
+}
 /* a story: its name (or "New story" in ink-2), its turn count or a dot while its turn runs; under a search, the line
    that hit */
 .story-row {

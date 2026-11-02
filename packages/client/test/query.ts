@@ -1,8 +1,9 @@
 // query.ts: the shelf's search terms (plain, `#tag`, `#facet`, `-` negation, AND across terms) over GET /cards rows
-// and the player's words (Player.tags), the plain words the rows mark, and the tag edits (retag, spare) (stories.ts `pieces` over several words). Under Bun the locale is zh-CN.
+// and the player's words (Player.tags), the plain words the rows mark, and the tag edits (retag, spare; renameTag,
+// dropTag, tagCounts for the tag manager) (stories.ts `pieces` over several words). Under Bun the locale is zh-CN.
 import assert from "node:assert/strict"
 import type { Player } from "@effect-tavern/runtime/src/fragment.ts"
-import { admits, parse, plain, retag, spare } from "../src/query.ts"
+import { admits, dropTag, parse, plain, renameTag, retag, spare, tagCounts } from "../src/query.ts"
 import type { ShelfCard } from "../src/store.ts"
 import { pieces } from "../src/stories.ts"
 import en from "../src/locales/en.ts"
@@ -65,4 +66,25 @@ const all = { wuxia: ["武侠", "对峙"], banxing: ["日常", "武侠"], yandao
 assert.deepEqual(spare(all, "banxing", ""), ["对峙", "Noir"])
 assert.deepEqual(spare(all, "banxing", "no"), ["Noir"]) // folded substring
 assert.deepEqual(spare(undefined, "banxing", ""), [])
+// the tag manager's ops over every card: rename merges into a word already on, drop empties keys and then the field
+const lib: Player = {
+  global: [],
+  forCard: {},
+  tags: { wuxia: ["武侠", "对峙"], banxing: ["对峙", "日常"], yandao: ["日常"] },
+}
+assert.deepEqual(renameTag(lib, "对峙", " 冲突 ").tags, {
+  wuxia: ["武侠", "冲突"],
+  banxing: ["冲突", "日常"],
+  yandao: ["日常"],
+})
+assert.deepEqual(renameTag(lib, "对峙", "日常").tags, { wuxia: ["武侠", "日常"], banxing: ["日常"], yandao: ["日常"] })
+assert.equal(renameTag(lib, "对峙", "  "), lib) // an empty name changes nothing
+assert.deepEqual(dropTag(lib, "日常").tags, { wuxia: ["武侠", "对峙"], banxing: ["对峙"] })
+assert.equal(dropTag(dropTag(dropTag(lib, "日常"), "对峙"), "武侠").tags, undefined)
+assert.deepEqual(tagCounts(lib.tags)[0], ["对峙", 2]) // most cards first
+assert.deepEqual(tagCounts({ a: ["b"], c: ["a"] }), [
+  ["a", 1],
+  ["b", 1],
+]) // ties by word
+assert.deepEqual(tagCounts(undefined), [])
 console.log("query ok")
