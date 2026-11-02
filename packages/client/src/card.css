@@ -220,9 +220,26 @@
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
-.manifest .openings-head .mono {
+.manifest .openings-head .mono,
+.manifest .openings-search .mono {
+  flex: none;
   color: var(--ink-2);
+  font-size: var(--text-footnote);
   font-weight: 500;
+}
+.manifest .openings-search {
+  flex: none;
+  padding-right: var(--space-2);
+}
+.manifest .versions .openings-search {
+  margin-bottom: var(--space-1);
+}
+.manifest .openings .none,
+.manifest .versions .none {
+  padding: var(--space-3) var(--space-2);
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+  text-align: center;
 }
 .manifest .openings {
   margin: 0;

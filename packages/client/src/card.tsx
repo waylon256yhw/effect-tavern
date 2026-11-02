@@ -9,8 +9,8 @@
 import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Back, Change, Next, Prev, Up } from "./icons.tsx"
-import { chips, firstLine, openingTags } from "./manifest.ts"
+import { Back, Change, Clue, Next, Prev, Up } from "./icons.tsx"
+import { admitsOpening, chips, firstLine, openingTags, SEARCH_AT } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { backOf, close, newStory, open } from "./pages.ts"
@@ -60,6 +60,7 @@ export const CardPage = () => {
   const back = () => backOf(activeOf(strip()))
   const id = createMemo(() => view()?.id)
   const [at, setAt] = createSignal(() => (id(), 0))
+  const [oq, setOq] = createSignal(() => (id(), ""))
   const [starting, setStarting] = createSignal(false)
   const inStory = () => all().nodes.size > 0
   /** Begin lands in the open story: it is empty and of this card. Otherwise (a story in progress, none yet, an empty
@@ -71,6 +72,14 @@ export const CardPage = () => {
   }
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
+  const listed = createMemo(() => {
+    const c = view()
+    const q = oq()
+    if (!c) return []
+    return openings()
+      .map((g, i) => ({ g, i }))
+      .filter(({ g }) => admitsOpening(c, g, q))
+  })
   const begin = async () => {
     if (starting()) return
     setStarting(true)
@@ -84,23 +93,25 @@ export const CardPage = () => {
       setStarting(false)
     }
   }
-  /** The list column's keys: ↑ ↓ move the selection (Home / End to the ends), the prose follows. */
+  /** The list column's keys: ↑ ↓ move the selection across the listed openings (Home / End to the ends), the prose follows. */
   const onKey = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
-    const last = openings().length - 1
-    const to =
+    const items = listed()
+    if (!items.length) return
+    const cur = items.findIndex((x) => x.i === at())
+    const pos =
       e.key === "ArrowDown"
-        ? Math.min(at() + 1, last)
+        ? Math.min((cur < 0 ? -1 : cur) + 1, items.length - 1)
         : e.key === "ArrowUp"
-          ? Math.max(at() - 1, 0)
+          ? Math.max((cur < 0 ? items.length : cur) - 1, 0)
           : e.key === "Home"
             ? 0
             : e.key === "End"
-              ? last
+              ? items.length - 1
               : undefined
-    if (to === undefined) return
+    if (pos === undefined) return
     e.preventDefault()
-    setAt(to)
-    e.currentTarget.children[to]?.scrollIntoView({ block: "nearest" })
+    setAt(items[pos]!.i)
+    e.currentTarget.children[pos]?.scrollIntoView({ block: "nearest" })
   }
   return (
     <div class="inspect manifest">
@@ -154,12 +165,31 @@ export const CardPage = () => {
             </section>
             <Show when={openings().length > 1}>
               <div class="openings-wrap">
-                <div class="openings-head">
-                  <span>{t("card.opening")}</span>
-                  <span class="mono">
-                    {at() + 1} / {openings().length}
-                  </span>
-                </div>
+                <Show
+                  when={openings().length >= SEARCH_AT}
+                  fallback={
+                    <div class="openings-head">
+                      <span>{t("card.opening")}</span>
+                      <span class="mono">
+                        {at() + 1} / {openings().length}
+                      </span>
+                    </div>
+                  }
+                >
+                  <div class="input-box sm openings-search">
+                    <Clue aria-hidden="true" />
+                    <input
+                      type="search"
+                      value={oq()}
+                      placeholder={t("card.searchOpenings")}
+                      aria-label={t("card.searchOpenings")}
+                      onInput={(e) => setOq(e.currentTarget.value)}
+                    />
+                    <span class="mono">
+                      {at() + 1} / {openings().length}
+                    </span>
+                  </div>
+                </Show>
                 <ul
                   class="openings"
                   role="listbox"
@@ -168,19 +198,22 @@ export const CardPage = () => {
                   aria-activedescendant={`opening-${at()}`}
                   onKeyDown={onKey}
                 >
-                  <For each={openings()} keyed={false}>
-                    {(g, i) => (
+                  <For each={listed()} keyed={(x) => x.i}>
+                    {(x) => (
                       <li
-                        id={`opening-${i}`}
+                        id={`opening-${x().i}`}
                         role="option"
                         class="version"
-                        aria-selected={i === at() ? "true" : "false"}
-                        onClick={() => setAt(i)}
+                        aria-selected={x().i === at() ? "true" : "false"}
+                        onClick={() => setAt(x().i)}
                       >
-                        <Line c={c()} g={g()} i={i} />
+                        <Line c={c()} g={x().g} i={x().i} />
                       </li>
                     )}
                   </For>
+                  <Show when={!listed().length}>
+                    <li class="none">{t("card.noOpeningMatch")}</li>
+                  </Show>
                 </ul>
               </div>
             </Show>
@@ -227,22 +260,40 @@ export const CardPage = () => {
                         e.currentTarget.hidePopover()
                       }
                     >
-                      <For each={openings()} keyed={false}>
-                        {(g, i) => (
+                      <Show when={openings().length >= SEARCH_AT}>
+                        <div class="input-box sm openings-search">
+                          <Clue aria-hidden="true" />
+                          <input
+                            type="search"
+                            value={oq()}
+                            placeholder={t("card.searchOpenings")}
+                            aria-label={t("card.searchOpenings")}
+                            onInput={(e) => setOq(e.currentTarget.value)}
+                          />
+                          <span class="mono">
+                            {at() + 1} / {openings().length}
+                          </span>
+                        </div>
+                      </Show>
+                      <For each={listed()} keyed={(x) => x.i}>
+                        {(x) => (
                           <button
                             type="button"
                             role="menuitem"
                             class="version"
-                            aria-current={i === at() ? "true" : undefined}
+                            aria-current={x().i === at() ? "true" : undefined}
                             onClick={(e) => {
-                              setAt(i)
+                              setAt(x().i)
                               e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()
                             }}
                           >
-                            <Line c={c()} g={g()} i={i} />
+                            <Line c={c()} g={x().g} i={x().i} />
                           </button>
                         )}
                       </For>
+                      <Show when={!listed().length}>
+                        <div class="none">{t("card.noOpeningMatch")}</div>
+                      </Show>
                     </div>
                     <button
                       class="icon"
