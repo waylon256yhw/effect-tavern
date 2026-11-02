@@ -8,9 +8,6 @@ import { plain } from "./markdown.ts"
 import { FLAGS, parse } from "./query.ts"
 import { fold } from "./stories.ts"
 
-/** How many openings a card needs before the list head becomes a search box (#120). */
-export const SEARCH_AT = 8
-
 /** A chip on the page's row (design/new-story-and-tags.md §5.1): the harness's word for what the card is, with the
  *  list it stands for in the hint, or (`own`) one of the card's own tags, never translated. */
 export interface Chip {

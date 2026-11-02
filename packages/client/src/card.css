@@ -215,24 +215,28 @@
 .manifest .openings-head {
   flex: none;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-sm);
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
-.manifest .openings-head .mono,
-.manifest .openings-search .mono {
+.manifest .openings-head > span:first-child {
+  flex: none;
+}
+.manifest .openings-head .inline-search[data-open="true"] {
+  flex: 1;
+  width: auto;
+}
+.manifest .openings-head .mono {
+  margin-left: auto;
   flex: none;
   color: var(--ink-2);
   font-size: var(--text-footnote);
   font-weight: 500;
 }
-.manifest .openings-search {
-  flex: none;
-  padding-right: var(--space-2);
-}
-.manifest .versions .openings-search {
-  margin-bottom: var(--space-1);
+.manifest .versions .openings-head {
+  padding: var(--space-1) var(--space-2);
 }
 .manifest .openings .none,
 .manifest .versions .none {

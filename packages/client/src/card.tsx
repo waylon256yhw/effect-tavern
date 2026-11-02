@@ -10,7 +10,7 @@ import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Clue, Next, Prev, Up } from "./icons.tsx"
-import { admitsOpening, chips, firstLine, openingTags, SEARCH_AT } from "./manifest.ts"
+import { admitsOpening, chips, firstLine, openingTags } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { backOf, close, newStory, open } from "./pages.ts"
@@ -61,6 +61,7 @@ export const CardPage = () => {
   const id = createMemo(() => view()?.id)
   const [at, setAt] = createSignal(() => (id(), 0))
   const [oq, setOq] = createSignal(() => (id(), ""))
+  const [searching, setSearching] = createSignal(false)
   const [starting, setStarting] = createSignal(false)
   const inStory = () => all().nodes.size > 0
   /** Begin lands in the open story: it is empty and of this card. Otherwise (a story in progress, none yet, an empty
@@ -165,31 +166,30 @@ export const CardPage = () => {
             </section>
             <Show when={openings().length > 1}>
               <div class="openings-wrap">
-                <Show
-                  when={openings().length >= SEARCH_AT}
-                  fallback={
-                    <div class="openings-head">
-                      <span>{t("card.opening")}</span>
-                      <span class="mono">
-                        {at() + 1} / {openings().length}
-                      </span>
-                    </div>
-                  }
-                >
-                  <div class="input-box sm openings-search">
+                <div class="openings-head">
+                  <span>{t("card.opening")}</span>
+                  <label class="inline-search" data-open={searching() || !!oq() ? "true" : "false"}>
                     <Clue aria-hidden="true" />
                     <input
                       type="search"
-                      value={oq()}
                       placeholder={t("card.searchOpenings")}
                       aria-label={t("card.searchOpenings")}
+                      value={oq()}
+                      onFocus={() => setSearching(true)}
+                      onBlur={() => setSearching(false)}
                       onInput={(e) => setOq(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Escape") return
+                        e.preventDefault() // the search's Escape: the page stays
+                        setOq("")
+                        e.currentTarget.blur()
+                      }}
                     />
-                    <span class="mono">
-                      {at() + 1} / {openings().length}
-                    </span>
-                  </div>
-                </Show>
+                  </label>
+                  <span class="mono">
+                    {at() + 1} / {openings().length}
+                  </span>
+                </div>
                 <ul
                   class="openings"
                   role="listbox"
@@ -260,21 +260,30 @@ export const CardPage = () => {
                         e.currentTarget.hidePopover()
                       }
                     >
-                      <Show when={openings().length >= SEARCH_AT}>
-                        <div class="input-box sm openings-search">
+                      <div class="openings-head">
+                        <span>{t("card.opening")}</span>
+                        <label class="inline-search" data-open={searching() || !!oq() ? "true" : "false"}>
                           <Clue aria-hidden="true" />
                           <input
                             type="search"
-                            value={oq()}
                             placeholder={t("card.searchOpenings")}
                             aria-label={t("card.searchOpenings")}
+                            value={oq()}
+                            onFocus={() => setSearching(true)}
+                            onBlur={() => setSearching(false)}
                             onInput={(e) => setOq(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Escape") return
+                              e.preventDefault()
+                              setOq("")
+                              e.currentTarget.blur()
+                            }}
                           />
-                          <span class="mono">
-                            {at() + 1} / {openings().length}
-                          </span>
-                        </div>
-                      </Show>
+                        </label>
+                        <span class="mono">
+                          {at() + 1} / {openings().length}
+                        </span>
+                      </div>
                       <For each={listed()} keyed={(x) => x.i}>
                         {(x) => (
                           <button
