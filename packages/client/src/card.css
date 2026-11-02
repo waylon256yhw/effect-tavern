@@ -152,7 +152,7 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-.manifest .chips li {
+.manifest .chips > li {
   flex: none;
   padding: 2px 9px;
   border-radius: var(--radius-pill);

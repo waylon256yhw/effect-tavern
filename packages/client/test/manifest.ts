@@ -64,8 +64,8 @@ assert.deepEqual(
   all.slice(1).map((c) => [c.label, c.items]),
   [
     ["状态", ["体力", "gold"]],
-    ["检定", ["闪避"]],
-    ["读数", ["心情"]],
+    ["检定", ["dodge"]], // the text, not the id: what the player reads
+    ["读数", ["mood?"]],
     ["线索", ["4 条 · 7 层"]],
     ["多开场", ["3 个开场白"]],
   ],

@@ -15,13 +15,13 @@ export interface Chip {
   items?: readonly string[]
 }
 /** Mode, then each mechanism the card has (query.ts FLAGS, the shelf's `#` words), each with what it stands for: the
- *  visible fields' labels, the actions' and readouts' ids (as a check is named, runtime card.ts), the lore's size, the
+ *  visible fields' labels, the actions' and readouts' text (card.ts: the option as the model sees it, the question), the lore's size, the
  *  openings' count. The fiction's module labels are the author's, not a spec of play (§2): not drawn. */
 export const chips = (c: CardView): Chip[] => {
   const items = {
     fields: c.rules.fields.filter((f) => !f.hidden).map((f) => f.label ?? f.path),
-    actions: c.rules.actions.map((a) => a.id),
-    readouts: (c.rules.readouts ?? []).map((q) => q.id),
+    actions: c.rules.actions.map((a) => a.text),
+    readouts: (c.rules.readouts ?? []).map((q) => q.text),
     lore: [t("card.loreSize", { entries: c.lore.entries, layers: c.lore.layers })],
     openings: [t("card.openingsCount", { n: c.greetings.length })],
   }
