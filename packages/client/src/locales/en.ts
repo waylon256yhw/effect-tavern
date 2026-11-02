@@ -384,6 +384,12 @@ const en: Dict = {
     verbosityDetailed: "Detailed",
     verbosityMedium: "Medium",
   },
+  tags: {
+    cards: "{n} cards",
+    empty: "No tags yet",
+    manage: "Manage tags",
+    rename: "Rename",
+  },
   timeline: {
     atNode: "at #{id}",
     belowN: "{n} below",

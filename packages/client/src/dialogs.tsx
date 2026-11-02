@@ -1,13 +1,15 @@
 // The dialogs the library needs, mounted once by the shell and opened from anywhere (#117): a story's rename, the
 // delete confirm (one story, or the manager's checked set), the export's two formats, the card's story manager
-// (manager.tsx) and the persona picker. The sidebar's rows carry none of these (a row only switches the story); the
-// manager's cards and the workspace's persona row call them. Each opener is a module function like `openSettings`, bound to
-// its dialog when the component mounts; before that it does nothing.
+// (manager.tsx), the persona picker and the tag manager (#133: every word of `Player.tags` with its card count, an
+// inline rename and a delete, each one PUT /player). The sidebar's rows carry none of these (a row only switches the
+// story); the manager's cards and the workspace's persona and tag rows call them. Each opener is a module function like
+// `openSettings`, bound to its dialog when the component mounts; before that it does nothing.
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { roam } from "./controls.tsx"
-import { Check, Clue, Jump } from "./icons.tsx"
+import { Check, Close, Clue, Jump } from "./icons.tsx"
 import { Manager } from "./manager.tsx"
+import { dropTag, renameTag, tagCounts } from "./query.ts"
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
@@ -21,6 +23,7 @@ const bound = {
   rename: (_s: StoryRow) => {},
   del: (_rows: readonly StoryRow[]) => {},
   exp: (_s: StoryRow) => {},
+  tags: () => {},
 }
 /** This card's stories: every one with its star, the search, the cleanup and the exports. */
 export const openManager = (): void => bound.manager()
@@ -29,6 +32,8 @@ export const openPicker = (): void => bound.picker()
 export const openRename = (s: StoryRow): void => bound.rename(s)
 export const openDelete = (rows: readonly StoryRow[]): void => bound.del(rows)
 export const openExport = (s: StoryRow): void => bound.exp(s)
+/** Every word the player files cards under: its count, a rename, a delete. */
+export const openTagManager = (): void => bound.tags()
 
 export const StoryDialogs = () => {
   const lib = read(stories)
@@ -114,6 +119,15 @@ export const StoryDialogs = () => {
     manager.close()
     if (s.id !== lib()?.current) void openStory(s.id)
   }
+  // the tag manager: one fixed order (most cards, then the word); a click on a word edits it in place, Enter renames it
+  // on every card, Escape or a blur keeps it; × drops it from every card (no confirm: one PUT, the word can be retyped)
+  let tagman!: HTMLDialogElement
+  const counts = createMemo(() => tagCounts(me()?.tags))
+  const [editing, setEditing] = createSignal<string | null>(null)
+  bound.tags = () => {
+    setEditing(null)
+    tagman.showModal()
+  }
   return (
     <>
       <dialog class="confirm" ref={(el) => (rename = el)} closedby="any" onClose={() => setRenaming(null)}>
@@ -183,6 +197,69 @@ export const StoryDialogs = () => {
         onDelete={(rows) => bound.del(rows)}
         onExport={(s) => bound.exp(s)}
       />
+      <Sheet dialog={(el) => (tagman = el)} heading={<span>{t("tags.manage")}</span>}>
+        <div class="manager tagman">
+          <div class="list scroller" role="list">
+            <For each={counts()} keyed={([w]) => w}>
+              {(row) => (
+                <div class="card" role="listitem">
+                  <div class="top">
+                    <Show
+                      when={editing() === row()[0]}
+                      fallback={
+                        <button
+                          type="button"
+                          class="name"
+                          aria-label={t("tags.rename")}
+                          onClick={() => setEditing(row()[0])}
+                        >
+                          {row()[0]}
+                        </button>
+                      }
+                    >
+                      <input
+                        class="field"
+                        value={row()[0]}
+                        aria-label={t("tags.rename")}
+                        ref={(el) => queueMicrotask(() => el.select())}
+                        onBlur={() => setEditing(null)}
+                        onKeyDown={(e) => {
+                          if (e.isComposing || e.keyCode === 229) return // an IME's confirming key is not a commit
+                          if (e.key === "Escape") {
+                            e.preventDefault() // the field's Escape, not the dialog's
+                            e.stopPropagation()
+                            setEditing(null)
+                          } else if (e.key === "Enter") {
+                            e.preventDefault()
+                            const from = row()[0]
+                            const to = e.currentTarget.value
+                            setEditing(null)
+                            if (to.trim() && to.trim() !== from) void putPlayer((p) => renameTag(p, from, to))
+                          }
+                        }}
+                      />
+                    </Show>
+                    <span class="meta">{t("tags.cards", { n: row()[1] })}</span>
+                    <button
+                      type="button"
+                      class="icon danger"
+                      aria-label={t("common.delete")}
+                      onClick={() => void putPlayer((p) => dropTag(p, row()[0]))}
+                    >
+                      <Close />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </For>
+            <Show when={!counts().length}>
+              <div class="empty">
+                <span>{t("tags.empty")}</span>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Sheet>
       {/* the picker: a search over the player's personas and their rows, the card's own first; made and edited on
         the settings page */}
       <Sheet

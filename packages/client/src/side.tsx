@@ -11,7 +11,7 @@
 // the story: the rename, star, export and delete live in the manager (manager.tsx, dialogs.tsx).
 import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { openManager, openPicker } from "./dialogs.tsx"
+import { openManager, openPicker, openTagManager } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
@@ -353,6 +353,15 @@ export const Sidebar = (props: {
                     </For>
                   </div>
                 </Show>
+                <button
+                  type="button"
+                  class="btn sm ghost manage"
+                  popovertarget={tagPop()}
+                  popovertargetaction="hide"
+                  onClick={() => leaveFor(openTagManager)}
+                >
+                  {t("tags.manage")}
+                </button>
               </div>
             </div>
             <div class="input-box sm">
