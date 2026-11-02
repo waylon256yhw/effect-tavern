@@ -37,6 +37,7 @@ export { default as Shade } from "~icons/ph/circle-half"
 export { default as Translate } from "~icons/ph/translate" // the locale flip (i18n.ts)
 export { default as Plugs } from "~icons/ph/plugs"
 export { default as Sliders } from "~icons/ph/sliders-horizontal"
+export { default as Tag } from "~icons/ph/tag" // the player's filing words on a card (side.tsx)
 export { default as Archive } from "~icons/ph/archive" // a card's story manager (side.tsx)
 export { default as Home } from "~icons/ph/books" // home's placeholder mark (home.tsx) and tab icon
 export { default as Card } from "~icons/ph/cards" // a card page's tab icon (shell.tsx)

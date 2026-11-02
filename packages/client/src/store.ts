@@ -38,7 +38,6 @@ export interface CardView {
   id: string
   title: string
   summary?: string // one line on what this card is
-  tags?: readonly string[] // the user layer's content words (Card.tags), never translated
   facets: Facets // what the card is, off its structure (session.ts `facets`): the keys a client draws in its own words
   heading?: string // what titles a turn (Card.heading); absent, turns have no titles
   input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
@@ -85,9 +84,9 @@ export interface Routing {
   stages?: Partial<Record<Phase, Pair>>
 }
 export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
-/** A card as GET /cards lists it (server library.ts `CardRow`): a card file's row adds its summary, tags and facets; a
+/** A card as GET /cards lists it (server library.ts `CardRow`): a card file's row adds its summary and facets; a
  *  library-table card's row has id and title alone. */
-export type ShelfCard = { id: string; title: string; summary?: string; tags?: readonly string[]; facets?: Facets }
+export type ShelfCard = { id: string; title: string; summary?: string; facets?: Facets }
 /** Every card the install knows (GET /cards): the sidebar's shelf (side.tsx, searched by query.ts), and what a
  *  persona's picks are named by. */
 export const cards = Atom.make<readonly ShelfCard[]>([]).pipe(Atom.keepAlive)

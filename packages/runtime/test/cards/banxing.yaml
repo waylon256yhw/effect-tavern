@@ -5,7 +5,6 @@
 id: banxing
 title: 伴星
 summary: 一对一纯聊天：依瑞丝。没有规则、没有 lore，一个人和她的开场。
-tags: [日常, 纯聊天]
 frame:
   - id: style
     text: |-

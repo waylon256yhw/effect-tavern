@@ -288,11 +288,8 @@ assert.deepEqual(wuxia, { mode: "act", fields: true, actions: true, readouts: tr
 assert.equal(head, cardView(full, plain).meta.tokens.head)
 const banxing = await loadCard("banxing")
 assert.deepEqual(
-  [banxing.tags, { ...facets(banxing), tokens: 0 }],
-  [
-    ["日常", "纯聊天"],
-    { mode: "act", fields: false, actions: false, readouts: false, lore: false, openings: false, tokens: 0 },
-  ],
+  { ...facets(banxing), tokens: 0 },
+  { mode: "act", fields: false, actions: false, readouts: false, lore: false, openings: false, tokens: 0 },
 )
 assert.equal(facets({ ...banxing, input: "note" }).mode, "note")
 assert.equal(

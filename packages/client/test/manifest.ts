@@ -38,12 +38,11 @@ const ri = view({
 })
 assert.deepEqual(chips(ri), [{ label: "参与者" }, { label: "状态", hint: "好感度" }]) // no module label, no hidden field
 assert.deepEqual(chips(view({ input: "note", facets: { ...view({}).facets, mode: "note" } })), [{ label: "作者" }]) // nothing tracked
-// each mechanism the card has, in the shelf's words, then the card's own tags, marked as its own
+// each mechanism the card has, in the shelf's words (no card tags: the player's words are Player.tags, #133)
 assert.deepEqual(
-  chips(view({ tags: ["武侠"], facets: { ...view({}).facets, actions: true, openings: true } })).map((c) => c.label),
-  ["参与者", "检定", "多开场", "武侠"],
+  chips(view({ facets: { ...view({}).facets, actions: true, openings: true } })).map((c) => c.label),
+  ["参与者", "检定", "多开场"],
 )
-assert.deepEqual(chips(view({ tags: ["武侠"] })).at(-1), { label: "武侠", own: true })
 const yandao = view({
   rules: {
     fields: [

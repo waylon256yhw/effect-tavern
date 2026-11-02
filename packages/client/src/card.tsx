@@ -143,14 +143,10 @@ export const CardPage = () => {
                   </div>
                 )}
               </Show>
-              {/* what the card is, in the harness's words, then the card's own tags */}
+              {/* what the card is, in the harness's words */}
               <ul class="chips">
                 <For each={chips(c())} keyed={false}>
-                  {(chip) => (
-                    <li class={{ own: chip().own === true }} title={chip().hint}>
-                      {chip().label}
-                    </li>
-                  )}
+                  {(chip) => <li title={chip().hint}>{chip().label}</li>}
                 </For>
               </ul>
               {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}

@@ -437,9 +437,9 @@ const over = (data: Data, m: () => Model = model) =>
     .run("mine", "我的", JSON.stringify(body), chat.id, "dup", "broken", "坏的")
   const lib = library({ data, cards: shelf([chat, { ...chat, id: "bare", title: undefined }], data), player, model })
   try {
-    // a YAML card's summary, tags and facets ride on its row (the client's shelf shows and filters by them); the
+    // a YAML card's summary and facets ride on its row (the client's shelf shows and filters by them); the
     // table's rows carry none
-    const line = { summary: chat.summary, tags: ["武侠", "对峙"], facets: facets(chat) }
+    const line = { summary: chat.summary, facets: facets(chat) }
     const { tokens, ...flags } = lib.cards()[0]!.facets!
     assert.deepEqual(flags, { mode: "act", fields: true, actions: false, readouts: false, lore: false, openings: true })
     assert.ok(tokens > 0)
