@@ -135,24 +135,62 @@ const follow = {
   landing: false,
   checkout: null as { index: number; top: number | "start" } | null,
 }
-const scroller = () => document.querySelector(".scroll")!
+const scroller = () => document.querySelector<HTMLElement>(".scroll")!
 const gap = () => scroller().scrollHeight - scroller().clientHeight - scroller().scrollTop
+const lastEl = () => {
+  let last = document.querySelector("main > section:last-of-type")?.lastElementChild
+  if (last && !last.getClientRects().length) last = last.previousElementSibling // .actions is display: none while editing
+  return last
+}
 /** How much of the latest turn's content is below the viewport. The last section is at least a screen tall so a
  *  turn can land at its top; that filler is not something to jump to, so the way-back button reads the content's end. */
 const hidden = () => {
-  let last = document.querySelector("main > section:last-of-type")?.lastElementChild
-  if (last && !last.getClientRects().length) last = last.previousElementSibling // .actions is display: none while editing
+  const last = lastEl()
   return last ? last.getBoundingClientRect().bottom - scroller().getBoundingClientRect().bottom : gap()
+}
+/** Tracks how far the composer's box rises above its one-line slot into `.scroll` (`--lift`), and hides any turn's
+ *  action row the raised box reaches so outer keys never hang beside the narrower box on a wide stage. */
+const syncLift = () => {
+  const s = scroller()
+  const box = document.querySelector<HTMLElement>(".composer .box")
+  if (!s || !box) return
+  const sb = s.getBoundingClientRect().bottom
+  const bt = box.getBoundingClientRect().top
+  const lift = Math.max(0, Math.round(sb - bt))
+  s.style.setProperty("--lift", `${lift}px`)
+  for (const a of s.querySelectorAll<HTMLElement>("main > section > .actions")) {
+    const r = a.getBoundingClientRect()
+    a.toggleAttribute("data-covered", lift > 0 && r.bottom > bt - 6 && r.top < sb)
+  }
+}
+/** Clamps `--foot` when the whole story down to its last action row already fits in `.scroll` with at least 12px to
+ *  spare, so the 40px reserve for a two-row composer never causes a ghost scroll on a single-screen opening. */
+const fit = () => {
+  const s = scroller()
+  const main = document.querySelector("main")
+  if (!s || !main) return
+  const last = lastEl()
+  const room =
+    last && !main.querySelector(":scope > .draft")
+      ? s.clientHeight - (last.getBoundingClientRect().bottom - main.getBoundingClientRect().top)
+      : 0
+  if (room >= 12 && room < 40) s.style.setProperty("--foot", `${Math.floor(room)}px`)
+  else s.style.removeProperty("--foot")
+  syncLift()
 }
 const anchor = () => {
   follow.on = true
   follow.touched = -Infinity
+  fit()
   document.querySelector("main > section:last-of-type")?.scrollIntoView({ block: "start", behavior: "instant" })
   follow.ours = scroller().scrollTop
+  syncLift()
 }
 const stick = () => {
+  fit()
   scroller().scrollTo({ top: scroller().scrollHeight, behavior: "instant" })
   follow.ours = scroller().scrollTop
+  syncLift()
 }
 const Latest = () => {
   const [away, setAway] = createSignal(false)
@@ -195,6 +233,7 @@ const Latest = () => {
   )
   onSettled(() => {
     const onScroll = () => {
+      syncLift()
       const g = gap()
       setAway(hidden() > 120)
       const t = follow.ours
@@ -207,13 +246,17 @@ const Latest = () => {
       if (e.type === "keydown" ? !field : t.closest?.(".scroll")) follow.touched = performance.now()
     }
     // opening included: the first growth is the story loading, and following from the start lands at its live edge;
-    // the scroller shrinking (the composer growing under it) is the same event from the other side
+    // the scroller shrinking is the same event from the other side
     const ro = new ResizeObserver(() => {
+      fit()
       if (follow.on && performance.now() - follow.touched >= 150) stick()
       setAway(!follow.on && hidden() > 120)
     })
     ro.observe(document.querySelector("main")!)
     ro.observe(scroller())
+    const boxRo = new ResizeObserver(syncLift)
+    const box = document.querySelector(".composer .box")
+    if (box) boxRo.observe(box)
     // a tab's scroll (tabs.ts): read when it is left; put back on the way in once the story has rendered (after the
     // landing's stick), where following holds only when that is within reach of the end
     scroll.get = () => scroller().scrollTop
@@ -221,16 +264,19 @@ const Latest = () => {
       void requestAnimationFrame(() => {
         follow.landing = false
         follow.checkout = null
+        fit()
         scroller().scrollTop = top
         follow.ours = scroller().scrollTop
         follow.on = gap() <= 40
         setAway(!follow.on && hidden() > 120)
+        syncLift()
       })
     const inputs = ["wheel", "touchmove", "keydown", "pointerdown"] as const
     scroller().addEventListener("scroll", onScroll, { passive: true })
     for (const e of inputs) addEventListener(e, onInput, { passive: true })
     return () => {
       ro.disconnect()
+      boxRo.disconnect()
       scroller().removeEventListener("scroll", onScroll)
       for (const e of inputs) removeEventListener(e, onInput)
     }

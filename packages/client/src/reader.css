@@ -32,13 +32,14 @@ body {
      under the bar or the composer; the head is `--head` where the stage card sets one (the canvas: the reader's keys).
      At the top the fade lives inside the turn gap above the head: a turn anchored at the head (App.tsx `anchor`) has
      the turn before it ending a gap higher, wholly in the clear band, so not a sliver of its action row shows over
-     the new one; prose scrolled up still fades out over the gap, under the keys */
+     the new one; prose scrolled up still fades out over the gap, under the keys. At the foot the clear band rises with
+     the composer's box (`--lift`), so wide prose and the action row's outer keys never show beside a raised box */
   mask-image: linear-gradient(
     to bottom,
     transparent calc(var(--head) - var(--gap-turn)),
     #000 var(--head),
-    #000 calc(100% - var(--fade)),
-    transparent
+    #000 calc(100% - max(min(var(--fade), var(--foot)), var(--lift) + var(--space-2))),
+    transparent calc(100% - var(--lift))
   );
 }
 .scroll:hover {
@@ -47,9 +48,10 @@ body {
 main {
   max-width: var(--measure);
   margin: 0 auto;
-  /* 40px at the foot (fade + space-4): the turn's 24px action row (40..64px, glyphs 44..60px) sits clear of a
-     two-row box (32..34px) and hides whole under a three-row box (66px), with the last prose line (78px+) untouched */
-  padding: var(--head) var(--space-4) calc(var(--fade) + var(--space-4));
+  /* 40px at the foot (`--foot`, fade + space-4; tightened by App.tsx `fit` when the whole story fits in the viewport
+     with room to spare, so empty foot padding alone never makes an opening scroll): the turn's 26px action row sits
+     clear of a two-row box (32..34px) and hides whole under a three-row box (66px), with the last prose line untouched */
+  padding: var(--head) var(--space-4) var(--foot);
   display: flex;
   flex-direction: column;
   gap: var(--gap-turn);
@@ -71,7 +73,7 @@ main > section:not(:last-of-type) {
 /* the latest section fills the column: scrolled to its start, the blank under it is where the prose grows, and
    the column holds still while it does */
 main > section:last-of-type {
-  min-height: calc(100cqh - var(--head) - var(--fade) - var(--space-4)); /* the column's head and foot paddings */
+  min-height: calc(100cqh - var(--head) - var(--foot)); /* the column's head and foot paddings */
 }
 .cursor {
   display: inline-block;
@@ -445,6 +447,11 @@ main > section:is(:hover, :focus-within) > .actions .acts,
   min-height: 26px;
   font-size: var(--text-body);
   color: var(--ink-2);
+  transition: opacity var(--dur-2) var(--ease);
+}
+.actions[data-covered] {
+  opacity: 0;
+  pointer-events: none;
 }
 .actions .spacer,
 .composer .spacer {
