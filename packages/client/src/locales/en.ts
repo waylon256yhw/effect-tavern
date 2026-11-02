@@ -23,7 +23,6 @@ const en: Dict = {
     waiting: "Waiting",
   },
   card: {
-    andMore: "and {n} more",
     begin: "Begin",
     card: "Card",
     modeAuthor: "author",
@@ -36,8 +35,6 @@ const en: Dict = {
     pickOpening: "Pick an opening",
     prevOpening: "Previous opening",
     prompt: "Prompt",
-    specMode: "Mode",
-    specSetting: "Setting",
     specState: "State",
     tokens: "tokens",
   },

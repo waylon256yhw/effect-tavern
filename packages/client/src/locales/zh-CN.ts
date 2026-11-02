@@ -22,7 +22,6 @@ const zh = {
     waiting: "等待中",
   },
   card: {
-    andMore: "及其余 {n} 项",
     begin: "开始",
     card: "卡片",
     modeAuthor: "作者",
@@ -35,8 +34,6 @@ const zh = {
     pickOpening: "选择开场白",
     prevOpening: "上一个开场白",
     prompt: "提示词",
-    specMode: "模式",
-    specSetting: "设定",
     specState: "状态",
     tokens: "tokens",
   },
