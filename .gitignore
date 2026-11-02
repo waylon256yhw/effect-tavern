@@ -5,3 +5,4 @@ dist/
 
 # agent worktrees (Claude Code)
 .claude/worktrees/
+.DS_Store
