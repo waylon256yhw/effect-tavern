@@ -9,7 +9,7 @@ import type { Provider, SecretView } from "@effect-tavern/provider/src/providers
 import type { Format, Hat, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Event, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
+import type { Event, Facets, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
 import * as Atom from "./atom.ts"
 import { registry } from "./atom.ts"
@@ -38,6 +38,8 @@ export interface CardView {
   id: string
   title: string
   summary?: string // one line on what this card is
+  tags?: readonly string[] // the user layer's content words (Card.tags), never translated
+  facets: Facets // what the card is, off its structure (session.ts `facets`): the keys a client draws in its own words
   heading?: string // what titles a turn (Card.heading); absent, turns have no titles
   input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
   greetings: readonly Greeting[] // the openings: a story starts with one (greet, by index) or, with none, with the player's line
@@ -83,9 +85,12 @@ export interface Routing {
   stages?: Partial<Record<Phase, Pair>>
 }
 export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
-/** Every card the install knows (GET /cards), by id and title, with its one-line summary when it has one: the
- *  sidebar's shelf (side.tsx), and what a persona's picks are named by. */
-export const cards = Atom.make<readonly { id: string; title: string; summary?: string }[]>([]).pipe(Atom.keepAlive)
+/** A card as GET /cards lists it (server library.ts `CardRow`): a card file's row adds its summary, tags and facets; a
+ *  library-table card's row has id and title alone. */
+export type ShelfCard = { id: string; title: string; summary?: string; tags?: readonly string[]; facets?: Facets }
+/** Every card the install knows (GET /cards): the sidebar's shelf (side.tsx, searched by query.ts), and what a
+ *  persona's picks are named by. */
+export const cards = Atom.make<readonly ShelfCard[]>([]).pipe(Atom.keepAlive)
 export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
 /** The model-name table (GET /models/names), read through provider names.ts `lookup`: a model id's name, owner, family. */
 export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)

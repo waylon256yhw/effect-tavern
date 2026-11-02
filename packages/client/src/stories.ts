@@ -64,17 +64,25 @@ export const matches = (row: StoryRow, q: string, hits: ReadonlyMap<number, Hit>
   const t = fold(q.trim())
   return !t || fold(row.title ?? "").includes(t) || hits.has(row.id)
 }
-/** `text` cut at every `q` (ASCII folded), each cut marked as a hit, for a `<mark>`; no query, the text whole. */
-export const pieces = (text: string, q: string): { text: string; hit: boolean }[] => {
-  const t = fold(q.trim())
-  if (!t) return [{ text, hit: false }]
+/** `text` cut at every `q` (ASCII folded), or at every one of several words (the shelf's plain terms, query.ts), each
+ *  cut marked as a hit, for a `<mark>`; no query, the text whole. Of hits at one place the longest word wins. */
+export const pieces = (text: string, q: string | readonly string[]): { text: string; hit: boolean }[] => {
+  const words = (typeof q === "string" ? [q] : q).map((w) => fold(w.trim())).filter(Boolean)
+  if (!words.length) return [{ text, hit: false }]
   const out: { text: string; hit: boolean }[] = []
   const lower = fold(text)
   let at = 0
-  for (let i = lower.indexOf(t); i >= 0; i = lower.indexOf(t, at)) {
+  for (;;) {
+    let i = -1
+    let n = 0
+    for (const w of words) {
+      const j = lower.indexOf(w, at)
+      if (j >= 0 && (i < 0 || j < i || (j === i && w.length > n))) [i, n] = [j, w.length]
+    }
+    if (i < 0) break
     if (i > at) out.push({ text: text.slice(at, i), hit: false })
-    out.push({ text: text.slice(i, i + t.length), hit: true })
-    at = i + t.length
+    out.push({ text: text.slice(i, i + n), hit: true })
+    at = i + n
   }
   if (at < text.length) out.push({ text: text.slice(at), hit: false })
   return out

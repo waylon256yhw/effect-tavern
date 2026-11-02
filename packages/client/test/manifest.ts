@@ -14,6 +14,7 @@ const view = (over: Partial<CardView>): CardView => ({
   guard: 0,
   lore: { entries: 0, layers: 0 },
   tokens: { head: 0 },
+  facets: { mode: "act", fields: false, actions: false, readouts: false, lore: false, openings: false, tokens: 0 },
   fiction: [],
   rules: { fields: [], actions: [] },
   products: [],

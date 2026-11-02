@@ -223,10 +223,26 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
     ),
   )
 
+/** What a card is, read off its structure (design/new-story-and-tags.md §5.1): the harness's closed vocabulary, beside
+ *  the user layer's free `tags`. `mode` is the default channel; each flag is whether the card has that mechanism (a
+ *  visible field, an action, a readout, a lore entry, more than one opening); `tokens` is what the card's own text
+ *  costs each turn, estimated (tokens.ts): every frame and fiction fragment, as if all held. The keys are
+ *  identifiers; a client draws them in its own words. Feeds both GET /cards rows and `cardView`. */
+export const facets = (card: Card) => ({
+  mode: card.input ?? "act",
+  fields: card.rules.fields.some((f) => !f.hidden),
+  actions: card.rules.actions.length > 0,
+  readouts: !!card.rules.readouts?.length,
+  lore: card.lore.length > 0,
+  openings: card.greetings.length > 1,
+  tokens: tokens([...card.frame, ...card.fiction].map((f) => f.text ?? "").join("\n")),
+})
+export type Facets = ReturnType<typeof facets>
+
 /** What a client draws a card by (server GET /card, GET /cards/<id>): read off the Card and the player layer alone, so
  *  the card page opens before any story of the card exists. Not the card: fragment bodies, guard lines and lore stay on
  *  the server (a ban is a prompt, to a player too). */
-export const cardView = (card: Card, player: Player) => ({
+export const cardView = (card: Card, player: Player, f = facets(card)) => ({
   // its name and one line, the turn-heading reference, and its size as numbers. `input` is the card's default channel,
   // the one client-facing coordinate of participant vs author mode: on `act` the box is the player's line and a note or
   // a thought is this turn's deviation; on `note` every input is direction.
@@ -234,13 +250,14 @@ export const cardView = (card: Card, player: Player) => ({
     id: card.id,
     title: card.title ?? card.id,
     summary: card.summary,
+    tags: card.tags,
     heading: card.heading,
-    input: card.input ?? "act",
+    input: f.mode,
     director: !!card.director,
     guard: card.guard.length,
     lore: { entries: card.lore.length, layers: card.lore.reduce((n, e) => n + e.layers.length, 0) }, // the card's size; what is readable now is on the node
-    // what the card's own text costs each turn, estimated (tokens.ts): every frame and fiction fragment, as if all held
-    tokens: { head: tokens([...card.frame, ...card.fiction].map((f) => f.text ?? "").join("\n")) },
+    tokens: { head: f.tokens }, // what the card's own text costs each turn, estimated (`facets`)
+    facets: f, // what the card is: the shelf's `#facet` filter, the same function GET /cards rows read
   }, // leaves as JSON, which drops undefined
   greetings: card.greetings,
   rules: card.rules,

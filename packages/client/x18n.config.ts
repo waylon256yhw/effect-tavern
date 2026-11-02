@@ -23,7 +23,7 @@ export default {
     exclude: ["src/locales/**"],
     calls: [{ callee: "t" }],
     // keys a table holds as data and `t()` reads where the word is drawn (the switches, the tabs, the stages, the
-    // phases, the card page's spec rows): used, though no call names them
+    // phases, the card page's spec rows, the shelf query's facet words): used, though no call names them
     keysInUse: [
       "switches.*",
       "writing.tab*",
@@ -36,6 +36,7 @@ export default {
       "settings.personas",
       "app.phase*",
       "card.spec*",
+      "card.facet*",
     ],
   },
   plugins: [{ name: "tavern", placeholders: [braces] }],

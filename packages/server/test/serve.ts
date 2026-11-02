@@ -4,7 +4,7 @@
 // The turn is the story's (#116): closing the response stops nothing, GET /turn re-attaches, POST /stop stops, a busy
 // story answers 409; stories of one card and of two run side by side; a story route without its story is a 404.
 import { fake, fakeText } from "@effect-tavern/provider"
-import type { Event } from "@effect-tavern/runtime/src/session.ts"
+import { facets, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
 import assert from "node:assert/strict"
@@ -446,10 +446,10 @@ await run(false)
   const on = (id: number, init: RequestInit = {}) => ({ ...init, headers: { "x-tavern-story": String(id) } })
   try {
     assert.deepEqual(await (await fetch(`${base}/stories`)).json(), { current: null, stories: [] })
-    const line = chat.summary ? { summary: chat.summary } : {} // a YAML card's summary rides on its row
+    const line = { summary: chat.summary, tags: chat.tags } // a YAML card's summary, tags and facets ride on its row
     assert.deepEqual(await (await fetch(`${base}/cards`)).json(), [
-      { id: chat.id, title: chat.title, ...line },
-      { id: "two", title: "二", ...line },
+      { id: chat.id, title: chat.title, ...line, facets: facets(chat) },
+      { id: "two", title: "二", ...line, facets: facets(two) },
     ])
     const page = (await (await fetch(`${base}/cards/two`)).json()) as { id: string; greetings: unknown[] }
     assert.deepEqual([page.id, page.greetings], ["two", [{ text: "G2" }]])

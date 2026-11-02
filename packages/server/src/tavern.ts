@@ -3,6 +3,7 @@
 // dev.ts reads it (CARDS, DATA, MODEL, HAT, the local key), loads the card files and opens the store; a test passes
 // `open(":memory:")` and a shelf of its own.
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
+import { facets } from "@effect-tavern/runtime/src/session.ts"
 import type { Data } from "./data.ts"
 import { library, type Cards } from "./library.ts"
 import { handle } from "./serve.ts"
@@ -13,11 +14,18 @@ export const shelf = (files: readonly Card[], data: Data): Cards => ({
   list: () =>
     [...files, ...data.cards.list()]
       .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
-      .map((c) => ({
-        id: c.id,
-        title: c.title ?? c.id,
-        ...("summary" in c && c.summary ? { summary: c.summary } : {}), // a YAML card's line; the table lists none
-      })),
+      .map((c) =>
+        // a YAML card is decoded already: its line, its tags and its facets ride on its row; the table lists none
+        "rules" in c
+          ? {
+              id: c.id,
+              title: c.title ?? c.id,
+              ...(c.summary ? { summary: c.summary } : {}),
+              ...(c.tags ? { tags: c.tags } : {}),
+              facets: facets(c),
+            }
+          : { id: c.id, title: c.title ?? c.id },
+      ),
   get: (id) => {
     const file = files.find((c) => c.id === id)
     if (file) return file

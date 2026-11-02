@@ -2,7 +2,8 @@
 import assert from "node:assert/strict"
 import { Schema } from "effect"
 import { cuts, drawn, Field, Greeting, decodeCard, decodeRules, makeCard, rollOf, type Beat } from "../src/card.ts"
-import { full, loadCard } from "./cards/index.ts"
+import { full, loadCard, plain } from "./cards/index.ts"
+import { cardView, facets } from "../src/session.ts"
 import { holds } from "../src/cond.ts"
 
 // ───────── the session's self-check card as data: fight (judged chance) / rest / talk, gold and hp with bounds ─────────
@@ -280,5 +281,24 @@ assert.deepEqual(drawn(int({ min: 0, max: 100, view: "scale" })), { as: "scale",
 assert.deepEqual(drawn(int({ min: 0 })), { as: "value" })
 assert.deepEqual(drawn({ path: "m", type: "enum", options: ["a", "b"], initial: "a" }), { as: "steps" })
 assert.throws(() => Schema.decodeUnknownSync(Field)({ path: "x", type: "int", initial: 0, view: "bar" }))
+// facets (session.ts): what a card is, off its structure. 竹林 has every mechanism and more than one opening; 伴星 (no rules, no
+// lore) has none, and a note-default card reads as author mode. `tokens` is the head estimate cardView reports too.
+const { tokens: head, ...wuxia } = facets(full)
+assert.deepEqual(wuxia, { mode: "act", fields: true, actions: true, readouts: true, lore: true, openings: true })
+assert.equal(head, cardView(full, plain).meta.tokens.head)
+const banxing = await loadCard("banxing")
+assert.deepEqual(
+  [banxing.tags, { ...facets(banxing), tokens: 0 }],
+  [
+    ["日常", "纯聊天"],
+    { mode: "act", fields: false, actions: false, readouts: false, lore: false, openings: false, tokens: 0 },
+  ],
+)
+assert.equal(facets({ ...banxing, input: "note" }).mode, "note")
+assert.equal(
+  facets({ ...full, rules: { ...full.rules, fields: [{ ...full.rules.fields[0]!, hidden: true }] } }).fields,
+  false,
+) // a hidden switch is not state the player sees
+
 console.log(tavern.menu(tavern.initial).join("\n"))
 console.log("ok")
