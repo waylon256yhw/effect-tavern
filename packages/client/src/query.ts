@@ -8,8 +8,8 @@ import { fold } from "./stories.ts"
 
 export type Term = { word: string; tag: boolean; not: boolean }
 
-/** The presence facets and the key of the word each is drawn by. */
-const FLAGS = [
+/** The presence facets and the key of the word each is drawn by: the shelf's `#` words, the card page's chips. */
+export const FLAGS = [
   ["fields", "card.specState"],
   ["actions", "card.facetActions"],
   ["readouts", "card.facetReadouts"],

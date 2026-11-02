@@ -124,10 +124,14 @@ export const CardPage = () => {
                   </div>
                 )}
               </Show>
-              {/* one row: the tag step appends the facets and the card's own tags here */}
+              {/* what the card is, in the harness's words, then the card's own tags */}
               <ul class="chips">
                 <For each={chips(c())} keyed={false}>
-                  {(chip) => <li title={chip().hint}>{chip().label}</li>}
+                  {(chip) => (
+                    <li class={{ own: chip().own === true }} title={chip().hint}>
+                      {chip().label}
+                    </li>
+                  )}
                 </For>
               </ul>
               {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}
