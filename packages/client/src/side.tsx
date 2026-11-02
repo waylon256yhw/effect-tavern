@@ -105,6 +105,12 @@ export const Sidebar = (props: {
   }
   const attach = (w: string) => tagsOf((ws) => [...ws, w])
   let tagBox: HTMLInputElement | undefined
+  // after a word lands (Enter or a tap on an offered chip) the box empties and keeps the focus: the next word follows
+  const clear = () => {
+    if (tagBox) tagBox.value = ""
+    setTq("")
+    tagBox?.focus()
+  }
   const tagPop = () => (props.inDrawer ? "tags-drawer" : "tags-side") // the drawer and the desktop sidebar may both be mounted
   const leaveFor = (go: () => void) => {
     props.onLeave?.()
@@ -325,8 +331,7 @@ export const Sidebar = (props: {
                       e.preventDefault()
                       const w = e.currentTarget.value.trim()
                       if (w && !words().includes(w)) attach(w)
-                      e.currentTarget.value = ""
-                      setTq("")
+                      clear()
                     }}
                   />
                 </div>
@@ -334,7 +339,14 @@ export const Sidebar = (props: {
                   <div class="tag-chips">
                     <For each={offered()} keyed={false}>
                       {(w) => (
-                        <button type="button" class="chip" onClick={() => attach(w())}>
+                        <button
+                          type="button"
+                          class="chip"
+                          onClick={() => {
+                            attach(w())
+                            clear()
+                          }}
+                        >
                           {w()}
                         </button>
                       )}
