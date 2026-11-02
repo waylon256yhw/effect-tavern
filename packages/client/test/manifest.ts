@@ -36,12 +36,39 @@ const ri = view({
     actions: [],
   },
 })
-assert.deepEqual(chips(ri), [{ label: "参与者" }, { label: "状态", hint: "好感度" }]) // no module label, no hidden field
+assert.deepEqual(chips(ri), [{ label: "参与者" }, { label: "状态", items: ["好感度"] }]) // no module label, no hidden field
 assert.deepEqual(chips(view({ input: "note", facets: { ...view({}).facets, mode: "note" } })), [{ label: "作者" }]) // nothing tracked
 // each mechanism the card has, in the shelf's words (no card tags: the player's words are Player.tags, #133)
 assert.deepEqual(
   chips(view({ facets: { ...view({}).facets, actions: true, openings: true } })).map((c) => c.label),
   ["参与者", "检定", "多开场"],
+)
+// what each chip lists when tapped: fields by label, actions and readouts by id, the lore's size, the openings' count
+const all = chips(
+  view({
+    greetings: [{ text: "a" }, { text: "b" }, { text: "c" }],
+    lore: { entries: 4, layers: 7 },
+    facets: { ...view({}).facets, fields: true, actions: true, readouts: true, lore: true, openings: true },
+    rules: {
+      fields: [
+        { path: "hp", label: "体力", type: "int", initial: 3 },
+        { path: "gold", type: "int", initial: 0 },
+      ],
+      actions: [{ id: "闪避", text: "dodge", roll: 50 }],
+      readouts: [{ id: "心情", text: "mood?", options: [] }],
+    },
+  }),
+)
+assert.equal(all[0]?.items, undefined) // the mode chip lists nothing: a plain pill
+assert.deepEqual(
+  all.slice(1).map((c) => [c.label, c.items]),
+  [
+    ["状态", ["体力", "gold"]],
+    ["检定", ["闪避"]],
+    ["读数", ["心情"]],
+    ["线索", ["4 条 · 7 层"]],
+    ["多开场", ["3 个开场白"]],
+  ],
 )
 const yandao = view({
   rules: {
@@ -75,5 +102,5 @@ assert.equal(admitsOpening(yandao, bloody, "盐津 -血案"), false) // `-` nega
 assert.equal(admitsOpening(yandao, bloody, "平静"), false)
 assert.equal(firstLine("  黄昏。盐津镇的石板街上\r\n第二段"), "黄昏。盐津镇的石板街上")
 assert.equal(firstLine("**午后的阳光**从彩绘玻璃窗渗入\n\n*第二段*"), "午后的阳光从彩绘玻璃窗渗入")
-assert.ok(chips(view({ rules: full.rules })).some((c) => c.label === "状态" && c.hint?.includes("体力")))
+assert.ok(chips(view({ rules: full.rules })).some((c) => c.label === "状态" && c.items?.includes("体力")))
 console.log("manifest ok")

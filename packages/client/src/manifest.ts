@@ -9,20 +9,27 @@ import { FLAGS, parse } from "./query.ts"
 import { fold } from "./stories.ts"
 
 /** A chip on the page's row (design/new-story-and-tags.md §5.1): the harness's word for what the card is, with the
- *  list it stands for in the hint. */
+ *  list it stands for (a tap opens it, card.tsx). */
 export interface Chip {
   label: string // a word of the chrome in the locale in force
-  hint?: string
+  items?: readonly string[]
 }
-/** Mode, then each mechanism the card has (query.ts FLAGS, the shelf's `#` words): the state chip names its fields
- *  in the hint. The fiction's module labels are the author's, not a spec of play (§2): not
- *  drawn. */
+/** Mode, then each mechanism the card has (query.ts FLAGS, the shelf's `#` words), each with what it stands for: the
+ *  visible fields' labels, the actions' and readouts' ids (as a check is named, runtime card.ts), the lore's size, the
+ *  openings' count. The fiction's module labels are the author's, not a spec of play (§2): not drawn. */
 export const chips = (c: CardView): Chip[] => {
-  const out: Chip[] = [{ label: t(c.facets.mode === "note" ? "card.modeAuthor" : "card.modeParticipant") }]
-  const fields = c.rules.fields.filter((f) => !f.hidden).map((f) => f.label ?? f.path)
-  if (fields.length) out.push({ label: t("card.specState"), hint: fields.join(" · ") })
-  for (const [k, key] of FLAGS) if (k !== "fields" && c.facets[k]) out.push({ label: t(key) })
-  return out
+  const items = {
+    fields: c.rules.fields.filter((f) => !f.hidden).map((f) => f.label ?? f.path),
+    actions: c.rules.actions.map((a) => a.id),
+    readouts: (c.rules.readouts ?? []).map((q) => q.id),
+    lore: [t("card.loreSize", { entries: c.lore.entries, layers: c.lore.layers })],
+    openings: [t("card.openingsCount", { n: c.greetings.length })],
+  }
+  const has = (k: keyof typeof items) => (k === "fields" ? items.fields.length > 0 : c.facets[k])
+  return [
+    { label: t(c.facets.mode === "note" ? "card.modeAuthor" : "card.modeParticipant") },
+    ...FLAGS.filter(([k]) => has(k)).map(([k, key]) => ({ label: t(key), items: items[k] })),
+  ]
 }
 /** An opening's first line, for the list, under its marks. */
 export const firstLine = (text: string): string => plain(text.trim().split(/\r?\n/)[0] ?? "")

@@ -146,7 +146,27 @@ export const CardPage = () => {
               {/* what the card is, in the harness's words */}
               <ul class="chips">
                 <For each={chips(c())} keyed={false}>
-                  {(chip) => <li title={chip().hint}>{chip().label}</li>}
+                  {(chip, i) => (
+                    <li>
+                      {/* a tap lists what the chip stands for (a phone has no hover title) */}
+                      <Show when={chip().items} fallback={chip().label}>
+                        {(items) => (
+                          <>
+                            <button type="button" popovertarget={`spec-${i}`}>
+                              {chip().label}
+                            </button>
+                            <div id={`spec-${i}`} class="spec-pop" popover>
+                              <ul>
+                                <For each={items()} keyed={false}>
+                                  {(x) => <li>{x()}</li>}
+                                </For>
+                              </ul>
+                            </div>
+                          </>
+                        )}
+                      </Show>
+                    </li>
+                  )}
                 </For>
               </ul>
               {/* said up front: Begin works without one (an opening calls no model), the first line sent does not */}
