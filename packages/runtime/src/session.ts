@@ -223,8 +223,8 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
     ),
   )
 
-/** What a card is, read off its structure (design/new-story-and-tags.md §5.1): the harness's closed vocabulary, beside
- *  the user layer's free `tags`. `mode` is the default channel; each flag is whether the card has that mechanism (a
+/** What a card is, read off its structure (design/new-story-and-tags.md §5.1): the harness's closed vocabulary (the
+ *  player's own filing words are `Player.tags`, #133). `mode` is the default channel; each flag is whether the card has that mechanism (a
  *  visible field, an action, a readout, a lore entry, more than one opening); `tokens` is what the card's own text
  *  costs each turn, estimated (tokens.ts): every frame and fiction fragment, as if all held. The keys are
  *  identifiers; a client draws them in its own words. Feeds both GET /cards rows and `cardView`. */
@@ -252,7 +252,6 @@ export const cardView = (card: Card, player: Player) => {
       id: card.id,
       title: card.title ?? card.id,
       summary: card.summary,
-      tags: card.tags,
       heading: card.heading,
       input: f.mode,
       director: !!card.director,

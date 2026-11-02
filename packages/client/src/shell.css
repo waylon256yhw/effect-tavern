@@ -425,6 +425,69 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* the tags row: both columns, one line; the words are unbounded, so they ellipsize and never wrap the sidebar */
+.workspace .row.tags {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+.workspace .row.tags .lbl {
+  flex: none;
+}
+.workspace .row.tags .val {
+  flex: 1;
+  width: auto;
+  text-align: right;
+}
+.workspace .val.none {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+/* its editor floats under the row (the resting height stays): the attached words with × , the field, the player's
+   other words to tap on (the chip, reader.css) */
+.tag-pop {
+  position-anchor: auto;
+  position-area: bottom span-right;
+  position-try-fallbacks: flip-block;
+  inset: auto;
+  box-sizing: border-box;
+  width: anchor-size(width);
+  margin: var(--space-1) 0;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-3);
+  color: inherit;
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 var(--hairline) var(--line);
+}
+.tag-pop:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+.tag-chips .chip button {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+.tag-chips .chip button:hover {
+  color: var(--ink);
+}
+.tag-chips button.chip {
+  padding: 0 10px;
+}
+.tag-chips button.chip:hover {
+  background: var(--alpha-2);
+}
 /* a story: its name (or "New story" in ink-2), its turn count or a dot while its turn runs; under a search, the line
    that hit */
 .story-row {

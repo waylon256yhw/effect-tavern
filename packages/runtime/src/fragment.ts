@@ -125,6 +125,7 @@ export const Player = Schema.Struct({
   global: Schema.Array(Fragment),
   forCard: Schema.Record(Schema.String, Schema.Array(Fragment)),
   persona: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)), // card id → the persona (a library id) the player is on that card; none = the card's own
+  tags: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))), // card id → the player's filing words on that card (#133); the harness never reads, generates or translates them
   defaults: Schema.optionalKey(
     Schema.Struct({ global: Schema.optionalKey(ModeSchema), forCard: Schema.optionalKey(ModeSchema) }),
   ), // harness-level setting, also the player's
