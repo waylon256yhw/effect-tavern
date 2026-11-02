@@ -10,7 +10,7 @@ import { tokens } from "@effect-tavern/runtime/src/tokens.ts"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Next, Prev, Up } from "./icons.tsx"
-import { chips, firstLine, openingTag } from "./manifest.ts"
+import { chips, firstLine, openingTags } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
 import { openSettings } from "./settings.tsx"
 import { backOf, close, newStory, open } from "./pages.ts"
@@ -33,13 +33,20 @@ const Size = (props: { label: string; n: number }) => (
   </span>
 )
 
-/** One opening in a list (the desktop column, the phone's sheet): its index, first line, what it sets, its size. */
+/** One opening in a list (the desktop column, the phone's sheet): its index, what it sets and its size on the top
+ *  row, and its opening lines below. */
 const Line = (props: { c: CardView; g: Greeting; i: number }) => (
   <>
-    <span class="below">{String(props.i + 1).padStart(2, "0")}</span>
+    <span class="vhead">
+      <span class="below">{String(props.i + 1).padStart(2, "0")}</span>
+      <span class="vmeta">
+        <For each={openingTags(props.c, props.g)} keyed={false}>
+          {(tag) => <span class="tag">{tag()}</span>}
+        </For>
+        <span class="est mono">~{compact.format(tokens(props.g.text))}</span>
+      </span>
+    </span>
     <span class="first">{firstLine(props.g.text)}</span>
-    <Show when={openingTag(props.c, props.g)}>{(tag) => <span class="tag">{tag()}</span>}</Show>
-    <span class="est mono">~{compact.format(tokens(props.g.text))}</span>
   </>
 )
 
@@ -146,28 +153,36 @@ export const CardPage = () => {
               <Size label={t("card.prompt")} n={c().tokens.head} />
             </section>
             <Show when={openings().length > 1}>
-              <ul
-                class="openings"
-                role="listbox"
-                tabindex="0"
-                aria-label={t("card.pickOpening")}
-                aria-activedescendant={`opening-${at()}`}
-                onKeyDown={onKey}
-              >
-                <For each={openings()} keyed={false}>
-                  {(g, i) => (
-                    <li
-                      id={`opening-${i}`}
-                      role="option"
-                      class="version"
-                      aria-selected={i === at() ? "true" : "false"}
-                      onClick={() => setAt(i)}
-                    >
-                      <Line c={c()} g={g()} i={i} />
-                    </li>
-                  )}
-                </For>
-              </ul>
+              <div class="openings-wrap">
+                <div class="openings-head">
+                  <span>{t("card.opening")}</span>
+                  <span class="mono">
+                    {at() + 1} / {openings().length}
+                  </span>
+                </div>
+                <ul
+                  class="openings"
+                  role="listbox"
+                  tabindex="0"
+                  aria-label={t("card.pickOpening")}
+                  aria-activedescendant={`opening-${at()}`}
+                  onKeyDown={onKey}
+                >
+                  <For each={openings()} keyed={false}>
+                    {(g, i) => (
+                      <li
+                        id={`opening-${i}`}
+                        role="option"
+                        class="version"
+                        aria-selected={i === at() ? "true" : "false"}
+                        onClick={() => setAt(i)}
+                      >
+                        <Line c={c()} g={g()} i={i} />
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </div>
             </Show>
             <section class="opening" aria-label={t("card.opening")}>
               <Show

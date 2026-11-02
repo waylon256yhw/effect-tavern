@@ -25,10 +25,13 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+.manifest .about {
+  gap: var(--space-4);
+}
 .manifest .about > * {
   flex: none;
 }
-.manifest .openings {
+.manifest .openings-wrap {
   display: none;
 }
 @container stage (width >= 52rem) {
@@ -40,9 +43,10 @@
      it (the 84rem block): 18 + 16 + 3 of chrome plus 42 + 3 of prose */
   .cardsheet {
     flex: 1;
-    grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr);
+    grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-    gap: var(--space-6);
+    column-gap: var(--space-6);
+    row-gap: var(--space-5);
     padding: var(--space-6);
   }
   .manifest .about {
@@ -51,9 +55,14 @@
   .cardsheet.many .about {
     grid-row-end: 2; /* the list takes the rest of the column; the introduction keeps its ceiling */
   }
-  .manifest .openings {
+  .manifest .openings-wrap {
     display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
     grid-area: 2 / 1;
+    padding-top: var(--space-4);
+    border-top: var(--hairline) solid var(--line);
   }
   .manifest .opening {
     grid-area: 1 / 2 / -1 / 3;
@@ -80,7 +89,7 @@
 /* a stage wide enough for the list's own column and the prose at its measure beside it */
 @container stage (width >= 84rem) {
   .cardsheet.many {
-    grid-template-columns: minmax(13rem, 18rem) minmax(12rem, 16rem) minmax(0, 1fr);
+    grid-template-columns: minmax(14rem, 18rem) minmax(14rem, 17rem) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
   .cardsheet.many .about {
@@ -90,8 +99,12 @@
     flex: 0 1 auto;
     max-height: none;
   }
-  .cardsheet.many .openings {
+  .cardsheet.many .openings-wrap {
     grid-area: 1 / 2 / -1 / 3;
+    padding-top: 0;
+    border-top: 0;
+    padding-left: var(--space-5);
+    border-left: var(--hairline) solid var(--line);
   }
   .cardsheet.many .opening {
     grid-area: 1 / 3 / -1 / 4;
@@ -115,12 +128,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* the introduction: prose, so it wraps, and past its height it scrolls behind the fade; its height is its text's */
+/* the introduction: prose, so it wraps, and past its height it scrolls; its height is its text's */
 .manifest .intro {
   contain: none;
   min-height: 0;
   max-height: 11rem;
-  padding: var(--fade) 0;
+  padding: 0;
+  mask-image: none;
 }
 .manifest .intro p {
   margin: 0;
@@ -131,7 +145,8 @@
 /* the chips wrap: the card's tags are its author's list, not a schema's (bounded data before layout) */
 .manifest .chips {
   margin: 0;
-  padding: 0;
+  padding: var(--space-4) 0 0;
+  border-top: var(--hairline) solid var(--line);
   list-style: none;
   display: flex;
   flex-wrap: wrap;
@@ -177,7 +192,7 @@
 .manifest .mono {
   font-family: var(--font-mono);
 }
-/* a size: the word small, the number at body size and weight */
+/* a size readout: footnote scale throughout, key-value aligned in the left column */
 .manifest .size {
   display: inline-flex;
   align-items: baseline;
@@ -186,18 +201,37 @@
   font-size: var(--text-footnote);
   white-space: nowrap;
 }
+.manifest .about > .size {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
 .manifest .size .mono {
-  color: var(--ink);
-  font-size: var(--text-body);
-  font-weight: 600;
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  font-weight: 500;
 }
 /* the openings' list column: the selection follows ↑ ↓, the prose follows the selection */
+.manifest .openings-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--ink-3);
+  font-size: var(--text-footnote);
+}
+.manifest .openings-head .mono {
+  color: var(--ink-2);
+  font-weight: 500;
+}
 .manifest .openings {
   margin: 0;
   padding: 0;
   list-style: none;
+  display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
   outline: none;
@@ -206,19 +240,64 @@
   box-shadow: 0 0 0 2px var(--line-strong);
   border-radius: var(--radius);
 }
-.manifest .openings .version {
+.manifest .version {
   flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: var(--text-footnote);
+  color: var(--ink-2);
   cursor: pointer;
+  transition:
+    background var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+.manifest .openings .version {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.manifest .openings .version:hover {
+  background: var(--ghost-hover);
+  color: var(--ink);
 }
 .manifest .openings .version[aria-selected="true"] {
   background: var(--alpha-1);
-  font-weight: 600;
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+  color: var(--ink);
+}
+.manifest .version .vhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.manifest .version .vmeta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.manifest .version .first {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.55;
+}
+.manifest .openings .version[aria-selected="true"] .first {
+  font-weight: 550;
 }
 .manifest .version .tag {
   flex: none;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
   font-size: var(--text-caption);
   font-weight: 500;
   color: var(--ink-2);
@@ -238,8 +317,8 @@
 .manifest .opening .well {
   height: 16.5rem;
   border-radius: var(--radius-card);
-  background: var(--alpha-1); /* a tint, not a line: the two surfaces are 1% apart in light, the tint reads in both */
-  box-shadow: none;
+  background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
 .manifest .opening .wscroll {
   flex: 1;

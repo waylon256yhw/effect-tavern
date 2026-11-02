@@ -2,7 +2,7 @@
 // field is not a state, an opening's tag prefers the route it sets.
 import { full } from "@effect-tavern/runtime/test/cards/index.ts"
 import assert from "node:assert/strict"
-import { chips, firstLine, openingTag } from "../src/manifest.ts"
+import { chips, firstLine, openingTag, openingTags } from "../src/manifest.ts"
 import type { CardView } from "../src/store.ts"
 
 const view = (over: Partial<CardView>): CardView => ({
@@ -59,6 +59,13 @@ assert.equal(
     do: [{ path: "局势", set: 7 }, { path: "起点", set: "血案" }, { event: "冲突:升级" }],
   }),
   "起点 = 血案",
+)
+assert.deepEqual(
+  openingTags(yandao, {
+    text: "x",
+    do: [{ path: "局势", set: 7 }, { path: "起点", set: "血案" }, { event: "冲突:升级" }],
+  }),
+  ["起点 = 血案", "局势 = 7"],
 )
 assert.equal(openingTag(yandao, { text: "x", do: [{ path: "局势", set: 7 }] }), "局势 = 7")
 assert.equal(openingTag(yandao, { text: "x" }), undefined)

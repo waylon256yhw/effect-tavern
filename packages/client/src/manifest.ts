@@ -27,6 +27,17 @@ export const chips = (c: CardView): Chip[] => {
 }
 /** An opening's first line, for the list, under its marks. */
 export const firstLine = (text: string): string => plain(text.trim().split(/\r?\n/)[0] ?? "")
+/** All visible state changes an opening makes at the start, enum sets first (a route's name tells most). */
+export const openingTags = (c: CardView, g: Greeting): string[] => {
+  const hidden = new Set(c.rules.fields.filter((f) => f.hidden).map((f) => f.path))
+  const changes = (g.do ?? []).filter(
+    (e): e is Exclude<typeof e, { event: string }> => "path" in e && !hidden.has(e.path),
+  )
+  const enums = changes.filter((e) => "set" in e && typeof e.set === "string")
+  const rest = changes.filter((e) => !("set" in e && typeof e.set === "string"))
+  const by = labels(c.rules)
+  return [...enums, ...rest].map((e) => effect(e, by))
+}
 /** What an opening sets at the start, as one phrase: its first enum set (a route's name tells most), else its first set. */
 export const openingTag = (c: CardView, g: Greeting): string | undefined => {
   const sets = (g.do ?? []).filter((e) => "set" in e)
