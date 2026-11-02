@@ -210,7 +210,7 @@ export const StoryDialogs = () => {
                         <button
                           type="button"
                           class="name"
-                          aria-label={t("tags.rename")}
+                          aria-label={`${row()[0]} · ${t("tags.rename")}`}
                           onClick={() => setEditing(row()[0])}
                         >
                           {row()[0]}
@@ -243,7 +243,7 @@ export const StoryDialogs = () => {
                     <button
                       type="button"
                       class="icon danger"
-                      aria-label={t("common.delete")}
+                      aria-label={`${row()[0]} · ${t("common.delete")}`}
                       onClick={() => void putPlayer((p) => dropTag(p, row()[0]))}
                     >
                       <Close />
