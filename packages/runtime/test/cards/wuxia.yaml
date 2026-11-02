@@ -4,6 +4,7 @@ id: wuxia
 title: 竹林
 summary: |-
   暮春雨后的越州苦竹岭，你携故人遗物寻访李鹤下落，在竹林荒亭中与守坟的剑客裴青舟相对。
+tags: [武侠, 对峙]
 heading: scene.place
 # The card gives the player's role (the persona slot's default; a player overrides or yields it like any slot).
 frame:

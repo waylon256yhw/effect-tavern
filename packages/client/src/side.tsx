@@ -15,7 +15,8 @@ import { openManager, openPicker } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
-import { arranged, busyElsewhere, busyOn, fold, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
+import { admits, parse, plain } from "./query.ts"
+import { arranged, busyElsewhere, busyOn, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
 import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
@@ -62,7 +63,7 @@ export const InstallKeys = (props: { onLeave?: () => void }) => {
 }
 
 /** `text` with every `q` in a `<mark>`. */
-const Mark = (props: { text: string; q: string }) => (
+const Mark = (props: { text: string; q: string | readonly string[] }) => (
   <For each={pieces(props.text, props.q)} keyed={false}>
     {(p) => (
       <Show when={p().hit} fallback={p().text}>
@@ -97,12 +98,12 @@ export const Sidebar = (props: {
     props.onLeave?.()
     go()
   }
-  // the shelf's search: title and summary, here
+  // the shelf's search (query.ts): plain words over title, summary and tags, `#` on a tag or a facet, `-` negates;
+  // the plain words are what the rows mark
   const [cq, setCq] = createSignal("")
-  const shown = createMemo(() => {
-    const q = fold(cq().trim())
-    return q ? shelf().filter((c) => fold(c.title).includes(q) || fold(c.summary ?? "").includes(q)) : shelf()
-  })
+  const terms = createMemo(() => parse(cq()))
+  const marked = createMemo(() => plain(terms()))
+  const shown = createMemo(() => shelf().filter((c) => admits(c, terms())))
   // the workspace's search: the title here, the turns on the server after a pause in the typing (the manager's
   // way: an answer to an older query than the one typed is dropped); a hit shows its line under the row
   const [sq, setSq] = createSignal("")
@@ -218,7 +219,7 @@ export const Sidebar = (props: {
                     >
                       <span class="head">
                         <span class="title">
-                          <Mark text={c().title} q={cq()} />
+                          <Mark text={c().title} q={marked()} />
                         </span>
                         <Show when={busyOn(rows(), c().id)}>
                           <i class="busy-dot" role="status" aria-label={t("side.cardBusy")} />
@@ -227,7 +228,7 @@ export const Sidebar = (props: {
                       <Show when={c().summary}>
                         {(s) => (
                           <span class="summary">
-                            <Mark text={s()} q={cq()} />
+                            <Mark text={s()} q={marked()} />
                           </span>
                         )}
                       </Show>

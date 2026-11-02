@@ -223,44 +223,64 @@ const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Eve
     ),
   )
 
+/** What a card is, read off its structure (design/new-story-and-tags.md §5.1): the harness's closed vocabulary, beside
+ *  the user layer's free `tags`. `mode` is the default channel; each flag is whether the card has that mechanism (a
+ *  visible field, an action, a readout, a lore entry, more than one opening); `tokens` is what the card's own text
+ *  costs each turn, estimated (tokens.ts): every frame and fiction fragment, as if all held. The keys are
+ *  identifiers; a client draws them in its own words. Feeds both GET /cards rows and `cardView`. */
+export const facets = (card: Card) => ({
+  mode: card.input ?? "act",
+  fields: card.rules.fields.some((f) => !f.hidden),
+  actions: card.rules.actions.length > 0,
+  readouts: !!card.rules.readouts?.length,
+  lore: card.lore.length > 0,
+  openings: card.greetings.length > 1,
+  tokens: tokens([...card.frame, ...card.fiction].map((f) => f.text ?? "").join("\n")),
+})
+export type Facets = ReturnType<typeof facets>
+
 /** What a client draws a card by (server GET /card, GET /cards/<id>): read off the Card and the player layer alone, so
  *  the card page opens before any story of the card exists. Not the card: fragment bodies, guard lines and lore stay on
  *  the server (a ban is a prompt, to a player too). */
-export const cardView = (card: Card, player: Player) => ({
-  // its name and one line, the turn-heading reference, and its size as numbers. `input` is the card's default channel,
-  // the one client-facing coordinate of participant vs author mode: on `act` the box is the player's line and a note or
-  // a thought is this turn's deviation; on `note` every input is direction.
-  meta: {
-    id: card.id,
-    title: card.title ?? card.id,
-    summary: card.summary,
-    heading: card.heading,
-    input: card.input ?? "act",
-    director: !!card.director,
-    guard: card.guard.length,
-    lore: { entries: card.lore.length, layers: card.lore.reduce((n, e) => n + e.layers.length, 0) }, // the card's size; what is readable now is on the node
-    // what the card's own text costs each turn, estimated (tokens.ts): every frame and fiction fragment, as if all held
-    tokens: { head: tokens([...card.frame, ...card.fiction].map((f) => f.text ?? "").join("\n")) },
-  }, // leaves as JSON, which drops undefined
-  greetings: card.greetings,
-  rules: card.rules,
-  // the record products as the card and the harness declare them, before the player's toggles: how a client draws a
-  // node's products by shape, and the Writing page's toggles (the player's toggle wins over `on`)
-  products: resolve(defaultProducts(card.input ?? "act"), card.products).map((p) => ({
-    id: p.id,
-    label: p.label,
-    shape: p.shape,
-    on: p.on,
-  })),
-  // the fiction's modules without their text: id, shown name, and the state condition that makes one a variant
-  fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
-  // in author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
-  // mark have nothing to do there
-  snippets: [...(player.snippets ?? []), ...snippets].filter(
-    (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
-  ),
-  format: [...(player.format ?? []), ...format],
-})
+export const cardView = (card: Card, player: Player) => {
+  const f = facets(card) // once: the shelf row's facets and the head size are the same reading
+  return {
+    // its name and one line, the turn-heading reference, and its size as numbers. `input` is the card's default channel,
+    // the one client-facing coordinate of participant vs author mode: on `act` the box is the player's line and a note or
+    // a thought is this turn's deviation; on `note` every input is direction.
+    meta: {
+      id: card.id,
+      title: card.title ?? card.id,
+      summary: card.summary,
+      tags: card.tags,
+      heading: card.heading,
+      input: f.mode,
+      director: !!card.director,
+      guard: card.guard.length,
+      lore: { entries: card.lore.length, layers: card.lore.reduce((n, e) => n + e.layers.length, 0) }, // the card's size; what is readable now is on the node
+      tokens: { head: f.tokens }, // what the card's own text costs each turn, estimated (`facets`)
+      facets: f, // what the card is: the shelf's `#facet` filter, the same function GET /cards rows read
+    }, // leaves as JSON, which drops undefined
+    greetings: card.greetings,
+    rules: card.rules,
+    // the record products as the card and the harness declare them, before the player's toggles: how a client draws a
+    // node's products by shape, and the Writing page's toggles (the player's toggle wins over `on`)
+    products: resolve(defaultProducts(card.input ?? "act"), card.products).map((p) => ({
+      id: p.id,
+      label: p.label,
+      shape: p.shape,
+      on: p.on,
+    })),
+    // the fiction's modules without their text: id, shown name, and the state condition that makes one a variant
+    fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
+    // in author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
+    // mark have nothing to do there
+    snippets: [...(player.snippets ?? []), ...snippets].filter(
+      (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
+    ),
+    format: [...(player.format ?? []), ...format],
+  }
+}
 
 export const makeSession = ({
   card,
