@@ -4,6 +4,8 @@ import assert from "node:assert/strict"
 import { admits, parse, plain } from "../src/query.ts"
 import type { ShelfCard } from "../src/store.ts"
 import { pieces } from "../src/stories.ts"
+import en from "../src/locales/en.ts"
+import zh from "../src/locales/zh-CN.ts"
 
 const off = {
   mode: "act",
@@ -52,4 +54,8 @@ assert.deepEqual(pieces("竹林 Star", ["star", "竹"]), [
   { text: "Star", hit: true },
 ])
 assert.deepEqual(pieces("abc", ["ab", "abc"]), [{ text: "abc", hit: true }]) // the longest at one place
+// a facet's word is one `#` token in either locale: no whitespace in it
+for (const d of [zh, en])
+  for (const [k, w] of Object.entries(d.card))
+    if (/^(facet|mode|specState)/.test(k)) assert.doesNotMatch(w, /\s/, `${k}: ${w}`)
 console.log("query ok")

@@ -62,8 +62,9 @@
 //   GET  /calls   the story's `call` events by node id: the inspector's trace. The turn files them in the library
 //                 under the node they made once it lands (turn.ts), whoever listened; they go with the node, and only
 //                 a story's last 200 nodes keep theirs.
-//   GET  /cards   every card the install knows, as {id, title} (a card file's row adds its summary, tags and facets,
-//                 library.ts `CardRow`): the card files, then the library's table (tavern.ts `shelf`). GET /cards/<id> is what a client draws that card by (404 when there is none), before any
+//   GET  /cards   every card the install knows, as {id, title}; a card file's row adds its summary, tags and facets
+//                 (library.ts `CardRow`): the card files, then the library's table (tavern.ts `shelf`).
+//                 GET /cards/<id> is what a client draws that card by (404 when there is none), before any
 //                 story of it exists: id, title and summary, the default channel, the rules as data (field bounds,
 //                 options, action ids), the openings whole, the declared products' shapes, the quick inputs
 //                 (snippets), the format keys, the fiction's modules without their text, the guard and lore as counts,
