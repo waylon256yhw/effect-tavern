@@ -449,14 +449,16 @@ const over = (data: Data, m: () => Model = model) =>
   const dir = await mkdtemp(join(tmpdir(), "tavern-cards-"))
   const file = join(dir, "t.db")
   const data = open(file)
-  const { id: _, ...body } = chat
+  // "mine" through the writer, its facets stored beside the json; the other two as rows written before the facets
+  // column, which list bare
+  data.cards.put({ ...chat, id: "mine", title: "我的" }, facets(chat))
   new DatabaseSync(file)
-    .prepare("insert into card values (?, ?, ?, 0), (?, ?, '{}', 0), (?, ?, '{}', 0)")
-    .run("mine", "我的", JSON.stringify(body), chat.id, "dup", "broken", "坏的")
+    .prepare("insert into card (id, title, json, updated) values (?, ?, '{}', 0), (?, ?, '{}', 0)")
+    .run(chat.id, "dup", "broken", "坏的")
   const lib = library({ data, cards: shelf([chat, { ...chat, id: "bare", title: undefined }], data), player, model })
   try {
-    // a YAML card's summary and facets ride on its row (the client's shelf shows and filters by them); the
-    // table's rows carry none
+    // a card's summary and facets ride on its row (the client's shelf shows them and its `#状态`-style words match
+    // on them, query.ts `admits`): a YAML card's read off it, a table card's as `put` stored them; an older row none
     const line = { summary: chat.summary, facets: facets(chat) }
     const { tokens, ...flags } = lib.cards()[0]!.facets!
     assert.deepEqual(flags, { mode: "act", fields: true, actions: false, readouts: false, lore: false, openings: true })
@@ -465,7 +467,7 @@ const over = (data: Data, m: () => Model = model) =>
       { id: chat.id, title: chat.title ?? chat.id, ...line },
       { id: "bare", title: "bare", ...line },
       { id: "broken", title: "坏的" },
-      { id: "mine", title: "我的" },
+      { id: "mine", title: "我的", ...line },
     ])
     const mine = lib.stories.create("mine")
     assert.deepEqual([lib.session(mine).meta.id, lib.view("mine").id], ["mine", "mine"])
