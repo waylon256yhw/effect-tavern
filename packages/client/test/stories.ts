@@ -5,6 +5,7 @@ import {
   ago,
   empty,
   matches,
+  openOn,
   personaOn,
   pieces,
   preview,
@@ -101,8 +102,11 @@ assert.deepEqual([turnLabel({ ...hits.get(3)!, turn: 0 }), turnLabel(hits.get(3)
 {
   const lib = { current: 2, stories: [row(1, { persona: "monk" }), row(2), row(3, { card: "other", persona: "nun" })] }
   const defaults = { wuxia: "friend", other: "monk" }
-  assert.equal(personaOn(lib, defaults, "wuxia"), undefined) // story 2 is open, on the card's own
-  assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia"), "monk")
-  assert.equal(personaOn(lib, defaults, "other"), "monk") // the open story is another card's: the default
+  assert.equal(personaOn(lib, defaults, "wuxia", "reader"), undefined) // story 2 is open, on the card's own
+  assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia", "reader"), "monk")
+  // the card's page: the tab keeps story 1 for Escape, but the row is the card's default
+  assert.equal(openOn({ ...lib, current: 1 }, "wuxia", "card"), undefined)
+  assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia", "card"), "friend")
+  assert.equal(personaOn(lib, defaults, "other", "reader"), "monk") // the open story is another card's: the default
 }
 console.log("ok")

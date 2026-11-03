@@ -101,7 +101,7 @@ export const Sidebar = (props: {
   const me = read(player)
   const people = read(personas)
   const persona = () =>
-    people().find((p) => p.id === personaOn(lib(), me()?.persona, at()))?.name ?? t("side.cardDefault")
+    people().find((p) => p.id === personaOn(lib(), me()?.persona, at(), pg()))?.name ?? t("side.cardDefault")
   const writing = createMemo(
     () =>
       chosen(me()?.writing, !!me()?.forCard[at() ?? ""]?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard"),
