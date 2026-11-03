@@ -50,6 +50,26 @@ export const admits = (c: ShelfCard, terms: readonly Term[], words: readonly str
   return terms.every((x) => (x.tag ? tags.includes(x.word) : text.some((s) => s.includes(x.word))) !== x.not)
 }
 
+/** Whether the shelf's facet panel belongs open over `q`: nothing in it but `#` terms, or a `#…` being typed last. A
+ *  plain word frees the list the panel would cover. */
+export const facetsWanted = (q: string): boolean => parse(q).every((x) => x.tag) || /(?:^|\s)#\S*$/.test(q)
+
+/** Every `#` word on `rows` (a facet's in the locale in force, or the player's, `words(id)`) with how many of the rows
+ *  carry it, most first (ties in the order met), spelled as first met: the shelf's facet panel. Over the rows the
+ *  query already admits, a word's count is what `admits` would leave with `#word` added (faceted search). */
+export const facetCounts = (
+  rows: readonly ShelfCard[],
+  words: (id: string) => readonly string[],
+): [string, number][] => {
+  const n = new Map<string, [string, number]>()
+  for (const c of rows)
+    for (const [f, w] of new Map(labels(c, words(c.id)).map((w) => [fold(w), w]))) {
+      const was = n.get(f)
+      n.set(f, [was?.[0] ?? w, (was?.[1] ?? 0) + 1])
+    }
+  return [...n.values()].sort((a, b) => b[1] - a[1])
+}
+
 /** Maximum filing words on one card: bounds the workspace tag strip to ~2–3 rows. */
 export const MAX_TAGS = 8
 

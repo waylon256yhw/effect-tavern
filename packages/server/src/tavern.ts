@@ -15,7 +15,7 @@ export const shelf = (files: readonly Card[], data: Data): Cards => ({
     [...files, ...data.cards.list()]
       .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
       .map((c) =>
-        // a YAML card is decoded already: its line and its facets ride on its row; the table lists none
+        // a YAML card is decoded already: its line and its facets ride on its row; the table stored them on `put`
         "rules" in c
           ? {
               id: c.id,
@@ -23,7 +23,7 @@ export const shelf = (files: readonly Card[], data: Data): Cards => ({
               ...(c.summary ? { summary: c.summary } : {}),
               facets: facets(c),
             }
-          : { id: c.id, title: c.title ?? c.id },
+          : c,
       ),
   get: (id) => {
     const file = files.find((c) => c.id === id)

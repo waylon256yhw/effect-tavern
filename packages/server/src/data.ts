@@ -21,8 +21,10 @@
 // library holds hundreds of long stories; sync between two installs (the Android copy is a copy of this file).
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
+import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
+import type { Facets } from "@effect-tavern/runtime/src/session.ts"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -35,7 +37,7 @@ create table if not exists secret (id text primary key, name text not null, json
 create table if not exists provider (id text primary key, name text not null, json text not null);
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
 create table if not exists names (id integer primary key check (id = 1), etag text, json text not null);
-create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null);
+create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null, summary text, facets text);
 create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
@@ -56,6 +58,8 @@ const migrations: readonly { table: string; column: string; add: string }[] = [
     add: `alter table story add column persona text;
       update story set persona = (select p.value from player, json_each(player.json, '$.persona') p where p.key = story.card);`,
   },
+  { table: "card", column: "summary", add: "alter table card add column summary text" },
+  { table: "card", column: "facets", add: "alter table card add column facets text" },
 ]
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
@@ -240,9 +244,26 @@ export const open = (asked: string) => {
         void q("insert or replace into names (id, etag, json) values (1, ?, ?)").run(t.etag, JSON.stringify(t.names)),
     },
     cards: {
-      /** The library's cards by id and title, the Card in the json column left unread. */
-      list: (): { id: string; title: string }[] =>
-        q("select id, title from card order by title").all() as { id: string; title: string }[],
+      /** The library's cards by id and title, with the summary and facets `put` stored beside the json (a row written
+       *  before those columns has neither), the Card in the json column left unread. */
+      list: (): { id: string; title: string; summary?: string; facets?: Facets }[] =>
+        (q("select id, title, summary, facets from card order by title").all() as Row[]).map((r) => ({
+          id: r["id"] as string,
+          title: r["title"] as string,
+          ...(r["summary"] ? { summary: r["summary"] as string } : {}),
+          ...(r["facets"] ? { facets: JSON.parse(r["facets"] as string) as Facets } : {}),
+        })),
+      /** A card written whole, with its facets (session.ts `facets`, the caller's reading) as a projection beside the
+       *  json, so the shelf's rows never decode a card. */
+      put: ({ id, ...card }: Card, facets: Facets) =>
+        void q("insert or replace into card (id, title, json, updated, summary, facets) values (?, ?, ?, ?, ?, ?)").run(
+          id,
+          card.title ?? id,
+          JSON.stringify(card),
+          Date.now(),
+          card.summary ?? null,
+          JSON.stringify(facets),
+        ),
       /** One card's json column, parsed (decoded by the caller); none when the table has no such id. */
       get: (id: string): unknown => parse<unknown>(q("select json from card where id = ?").get(id) as Row | undefined),
     },

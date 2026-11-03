@@ -71,9 +71,9 @@ export class NoModel extends Error {
   }
 }
 
-/** A card as the shelf lists it: id and title, and for a card already decoded (a card file) its one-line summary and
- *  its facets (session.ts `facets`), what the client's shelf shows and filters by. A table card's row carries
- *  neither: it is decoded when a story of it opens. */
+/** A card as the shelf lists it: id and title, its one-line summary and its facets (session.ts `facets`), what the
+ *  client's shelf shows and filters by: a card file's read off the decoded card, a table card's stored when it was
+ *  written (data.ts `cards.put`; a row from before has neither). */
 export type CardRow = { id: string; title: string; summary?: string; facets?: Facets }
 /** Where cards come from (tavern.ts `shelf`: a directory of YAML and the library's table): every one as a row, and
  *  one whole by id (throws when there is none). */
