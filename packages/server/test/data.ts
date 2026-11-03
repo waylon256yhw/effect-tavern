@@ -21,7 +21,7 @@ const data = open(":memory:")
 
 // Store: the authority commits, a fresh holder over the same rows equals it, and the next id is the stored one.
 const story = data.stories.create("wuxia")
-assert.deepEqual({ ...data.stories.get(story) }, { id: story, card: "wuxia" })
+assert.deepEqual({ ...data.stories.get(story) }, { id: story, card: "wuxia", persona: null })
 assert.equal(data.stories.get(999), undefined)
 const store = data.store<N>(story)
 const h = L.hold<N>(store)

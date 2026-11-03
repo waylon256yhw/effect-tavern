@@ -33,7 +33,17 @@ import {
 import { add, CAP, home, remove, restore, scroll, select, unread } from "../src/tabs.ts"
 
 const row = (id: number, cardId: string, updated = id): StoryRow =>
-  ({ id, card: cardId, busy: null, title: null, starred: false, updated, turns: 1, last: null }) as StoryRow
+  ({
+    id,
+    card: cardId,
+    busy: null,
+    title: null,
+    starred: false,
+    persona: null,
+    updated,
+    turns: 1,
+    last: null,
+  }) as StoryRow
 let rows = [row(1, "a"), row(2, "b"), row(3, "a")]
 const cardOf = (id: number | null | undefined) => rows.find((s) => s.id === id)?.card
 const opened: number[] = [] // the stories the Reading read afresh: one per real switch

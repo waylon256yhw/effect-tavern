@@ -35,6 +35,21 @@ export const latestOf = (rows: readonly StoryRow[]): StoryRow | undefined =>
   rows.reduce<StoryRow | undefined>((best, s) => (!best || s.updated > best.updated ? s : best), undefined)
 /** Whether a card has a turn in flight on any of its stories (the dot on its shelf row, and beside the back button
  *  for every other card). */
+/** The open story when it is of `card` (the workspace's persona row then reads and writes it), else none: the row
+ *  is the card's default (`Player.persona[card]`). */
+export const openOn = (
+  lib: { current: number | null; stories: readonly StoryRow[] } | null,
+  card: string | null,
+): StoryRow | undefined => lib?.stories.find((s) => s.id === lib.current && s.card === card)
+/** The persona id the workspace's row shows: the open story's own, else the card's default; none = the card's own. */
+export const personaOn = (
+  lib: { current: number | null; stories: readonly StoryRow[] } | null,
+  defaults: Readonly<Record<string, string>> | undefined,
+  card: string | null,
+): string | undefined => {
+  const s = openOn(lib, card)
+  return s ? (s.persona ?? undefined) : defaults?.[card ?? ""]
+}
 export const busyOn = (rows: readonly StoryRow[], card: string): boolean =>
   rows.some((s) => s.card === card && s.busy !== null)
 export const busyElsewhere = (rows: readonly StoryRow[], card: string): boolean =>

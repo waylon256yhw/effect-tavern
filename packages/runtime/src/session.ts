@@ -299,7 +299,7 @@ export const makeSession = ({
   model: (phase: Phase) => Model
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
-  persona?: (player: Player) => string | undefined // the player's persona on this card, read per request (library.ts)
+  persona?: (player: Player) => string | undefined // the persona in force on this story, read per request (library.ts)
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
   // the fold boundary, a value or read on every fold (library.ts: the narrate model's window, so a routing edit is in
   // force from the next request); tests pass a small budget to fold short scripted prose

@@ -3,7 +3,7 @@
 // with a search; a card's row has a dot while a turn runs on any of its stories) and the workspace (one card: its
 // head, which opens its page; the player's filing words on it (`Player.tags`, #133) as wrapping chips right under the
 // head (click a word to filter the shelf by `#word`, × to remove, + to add or open the tag manager); two rows under it,
-// the persona and the writing in force on this card (both are the card's, not a story's); a search; its stories, starred first then newest, the open one on a tint, a dot on one
+// the persona in force (the open story's when it is of this card, else the card's default) and the writing in force on this card; a search; its stories, starred first then newest, the open one on a tint, a dot on one
 // with a turn in flight; "新建故事" at the foot, which opens the card's page and makes no story: a story begins at
 // Begin). The top strip (the way back to the shelf, with a dot when another card is busy) and the foot (this card's
 // story manager at the right end) are one DOM for both layers: only the middle moves. Settings, theme and language
@@ -17,7 +17,17 @@ import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Trans
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
 import { admits, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
-import { arranged, busyElsewhere, busyOn, type Hit, kindLabel, matches, pieces, turnLabel } from "./stories.ts"
+import {
+  arranged,
+  busyElsewhere,
+  busyOn,
+  type Hit,
+  kindLabel,
+  matches,
+  personaOn,
+  pieces,
+  turnLabel,
+} from "./stories.ts"
 import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
@@ -87,10 +97,11 @@ export const Sidebar = (props: {
   const pg = read(page)
   const rows = () => lib()?.stories ?? []
   const card = createMemo(() => shelf().find((c) => c.id === at()))
-  // who the player is on this card, and the writing in force: a change rewrites the cached prefix, no new story
+  // who the player is here (the open story's persona, else the card's default), and the writing in force: a change rewrites the cached prefix, no new story
   const me = read(player)
   const people = read(personas)
-  const persona = () => people().find((p) => p.id === me()?.persona?.[at() ?? ""])?.name ?? t("side.cardDefault")
+  const persona = () =>
+    people().find((p) => p.id === personaOn(lib(), me()?.persona, at()))?.name ?? t("side.cardDefault")
   const writing = createMemo(
     () =>
       chosen(me()?.writing, !!me()?.forCard[at() ?? ""]?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard"),

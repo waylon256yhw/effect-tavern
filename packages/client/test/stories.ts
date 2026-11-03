@@ -1,7 +1,19 @@
 // stories.ts: the card's four rows (starred first, the open one kept in view), the preview a row carries, the search's
 // match over title and hits, the marks it cuts, the cleanup's quick picks.
 import assert from "node:assert/strict"
-import { ago, empty, matches, pieces, preview, ranked, shown, turnLabel, unnamed, type Hit } from "../src/stories.ts"
+import {
+  ago,
+  empty,
+  matches,
+  personaOn,
+  pieces,
+  preview,
+  ranked,
+  shown,
+  turnLabel,
+  unnamed,
+  type Hit,
+} from "../src/stories.ts"
 import type { StoryRow } from "../src/store.ts"
 
 const row = (id: number, p: Partial<StoryRow> = {}): StoryRow => ({
@@ -10,6 +22,7 @@ const row = (id: number, p: Partial<StoryRow> = {}): StoryRow => ({
   busy: null,
   title: null,
   starred: false,
+  persona: null,
   updated: 100 - id, // newest first, as the listing comes
   turns: 1,
   last: { text: `line ${id}` },
@@ -83,4 +96,13 @@ assert.deepEqual(rows.map(empty), [false, false, false, false, false, false])
 assert.equal(empty(row(7, { turns: 0 })), true)
 assert.deepEqual(rows.map(unnamed), [true, false, true, true, false, true]) // starred or named is kept
 assert.deepEqual([turnLabel({ ...hits.get(3)!, turn: 0 }), turnLabel(hits.get(3)!)], ["开场白", "第 2 轮"])
+
+// The workspace's persona row: the open story's own when it is of the card, else the card's default.
+{
+  const lib = { current: 2, stories: [row(1, { persona: "monk" }), row(2), row(3, { card: "other", persona: "nun" })] }
+  const defaults = { wuxia: "friend", other: "monk" }
+  assert.equal(personaOn(lib, defaults, "wuxia"), undefined) // story 2 is open, on the card's own
+  assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia"), "monk")
+  assert.equal(personaOn(lib, defaults, "other"), "monk") // the open story is another card's: the default
+}
 console.log("ok")

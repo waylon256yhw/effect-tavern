@@ -105,6 +105,9 @@ export const nameStory = async (id: number, title: string): Promise<void> =>
 /** Starred or not: the same write as a name, only the listing comes back. */
 export const starStory = async (id: number, starred: boolean): Promise<void> =>
   keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ starred }) })))
+/** The persona on this story alone (none: the card's own): the same write as a star. */
+export const pickStoryPersona = async (id: number, persona: string | null): Promise<void> =>
+  keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ persona }) })))
 /** The manager's search: the stories whose turns hold `q`, as hits by story (stories.ts `Hit`). */
 export const searchStories = (q: string): Promise<Hit[]> =>
   got(call(`${base}/stories/search?q=${encodeURIComponent(q)}`)) as Promise<Hit[]>
@@ -115,7 +118,7 @@ export const putPersona = async ({ id, ...body }: Persona): Promise<void> =>
   registry.set(personas, await got(call(at(id), { method: "PUT", body: JSON.stringify(body) })))
 export const deletePersona = async (id: string): Promise<void> => {
   registry.set(personas, await got(call(at(id), { method: "DELETE" })))
-  await fetchPlayer() // the pick on any card it held is gone with it
+  await Promise.all([fetchPlayer(), fetchStories()]) // the pick on any card or story it held is gone with it
 }
 let playerWrite: Promise<void> = Promise.resolve()
 /** Apply each edit to the last acknowledged document, including edits queued in the same blur/click sequence. */

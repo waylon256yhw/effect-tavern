@@ -121,7 +121,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --fade: 24px; /* the column's vertical padding, over which its two ends fade out */
   --head: var(--fade); /* the column's top padding and fade; on the canvas the sidebar's top row (shell.css) */
-  --foot: calc(var(--fade) + var(--space-4)); /* the column's bottom padding: clears a two-row composer, hides the action row under a three-row one */
+  --foot: calc(
+    var(--fade) + var(--space-4)
+  ); /* the column's bottom padding: clears a two-row composer, hides the action row under a three-row one */
   --lift: 0px; /* how far the composer's box has risen into the column above its one-line slot (App.tsx) */
 
   /* motion: five durations, one ease for movement, one for pulses */

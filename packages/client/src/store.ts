@@ -63,6 +63,7 @@ export interface StoryRow {
   busy: Phase | null // a turn in flight on it, where it stands
   title: string | null // the player's name for it; none (never named), the row reads "New story"
   starred: boolean // the player's star: first on the card and in the manager
+  persona: string | null // the persona in force on it; none: the card's own (a new story takes the card's default)
   updated: number
   turns: number // the nodes with a player line or note: a greeting is none
   last: { text: string; note?: string } | null // the last turn's input: the manager's preview; none with only the opening
