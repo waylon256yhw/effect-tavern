@@ -49,7 +49,13 @@ export const traced = 200
 /** Columns added to a table after libraries were made with it, each applied on open when the table lacks it. */
 const migrations: readonly { table: string; column: string; add: string }[] = [
   { table: "story", column: "starred", add: "alter table story add column starred integer not null default 0" },
-  { table: "story", column: "persona", add: "alter table story add column persona text" },
+  // the card's pick (`Player.persona[card]`) as it stood copied in, so a running story keeps its persona on upgrade
+  {
+    table: "story",
+    column: "persona",
+    add: `alter table story add column persona text;
+      update story set persona = (select p.value from player, json_each(player.json, '$.persona') p where p.key = story.card);`,
+  },
 ]
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
