@@ -3,7 +3,18 @@
 // dropTag, tagCounts for the tag manager) (stories.ts `pieces` over several words). Under Bun the locale is zh-CN.
 import assert from "node:assert/strict"
 import type { Player } from "@effect-tavern/runtime/src/fragment.ts"
-import { admits, dropTag, MAX_TAGS, parse, plain, renameTag, retag, spare, tagCounts } from "../src/query.ts"
+import {
+  admits,
+  dropTag,
+  facetCounts,
+  MAX_TAGS,
+  parse,
+  plain,
+  renameTag,
+  retag,
+  spare,
+  tagCounts,
+} from "../src/query.ts"
 import type { ShelfCard } from "../src/store.ts"
 import { pieces } from "../src/stories.ts"
 import en from "../src/locales/en.ts"
@@ -42,6 +53,21 @@ assert.deepEqual(ids("-#检定"), ["banxing", "yandao", "table"]) // negated
 assert.deepEqual(ids("-竹"), ["banxing", "yandao", "table"])
 assert.deepEqual(ids("#参与者 -#武侠"), ["banxing"]) // AND across terms
 assert.deepEqual(ids("#线索 star"), [])
+// the facet panel: every `#` word on the rows a query admits, with how many carry it (what `#word` added would leave)
+assert.deepEqual(
+  facetCounts(
+    shelf.filter((c) => admits(c, parse("#参与者"), tags[c.id])),
+    (id) => tags[id] ?? [],
+  ),
+  [
+    ["参与者", 2],
+    ["武侠", 1],
+    ["对峙", 1],
+    ["检定", 1],
+    ["线索", 1],
+    ["日常", 1],
+  ],
+)
 
 // only the plain, positive words are marked; several at once
 assert.deepEqual(plain(parse("Star #日常 -盐 竹")), ["star", "竹"])
