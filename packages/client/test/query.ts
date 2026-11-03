@@ -7,6 +7,7 @@ import {
   admits,
   dropTag,
   facetCounts,
+  facetsWanted,
   MAX_TAGS,
   parse,
   plain,
@@ -53,6 +54,15 @@ assert.deepEqual(ids("-#检定"), ["banxing", "yandao", "table"]) // negated
 assert.deepEqual(ids("-竹"), ["banxing", "yandao", "table"])
 assert.deepEqual(ids("#参与者 -#武侠"), ["banxing"]) // AND across terms
 assert.deepEqual(ids("#线索 star"), [])
+// the facet panel stays open over `#` terms alone or a `#…` being typed; a plain word closes it
+assert.deepEqual(["", "#作者 -#检定 ", "竹 #", "竹 #作", "竹", "#作者 竹"].map(facetsWanted), [
+  true,
+  true,
+  true,
+  true,
+  false,
+  false,
+])
 // the facet panel: every `#` word on the rows a query admits, with how many carry it (what `#word` added would leave)
 assert.deepEqual(
   facetCounts(

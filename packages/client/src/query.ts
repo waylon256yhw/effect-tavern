@@ -50,6 +50,10 @@ export const admits = (c: ShelfCard, terms: readonly Term[], words: readonly str
   return terms.every((x) => (x.tag ? tags.includes(x.word) : text.some((s) => s.includes(x.word))) !== x.not)
 }
 
+/** Whether the shelf's facet panel belongs open over `q`: nothing in it but `#` terms, or a `#…` being typed last. A
+ *  plain word frees the list the panel would cover. */
+export const facetsWanted = (q: string): boolean => parse(q).every((x) => x.tag) || /(?:^|\s)#\S*$/.test(q)
+
 /** Every `#` word on `rows` (a facet's in the locale in force, or the player's, `words(id)`) with how many of the rows
  *  carry it, most first (ties in the order met), spelled as first met: the shelf's facet panel. Over the rows the
  *  query already admits, a word's count is what `admits` would leave with `#word` added (faceted search). */

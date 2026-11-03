@@ -16,7 +16,7 @@ import { openManager, openPicker, openTagManager } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
-import { admits, facetCounts, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
+import { admits, facetCounts, facetsWanted, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
 import {
   arranged,
   busyElsewhere,
@@ -145,8 +145,8 @@ export const Sidebar = (props: {
   const terms = createMemo(() => parse(cq()))
   const marked = createMemo(() => plain(terms()))
   const shown = createMemo(() => shelf().filter((c) => admits(c, terms(), wordsOn(c.id))))
-  // the facet panel (#130): a popover under the box while it holds the focus (or once a `#` is typed after Escape),
-  // the `#` words on the cards the query admits, each with its count; a click adds `#word`, or removes it when it is
+  // the facet panel (#130): a popover under the box while it holds the focus and the query is only `#` terms or ends
+  // in a `#…` being typed (query.ts `facetsWanted`; a plain word closes it, freeing the list under it), the `#` words on the cards the query admits, each with its count; a click adds `#word`, or removes it when it is
   // on. A trailing `#…` still being typed narrows the words and is what a click completes: counted without it
   const draft = createMemo(() => /(?:^|\s)#(\S*)$/.exec(cq())?.[1])
   const capsules = createMemo(() => {
@@ -162,6 +162,7 @@ export const Sidebar = (props: {
     const kept = toks.filter((r) => !parse(r).some((x) => x.tag && !x.not && x.word === fold(w)))
     const q = [...kept, ...(isOn(w) ? [] : [`#${w}`])].join(" ")
     setQuery(q && `${q} `)
+    peek(facetsWanted(q))
   }
   let facetPop: HTMLDivElement | undefined
   const peek = (on: boolean) => void facetPop?.togglePopover(on)
@@ -272,10 +273,10 @@ export const Sidebar = (props: {
                 ref={(el) => (shelfSearch = el)}
                 placeholder={t("side.searchCards")}
                 aria-label={t("side.searchCards")}
-                onFocus={() => peek(true)}
+                onFocus={(e) => peek(facetsWanted(e.currentTarget.value))}
                 onInput={(e) => {
                   setCq(e.currentTarget.value)
-                  if (e.currentTarget.value.includes("#")) peek(true)
+                  peek(facetsWanted(e.currentTarget.value))
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") peek(false)
