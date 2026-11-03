@@ -69,19 +69,6 @@ export const admits = (
   return terms.every((x) => (x.tag ? tags.includes(x.word) : text.some((s) => s.includes(x.word))) !== x.not)
 }
 
-/** The complete positive `#word` tokens in `q` (followed by a space; every one when `all`, the Enter key) lifted out
- *  as picked words, with the text they leave: a typed term becomes a chip (side.tsx). `-#x` stays text: a chip
- *  cannot negate. */
-export const lift = (q: string, all = false): { q: string; words: string[] } => {
-  const words: string[] = []
-  const rest = q.replace(all ? /(^|\s)#(\S+)(?=\s|$)/g : /(^|\s)#(\S+)(?=\s)/g, (_, pre: string, w: string) => {
-    words.push(w)
-    return pre
-  })
-  const out = rest.replace(/\s+/g, " ").trimStart()
-  return { q: all ? out.trimEnd() : out, words } // mid-typing the trailing space is the player's
-}
-
 /** Whether the shelf's facet panel belongs open over `q`: nothing in it but `#` terms, or a `#…` being typed last. A
  *  plain word frees the list the panel would cover. */
 export const facetsWanted = (q: string): boolean => parse(q).every((x) => x.tag) || /(?:^|\s)#\S*$/.test(q)

@@ -16,7 +16,7 @@ import { openManager, openPicker, openTagManager } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
-import { admits, facetCounts, facetsWanted, isFacet, lift, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
+import { admits, facetCounts, facetsWanted, isFacet, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
 import {
   arranged,
   busyElsewhere,
@@ -131,22 +131,12 @@ export const Sidebar = (props: {
     go()
   }
   // the shelf's search (query.ts): plain words over title, summary and the player's words on the card, `#` on one of
-  // those words or a facet, `-` negates; a picked word is a chip below the box, never text in it: a `#word` typed
-  // there becomes a chip once complete (a space after it, or Enter; query.ts `lift`), `-#x` stays text
+  // those words or a facet, `-` negates; picked chips stay out of the input box as atomic tokens below it
   const [cq, setCq] = createSignal("")
   const [picked, setPicked] = createSignal<readonly string[]>([])
   const setQuery = (q: string) => {
     setCq(q)
     if (shelfSearch) shelfSearch.value = q
-  }
-  const addPicked = (words: readonly string[]) =>
-    setPicked((ws) => [...ws, ...words.filter((w) => !ws.some((x) => fold(x) === fold(w)))])
-  /** The complete `#word` tokens in `q` lifted into chips; the text that remains is the query. */
-  const typed = (q: string, all = false) => {
-    const l = lift(q, all)
-    if (!l.words.length) return setCq(q)
-    setQuery(l.q)
-    addPicked(l.words)
   }
   const filterByTag = (w: string) => {
     setQuery("")
@@ -184,8 +174,7 @@ export const Sidebar = (props: {
       .filter((r) => r && !parse(r).some((x) => x.tag && !x.not && x.word === f))
       .join(" ")
     if (kept !== cq()) setQuery(kept)
-    if (on) setPicked((ws) => ws.filter((x) => fold(x) !== f))
-    else addPicked([w])
+    setPicked((ws) => (on ? ws.filter((x) => fold(x) !== f) : [...ws, w]))
   }
   let facetPop: HTMLDivElement | undefined
   const peek = (on: boolean) => void facetPop?.togglePopover(on)
@@ -299,12 +288,11 @@ export const Sidebar = (props: {
                   aria-label={t("side.searchCards")}
                   onFocus={(e) => peek(facetsWanted(e.currentTarget.value))}
                   onInput={(e) => {
-                    typed(e.currentTarget.value)
-                    peek(facetsWanted(cq()))
+                    setCq(e.currentTarget.value)
+                    peek(facetsWanted(e.currentTarget.value))
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") peek(false)
-                    else if (e.key === "Enter" && !e.isComposing) typed(cq(), true)
                     else if (e.key === "Backspace" && !e.currentTarget.value && picked().length)
                       setPicked((ws) => ws.slice(0, -1))
                   }}

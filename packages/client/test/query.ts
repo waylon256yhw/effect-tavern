@@ -8,7 +8,6 @@ import {
   dropTag,
   facetCounts,
   facetsWanted,
-  lift,
   isFacet,
   MAX_TAGS,
   parse,
@@ -136,8 +135,3 @@ assert.deepEqual(tagCounts({ a: ["b"], c: ["a"] }), [
 ]) // ties by word
 assert.deepEqual(tagCounts(undefined), [])
 console.log("query ok")
-
-// a typed `#word` lifts into a chip once complete: a space after it, every one on Enter; `-#x` and a `#` draft stay
-assert.deepEqual(lift("竹 #作者 林 -#检定 #线"), { q: "竹 林 -#检定 #线", words: ["作者"] })
-assert.deepEqual(lift("#作者 竹 #线", true), { q: "竹", words: ["作者", "线"] })
-assert.deepEqual(lift("竹林"), { q: "竹林", words: [] })
