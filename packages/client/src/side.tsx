@@ -16,7 +16,7 @@ import { openManager, openPicker, openTagManager } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
-import { admits, facetCounts, facetsWanted, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
+import { admits, facetCounts, facetsWanted, isFacet, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
 import {
   arranged,
   busyElsewhere,
@@ -131,38 +131,50 @@ export const Sidebar = (props: {
     go()
   }
   // the shelf's search (query.ts): plain words over title, summary and the player's words on the card, `#` on one of
-  // those words or a facet, `-` negates; the plain words are what the rows mark
+  // those words or a facet, `-` negates; picked chips stay out of the input box as atomic tokens below it
   const [cq, setCq] = createSignal("")
+  const [picked, setPicked] = createSignal<readonly string[]>([])
   const setQuery = (q: string) => {
     setCq(q)
     if (shelfSearch) shelfSearch.value = q
   }
   const filterByTag = (w: string) => {
-    setQuery(`#${w}`)
+    setQuery("")
+    setPicked([w])
     toShelf()
   }
   const wordsOn = (id: string) => me()?.tags?.[id] ?? []
   const terms = createMemo(() => parse(cq()))
   const marked = createMemo(() => plain(terms()))
-  const shown = createMemo(() => shelf().filter((c) => admits(c, terms(), wordsOn(c.id))))
-  // the facet panel (#130): a popover under the box while it holds the focus and the query is only `#` terms or ends
-  // in a `#…` being typed (query.ts `facetsWanted`; a plain word closes it, freeing the list under it), the `#` words on the cards the query admits, each with its count; a click adds `#word`, or removes it when it is
-  // on. A trailing `#…` still being typed narrows the words and is what a click completes: counted without it
+  const shown = createMemo(() => shelf().filter((c) => admits(c, terms(), wordsOn(c.id), picked())))
+  // the facet panel (#130): a popover under the filter block while the box holds the focus and the query is only `#`
+  // terms or ends in a `#…` being typed (query.ts `facetsWanted`; a plain word closes it, freeing the list under it).
+  // System facets (squircle badges) and the player's tags (round pills) sit in separate groups, each with its hit count
   const draft = createMemo(() => /(?:^|\s)#(\S*)$/.exec(cq())?.[1])
   const capsules = createMemo(() => {
-    const d = draft()
-    const base = d === undefined ? terms() : parse(cq().slice(0, -d.length - 1))
-    const rows = shelf().filter((c) => admits(c, base, wordsOn(c.id)))
-    return facetCounts(rows, wordsOn).filter(([w]) => fold(w).includes(fold(d ?? "")))
+    const d = fold(draft() ?? "")
+    const base = draft() === undefined ? terms() : parse(cq().slice(0, -draft()!.length - 1))
+    const rows = shelf().filter((c) => admits(c, base, wordsOn(c.id), picked()))
+    const { facets, tags } = facetCounts(rows, wordsOn)
+    return {
+      facets: facets.filter(([w]) => fold(w).includes(d)),
+      tags: tags.filter(([w]) => fold(w).includes(d)),
+    }
   })
-  const isOn = (w: string) => terms().some((x) => x.tag && !x.not && x.word === fold(w))
+  const isOn = (w: string) => {
+    const f = fold(w)
+    return picked().some((x) => fold(x) === f) || terms().some((x) => x.tag && !x.not && x.word === f)
+  }
   const pick = (w: string) => {
-    const toks = cq().split(/\s+/).filter(Boolean)
-    if (draft() !== undefined) toks.pop()
-    const kept = toks.filter((r) => !parse(r).some((x) => x.tag && !x.not && x.word === fold(w)))
-    const q = [...kept, ...(isOn(w) ? [] : [`#${w}`])].join(" ")
-    setQuery(q && `${q} `)
-    peek(facetsWanted(q))
+    const f = fold(w)
+    const on = isOn(w)
+    const stripped = draft() === undefined ? cq() : cq().replace(/(?:^|\s)#\S*$/, "")
+    const kept = stripped
+      .split(/\s+/)
+      .filter((r) => r && !parse(r).some((x) => x.tag && !x.not && x.word === f))
+      .join(" ")
+    if (kept !== cq()) setQuery(kept)
+    setPicked((ws) => (on ? ws.filter((x) => fold(x) !== f) : [...ws, w]))
   }
   let facetPop: HTMLDivElement | undefined
   const peek = (on: boolean) => void facetPop?.togglePopover(on)
@@ -262,47 +274,84 @@ export const Sidebar = (props: {
           {/* layer A, the shelf: every card of the install */}
           <section class="pane shelf" aria-label={t("side.allCards")} inert={which() !== "shelf"}>
             <div
-              class="input-box sm shelf-search"
+              class="shelf-filter"
               onFocusOut={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node | null)) peek(false)
               }}
             >
-              <Clue aria-hidden="true" />
-              <input
-                type="search"
-                ref={(el) => (shelfSearch = el)}
-                placeholder={t("side.searchCards")}
-                aria-label={t("side.searchCards")}
-                onFocus={(e) => peek(facetsWanted(e.currentTarget.value))}
-                onInput={(e) => {
-                  setCq(e.currentTarget.value)
-                  peek(facetsWanted(e.currentTarget.value))
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") peek(false)
-                }}
-              />
+              <div class="input-box sm shelf-search">
+                <Clue aria-hidden="true" />
+                <input
+                  type="search"
+                  ref={(el) => (shelfSearch = el)}
+                  placeholder={t("side.searchCards")}
+                  aria-label={t("side.searchCards")}
+                  onFocus={(e) => peek(facetsWanted(e.currentTarget.value))}
+                  onInput={(e) => {
+                    setCq(e.currentTarget.value)
+                    peek(facetsWanted(e.currentTarget.value))
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") peek(false)
+                    else if (e.key === "Backspace" && !e.currentTarget.value && picked().length)
+                      setPicked((ws) => ws.slice(0, -1))
+                  }}
+                />
+              </div>
+              <Show when={picked().length}>
+                <div class="shelf-picked">
+                  <For each={picked()} keyed={false}>
+                    {(w) => (
+                      <button type="button" class={{ chip: true, facet: isFacet(w()) }} onClick={() => pick(w())}>
+                        <span>{w()}</span>
+                        <Close aria-hidden="true" />
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
               {/* a press keeps the focus in the box, so a capsule's click lands and the panel stays open */}
               <div
                 id={facetId()}
                 ref={(el) => (facetPop = el)}
-                class={{ "facet-pop": true, none: !capsules().length }}
+                class={{ "facet-pop": true, none: !capsules().facets.length && !capsules().tags.length }}
                 popover="manual"
                 onMouseDown={(e) => e.preventDefault()}
               >
-                <For each={capsules()} keyed={false}>
-                  {(c) => (
-                    <button
-                      type="button"
-                      class="chip"
-                      aria-pressed={isOn(c()[0]) ? "true" : "false"}
-                      onClick={() => pick(c()[0])}
-                    >
-                      <span>{c()[0]}</span>
-                      <span class="count">{c()[1]}</span>
-                    </button>
-                  )}
-                </For>
+                <Show when={capsules().facets.length}>
+                  <div class="facet-group">
+                    <For each={capsules().facets} keyed={false}>
+                      {(c) => (
+                        <button
+                          type="button"
+                          class="chip facet"
+                          aria-pressed={isOn(c()[0]) ? "true" : "false"}
+                          onClick={() => pick(c()[0])}
+                        >
+                          <span>{c()[0]}</span>
+                          <span class="count">{c()[1]}</span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+                <Show when={capsules().tags.length}>
+                  <div class="facet-group">
+                    <For each={capsules().tags} keyed={false}>
+                      {(c) => (
+                        <button
+                          type="button"
+                          class="chip"
+                          aria-pressed={isOn(c()[0]) ? "true" : "false"}
+                          onClick={() => pick(c()[0])}
+                        >
+                          <span>{c()[0]}</span>
+                          <span class="count">{c()[1]}</span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
               </div>
             </div>
             <ul class="shelf-list scroller">
@@ -335,7 +384,7 @@ export const Sidebar = (props: {
                 )}
               </For>
               <Show when={!shown().length}>
-                <li class="none">{cq().trim() ? t("side.noCardMatch") : t("side.noCards")}</li>
+                <li class="none">{cq().trim() || picked().length ? t("side.noCardMatch") : t("side.noCards")}</li>
               </Show>
             </ul>
           </section>

@@ -31,21 +31,40 @@ export const parse = (q: string): Term[] =>
 /** The plain words the shelf marks in a row's title and summary. */
 export const plain = (terms: readonly Term[]): string[] => terms.filter((x) => !x.tag && !x.not).map((x) => x.word)
 
-/** A card's `#` words: the player's words on it, then its facets in the locale in force (none on a row without facets). */
-const labels = (c: ShelfCard, words: readonly string[]): string[] => {
+/** A card's facet words in the locale in force (none on a row without facets). */
+const facetWords = (c: ShelfCard): string[] => {
   const f = c.facets
-  if (!f) return [...words]
+  if (!f) return []
   return [
-    ...words,
     t(f.mode === "note" ? "card.modeAuthor" : "card.modeParticipant"),
     ...FLAGS.filter(([k]) => f[k]).map(([, key]) => t(key)),
   ]
 }
 
-/** Whether a card holds every term; `words` are the player's on it (`Player.tags[c.id]`). */
-export const admits = (c: ShelfCard, terms: readonly Term[], words: readonly string[] = []): boolean => {
-  if (!terms.length) return true
+/** Whether `w` is one of the harness's facet words in the locale in force. */
+export const isFacet = (w: string): boolean => {
+  const f = fold(w)
+  return (
+    f === fold(t("card.modeAuthor")) ||
+    f === fold(t("card.modeParticipant")) ||
+    FLAGS.some(([, key]) => f === fold(t(key)))
+  )
+}
+
+/** A card's `#` words: the player's words on it, then its facets in the locale in force (none on a row without facets). */
+const labels = (c: ShelfCard, words: readonly string[]): string[] => [...words, ...facetWords(c)]
+
+/** Whether a card holds every term and every picked chip; `words` are the player's on it (`Player.tags[c.id]`). */
+export const admits = (
+  c: ShelfCard,
+  terms: readonly Term[],
+  words: readonly string[] = [],
+  picked: readonly string[] = [],
+): boolean => {
+  if (!terms.length && !picked.length) return true
   const tags = labels(c, words).map(fold)
+  if (!picked.every((w) => tags.includes(fold(w)))) return false
+  if (!terms.length) return true
   const text = [c.title, c.summary ?? "", ...words].map(fold)
   return terms.every((x) => (x.tag ? tags.includes(x.word) : text.some((s) => s.includes(x.word))) !== x.not)
 }
@@ -54,21 +73,26 @@ export const admits = (c: ShelfCard, terms: readonly Term[], words: readonly str
  *  plain word frees the list the panel would cover. */
 export const facetsWanted = (q: string): boolean => parse(q).every((x) => x.tag) || /(?:^|\s)#\S*$/.test(q)
 
-/** Every `#` word on `rows` (a facet's in the locale in force, or the player's, `words(id)`) with how many of the rows
- *  carry it, most first (ties in the order met), spelled as first met: the shelf's facet panel. Over the rows the
- *  query already admits, a word's count is what `admits` would leave with `#word` added (faceted search). */
-export const facetCounts = (
-  rows: readonly ShelfCard[],
-  words: (id: string) => readonly string[],
-): [string, number][] => {
+const tally = (lists: Iterable<readonly string[]>): [string, number][] => {
   const n = new Map<string, [string, number]>()
-  for (const c of rows)
-    for (const [f, w] of new Map(labels(c, words(c.id)).map((w) => [fold(w), w]))) {
+  for (const ws of lists)
+    for (const [f, w] of new Map(ws.map((w) => [fold(w), w]))) {
       const was = n.get(f)
       n.set(f, [was?.[0] ?? w, (was?.[1] ?? 0) + 1])
     }
   return [...n.values()].sort((a, b) => b[1] - a[1])
 }
+
+/** Every `#` word on `rows` split into system facets (in the locale in force) and the player's words (`words(id)`),
+ *  each with how many of the rows carry it, most first (ties in the order met), spelled as first met: the shelf's
+ *  facet panel. Over the rows the query already admits, a word's count is what `admits` would leave with it added. */
+export const facetCounts = (
+  rows: readonly ShelfCard[],
+  words: (id: string) => readonly string[],
+): { facets: [string, number][]; tags: [string, number][] } => ({
+  facets: tally(rows.map(facetWords)),
+  tags: tally(rows.map((c) => words(c.id).filter((w) => !isFacet(w)))),
+})
 
 /** Maximum filing words on one card: bounds the workspace tag strip to ~2–3 rows. */
 export const MAX_TAGS = 8

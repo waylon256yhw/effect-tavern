@@ -8,6 +8,7 @@ import {
   dropTag,
   facetCounts,
   facetsWanted,
+  isFacet,
   MAX_TAGS,
   parse,
   plain,
@@ -63,21 +64,26 @@ assert.deepEqual(["", "#作者 -#检定 ", "竹 #", "竹 #作", "竹", "#作者 
   false,
   false,
 ])
-// the facet panel: every `#` word on the rows a query admits, with how many carry it (what `#word` added would leave)
+// the facet panel: system facets and the player's tags in separate groups, each with how many admitted rows carry it
 assert.deepEqual(
   facetCounts(
-    shelf.filter((c) => admits(c, parse("#参与者"), tags[c.id])),
+    shelf.filter((c) => admits(c, [], tags[c.id], ["参与者"])),
     (id) => tags[id] ?? [],
   ),
-  [
-    ["参与者", 2],
-    ["武侠", 1],
-    ["对峙", 1],
-    ["检定", 1],
-    ["线索", 1],
-    ["日常", 1],
-  ],
+  {
+    facets: [
+      ["参与者", 2],
+      ["检定", 1],
+      ["线索", 1],
+    ],
+    tags: [
+      ["武侠", 1],
+      ["对峙", 1],
+      ["日常", 1],
+    ],
+  },
 )
+assert.deepEqual([isFacet("参与者"), isFacet("检定"), isFacet("武侠")], [true, true, false])
 
 // only the plain, positive words are marked; several at once
 assert.deepEqual(plain(parse("Star #日常 -盐 竹")), ["star", "竹"])

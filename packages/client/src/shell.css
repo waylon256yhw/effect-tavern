@@ -519,13 +519,43 @@
 .tag-pop .manage {
   align-self: flex-end;
 }
-/* the shelf's facet panel (#130): the `#` words on the cards the query admits, a capsule each with its count, pressed
-   while its term is on; it floats under the search box, the same surface as the tag adder */
-.shelf-search {
+/* the shelf's filter block and facet panel (#130): picked chips sit below the search box as atomic tokens, and the
+   panel floats under the block with system facets (squircle framed badges) separated from the player's tags (round
+   capsules), each with its hit count */
+.shelf-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   anchor-name: --facets-side;
 }
-.shelf-search:has(#facets-drawer) {
+.shelf-filter:has(#facets-drawer) {
   anchor-name: --facets-drawer;
+}
+.shelf-picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.shelf-picked .chip {
+  height: 22px;
+  padding: 0 6px 0 9px;
+  gap: 4px;
+  background: var(--fill);
+  color: var(--ink);
+  font-weight: 500;
+}
+.shelf-picked .chip.facet {
+  border-radius: 5px;
+  background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+}
+.shelf-picked .chip svg {
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+}
+.shelf-picked .chip:hover {
+  background: var(--fill-hover);
 }
 .facet-pop {
   position-anchor: --facets-side;
@@ -534,7 +564,7 @@
   inset: auto;
   box-sizing: border-box;
   width: anchor-size(width);
-  max-height: 12rem;
+  max-height: 13rem;
   overflow-y: auto;
   margin: var(--space-1) 0;
   padding: var(--space-2);
@@ -551,25 +581,41 @@
 }
 .facet-pop:popover-open {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.facet-pop.none {
+  display: none;
+}
+.facet-group {
+  display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 4px;
 }
-.facet-pop.none {
-  display: none;
+.facet-group + .facet-group {
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--line);
 }
 .facet-pop .chip {
   height: 24px;
   padding: 0 8px 0 10px;
   gap: 5px;
 }
+/* system facets: a squircle spec badge with a hairline frame; player tags keep the round capsule on `--fill` */
+.facet-pop .chip.facet {
+  border-radius: 5px;
+  background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+}
 .facet-pop .chip:hover {
-  background: var(--alpha-2);
+  background: var(--fill-hover);
   color: var(--ink);
 }
 .facet-pop .chip[aria-pressed="true"] {
   background: var(--primary);
   color: var(--primary-ink);
+  box-shadow: none;
 }
 .facet-pop .count {
   font-family: var(--font-mono);
