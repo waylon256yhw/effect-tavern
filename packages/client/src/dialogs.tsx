@@ -13,8 +13,9 @@ import { dropTag, renameTag, tagCounts } from "./query.ts"
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
-import { focus, personas, player, stories, type StoryRow } from "./store.ts"
-import { exportUrl, nameStory, putPlayer } from "./wire.ts"
+import { focus, log, page, personas, player, stories, type StoryRow } from "./store.ts"
+import { openOn, personaOn } from "./stories.ts"
+import { exportUrl, nameStory, pickStoryPersona, putPlayer } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const bound = {
@@ -27,7 +28,7 @@ const bound = {
 }
 /** This card's stories: every one with its star, the search, the cleanup and the exports. */
 export const openManager = (): void => bound.manager()
-/** The persona in force on this card, picked from the player's. */
+/** The persona in force (the open story's, else the card's default), picked from the player's. */
 export const openPicker = (): void => bound.picker()
 export const openRename = (s: StoryRow): void => bound.rename(s)
 export const openDelete = (rows: readonly StoryRow[]): void => bound.del(rows)
@@ -40,8 +41,12 @@ export const StoryDialogs = () => {
   const people = read(personas)
   const me = read(player)
   const cardId = read(focus)
-  // the persona in force on the focused card, and the pick: a change of the player's own layer, nothing of the story's
-  const current = () => people().find((p) => p.id === me()?.persona?.[cardId() ?? ""])
+  const pg = read(page)
+  const nodes = read(log)
+  // the persona in force: the open story's when it is of the focused card, and the pick writes that story alone; on
+  // the card's page or with none open there, the card's default (the player layer), which a new story of the card
+  // starts on
+  const current = () => people().find((p) => p.id === personaOn(lib(), me()?.persona, cardId(), pg()))
   // the picker: the search over name and text, the rows it leaves; opened from the workspace's row, closed by a pick
   const [q, setQ] = createSignal("")
   const hits = createMemo(() => {
@@ -66,6 +71,12 @@ export const StoryDialogs = () => {
   const pick = (id: string | undefined) => {
     const c = cardId()
     if (!me() || c === null) return
+    const s = openOn(lib(), c, pg())
+    if (s) return void pickStoryPersona(s.id, id ?? null)
+    // the card's page: Begin lands in the open story when it is empty and of this card (card.tsx `fresh`), so that one
+    // takes the new default too
+    const kept = openOn(lib(), c, "reader")
+    if (kept && nodes().nodes.size === 0) void pickStoryPersona(kept.id, id ?? null)
     void putPlayer((p) => {
       const { [c]: _, ...rest } = p.persona ?? {}
       const next = id === undefined ? rest : { ...rest, [c]: id }

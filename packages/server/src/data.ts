@@ -2,7 +2,7 @@
 // document store: a row is an id and a JSON column, nothing is ever joined. The tables mirror the types. `player`: one
 // row, the Player (reading preferences: writing, language, asks, product toggles, snippets, and which persona it is on
 // each card). `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
-// default in its frame). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `secret`:
+// default in its frame; a story names the one in force on it, `story.persona`). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `secret`:
 // the key vault (provider providers.ts `Secret`), the only table holding key material; `provider`: the player's model
 // providers, each naming a secret by id; `routing`: one row, which (provider, model) each stage runs on; `names`: one row,
 // the model-name table last fetched from models.dev and its ETag (names.ts). Export of cards
@@ -14,7 +14,7 @@
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
 // A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
-// A column added after a library was made (`story.starred`) is added to it on open (`migrate`): the schema's create is
+// A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
 // for a fresh file. The stories' search (`stories.search`) walks each story's line and reads the player's lines and
 // the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
 // filter: absent, every card's. Ceilings: an FTS5 index over nodes once a
@@ -36,7 +36,7 @@ create table if not exists provider (id text primary key, name text not null, js
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
 create table if not exists names (id integer primary key check (id = 1), etag text, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null);
-create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0);
+create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
 create table if not exists call (seq integer primary key autoincrement, story integer not null, node integer not null,
@@ -49,6 +49,13 @@ export const traced = 200
 /** Columns added to a table after libraries were made with it, each applied on open when the table lacks it. */
 const migrations: readonly { table: string; column: string; add: string }[] = [
   { table: "story", column: "starred", add: "alter table story add column starred integer not null default 0" },
+  // the card's pick (`Player.persona[card]`) as it stood copied in, so a running story keeps its persona on upgrade
+  {
+    table: "story",
+    column: "persona",
+    add: `alter table story add column persona text;
+      update story set persona = (select p.value from player, json_each(player.json, '$.persona') p where p.key = story.card);`,
+  },
 ]
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
@@ -57,13 +64,15 @@ export interface Input {
   text: string
   note?: string
 }
-/** One story's row for the client: the player's name for it or none, whether it is starred, the turns on the head's
+/** One story's row for the client: the player's name for it or none, whether it is starred, its persona (an id, or
+ *  none: the card's own), the turns on the head's
  *  line and the input of the last of them (what the manager previews), the time. */
 export interface StoryRow {
   id: Id
   card: string
   title: string | null
   starred: boolean
+  persona: string | null
   updated: number
   turns: number
   last: Input | null
@@ -161,8 +170,8 @@ export const open = (asked: string) => {
   if (!/autoincrement/i.test(String(made))) {
     db.exec("pragma foreign_keys = off")
     db.exec(`begin;
-      create table story_new (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0);
-      insert into story_new (id, card, title, head, next, updated, starred) select id, card, title, head, next, updated, starred from story;
+      create table story_new (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
+      insert into story_new (id, card, title, head, next, updated, starred, persona) select id, card, title, head, next, updated, starred, persona from story;
       drop table story;
       alter table story_new rename to story;
       commit;`)
@@ -245,9 +254,11 @@ export const open = (asked: string) => {
      *  `last` is its input: what the manager previews, since every story of a card opens on the same greeting. Every
      *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
-      /** Identity alone: existence and card lookup never walk the story's line. */
-      get: (id: Id): { id: Id; card: string } | undefined =>
-        q("select id, card from story where id = ?").get(id) as { id: Id; card: string } | undefined,
+      /** The row's own columns that a request needs (identity, card, persona): never a walk of the story's line. */
+      get: (id: Id): { id: Id; card: string; persona: string | null } | undefined =>
+        q("select id, card, persona from story where id = ?").get(id) as
+          | { id: Id; card: string; persona: string | null }
+          | undefined,
       /** The card's rows (every card's when `card` is absent), or the one of them `only` names (none when that is
        *  another card's or no story): the walk starts from that story's head alone, so one row costs one line. */
       list: (card?: string, only?: Id): StoryRow[] =>
@@ -263,7 +274,7 @@ export const open = (asked: string) => {
              turns as (
                select story, count(*) as turns, max(id) as last from line
                  where text != '' or note is not null group by story)
-             select s.id, s.card, s.title, s.starred, s.updated, coalesce(t.turns, 0) as turns,
+             select s.id, s.card, s.title, s.starred, s.persona, s.updated, coalesce(t.turns, 0) as turns,
                (select json_extract(json, '$.input') from node where story = s.id and id = t.last) as last
              from story s left join turns t on t.story = s.id
              where (?1 is null or s.card = ?1) and (?2 is null or s.id = ?2) order by s.updated desc, s.id desc`,
@@ -273,6 +284,7 @@ export const open = (asked: string) => {
           card: r["card"] as string,
           title: (r["title"] as string | null) ?? null,
           starred: r["starred"] === 1,
+          persona: (r["persona"] as string | null) ?? null,
           updated: r["updated"] as number,
           turns: r["turns"] as number,
           last: r["last"] ? (JSON.parse(r["last"] as string) as Input) : null,
@@ -281,8 +293,16 @@ export const open = (asked: string) => {
       title: (id: Id, title: string | null) => void q("update story set title = ? where id = ?").run(title, id),
       /** Starred or not; `updated` untouched like a rename. The client puts the starred first. */
       star: (id: Id, starred: boolean) => void q("update story set starred = ? where id = ?").run(starred ? 1 : 0, id),
-      create: (card: string): Id =>
-        Number(q("insert into story (card, updated) values (?, ?)").run(card, Date.now()).lastInsertRowid),
+      /** The persona in force on this story alone (none: the card's own); `updated` untouched like a rename. */
+      persona: (id: Id, persona: string | null) => void q("update story set persona = ? where id = ?").run(persona, id),
+      /** Every story naming `persona` back on its card's own: a deleted persona leaves no stale id behind. */
+      dropPersona: (persona: string) => void q("update story set persona = null where persona = ?").run(persona),
+      /** A new story, on `persona` from its first request (the card's default pick, copied: after this it is the story's own). */
+      create: (card: string, persona: string | null = null): Id =>
+        Number(
+          q("insert into story (card, updated, persona) values (?, ?, ?)").run(card, Date.now(), persona)
+            .lastInsertRowid,
+        ),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
       /** Several at once, one transaction: the batch cleanup. Only the card's own go (any card's when it is absent);
        *  another card's, or no story, is skipped. The ids deleted are answered. */

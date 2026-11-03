@@ -21,7 +21,7 @@ const data = open(":memory:")
 
 // Store: the authority commits, a fresh holder over the same rows equals it, and the next id is the stored one.
 const story = data.stories.create("wuxia")
-assert.deepEqual({ ...data.stories.get(story) }, { id: story, card: "wuxia" })
+assert.deepEqual({ ...data.stories.get(story) }, { id: story, card: "wuxia", persona: null })
 assert.equal(data.stories.get(999), undefined)
 const store = data.store<N>(story)
 const h = L.hold<N>(store)
@@ -190,12 +190,22 @@ assert.deepEqual(trace.list(), {})
   const old = new DatabaseSync(file)
   old.exec(`create table story (id integer primary key autoincrement, card text not null, title text, head integer,
     next integer not null default 0, updated integer not null);
-    insert into story (card, updated) values ('wuxia', 1);`)
+    insert into story (card, updated) values ('wuxia', 1), ('other', 2);
+    create table player (id integer primary key check (id = 1), json text not null);
+    insert into player (id, json) values (1, '{"persona":{"wuxia":"monk"}}');`)
   old.close()
   const opened = open(file)
   assert.deepEqual(
     opened.stories.list("wuxia").map((s) => [s.starred, s.turns, s.last]),
     [[false, 0, null]],
+  )
+  // `story.persona` arrives with the card's pick as it stood: a running story keeps its persona through the upgrade
+  assert.deepEqual(
+    opened.stories.list().map((s) => [s.card, s.persona]),
+    [
+      ["other", null],
+      ["wuxia", "monk"],
+    ],
   )
   opened.stories.star(1, true)
   assert.equal(opened.stories.list("wuxia")[0]!.starred, true)

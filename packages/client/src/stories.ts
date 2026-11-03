@@ -1,7 +1,7 @@
 // The stories as the left card and the manager (side.tsx) arrange them: starred first, the open one kept in view on
 // the card's four rows; the manager's search over the title here and over the turns on the server (its hits by
 // story id), the quick picks of the cleanup (#75), the preview a row carries. Pure over the rows the wire holds.
-import type { StoryRow } from "./store.ts"
+import type { Page, StoryRow } from "./store.ts"
 import { t } from "./i18n.ts"
 
 /** A search hit as the server answers it (server data.ts `Hit`): the earliest turn on the head's line whose player
@@ -35,6 +35,25 @@ export const latestOf = (rows: readonly StoryRow[]): StoryRow | undefined =>
   rows.reduce<StoryRow | undefined>((best, s) => (!best || s.updated > best.updated ? s : best), undefined)
 /** Whether a card has a turn in flight on any of its stories (the dot on its shelf row, and beside the back button
  *  for every other card). */
+/** The open story when it is of `card` and the stage is not the card's page (the workspace's persona row then reads
+ *  and writes it), else none: the row is the card's default (`Player.persona[card]`). On the card's page the tab keeps
+ *  its story only for Escape (pages.ts `showCard`): what is picked there is for the story Begin makes. */
+export const openOn = (
+  lib: { current: number | null; stories: readonly StoryRow[] } | null,
+  card: string | null,
+  page: Page,
+): StoryRow | undefined =>
+  page === "card" ? undefined : lib?.stories.find((s) => s.id === lib.current && s.card === card)
+/** The persona id the workspace's row shows: the open story's own, else the card's default; none = the card's own. */
+export const personaOn = (
+  lib: { current: number | null; stories: readonly StoryRow[] } | null,
+  defaults: Readonly<Record<string, string>> | undefined,
+  card: string | null,
+  page: Page,
+): string | undefined => {
+  const s = openOn(lib, card, page)
+  return s ? (s.persona ?? undefined) : defaults?.[card ?? ""]
+}
 export const busyOn = (rows: readonly StoryRow[], card: string): boolean =>
   rows.some((s) => s.card === card && s.busy !== null)
 export const busyElsewhere = (rows: readonly StoryRow[], card: string): boolean =>

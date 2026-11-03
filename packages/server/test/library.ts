@@ -162,22 +162,40 @@ const over = (data: Data, m: () => Model = model) =>
   )
   assert.equal(t.attach(), undefined)
 
-  // the persona: each story's own card's pick
+  // the persona: each story's own pick; the card's default reaches a story only at its creation
   lib.personas.put({ id: "monk", name: "行脚僧", text: "你是路过的行脚僧。" })
-  lib.setPlayer({ ...lib.player, persona: { [other.id]: "monk" } })
+  lib.stories.persona(r, "monk")
   await run(lib.turn(p).start(act("who")))
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), false)
   await run(lib.turn(r).start(act("who")))
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), true)
+  lib.setPlayer({ ...lib.player, persona: { [chat.id]: "monk" } })
+  const s = lib.stories.create(chat.id)
+  assert.deepEqual(
+    [p, q, s].map((id) => lib.stories.list().find((x) => x.id === id)!.persona),
+    [null, null, "monk"], // the default copied into the new story only
+  )
+  lib.stories.persona(s, null) // a pick on one story leaves its card's default and its siblings alone
+  assert.deepEqual(
+    [lib.player.persona, lib.stories.list().find((x) => x.id === q)!.persona],
+    [{ [chat.id]: "monk" }, null],
+  )
 }
 
-// A persona deleted is gone from every card it was picked on; the others' picks stay, and an empty map is no map.
+// A persona deleted is gone from every card and story it was picked on; the others' picks stay, and an empty map is
+// no map.
 {
   const lib = over(open(":memory:"))
   lib.personas.put({ id: "monk", name: "行脚僧", text: "你是路过的行脚僧。" })
   lib.setPlayer({ ...lib.player, persona: { [chat.id]: "monk", other: "monk", third: "nun" } })
+  const [a, b] = [lib.stories.create(chat.id), lib.stories.create(chat.id)]
+  lib.stories.persona(b, "nun")
   lib.personas.del("monk")
   assert.deepEqual([lib.personas.list(), lib.player.persona], [[], { third: "nun" }])
+  assert.deepEqual(
+    [a, b].map((id) => lib.stories.list().find((x) => x.id === id)!.persona),
+    [null, "nun"],
+  )
   lib.personas.del("nun")
   assert.equal(lib.player.persona, undefined)
 }

@@ -18,14 +18,15 @@
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
 //   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
 //                 written to the library, in force from the next request; a bad body is a 400).
-//   GET  /stories every card's stories (id, card, title or null, starred, turns: the nodes with a player line or note,
+//   GET  /stories every card's stories (id, card, title or null, starred, persona or null, turns: the nodes with a player line or note,
 //                 so a greeting is none, last: the last turn's input or null, updated, busy: the phase of a turn in
 //                 flight or null), newest first, and `current`: the story the client is to be on (the one it named
 //                 while that one is there, else the newest, null on an empty library).
-//                 POST /stories {card} makes a new one of that card (400 when there is none) and answers it as
-//                 `current`, PUT /stories/<id> answers that one (404
-//                 when there is none), with a body {title?: string | null, starred?: boolean} names or stars it
-//                 instead (blank = null, `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
+//                 POST /stories {card} makes a new one of that card (400 when there is none), on the card's default
+//                 persona (`Player.persona[card]`), and answers it as `current`, PUT /stories/<id> answers that one (404
+//                 when there is none), with a body {title?: string | null, starred?: boolean, persona?: string | null}
+//                 names, stars or picks its persona instead (this story's alone; blank title = null, null persona = the
+//                 card's own; `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
 //                 {ids: number[]} removes those among them in one go. Every one answers the listing.
 //                 The server opens nothing: the client adopts `current`, sends it from then on, re-reads /nodes, and
 //                 the trace starts over. GET /stories/search?q=… is the manager's search: the stories whose head's
@@ -34,8 +35,9 @@
 //                 reading copy, GET /stories/<id>/export.json the tree whole as a backup (export.ts), both as
 //                 attachments named by the title.
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
-//                 where it is picked), DELETE /personas/<id> removes it and its picks (the client re-reads /player).
-//                 Both answer the list. Which persona is in force on a card is the player's (`Player.persona`).
+//                 where it is picked), DELETE /personas/<id> removes it and its picks, the stories' and the card
+//                 defaults' (the client re-reads /player and /stories). Both answer the list. Which persona is in force
+//                 is the story's (`persona` on its row); `Player.persona[card]` is the card's default a new story takes.
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
@@ -126,6 +128,7 @@ const StoryBody = Schema.decodeUnknownSync(
   Schema.Struct({
     title: Schema.optionalKey(Schema.NullOr(Schema.String)),
     starred: Schema.optionalKey(Schema.Boolean),
+    persona: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
 )
 const IdsBody = Schema.decodeUnknownSync(Schema.Struct({ ids: Schema.Array(Schema.Number) }))
@@ -196,6 +199,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
           const b = StoryBody(JSON.parse(raw))
           if (b.title !== undefined) lib.stories.title(id, b.title)
           if (b.starred !== undefined) lib.stories.star(id, b.starred)
+          if (b.persona !== undefined) lib.stories.persona(id, b.persona)
           return stories()
         })
       return reply(() => (lib.stories.del(id), stories()), 409) // busy: a turn runs on it

@@ -2,10 +2,12 @@
 // data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player
 // layer the library stores (it wins over the harness default given), and the turn in flight beside it (turn.ts): a
 // turn is the story's, it runs to its end whoever listens, one at a time per story and with no lock across stories.
-// A persona is the player's, a sibling of the card, not a step of a story: `Player.persona[card]` names the one in
-// force, and the library reads its text into the per-card persona slot on every request (the card's default overridden
-// by the slot rules, nothing else in the card touched), so an edit of the persona is in force from the next request and
-// a change of pick is one head rewrite, no new story. Deleting a persona drops the pick (no silent fallback). The
+// A persona is the player's, a sibling of the card, not a step of a story: a story's row names the one in force on it
+// (`story.persona`, none: the card's own), and the library reads its text into the per-card persona slot on every
+// request (the card's default overridden by the slot rules, nothing else in the card touched), so an edit of the
+// persona is in force from the next request and a change of pick is one head rewrite, no new story. A pick on one story
+// leaves the card's other stories alone. `Player.persona[card]` is the card's default: a new story starts on it, copied
+// at creation. Deleting a persona drops it from every story and every card default (no silent fallback). The
 // library holds no "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens
 // that story's session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
 // the install's: the player layer (a write reaches every open session), personas, hats, providers and routing. A hat is the player's too, named by a
@@ -209,10 +211,10 @@ export const library = ({
     },
     write: data.player.write,
   }
-  /** The persona in force on `card`, read per request. */
-  const persona = (card: string) => (p: Player) => {
-    const id = p.persona?.[card]
-    return id === undefined ? undefined : data.personas.list().find((x) => x.id === id)?.text
+  /** The persona in force on story `id`, its row read per request (a pick is live from the next one). */
+  const persona = (id: Id) => () => {
+    const pid = data.stories.get(id)?.persona
+    return pid == null ? undefined : data.personas.list().find((x) => x.id === pid)?.text
   }
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
@@ -227,7 +229,7 @@ export const library = ({
     if (!r) throw new Error(`no story ${id}`)
     const card = cards.get(r.card)
     const store = data.store<Logged>(id)
-    const session = makeSession({ card, player, model, store, players, persona: persona(card.id), hat, policy })
+    const session = makeSession({ card, player, model, store, players, persona: persona(id), hat, policy })
     const opened = { session, turn: makeTurn(session, (node, calls) => data.calls(id).add(node, calls)) }
     sessions.set(id, opened)
     return opened
@@ -265,8 +267,13 @@ export const library = ({
       title: (id: Id, title: string | null) => data.stories.title(id, title?.trim() || null),
       /** Starred: the left card and the manager put it first. */
       star: (id: Id, starred: boolean) => data.stories.star(id, starred),
-      /** A new, empty story of `card`; throws when there is no such card. */
-      create: (card: string): Id => data.stories.create(cards.get(card).id),
+      /** On this story alone (none: the card's own persona), in force from its next request. */
+      persona: (id: Id, persona: string | null) => data.stories.persona(id, persona),
+      /** A new, empty story of `card`, on the card's default persona; throws when there is no such card. */
+      create: (card: string): Id => {
+        const id = cards.get(card).id
+        return data.stories.create(id, layer().persona?.[id] ?? null)
+      },
       /** Refused (throws) while a turn runs on the story: its writes would land on nothing. */
       del: (id: Id) => {
         if (!exists(id)) throw new Error(`no story ${id}`)
@@ -390,9 +397,11 @@ export const library = ({
     cards: () => cards.list(),
     personas: {
       ...data.personas,
-      /** Gone from the table, and from every card it was picked on: the card's own persona is back in force there. */
+      /** Gone from the table, and from every story and card default it was picked on: the card's own persona is back in
+       *  force there. */
       del: (id: string) => {
         data.personas.del(id)
+        data.stories.dropPersona(id)
         const p = layer()
         if (p.persona && Object.values(p.persona).includes(id)) {
           const rest = Object.fromEntries(Object.entries(p.persona).filter(([, v]) => v !== id))

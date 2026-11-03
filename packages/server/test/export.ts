@@ -24,6 +24,7 @@ const story = {
   card: "wuxia",
   title: "竹林夜话",
   starred: true,
+  persona: null,
   updated: 1700000000000,
   turns: 2,
   last: { text: "x" },

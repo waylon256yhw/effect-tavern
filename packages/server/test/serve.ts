@@ -307,6 +307,8 @@ const run = async (inspect: boolean) => {
     const starred = await row({ method: "PUT", body: JSON.stringify({ starred: true }) })
     assert.deepEqual([starred.title, starred.starred, starred.updated], ["竹林夜话", true, acted.updated])
     assert.equal((await fetch(`${base}/stories/${story}`, { method: "PUT", body: '{"starred":"yes"}' })).status, 400)
+    const onNun = (await row({ method: "PUT", body: JSON.stringify({ persona: "nun" }) })) as Row & { persona: unknown }
+    assert.deepEqual([onNun.persona, onNun.updated], ["nun", acted.updated]) // this story's alone, like a star
     const search = async (q: string) =>
       (await (await fetch(`${base}/stories/search?q=${encodeURIComponent(q)}`)).json()) as unknown[]
     assert.deepEqual(await search("onward"), [{ id: story, turn: 1, kind: "input", text: "onward", count: 1 }])
