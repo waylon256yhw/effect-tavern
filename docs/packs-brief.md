@@ -250,3 +250,27 @@ GLOSSARY：**玩家层** 条改写为"一种行 `Layer`，五个作者一个序"
 ### 7. 客户端（另一个 PR，Gemini）
 
 设置页：`[harness, base, ...packs]` 同一行模板，六个 tab（文风与要求 / 线索词条 / 润色禁词 / 记录与小剧场 / 快捷输入 / 问法），`harness` 行标「内置」、无删除。写作页：挂载 chips = `mounts`，代称 = `layer.names` + `holes`，开关 = `local.switches` 与 `sentences`，`taken` 非空且非 compiled 即灰掉并写接管者，产物 = `layer.products` 的 `from` / `on` / `text`，`dropped` 为警示条。删 `BASE_ID`、全部 `isBase()`、`sourceOf`、`pack.ts` 的合并与计数。
+
+## 十、只有一个「内置」：基底并入 harness 叠加行（2026-11-05 晚）
+
+#144 落地后设置页顶上有两行常驻：「内置」（harness 叠加，卡之前）与「全局基底」（base，卡之后）。两者在玩家眼里都是"默认"，并排就是重复。决定：**删除 base 这一级**，harness 叠加行就是玩家的全局行，id 仍为 `harness`，界面词「内置」。不是前端合并显示，是服务端少一级。
+
+### 1. 作者序变为五级
+
+harness（代码默认 + 玩家叠加按 id 盖上）→ 卡 → `local.mounts` 顺序的包 → 本卡 → 人设。叠加行在卡之前：玩家在「内置」里写的是默认值，卡对同 id 的声明压过它；本卡行永远最后，玩家在一张卡上的最后一句话仍是本卡。这与框架槽位最初的规则一致（全局让位、本卡覆盖）。
+
+### 2. 叠加行的规则与包相同，只多"存差异"
+
+- 解码走 `locked`（剥 `when` / `role`；产物补丁只取 label / text / on）。代码默认本身不经解码，仍可写整条。
+- **新 id 的产物**在叠加行里与包一样编译成 `stage: "narrate"`、`shape: text`，缺 `text` 丢弃。今天叠加行按"整条"校验，新小剧场因无 shape 落进 `dropped`，这是 bug。
+- **片段**：叠加行的片段按 `mode` 对卡，缺省 `yield`（卡写了这个槽就让位），写 `override` 则压过卡。客户端的「文风与要求」已露出冲突策略，正好用上。`resolve` 里今天"叠加行片段只在卡没有该槽时站上去"的硬规则改为读 `mode`。
+- 词条、词表、快捷输入、代称、问法：与今天叠加行相同，位于卡之前。
+- 存储不变：只存与代码默认的差异，缺项即复位；`GET /packs` 回合并后的整行。
+
+### 3. 迁移
+
+`pack` 表里已有的 `base` 行一次性并进 `harness` 叠加行：各列表拼接（叠加行的在前），`switches` 以 base 的覆盖，`products` 补丁按 id 以 base 的覆盖；然后删 `base` 行。`fromPlayer`（旧 `player` 表的迁移）直接写进 harness 叠加行，不再产出 base。`RESERVED` 只剩 `harness`。
+
+### 4. 改动清单
+
+runtime `layer.ts`：`Rows` 去 `base`；`From` 去 `"base"`；叠加行走 `locked` 与新 id 编译；片段按 `mode`。server：`library.ts`（`baseOf` 删除，列表 `[harness, ...packs]`，`DELETE` 只拒 `harness`）、`serve.ts` 头注释、`data.ts` 两处迁移。client：`isReservedPack` 只认 `harness`，列表与注释去 base，其余不动（行模板已同构）。测试：`test/layer.ts` 的 base 用例改写为叠加行用例（yield 缺省、override 压卡、新 id 小剧场、与包和本卡的序），`data.ts` 加 base→harness 迁移用例，`serve.ts` 列表长度。GLOSSARY / README 的"基底"字样删除。
