@@ -78,9 +78,9 @@ const pack: Layer = {
 }
 const local = { id: "local", name: "local", card: card.id, mounts: ["pk"] }
 const player: Rows = {
-  base: {
-    id: "base",
-    name: "base",
+  harness: {
+    id: "harness",
+    name: "harness",
     fragments: [
       { id: "t", text: "TAIL {{char}}", at: "tail" },
       { id: "u", text: "TAIL-NO {{missing}}", at: "tail" },
@@ -288,7 +288,14 @@ assert.ok(!has(doc(third, "narrate"), "HELD"))
     const A = makeSession({
       card: { ...chat, lore, ...(cardAsks && { asks: cardAsks }) },
       rows: () => ({
-        base: { ...plain.base!, asks: [{ id: "lookup", text: "PLAYER {{char}}" }], ...(names && { names }) },
+        ...plain,
+        local: {
+          id: "local",
+          name: "local",
+          card: chat.id,
+          asks: [{ id: "lookup", text: "PLAYER {{char}}" }],
+          ...(names && { names }),
+        },
       }),
       model: () => scripted,
     })

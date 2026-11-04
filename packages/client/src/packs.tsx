@@ -1,6 +1,6 @@
-// Settings → 写作包 (docs/packs-brief.md §九 §7): `[harness, base, ...packs]` share one row shape (`Layer`) and one
+// Settings → 写作包 (docs/packs-brief.md §九 §7, §十): `[harness, ...packs]` share one row shape (`Layer`) and one
 // 6-tab full-height workbench (文风与要求, 线索词条, 润色禁词, 记录与小剧场, 快捷输入, 问法). `harness` is marked 内置 and
-// neither `harness` nor `base` can be deleted. Every edit is one `PUT /packs/<id>` and a re-read of the active card.
+// cannot be deleted. Every edit is one `PUT /packs/<id>` and a re-read of the active card.
 import { SLOTS, type Format, type Fragment, type Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { harness, type Ask, type Layer, type PackEntry } from "@effect-tavern/runtime/src/layer.ts"
 import { hook } from "@effect-tavern/runtime/src/lore.ts"
@@ -274,6 +274,7 @@ export const Packs = (props: Pane) => {
 // ───────── 1. 文风与要求 (`Layer.fragments`) ─────────
 const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
   const frags = () => props.pack.fragments ?? []
+  const noMode = () => (props.pack.id === "harness" ? "yield" : "override") // what a fragment with no `mode` does (layer.ts)
   const [draft, setDraft] = createSignal<string | null>(null)
   const commitDraft = () => {
     const d = draft()
@@ -372,12 +373,12 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
                     <select
                       class="field sm"
                       aria-label={t("packs.mode")}
-                      value={f().mode ?? "override"}
+                      value={f().mode ?? noMode()}
                       onChange={(e) => {
                         const val = e.currentTarget.value as "override" | "yield" | "both"
                         const { mode: _, ...rest } = f()
                         const cur = [...frags()]
-                        cur[i] = val === "override" ? rest : { ...rest, mode: val }
+                        cur[i] = val === noMode() ? rest : { ...rest, mode: val }
                         void props.onSave({ ...props.pack, fragments: cur })
                       }}
                     >

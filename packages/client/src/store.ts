@@ -77,7 +77,7 @@ export const stories = Atom.make<{ current: Id | null; stories: readonly StoryRo
 export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
 export const locals = Atom.make<Readonly<Record<string, Local>>>({}).pipe(Atom.keepAlive)
 /** The player's settings (GET /providers, /secrets, /routing, /hats, /packs): the model providers, the key vault as hints,
- *  which (provider, model) runs each stage, the hats (提示词模板 in the UI), and the player's rows ([harness, base, ...packs]). */
+ *  which (provider, model) runs each stage, the hats (提示词模板 in the UI), and the player's rows ([harness, ...packs]). */
 export type Pair = { provider: string; model: string }
 export interface Routing {
   default?: Pair

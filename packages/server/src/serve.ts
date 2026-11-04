@@ -38,12 +38,12 @@
 //                 is the story's (`persona` on its row); `local.persona` is the card's default a new story takes.
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
-//   GET  /packs   the player's rows, one template (runtime layer.ts `Layer`): [harness, base, ...packs], the harness row
+//   GET  /packs   the player's rows, one template (runtime layer.ts `Layer`): [harness, ...packs], the harness row
 //                 whole (the code's defaults under its overlay). PUT /packs/<id> {name, fragments?, switches?, asks?,
 //                 products?, entries?, lexicon?, snippets?, format?, names?} writes one whole (decoded at this boundary,
 //                 in force from the next request); on `harness` only the difference from the code's defaults is stored,
 //                 an item left out is its default again. DELETE /packs/<id> removes a pack and takes it off every card;
-//                 harness and base are a 400, and so is a PUT naming `card` or `local`. Both answer the list.
+//                 harness is a 400, and so is a PUT naming `card`, `local` or `base`. Both answer the list.
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
 //                 {name, type?, value} adds one and answers it the same way; PUT /secrets/<id> {name, type?, value?} renames,
 //                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
@@ -86,7 +86,7 @@
 // bodies, so a player client gets phase, answer and usage only.
 import { Provider, Secret } from "@effect-tavern/provider"
 import { Hat } from "@effect-tavern/runtime/src/fragment.ts"
-import { decodeHarness, decodeLayer, decodeLocal } from "@effect-tavern/runtime/src/layer.ts"
+import { decodeLayer, decodeLocal } from "@effect-tavern/runtime/src/layer.ts"
 import { decodeAction, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
@@ -241,7 +241,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       return reply(async () => {
         if (req.method === "PUT") {
           const raw = (await read((u) => u)) as object
-          lib.packs.put((id === "harness" ? decodeHarness : decodeLayer)({ ...raw, id }))
+          lib.packs.put(decodeLayer({ ...raw, id }))
         } else lib.packs.del(id)
         return lib.packs.list()
       })

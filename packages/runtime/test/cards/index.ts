@@ -13,7 +13,7 @@ export const readCard = (path: string | URL): Card => decodeCard(Bun.YAML.parse(
 // The test player: language only, options on (the card declares nothing about options).
 const language = { id: "language", text: "使用自然、舒展的现代中文写作。", mode: "yield" as const }
 export const plain: Rows = {
-  base: { id: "base", name: "base", fragments: [language], products: [{ id: "options", on: true }] },
+  harness: { id: "harness", name: "内置", fragments: [language], products: [{ id: "options", on: true }] },
 }
 
 // The player's rows: language, and the writing switches every player sets once (fragment.ts `Writing`): the player is 你,
@@ -37,7 +37,7 @@ export const lexicon = [
   { pattern: "不是*而是", hint: "先否定再肯定的八股句式" },
 ]
 export const player: Rows = {
-  base: { ...plain.base!, switches: { pov: "second", echo: true, agency: "strict" }, lexicon },
+  harness: { ...plain.harness!, switches: { pov: "second", echo: true, agency: "strict" }, lexicon },
 }
 
 export const cardNames = ["wuxia", "yandao", "banxing", "ri"]

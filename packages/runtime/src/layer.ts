@@ -1,15 +1,17 @@
 // The player layer as one module (docs/packs-brief.md §九, GLOSSARY 玩家层): one kind of row, one author order, one pure
-// `resolve`, a result that says where each item came from. Every author writes a `Layer`: the harness's overlay, the
-// base, each pack, and the player on one card (`Local`); a card is projected into a row here and never stored as one.
+// `resolve`, a result that says where each item came from. Every author writes a `Layer`: the harness's overlay (the
+// player's global row), each pack, and the player on one card (`Local`); a card is projected into a row here and never
+// stored as one.
 //
 // THE AUTHOR ORDER, stated here and nowhere else: harness (the code's defaults, the overlay over them by id) → card →
-// base → the packs in `local.mounts` order → local → the persona (its text the `persona` fragment at the end of the
-// local row, its name last into `names.user`). The later wins by id, for every kind. The one exception is a fragment's
-// `mode: "yield"`: when a lower rank has filled the slot it does not stand. A compiled switch always yields (a card that
-// writes the player's place itself takes the group), to a card or free text; switches themselves merge by key down the
-// ranks, so the local row's `pov` beats the base's and one slot compiles from the merge.
+// the packs in `local.mounts` order → local → the persona (its text the `persona` fragment at the end of the local row,
+// its name last into `names.user`). The later wins by id, for every kind. The one exception is a fragment's
+// `mode: "yield"`: when a lower rank has filled the slot it does not stand. An overlay's fragment sits below the card, so
+// its `mode` is read against the card, and absent it yields; `override` beats the card's slot. A compiled switch always
+// yields (a card that writes the player's place itself takes the group), to a card or free text; switches themselves
+// merge by key down the ranks, so the local row's `pov` beats the overlay's and one slot compiles from the merge.
 //
-// The locks are all here and never throw at or above the base (a throw would kill a card at session open for what a pack
+// The locks are all here and never throw for a player's row (a throw would kill a card at session open for what a pack
 // happens to declare): what they refuse lands in `dropped`, for a client to draw. Only the card's own bad product throws.
 import { Schema } from "effect"
 import type { Card } from "./card.ts"
@@ -28,7 +30,7 @@ export const Layer = Schema.Struct({
   fragments: Schema.optionalKey(Schema.Array(Fragment)), // the id is a slot or its own, `at` head or tail, `mode` vs the lower ranks
   switches: Schema.optionalKey(Writing), // compiled to `pov` / `verbosity` before this row's own fragments, yielding
   asks: Schema.optionalKey(Schema.Array(Ask)), // lookup, direct, decide.*, record.*, narrate.*, polish, input.thought; switch.<key>.<value>; product.<id> is a text patch
-  products: Schema.optionalKey(Schema.Array(ProductPatch)), // whole on the harness and the card; below them label, text and on
+  products: Schema.optionalKey(Schema.Array(ProductPatch)), // whole on the code's defaults and the card; on a player's row label, text and on
   entries: Schema.optionalKey(Schema.Array(PackEntry)), // indexed as `<row>/<entry>`: one layer, no Cond
   lexicon: Schema.optionalKey(Schema.Array(LexiconEntry)),
   snippets: Schema.optionalKey(Schema.Array(Snippet)),
@@ -46,7 +48,7 @@ export const Local = Schema.Struct({
 })
 export type Local = typeof Local.Type
 
-/** A row as it may stand below the card: no Cond and no role on a fragment, a product patch only label, text and on. */
+/** A row as a player may store it: no Cond and no role on a fragment, a product patch only label, text and on. */
 export const locked = <R extends Layer>(r: R): R => ({
   ...r,
   ...(r.fragments && { fragments: r.fragments.map(({ when: _w, role: _r, ...f }) => f) }),
@@ -61,8 +63,7 @@ export const locked = <R extends Layer>(r: R): R => ({
 })
 const decodeRow = Schema.decodeUnknownSync(Layer)
 const decodeLocalRow = Schema.decodeUnknownSync(Local)
-/** The boundary's decoders: the harness's overlay may write whole, the rest goes through the lock as it comes in. */
-export const decodeHarness = decodeRow
+/** The boundary's decoders: every stored row goes through the lock as it comes in. */
 export const decodeLayer = (u: unknown): Layer => locked(decodeRow(u))
 export const decodeLocal = (u: unknown): Local => locked(decodeLocalRow(u))
 
@@ -265,13 +266,12 @@ export const empty = (r: Layer) => Object.keys(r).every((k) => k === "id" || k =
 
 // ───────── resolve ─────────
 export interface Rows {
-  harness?: Layer | undefined // the overlay, usually none
-  base?: Layer | undefined
+  harness?: Layer | undefined // the overlay: the player's global row
   packs?: readonly Layer[] | undefined // the library; `local.mounts` says which stand here, and in what order
   local?: Local | undefined
   persona?: { name: string; text: string } | undefined
 }
-export type From = string // "harness" | "card" | "base" | "local" | a pack's id
+export type From = string // "harness" | "card" | "local" | a pack's id
 export type Item<T> = T & { from: From; compiled?: true; unasked?: true }
 export interface Resolved {
   frame: Item<Fragment>[] // the head, holes filled; an entry with one unfilled is not here
@@ -307,16 +307,15 @@ const compile = (w: Writing, say: Readonly<Record<string, string>>): Fragment[] 
   ]
 }
 
-/** The one place a layer is merged. Pure; called once per request; never throws for a row at or above the base. */
+/** The one place a layer is merged. Pure; called once per request; never throws for a player's row. */
 export const resolve = (card: Card, rows: Rows): Resolved => {
   const dropped: Resolved["dropped"] = []
   const input = card.input ?? "act"
   const code = harness(input)
-  const overlay = rows.harness
   // The player's rows in author order, each locked again: a row is only as good as what wrote it.
+  const overlay = rows.harness && locked(rows.harness)
   const local = rows.local ?? (rows.persona ? { id: "local", name: "local", card: card.id } : undefined)
   const mine: { from: From; row: Layer }[] = [
-    ...(rows.base ? [{ from: "base", row: locked(rows.base) }] : []),
     ...[...new Set(local?.mounts)].flatMap((id) => {
       const p = rows.packs?.find((x) => x.id === id)
       return p ? [{ from: p.id, row: locked(p) }] : []
@@ -386,8 +385,10 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     }
   }
   if (overlay) switched("harness", overlay)
-  for (const f of overlay?.fragments ?? [])
-    if (f.enabled !== false && !theirs.has(f.id)) slots.set(f.id, { ...f, from: "harness" })
+  for (const f of overlay?.fragments ?? []) {
+    if (f.enabled === false || ((f.mode ?? "yield") === "yield" && theirs.has(f.id))) continue
+    slots.set(f.id, { ...f, from: "harness" })
+  }
   for (const { from, row } of mine) {
     switched(from, row)
     for (const f of row.fragments ?? []) {
@@ -406,21 +407,25 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   const filled = fill(zone, names)
   const holder = (id: string) => zone.find((f) => f.id === id)?.from ?? null
 
-  // ───────── products: whole on the harness and the card, below them by rank ─────────
+  // ───────── products: whole in the code's defaults and on the card, on a player's row by rank ─────────
   const stock = new Map<string, Partial<Product> & { id: string; from: From }>(
     (code.products ?? []).map((p) => [p.id, { ...p, from: "harness" }]),
   )
-  /** A toggle on an id this card does not declare says nothing about this card (a base's `people` on a card without it). */
+  /** A toggle on an id this card does not declare says nothing about this card (an overlay's `people` on a card without it). */
   const toggleOnly = (p: { id: string }) => Object.keys(p).every((k) => k === "id" || k === "on")
+  /** A player row's patch: label, text and on over an id that exists; a new id is a 小剧场, dropped without text. */
+  const patched = (from: From, p: ProductPatch) => {
+    const { id, ...patch } = p as { id: string; label?: string; text?: string; on?: boolean }
+    const was = stock.get(id)
+    if (was) stock.set(id, { ...was, ...patch, from })
+    else if (toggleOnly(p)) return
+    else if (patch.text === undefined) dropped.push({ from, kind: "product", id, why: "a new product needs text" })
+    else stock.set(id, { id, ...patch, text: patch.text, shape: { kind: "text" }, stage: "narrate", from })
+  }
+  // An id the card declares exists at the overlay's rank too: the patch stays a patch, and the card's own fields go over it.
   for (const p of overlay?.products ?? []) {
-    if (!stock.has(p.id) && toggleOnly(p)) continue
-    const merged = { ...stock.get(p.id), ...p, from: "harness" }
-    try {
-      validate(merged)
-      stock.set(p.id, merged)
-    } catch (e) {
-      dropped.push({ from: "harness", kind: "product", id: p.id, why: (e as Error).message })
-    }
+    if (!stock.has(p.id) && card.products?.some((c) => c.id === p.id)) stock.set(p.id, { id: p.id, from: "harness" })
+    patched("harness", p)
   }
   for (const p of card.products ?? []) stock.set(p.id, { ...stock.get(p.id), ...p, from: "card" })
   /** An ask `product.<id>` is a text patch at its row's rank; on a product this card does not have it is nothing. */
@@ -434,14 +439,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   reworded("card", cardRow)
   for (const p of stock.values()) validate(p) // the card's own error stands: it fails when the session opens
   for (const { from, row } of mine) {
-    for (const p of row.products ?? []) {
-      const { id, ...patch } = p as { id: string; label?: string; text?: string; on?: boolean }
-      const was = stock.get(id)
-      if (was) stock.set(id, { ...was, ...patch, from })
-      else if (toggleOnly(p)) continue
-      else if (patch.text === undefined) dropped.push({ from, kind: "product", id, why: "a new product needs text" })
-      else stock.set(id, { id, ...patch, text: patch.text, shape: { kind: "text" }, stage: "narrate", from })
-    }
+    for (const p of row.products ?? []) patched(from, p)
     reworded(from, row)
   }
   const raw = [...stock.values()].map((p) => validate(p) as Item<Product>)
