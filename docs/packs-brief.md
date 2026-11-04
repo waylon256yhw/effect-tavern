@@ -167,3 +167,86 @@ Gemini 核过 request.ts：`toP` 只套在 `Msg` 上，小剧场块指令（`blo
 ### 7. 不在这个 PR
 
 客户端（输入框、标记、snippet 展开）；`x18n` 式的"英文丢洞"检查不适用（没有第二语言）。
+
+## 九、玩家层一体化：`layer.ts`（2026-11-05，三份设计比较后的合成，#69 之后的重构）
+
+今天的状态：一个概念（harness 的提示词是带 id 的默认值，按作者覆盖），九种形状，session 里十四处"玩家自己的 + 包的 + 卡的 + 默认"各排各的序；全局片段让位给包、玩家小剧场却压过包；客户端伪造一行「全局基底」并在每个 tab 里分叉；按卡的数据散在五张 map，产物开关却是全局的；开关句子、问法、产物问法硬编码，前台看不见也改不了。这一节把它收成**一个模块、一种行、一次 resolve、结果带来源**。三份设计（最小接口 / 最大弹性 / 常见调用方优先）的合成，决定不再重开。
+
+### 1. 一种行：`Layer`
+
+```ts
+// runtime/src/layer.ts。每个作者写的都是它：harness 叠加行、基底、每个包、本卡；卡在 resolve 内部投影成一行，不入库。
+export const Layer = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  fragments: optional(Array(Fragment)),   // id 是槽位（SLOTS）或自己的 id；at 头/尾；mode 对卡；入库时剥掉 when / role
+  switches: optional(Writing),            // 写作开关（含 polish）；编译成 pov / verbosity 片段，排在本行自己的片段之前，mode: "yield"
+  asks: optional(Array(Ask)),             // { id, text }：问法（lookup、direct、decide.*、record.*、narrate.*、polish、input.thought）与开关句子（switch.<key>.<value>）
+  products: optional(Array(ProductPatch)),// harness 与卡：整补丁；其余等级：只带 label / text / on（见锁）
+  entries: optional(Array(PackEntry)),    // 单层、无条件、首句即 hook；索引 id 为 `<行 id>/<条目 id>`
+  lexicon: optional(Array(Entry)),
+  snippets: optional(Array(Snippet)),
+  format: optional(Array(Format)),
+  names: optional(Names),
+})
+// 这个玩家在这张卡上：一行一卡，自己的表与路由
+export const Local = Schema.Struct({ ...Layer.fields, card: Schema.String, mounts: optional(Array(String)), persona: optional(String), tags: optional(Array(String)) })
+```
+
+`Theater`、`Player`、`Pack`、`Player.defaults` 删除；`Pack` 即 `Layer`。`Writing` 不再带 `lexicon`（词表是行的字段）。
+
+### 2. 一个序，一次 resolve
+
+```ts
+export interface Rows { harness?: Layer; base?: Layer; packs?: Layer[]; local?: Local; persona?: { name: string; text: string } }
+export const harness = (input: "act" | "note"): Layer   // 代码默认作为一行：asks（含开关句子）、notes / options / inner、snippets、format
+export const resolve = (card: Card, rows: Rows): Resolved   // 纯函数；resolve(card, {}) 与今天无包请求逐字节相同
+```
+
+**作者序，只在这里说一次**：harness（代码默认 + 叠加行按 id 盖上）→ 卡 → 基底 → `local.mounts` 顺序的包 → 本卡 → 人设（正文作为本卡行末尾的 `persona` 片段，名字最后填 `names.user`）。**同 id 后者赢**，对每一种都成立。唯一例外是片段的 `mode: "yield"`：低等级已填这个槽就不站上去；编译出的开关片段一律 yield（卡自己写了玩家的位置就整组接管）。
+
+```ts
+type From = "harness" | "card" | "base" | "local" | string /* 包 id */
+type Item<T> = T & { from: From; compiled?: true }
+export interface Resolved {
+  frame: Item<Fragment>[]; tail: Item<Fragment>[]          // 洞已填；未填的条目不在这里
+  asks: Record<string, Item<{ text: string }>>             // 每个 id 都有：链上第一个整条填得上的（harness 的没有洞）
+  products: Item<Product>[]                                 // on 已定；问法已填，填不上的标 unasked
+  entries: Item<{ id: string; text: string }>[]             // 进 lookup 索引的玩家层词条
+  lexicon: Entry[]; snippets: Item<Snippet>[]; format: Item<Format>[]
+  names: Names; holes: string[]
+  switches: { value: Writing; sentences: Record<string, string>; taken: { pov: From | null; verbosity: From | null } }
+  dropped: { from: From; kind: string; id?: string; why: string }[]   // 锁拒绝了什么：给前端画，从不抛
+}
+```
+
+### 3. 锁（全在 resolve 里，等级 ≥ 基底一律不抛）
+
+- 入库解码剥掉 `when` / `role`（harness 与卡除外）。
+- 词条 id 加行前缀；单层；`unlock: () => 1`。
+- **产物补丁按等级**：harness 与卡可以写整条；基底 / 包 / 本卡的补丁只取 `label` / `text` / `on`，**落在任何已有 id 上**（notes、options 的问法由此可见可改，形状、阶段、折叠不动）；新 id 编译成 `stage: "narrate"`、`shape: text`，缺 `text` 则丢弃。卡自己的形状错误仍在 session 打开时抛。
+- 名字一行、不含 `{{`；`names.user` 缺省 "玩家"。
+- 洞：按条目填；片段 / 词条 / 快捷输入未填则不出；产物未填则本轮不问；问法沿链回退；开局与索取仍拒绝并报洞名。
+- 开关句子：`asks` 里 id 为 `switch.<key>.<value>` 的默认文本就是 `SENTENCES`；叠加行按 id 改一句即生效；整槽自由文本仍整组接管。`SENTENCES` 常量从 fragment.ts 搬进 harness 行。
+
+### 4. 库与线
+
+- 表：`pack(id, name, json)` 存 `harness`（叠加，常为空）、`base`、各包；`local(card, json)` 一卡一行。`player` 表删除，一次性迁移：`global / writing / asks / products / theaters / snippets / format` → `base`；`forCard / persona / packs / names / tags / products` → 各 `local`（`theaters` → `products` 补丁）。
+- `GET /packs` → `[harness, base, ...packs]`，`harness` 行回的是**代码默认与叠加合并后的整行**；`PUT /packs/harness` 服务端只存与代码默认不同的项，缺项即复位；`DELETE` 对 `harness` / `base` 拒绝。`PUT /packs/<id>` 整行。
+- `GET /cards/<id>/local`、`PUT /cards/<id>/local` 整行。`/player` 删除。`/personas` 不动。
+- `GET /card` 与 `/cards/<id>`：`{ ...meta, greetings, rules, fiction, local, mounts: {id,name}[], layer: Resolved }`，唯一脱敏：`from === "card"` 的条目不带 `text`。客户端不再合并任何东西。
+- session 构造参数：`rows: () => Rows`（库每次请求读），替换今天的 `persona` / `packs` / `player` / `players`。
+
+### 5. 删除清单
+
+runtime：`frame`、`mounted`、`Theater`、`Player`、`Pack`、`Player.defaults`、`theatersOf`、`namesOf`、`wordingOf`、`questionOf`、`withPersona`、`inForce` / `namesNow` / `loreNow` 的拼装；`product.ts resolve` 的小剧场参数改为按等级的补丁。
+server：`/player` 路由、`players` 持久化、`persona` 回调。
+测试：`test/packs.ts`、`test/names.ts` 的合并序、`test/product.ts` 的小剧场合并、`cardView.snippets` 顺序、`wordingOf` 链，全部由 `test/layer.ts` 一套走接口的测试取代（作者序、yield、基底在包前、接管与 `taken`、人设最后、锁落 `dropped` 且 session 照开、词条前缀、洞的四种处理、`on` 与 `from`、`resolve(card, {})` 逐字节等同旧请求、叠加行只存差异、迁移）。`request.ts`、`derived.ts` 回放、`lore.ts`、路由测试保留。
+
+### 6. 文档
+
+GLOSSARY：**玩家层** 条改写为"一种行 `Layer`，五个作者一个序"，**enhancer** 条改"包即一行"，删 `Player.*` 引用，**asks** 条加开关句子 id；README 第 130 段同步；§一–§八 不改（历史记录），本节是现行。
+
+### 7. 客户端（另一个 PR，Gemini）
+
+设置页：`[harness, base, ...packs]` 同一行模板，六个 tab（文风与要求 / 线索词条 / 润色禁词 / 记录与小剧场 / 快捷输入 / 问法），`harness` 行标「内置」、无删除。写作页：挂载 chips = `mounts`，代称 = `layer.names` + `holes`，开关 = `local.switches` 与 `sentences`，`taken` 非空且非 compiled 即灰掉并写接管者，产物 = `layer.products` 的 `from` / `on` / `text`，`dropped` 为警示条。删 `BASE_ID`、全部 `isBase()`、`sourceOf`、`pack.ts` 的合并与计数。
