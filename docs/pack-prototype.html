@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Settings · 写作包原型 (Issue #69)</title>
+  <title>写作包与小剧场/代称联动原型 (Issue #69)</title>
   <style>
     /* ───────── 1. Design Tokens ───────── */
     :root {
@@ -27,6 +27,8 @@
       --primary: var(--ink);
       --primary-ink: var(--surface-1);
       --danger: light-dark(#dc2626, #f87171);
+      --warn: light-dark(#b45309, #fbbf24);
+      --warn-soft: light-dark(rgb(180 83 9 / 0.11), rgb(251 191 36 / 0.14));
       --ok: light-dark(#16a34a, #22c55e);
       --ok-soft: light-dark(rgb(22 163 74 / 0.12), rgb(34 197 94 / 0.15));
       --scrim: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.58));
@@ -91,12 +93,13 @@
       font-variant-numeric: tabular-nums;
       -webkit-font-smoothing: antialiased;
     }
-    button, input, textarea {
+    button, input, textarea, fieldset {
       font: inherit;
       color: inherit;
       background: none;
       border: 0;
       padding: 0;
+      margin: 0;
     }
     button { cursor: pointer; }
     button:focus-visible, input:focus-visible, textarea:focus-visible {
@@ -134,6 +137,11 @@
       background: var(--ink);
       color: var(--surface-1);
       font-weight: 600;
+    }
+    .demo-dock .sep {
+      width: 1px;
+      height: 12px;
+      background: var(--alpha-2);
     }
 
     /* ───────── 3. Viewport & Top Shell Bar (.shell-top) ───────── */
@@ -304,6 +312,11 @@
       font-size: var(--text-caption);
       white-space: nowrap;
     }
+    .tag.warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+      font-weight: 600;
+    }
 
     .switch {
       flex: none;
@@ -331,7 +344,7 @@
       translate: 16px 0;
     }
 
-    /* ───────── 5. Settings Three-Card Canvas (.settings) ───────── */
+    /* ───────── 5. View 1: Settings Three-Card Canvas (.settings) ───────── */
     .settings {
       flex: 1;
       min-height: 0;
@@ -347,7 +360,6 @@
       display: none;
     }
 
-    /* Left Card: Navigation */
     .nav-card {
       display: flex;
       flex-direction: column;
@@ -408,7 +420,6 @@
       color: var(--ink);
     }
 
-    /* Middle Card: Pack List + Unobstructed Bottom Actions */
     .master-card,
     .detail-card {
       min-height: 0;
@@ -453,7 +464,6 @@
       height: 36px;
     }
 
-    /* Right Card: Detail Header + 5 Borderless Module Blocks */
     .detail-header {
       flex: none;
       min-height: 58px;
@@ -526,7 +536,6 @@
       background: var(--alpha-1);
     }
 
-    /* Compact item pills inside a module */
     .item-pills {
       display: flex;
       flex-wrap: wrap;
@@ -555,8 +564,53 @@
       text-overflow: ellipsis;
       color: var(--ink-2);
     }
+    .item-pill .dot-on {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+      flex: none;
+    }
 
-    /* Compact 1-line summary rows for fragments */
+    /* Inline hole-input chips (for Pack.names and Player.names) */
+    .name-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .name-chip {
+      height: 32px;
+      padding: 0 10px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--text-footnote);
+    }
+    .name-chip[data-unfilled="true"] {
+      background: var(--warn-soft);
+    }
+    .name-chip .hole-key {
+      font-family: var(--font-mono);
+      font-size: var(--text-caption);
+      color: var(--ink-3);
+    }
+    .name-chip[data-unfilled="true"] .hole-key {
+      color: var(--warn);
+      font-weight: 600;
+    }
+    .name-chip input {
+      width: 6.5rem;
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      outline: none;
+    }
+    .name-chip input::placeholder {
+      color: var(--ink-3);
+      font-weight: 400;
+    }
+
     .compact-rows {
       display: flex;
       flex-direction: column;
@@ -590,35 +644,228 @@
       text-overflow: ellipsis;
     }
 
-    /* Product toggle pills */
-    .prod-pills {
+    /* ───────── 7. View 2: Writing Workbench in Play (.wpage / .wsheet) ───────── */
+    .wpage {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 var(--space-5) var(--space-5);
+      background: var(--surface-0);
+    }
+    .wsheet {
+      width: 100%;
+      max-width: 56rem;
+      height: min(44rem, 100%);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-2);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .whead {
+      flex: none;
+      min-height: 56px;
+      padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-    }
-    .prod-pill {
-      height: 30px;
-      padding: 0 12px;
-      border-radius: var(--radius);
-      background: var(--surface-2);
-      display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      font-size: var(--text-footnote);
+    }
+    .whead h1 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .card-switcher {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .card-switcher button {
+      height: 24px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: var(--text-caption);
       color: var(--ink-2);
+      font-weight: 550;
+    }
+    .card-switcher button[aria-pressed="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+    }
+
+    .wtabs {
+      display: flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .wtabs button {
+      height: 28px;
+      padding: 0 14px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      white-space: nowrap;
+    }
+    .wtabs button[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+    }
+
+    /* Per-Card Pack Mount & Hole Strip at top of Writing Sheet */
+    .wmount {
+      flex: none;
+      margin: 0 var(--space-5);
+      padding: 10px 14px;
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .wmount-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .wmount-label {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-3);
+      min-width: 3.2rem;
+    }
+    .pack-chip {
+      height: 28px;
+      padding: 0 11px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       transition: background var(--dur-1), color var(--dur-1);
     }
-    .prod-pill:hover {
+    .pack-chip:hover {
       background: var(--surface-3);
       color: var(--ink);
     }
-    .prod-pill[aria-pressed="true"] {
-      background: var(--ok-soft);
-      color: var(--ok);
-      font-weight: 600;
+    .pack-chip[aria-pressed="true"] {
+      background: var(--primary);
+      color: var(--primary-ink);
+      font-weight: 550;
     }
 
-    /* ───────── 7. Spatial Layer 1: Slide-Over Side Drawer (.side-drawer) ───────── */
+    .wbody {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-4) var(--space-5) var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+    .wsec {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .block-title {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 26px;
+    }
+    .block-title h3 {
+      font-size: var(--text-body);
+      font-weight: 600;
+    }
+    .block-title .right {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sw-grid,
+    .prod-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-2);
+    }
+    .sw-card {
+      padding: 10px 14px;
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+    }
+    .sw-card legend {
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-3);
+    }
+    .sw-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .sw-pills button {
+      height: 26px;
+      padding: 0 11px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+    }
+    .sw-pills button[aria-pressed="true"] {
+      background: var(--primary);
+      color: var(--primary-ink);
+      font-weight: 550;
+    }
+
+    .prod-kind {
+      grid-column: 1 / -1;
+      margin-top: 4px;
+      font-size: var(--text-caption);
+      font-weight: 600;
+      color: var(--ink-3);
+    }
+    .prod-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 42px;
+      padding: 0 12px;
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+    }
+    .prod-item[data-editable="true"] {
+      cursor: pointer;
+      transition: background var(--dur-1);
+    }
+    .prod-item[data-editable="true"]:hover {
+      background: var(--alpha-2);
+    }
+    .prod-item .pname {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--text-body);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ───────── 8. Spatial Layer 1: Slide-Over Side Drawer (.side-drawer) ───────── */
     .drawer-scrim {
       position: absolute;
       inset: 0;
@@ -725,9 +972,9 @@
       text-overflow: ellipsis;
     }
 
-    /* ───────── 8. Spatial Layer 2: Centered Dialog Modal (<dialog class="modal">) ───────── */
+    /* ───────── 9. Spatial Layer 2: Centered Dialog Modal (<dialog class="modal">) ───────── */
     dialog.modal {
-      width: min(26rem, calc(100vw - 2 * var(--space-4)));
+      width: min(28rem, calc(100vw - 2 * var(--space-4)));
       margin: auto;
       padding: 0;
       border: 0;
@@ -815,7 +1062,7 @@
       box-shadow: var(--shadow-1);
     }
 
-    /* ───────── 9. Mobile 390px Rules ───────── */
+    /* ───────── 10. Mobile 390px Rules ───────── */
     .app-wrap[data-vp="mobile"] .settings {
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto minmax(0, 1fr);
@@ -887,6 +1134,33 @@
     .app-wrap[data-vp="mobile"] .mod-card {
       padding: 10px var(--space-3);
     }
+    .app-wrap[data-vp="mobile"] .wpage {
+      padding: 0;
+      background: var(--surface-1);
+    }
+    .app-wrap[data-vp="mobile"] .wsheet {
+      height: 100%;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .app-wrap[data-vp="mobile"] .wtabs {
+      width: 100%;
+    }
+    .app-wrap[data-vp="mobile"] .wtabs button {
+      flex: 1;
+      padding: 0 6px;
+      font-size: var(--text-caption);
+    }
+    .app-wrap[data-vp="mobile"] .wmount {
+      margin: 0 var(--space-3);
+    }
+    .app-wrap[data-vp="mobile"] .wbody {
+      padding: var(--space-3);
+    }
+    .app-wrap[data-vp="mobile"] .sw-grid,
+    .app-wrap[data-vp="mobile"] .prod-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
     .app-wrap[data-vp="mobile"] dialog.modal {
       width: calc(min(390px, 100vw) - 24px);
     }
@@ -902,8 +1176,8 @@
         </button>
       </header>
 
-      <div class="settings" id="settingsRoot" data-pane="detail">
-        <!-- Column 1: Left Navigation Card -->
+      <!-- VIEW 1: SETTINGS · 写作包 -->
+      <div class="settings" id="settingsView" data-pane="detail">
         <nav class="nav-card" aria-label="设置">
           <div class="nav-head">
             <h1>设置</h1>
@@ -932,7 +1206,6 @@
           </div>
         </nav>
 
-        <!-- Phone Top Bar -->
         <header class="phone-bar">
           <button type="button" class="icon-btn" aria-label="返回">
             <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 128H40M112 56l-72 72 72 72"/></svg>
@@ -957,7 +1230,6 @@
           </div>
         </header>
 
-        <!-- Column 2: Master List Card -->
         <aside class="master-card" aria-label="写作包">
           <div class="master-list scroller" id="packList"></div>
           <div class="master-foot">
@@ -972,8 +1244,12 @@
           </div>
         </aside>
 
-        <!-- Column 3: Detail Card -->
         <section class="detail-card" aria-label="写作包详情" id="packDetail"></section>
+      </div>
+
+      <!-- VIEW 2: WRITING WORKBENCH IN PLAY (挂载包 + 代称填空 + 小剧场编辑) -->
+      <div class="wpage" id="writingView" style="display:none;">
+        <article class="wsheet" aria-label="写作" id="writingSheet"></article>
       </div>
     </div>
   </div>
@@ -992,6 +1268,9 @@
 
   <!-- Prototype Switcher Dock -->
   <div class="demo-dock" role="toolbar" aria-label="原型演示切换">
+    <button type="button" id="modeSettingsBtn" aria-pressed="true">设置 · 写作包</button>
+    <button type="button" id="modeWritingBtn" aria-pressed="false">游玩中 · 写作</button>
+    <span class="sep"></span>
     <button type="button" id="vpDesktopBtn" aria-pressed="true">桌面端</button>
     <button type="button" id="vpMobileBtn" aria-pressed="false">手机 390px</button>
     <button type="button" id="themeBtn" aria-pressed="false">深色</button>
@@ -1008,49 +1287,140 @@
       chevRight: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M96 48l80 80-80 80"/></svg>`,
     };
 
+    const HOLE = /\{\{\s*([A-Za-z_]\w*)\s*\}\}/g;
+    const holesOf = (text) => [...new Set(Array.from(text.matchAll(HOLE), (m) => m[1]))];
+    const unfilledOf = (text, names) => holesOf(text).filter((k) => !names[k]);
     const hookOf = (text) => (text.trim().split(/(?<=[.。!?！？])\s*/)[0] || "").trim();
+
+    // Cards in shelf (with Card.names defaults)
+    const cardsById = {
+      ri: {
+        id: "ri",
+        title: "理",
+        persona: "克莱恩",
+        names: {}, // Multi-character card (理 & 罗伦斯): char is intentionally not fixed by the card!
+        worldProducts: [
+          { id: "trust", label: "信任度与线索" }
+        ]
+      },
+      banxing: {
+        id: "banxing",
+        title: "伴星",
+        persona: "林夏",
+        names: { char: "依瑞丝" }, // Card author declared char = "依瑞丝"
+        worldProducts: []
+      },
+      zhulin: {
+        id: "zhulin",
+        title: "竹林",
+        persona: "沈舟",
+        names: { char: "青衣客" },
+        worldProducts: [
+          { id: "scene", label: "当前场景" },
+          { id: "people", label: "在场人物" }
+        ]
+      }
+    };
+
+    // Player layer state
+    const playerState = {
+      packs: {
+        ri: ["pack-lotm", "pack-theater"],
+        banxing: ["pack-theater"],
+        zhulin: ["pack-wuxia"]
+      },
+      names: {
+        ri: {}, // On《理》, {{char}} is unfilled until the player types "理" or "罗伦斯"!
+        banxing: {},
+        zhulin: {}
+      },
+      products: {
+        scene: true,
+        people: true,
+        options: false,
+        inner: true
+      },
+      theaters: []
+    };
 
     const packs = [
       {
         id: "pack-new",
         name: "新写作包",
-        cards: [],
         fragments: [],
         entries: [],
         lexicon: [],
-        products: {},
-        snippets: []
+        theaters: [],
+        snippets: [],
+        names: {}
+      },
+      {
+        id: "pack-theater",
+        name: "同人与番外小剧场集",
+        fragments: [],
+        entries: [],
+        lexicon: [],
+        theaters: [
+          {
+            id: "reading-room",
+            label: "同人阅读体小剧场",
+            on: false,
+            text: "现在停止角色扮演。在同人小说创作中，阅读体/观影体是让角色被拉进神秘空间看到自身相关故事（小说、剧本、漫画、视频屏幕等）并做出反应的形式。\n请结合{{char}}和{{user}}的人设与当前剧情生成一个载体故事，描写他们一起阅读/观影的番外剧场。内容有趣生动，可以略缺德和吐槽，一步步展示每个剧情点及人物反应。"
+          },
+          {
+            id: "gunfighter-narrator",
+            label: "火枪手旁白梗",
+            on: false,
+            text: "现在停止角色扮演。参考喜剧短片《火枪手》中具有拟人化特征、能被主角们直接听到并互动的调皮整蛊旁白，生成一个属于{{char}}和{{user}}的火枪手旁白喜剧短片。\n重点描写主角们听到旁白揭穿心思时的反应，起一个有趣的短片名，文风要求冷幽默、黑色幽默。"
+          },
+          {
+            id: "underground-idol-diary",
+            label: "地下偶像粉丝日记",
+            on: false,
+            text: "现在停止角色扮演，生成一个番外小剧场。设定{{char}}是地下偶像{{user}}的粉丝，以{{char}}的第一人称视角创作一本日记（可穿插拍立得或现场记录描述），紧密围绕{{char}}与{{user}}的性格设定与关系展开。"
+          }
+        ],
+        snippets: [],
+        names: {}
       },
       {
         id: "pack-lotm",
         name: "诡秘序列与民俗世界书",
-        cards: ["理"],
         fragments: [
           {
             id: "req-1",
             at: "head",
             enabled: true,
-            text: "时代底色为蒸汽与机械并存的维多利亚雾都：煤气路灯、马车、报童、神秘学结社与非凡特性守恒定律并存。"
+            text: "时代底色为蒸汽与机械并存的{{char_place}}雾都：煤气路灯、马车、报童、神秘学结社与非凡特性守恒定律并存。"
           }
         ],
         entries: [
           { id: "占卜家途径", text: "占卜家途径的序列晋升与扮演守则。序列9占卜家重在敬畏命运；序列8小丑学会在危机中保持肢体协调与面具般的微笑；序列7魔术师从不打无准备之仗。" },
           { id: "非凡特性定律", text: "非凡特性聚合定律与守恒定律。同途径或相邻途径的非凡者会在命运牵引下无意相遇，高序列者对低序列存在天然吸引。" },
-          { id: "贝克兰德街区", text: "贝克兰德各街区风貌与阶级分布。皇后区为贵族府邸，乔伍德区居住体面中产，东区与码头区则是浓雾、煤灰与帮派滋生的温床。" },
+          { id: "贝克兰德街区", text: "{{char_place}}各街区风貌与阶级分布。皇后区为贵族府邸，乔伍德区居住体面中产，东区与码头区则是浓雾、煤灰与帮派滋生的温床。" },
           { id: "灵界与七光", text: "灵界穿梭与占卜启示的视觉表现。灵界由破碎色块、历史残影与灵界生物构成，七光居于高处。" }
         ],
         lexicon: [
           { pattern: "魔法能量", hint: "灵性" }
         ],
-        products: {},
+        theaters: [
+          {
+            id: "acting-notes",
+            label: "扮演守则手记",
+            on: false,
+            text: "以{{char}}的视角写一段简短的神秘学手记，复盘刚才的言行是否契合其途径的「扮演法」守则，以及灵性直觉捕捉到的异常。"
+          }
+        ],
         snippets: [
-          { name: "灵视观察", text: "我悄然开启灵视，端详对方的以太体与情绪颜色。", hint: "场内动作", note: false }
-        ]
+          { name: "灵视观察", text: "我悄然开启灵视，端详{{char}}的以太体与情绪颜色。", hint: "场内动作", note: false }
+        ],
+        names: {
+          char_place: "贝克兰德"
+        }
       },
       {
         id: "pack-wuxia",
         name: "冷峻武侠与去八股",
-        cards: ["竹林", "盐道"],
         fragments: [
           { id: "req-1", at: "head", enabled: true, text: "行文取古龙与早年武侠之冷峻克制：多用短句与白描，动作交代干脆，兵刃交击只写分寸与落点。" },
           { id: "req-2", at: "tail", enabled: true, text: "收尾停在对方动作或话音落定处，严禁在段末升华主题或感叹江湖宿命。" }
@@ -1062,48 +1432,84 @@
           { pattern: "瞳孔微缩", hint: "呼吸或目光停顿" },
           { pattern: "嘴角勾起一抹", hint: "平实写笑" }
         ],
-        products: { inner: true },
+        theaters: [
+          {
+            id: "inner",
+            label: "人物心声",
+            on: true,
+            text: "用一两句冷峻的江湖独白写出{{char}}未宣之于口的杀机、忌惮或试探，不作现代心理剖析。"
+          },
+          {
+            id: "teahouse-commentary",
+            label: "茶客评书",
+            on: false,
+            text: "以江湖茶馆说书人的口吻，对本幕{{char}}与{{user}}的交锋做一段简短辛辣的场外评点。"
+          }
+        ],
         snippets: [
           { name: "慢镜交手", text: "放慢镜头，逐招写出这一合的方位与兵刃试探。", hint: "拆招细写", note: true }
-        ]
+        ],
+        names: {}
       }
     ];
 
+    let viewMode = "settings"; // "settings" | "writing"
     let selectedId = "pack-new";
     let drawerKind = null;
     let drawerQuery = "";
+    let activeCardId = "ri";
+    let activeWTab = "switches"; // "switches" | "prose" | "polish" | "inputs"
 
     const totalCount = (p) =>
       p.fragments.length +
       p.entries.length +
       p.lexicon.length +
-      Object.keys(p.products).length +
+      p.theaters.length +
       p.snippets.length;
+
+    const cardsUsingPack = (packId) =>
+      Object.entries(playerState.packs)
+        .filter(([, ids]) => ids.includes(packId))
+        .map(([cid]) => cardsById[cid]?.title || cid);
+
+    const packHolesOf = (p) => {
+      const allText = [
+        ...p.fragments.map((x) => x.text),
+        ...p.entries.map((x) => x.text),
+        ...p.theaters.map((x) => x.text),
+        ...p.snippets.map((x) => x.text),
+      ].join("\n");
+      return holesOf(allText).filter((k) => k !== "user");
+    };
 
     function currentPack() {
       return packs.find((p) => p.id === selectedId) || packs[0];
     }
 
+    // ───────── VIEW 1: SETTINGS · 写作包 ─────────
     function renderList() {
       const el = document.getElementById("packList");
-      el.innerHTML = packs.map((p) => `
-        <button
-          type="button"
-          class="p-row"
-          aria-selected="${p.id === selectedId ? "true" : "false"}"
-          data-pick="${p.id}"
-        >
-          <span class="p-name">${p.name}</span>
-          ${p.cards.map((c) => `<span class="tag">${c}</span>`).join("")}
-          <span class="tag mono">${totalCount(p)}</span>
-        </button>
-      `).join("");
+      el.innerHTML = packs.map((p) => {
+        const mountedOn = cardsUsingPack(p.id);
+        return `
+          <button
+            type="button"
+            class="p-row"
+            aria-selected="${p.id === selectedId ? "true" : "false"}"
+            data-pick="${p.id}"
+          >
+            <span class="p-name">${p.name}</span>
+            ${mountedOn.map((c) => `<span class="tag">${c}</span>`).join("")}
+            <span class="tag mono">${totalCount(p)}</span>
+          </button>
+        `;
+      }).join("");
 
       el.querySelectorAll("[data-pick]").forEach((btn) => {
         btn.addEventListener("click", () => {
           selectedId = btn.dataset.pick;
           drawerKind = null;
-          document.getElementById("settingsRoot").dataset.pane = "detail";
+          document.getElementById("settingsView").dataset.pane = "detail";
           renderList();
           renderDetail();
         });
@@ -1113,6 +1519,8 @@
     function renderDetail() {
       const p = currentPack();
       const detail = document.getElementById("packDetail");
+      const mountedOn = cardsUsingPack(p.id);
+      const pHoles = packHolesOf(p);
 
       detail.innerHTML = `
         <header class="detail-header">
@@ -1120,7 +1528,7 @@
             ${ICONS.back}
           </button>
           <input class="name-input" value="${p.name}" aria-label="写作包名称" id="packNameInput" />
-          ${p.cards.map((c) => `<span class="tag">${c}</span>`).join("")}
+          ${mountedOn.map((c) => `<span class="tag">${c}</span>`).join("")}
           <span class="spacer"></span>
           <button type="button" class="btn sm ghost">
             ${ICONS.export} <span>导出</span>
@@ -1131,6 +1539,23 @@
         </header>
 
         <div class="detail-scroll scroller">
+          ${pHoles.length > 0 ? `
+            <div class="mod-card">
+              <div class="mod-head">
+                <h3>代称</h3>
+                <span class="tag mono">${pHoles.length}</span>
+              </div>
+              <div class="name-chips">
+                ${pHoles.map((k) => `
+                  <label class="name-chip">
+                    <span class="hole-key">{{${k}}}</span>
+                    <input value="${p.names?.[k] || ""}" data-pack-name="${k}" placeholder="随卡填写" />
+                  </label>
+                `).join("")}
+              </div>
+            </div>
+          ` : ""}
+
           <!-- 1. 文风与要求 -->
           <div class="mod-card">
             <div class="mod-head">
@@ -1203,20 +1628,26 @@
             ` : ""}
           </div>
 
-          <!-- 4. 产物开关 -->
+          <!-- 4. 小剧场 -->
           <div class="mod-card">
             <div class="mod-head">
-              <h3>产物开关</h3>
-              <span class="tag mono">${Object.keys(p.products).length}</span>
+              <h3>小剧场</h3>
+              <span class="tag mono">${p.theaters.length}</span>
+              <div class="mod-actions">
+                ${p.theaters.length > 0 ? `<button type="button" class="btn sm ghost" id="openTheatersDrawerBtn"><span>管理</span> ${ICONS.chevRight}</button>` : ""}
+                <button type="button" class="btn sm" id="addTheaterBtn">${ICONS.plus} <span>添加小剧场</span></button>
+              </div>
             </div>
-            <div class="prod-pills">
-              <button type="button" class="prod-pill" aria-pressed="${p.products.inner ? "true" : "false"}" data-prod="inner">
-                <span>人物心声</span>
-              </button>
-              <button type="button" class="prod-pill" aria-pressed="${p.products.options ? "true" : "false"}" data-prod="options">
-                <span>行动选项</span>
-              </button>
-            </div>
+            ${p.theaters.length > 0 ? `
+              <div class="item-pills">
+                ${p.theaters.map((th, i) => `
+                  <button type="button" class="item-pill" data-edit-theater="${i}">
+                    ${th.on ? `<span class="dot-on"></span>` : ""}
+                    <span>${th.label}</span>
+                  </button>
+                `).join("")}
+              </div>
+            ` : ""}
           </div>
 
           <!-- 5. 快捷输入 -->
@@ -1240,7 +1671,6 @@
           </div>
         </div>
 
-        <!-- Slide-Over Side Drawer -->
         <div class="drawer-scrim" data-open="${drawerKind ? "true" : "false"}" id="drawerScrim"></div>
         <aside class="side-drawer" data-open="${drawerKind ? "true" : "false"}" aria-label="列表管理">
           ${renderDrawerContent(p)}
@@ -1248,11 +1678,20 @@
       `;
 
       detail.querySelector("#backToListBtn")?.addEventListener("click", () => {
-        document.getElementById("settingsRoot").dataset.pane = "list";
+        document.getElementById("settingsView").dataset.pane = "list";
       });
       detail.querySelector("#packNameInput")?.addEventListener("change", (e) => {
         p.name = e.target.value.trim() || p.name;
         renderList();
+      });
+      detail.querySelectorAll("[data-pack-name]").forEach((inp) => {
+        inp.addEventListener("input", () => {
+          const k = inp.dataset.packName;
+          const v = inp.value.trim();
+          p.names = p.names || {};
+          if (v) p.names[k] = v;
+          else delete p.names[k];
+        });
       });
       detail.querySelector("#drawerScrim")?.addEventListener("click", () => {
         drawerKind = null;
@@ -1296,14 +1735,14 @@
         renderDetail();
       });
 
-      detail.querySelectorAll("[data-prod]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const k = btn.dataset.prod;
-          if (p.products[k]) delete p.products[k];
-          else p.products[k] = true;
-          renderList();
-          renderDetail();
-        });
+      detail.querySelector("#addTheaterBtn")?.addEventListener("click", () => openTheaterModal(-1, false));
+      detail.querySelectorAll("[data-edit-theater]").forEach((btn) =>
+        btn.addEventListener("click", () => openTheaterModal(Number(btn.dataset.editTheater), false))
+      );
+      detail.querySelector("#openTheatersDrawerBtn")?.addEventListener("click", () => {
+        drawerKind = "theaters";
+        drawerQuery = "";
+        renderDetail();
       });
 
       detail.querySelector("#addSnipBtn")?.addEventListener("click", () => openSnipModal(-1));
@@ -1314,12 +1753,14 @@
       detail.querySelector("#drawerAddBtn")?.addEventListener("click", () => {
         if (drawerKind === "entries") openEntryModal(-1);
         else if (drawerKind === "lexicon") openLexModal(-1);
+        else if (drawerKind === "theaters") openTheaterModal(-1, false);
       });
       detail.querySelectorAll("[data-drawer-edit]").forEach((row) => {
         row.addEventListener("click", () => {
           const idx = Number(row.dataset.drawerEdit);
           if (drawerKind === "entries") openEntryModal(idx);
           else if (drawerKind === "lexicon") openLexModal(idx);
+          else if (drawerKind === "theaters") openTheaterModal(idx, false);
         });
       });
       const dsInput = detail.querySelector("#drawerSearchInput");
@@ -1366,6 +1807,35 @@
           </div>
         `;
       }
+      if (drawerKind === "theaters") {
+        const rows = p.theaters
+          .map((th, i) => ({ th, i }))
+          .filter(({ th }) => !drawerQuery || th.label.includes(drawerQuery) || th.text.includes(drawerQuery));
+        return `
+          <div class="drawer-head">
+            <h3>小剧场</h3>
+            <span class="tag mono">${p.theaters.length}</span>
+            <span class="spacer"></span>
+            <button type="button" class="btn sm" id="drawerAddBtn">${ICONS.plus} <span>添加小剧场</span></button>
+            <button type="button" class="icon-btn sm" id="closeDrawerBtn">${ICONS.close}</button>
+          </div>
+          <div class="drawer-search">
+            <div class="search-box">
+              ${ICONS.search}
+              <input type="search" id="drawerSearchInput" placeholder="搜索…" value="${drawerQuery}" />
+            </div>
+          </div>
+          <div class="drawer-body scroller">
+            ${rows.map(({ th, i }) => `
+              <div class="drawer-row" data-drawer-edit="${i}">
+                <span class="d-name">${th.label}</span>
+                <span class="d-preview">${th.text}</span>
+                ${th.on ? `<span class="tag">常开</span>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
       const rows = p.lexicon
         .map((e, i) => ({ e, i }))
         .filter(({ e }) => !drawerQuery || e.pattern.includes(drawerQuery) || (e.hint || "").includes(drawerQuery));
@@ -1392,6 +1862,286 @@
           `).join("")}
         </div>
       `;
+    }
+
+    // ───────── VIEW 2: WRITING WORKBENCH IN PLAY (挂载包 + 代称填空 + 小剧场) ─────────
+    function computeCardContext(cid) {
+      const card = cardsById[cid];
+      const mountedIds = playerState.packs[cid] || [];
+      const mountedPacks = mountedIds.map((id) => packs.find((p) => p.id === id)).filter(Boolean);
+
+      // Merged names: { user, ...card.names, ...packs.names, ...player.names[cid] }
+      const baseNames = Object.assign(
+        { user: card.persona || "玩家" },
+        card.names,
+        ...mountedPacks.map((p) => p.names || {})
+      );
+      const mergedNames = { ...baseNames, ...(playerState.names[cid] || {}) };
+
+      // Resolve theater products: default inner + mounted packs' theaters + player.theaters
+      const byId = new Map([
+        [
+          "inner",
+          {
+            id: "inner",
+            label: "人物心声",
+            text: "本幕角色心中所想但未说出口的话，简短一段。",
+            on: false,
+            source: null
+          }
+        ]
+      ]);
+      for (const pk of mountedPacks) {
+        for (const th of pk.theaters) {
+          const prev = byId.get(th.id);
+          byId.set(th.id, {
+            id: th.id,
+            label: th.label || prev?.label || th.id,
+            text: th.text || prev?.text || "",
+            on: th.on ?? prev?.on ?? false,
+            source: pk.name
+          });
+        }
+      }
+      for (const th of playerState.theaters) {
+        const prev = byId.get(th.id);
+        byId.set(th.id, {
+          id: th.id,
+          label: th.label || prev?.label || th.id,
+          text: th.text || prev?.text || "",
+          on: th.on ?? prev?.on ?? false,
+          source: null
+        });
+      }
+      const theaters = [...byId.values()];
+
+      // Scan all outgoing texts for holes (excluding `user`)
+      const outTexts = [
+        ...mountedPacks.flatMap((p) => [
+          ...p.fragments.map((x) => x.text),
+          ...p.entries.map((x) => x.text),
+          ...p.snippets.map((x) => x.text)
+        ]),
+        ...theaters.map((t) => t.text)
+      ].join("\n");
+      const allHoles = holesOf(outTexts).filter((k) => k !== "user");
+      // Also include any keys defined in card.names or player.names[cid]
+      for (const k of Object.keys(baseNames)) if (k !== "user" && !allHoles.includes(k)) allHoles.push(k);
+      for (const k of Object.keys(playerState.names[cid] || {})) if (k !== "user" && !allHoles.includes(k)) allHoles.push(k);
+
+      return { card, mountedIds, mountedPacks, baseNames, mergedNames, theaters, allHoles };
+    }
+
+    function renderWriting() {
+      const sheet = document.getElementById("writingSheet");
+      const ctx = computeCardContext(activeCardId);
+      const { card, mountedIds, baseNames, mergedNames, theaters, allHoles } = ctx;
+      const libraryPacks = packs.filter((p) => p.id !== "pack-new" || totalCount(p) > 0);
+
+      sheet.innerHTML = `
+        <header class="whead">
+          <div class="card-switcher" role="group" aria-label="切换卡片预览">
+            ${Object.values(cardsById).map((c) => `
+              <button type="button" data-switch-card="${c.id}" aria-pressed="${c.id === activeCardId ? "true" : "false"}">
+                ${c.title}
+              </button>
+            `).join("")}
+          </div>
+          <h1>写作</h1>
+          <span class="tag">${card.persona}</span>
+          <span class="spacer"></span>
+          <nav class="wtabs" role="tablist">
+            <button type="button" role="tab" aria-selected="${activeWTab === "switches" ? "true" : "false"}" data-wtab="switches">开关与记录</button>
+            <button type="button" role="tab" aria-selected="${activeWTab === "prose" ? "true" : "false"}" data-wtab="prose">文风与要求</button>
+            <button type="button" role="tab" aria-selected="${activeWTab === "polish" ? "true" : "false"}" data-wtab="polish">润色与禁词</button>
+            <button type="button" role="tab" aria-selected="${activeWTab === "inputs" ? "true" : "false"}" data-wtab="inputs">快捷输入</button>
+          </nav>
+        </header>
+
+        <!-- Per-card Pack Mounts & Derived Holes ({{char}}, {{char_place}}, etc.) -->
+        <div class="wmount">
+          <div class="wmount-row">
+            <span class="wmount-label">写作包</span>
+            ${libraryPacks.map((p) => `
+              <button
+                type="button"
+                class="pack-chip"
+                aria-pressed="${mountedIds.includes(p.id) ? "true" : "false"}"
+                data-toggle-mount="${p.id}"
+              >
+                <span>${p.name}</span>
+              </button>
+            `).join("")}
+            <button type="button" class="btn sm ghost" id="jumpToPacksBtn">
+              <span>管理</span> ${ICONS.chevRight}
+            </button>
+          </div>
+          ${allHoles.length > 0 ? `
+            <div class="wmount-row">
+              <span class="wmount-label">代称</span>
+              <span class="tag mono">{{user}} = ${mergedNames.user}</span>
+              ${allHoles.map((k) => {
+                const val = mergedNames[k] || "";
+                const playerVal = playerState.names[activeCardId]?.[k] ?? "";
+                const defVal = baseNames[k] || "";
+                return `
+                  <label class="name-chip" data-unfilled="${!val ? "true" : "false"}">
+                    <span class="hole-key">{{${k}}}</span>
+                    <input
+                      value="${playerVal}"
+                      placeholder="${defVal || "未填写"}"
+                      data-card-hole="${k}"
+                    />
+                  </label>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+        </div>
+
+        <div class="wbody scroller">
+          <div class="wsec">
+            <div class="block-title">
+              <h3>叙事开关</h3>
+              <div class="right">
+                <button type="button" class="btn sm ghost">全部跟随卡片</button>
+              </div>
+            </div>
+            <div class="sw-grid">
+              <fieldset class="sw-card">
+                <legend>视角</legend>
+                <div class="sw-pills">
+                  <button type="button" aria-pressed="true">跟随卡片</button>
+                  <button type="button" aria-pressed="false">第二人称</button>
+                  <button type="button" aria-pressed="false">第三人称</button>
+                  <button type="button" aria-pressed="false">无主角</button>
+                </div>
+              </fieldset>
+              <fieldset class="sw-card">
+                <legend>篇幅</legend>
+                <div class="sw-pills">
+                  <button type="button" aria-pressed="true">跟随卡片</button>
+                  <button type="button" aria-pressed="false">简短</button>
+                  <button type="button" aria-pressed="false">适中</button>
+                  <button type="button" aria-pressed="false">详尽</button>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="wsec">
+            <div class="block-title">
+              <h3>每轮记录</h3>
+              <div class="right">
+                <button type="button" class="btn sm" id="addPlayerTheaterBtn">${ICONS.plus} <span>添加小剧场</span></button>
+              </div>
+            </div>
+            <div class="prod-grid">
+              ${card.worldProducts.length > 0 ? `
+                <h4 class="prod-kind">状态</h4>
+                ${card.worldProducts.map((wp) => {
+                  const isOn = playerState.products[wp.id] ?? true;
+                  return `
+                    <div class="prod-item">
+                      <span class="pname">${wp.label}</span>
+                      <span class="tag">${card.title}</span>
+                      <button type="button" class="switch" role="switch" aria-checked="${isOn ? "true" : "false"}" data-flip-prod="${wp.id}">
+                        <span class="thumb"></span>
+                      </button>
+                    </div>
+                  `;
+                }).join("")}
+              ` : ""}
+
+              <h4 class="prod-kind">小剧场</h4>
+              <!-- options: list shape, switch only -->
+              <div class="prod-item">
+                <span class="pname">行动选项</span>
+                <button type="button" class="switch" role="switch" aria-checked="${playerState.products.options ? "true" : "false"}" data-flip-prod="options">
+                  <span class="thumb"></span>
+                </button>
+              </div>
+
+              <!-- text-shaped theaters: clickable to edit label & prompt text! -->
+              ${theaters.map((th) => {
+                const isOn = playerState.products[th.id] ?? th.on;
+                const missing = unfilledOf(th.text, mergedNames);
+                return `
+                  <div class="prod-item" data-editable="true" data-edit-wtheater="${th.id}">
+                    <span class="pname">${th.label}</span>
+                    ${missing.map((m) => `<span class="tag warn mono">{{${m}}}</span>`).join("")}
+                    ${th.source ? `<span class="tag">${th.source}</span>` : ""}
+                    <button type="button" class="switch" role="switch" aria-checked="${isOn ? "true" : "false"}" data-flip-prod="${th.id}">
+                      <span class="thumb"></span>
+                    </button>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+
+      sheet.querySelectorAll("[data-switch-card]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          activeCardId = btn.dataset.switchCard;
+          renderWriting();
+        });
+      });
+      sheet.querySelectorAll("[data-wtab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          activeWTab = btn.dataset.wtab;
+          renderWriting();
+        });
+      });
+      sheet.querySelectorAll("[data-toggle-mount]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const pid = btn.dataset.toggleMount;
+          const cur = playerState.packs[activeCardId] || [];
+          playerState.packs[activeCardId] = cur.includes(pid)
+            ? cur.filter((x) => x !== pid)
+            : [...cur, pid];
+          renderWriting();
+          renderList();
+        });
+      });
+      sheet.querySelector("#jumpToPacksBtn")?.addEventListener("click", () => {
+        setViewMode("settings");
+      });
+      sheet.querySelectorAll("[data-card-hole]").forEach((inp) => {
+        inp.addEventListener("input", () => {
+          const k = inp.dataset.cardHole;
+          const v = inp.value.trim();
+          playerState.names[activeCardId] = playerState.names[activeCardId] || {};
+          if (v) playerState.names[activeCardId][k] = v;
+          else delete playerState.names[activeCardId][k];
+          renderWriting();
+          const next = sheet.querySelector(`[data-card-hole="${k}"]`);
+          if (next) {
+            next.focus();
+            next.setSelectionRange(v.length, v.length);
+          }
+        });
+      });
+      sheet.querySelectorAll("[data-flip-prod]").forEach((sw) => {
+        sw.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = sw.dataset.flipProd;
+          const th = theaters.find((t) => t.id === id);
+          const cur = playerState.products[id] ?? th?.on ?? false;
+          playerState.products[id] = !cur;
+          renderWriting();
+        });
+      });
+      sheet.querySelector("#addPlayerTheaterBtn")?.addEventListener("click", () => {
+        openTheaterModal(-1, true);
+      });
+      sheet.querySelectorAll("[data-edit-wtheater]").forEach((row) => {
+        row.addEventListener("click", () => {
+          const id = row.dataset.editWtheater;
+          openWritingTheaterModal(id, theaters);
+        });
+      });
     }
 
     // ───────── Modal Helpers ─────────
@@ -1533,6 +2283,114 @@
       modal.showModal();
     }
 
+    function openTheaterModal(idx, isPlayerLayer) {
+      const list = isPlayerLayer ? playerState.theaters : currentPack().theaters;
+      const cur = idx >= 0
+        ? { ...list[idx] }
+        : { id: `th-${Date.now()}`, label: "", on: false, text: "" };
+      modalTitle.textContent = idx >= 0 ? "编辑小剧场" : "添加小剧场";
+      modalBody.innerHTML = `
+        <label class="mfield">
+          <span>名称</span>
+          <input id="mThLabel" value="${cur.label}" />
+        </label>
+        ${!isPlayerLayer ? `
+          <div class="mfield">
+            <span>触发</span>
+            <div class="at-toggle">
+              <button type="button" id="mThDemand" aria-pressed="${!cur.on ? "true" : "false"}">按需索取</button>
+              <button type="button" id="mThAuto" aria-pressed="${cur.on ? "true" : "false"}">每轮常开</button>
+            </div>
+          </div>
+        ` : ""}
+        <label class="mfield">
+          <span>提示词</span>
+          <textarea id="mThText" rows="7">${cur.text}</textarea>
+        </label>
+      `;
+      modalFoot.innerHTML = `
+        ${idx >= 0 ? `<button type="button" class="btn sm ghost danger" id="mDelBtn">删除</button><span class="spacer"></span>` : ""}
+        <button type="button" class="btn sm ghost" id="mCancelBtn">取消</button>
+        <button type="button" class="btn sm primary" id="mSaveBtn">保存</button>
+      `;
+      let on = !!cur.on;
+      const btnDemand = modalBody.querySelector("#mThDemand");
+      const btnAuto = modalBody.querySelector("#mThAuto");
+      if (btnDemand && btnAuto) {
+        btnDemand.onclick = () => {
+          on = false;
+          btnDemand.setAttribute("aria-pressed", "true");
+          btnAuto.setAttribute("aria-pressed", "false");
+        };
+        btnAuto.onclick = () => {
+          on = true;
+          btnAuto.setAttribute("aria-pressed", "true");
+          btnDemand.setAttribute("aria-pressed", "false");
+        };
+      }
+      modalFoot.querySelector("#mCancelBtn").onclick = () => modal.close();
+      modalFoot.querySelector("#mDelBtn")?.addEventListener("click", () => {
+        list.splice(idx, 1);
+        modal.close();
+        renderList();
+        renderDetail();
+        renderWriting();
+      });
+      modalFoot.querySelector("#mSaveBtn").onclick = () => {
+        const label = modalBody.querySelector("#mThLabel").value.trim();
+        const text = modalBody.querySelector("#mThText").value.trim();
+        if (!label || !text) return;
+        const id = label === "人物心声" ? "inner" : cur.id;
+        const item = { id, label, on, text };
+        if (idx >= 0) list[idx] = item;
+        else list.push(item);
+        modal.close();
+        renderList();
+        renderDetail();
+        renderWriting();
+      };
+      modal.showModal();
+    }
+
+    function openWritingTheaterModal(id, resolvedList) {
+      const cur = resolvedList.find((t) => t.id === id);
+      if (!cur) return;
+      const ownIdx = playerState.theaters.findIndex((t) => t.id === id);
+      modalTitle.textContent = "编辑小剧场";
+      modalBody.innerHTML = `
+        <label class="mfield">
+          <span>名称</span>
+          <input id="mThLabel" value="${cur.label}" />
+        </label>
+        <label class="mfield">
+          <span>提示词</span>
+          <textarea id="mThText" rows="7">${cur.text}</textarea>
+        </label>
+      `;
+      modalFoot.innerHTML = `
+        ${ownIdx >= 0 && id !== "inner" ? `<button type="button" class="btn sm ghost danger" id="mDelBtn">删除</button><span class="spacer"></span>` : ""}
+        <button type="button" class="btn sm ghost" id="mCancelBtn">取消</button>
+        <button type="button" class="btn sm primary" id="mSaveBtn">保存</button>
+      `;
+      modalFoot.querySelector("#mCancelBtn").onclick = () => modal.close();
+      modalFoot.querySelector("#mDelBtn")?.addEventListener("click", () => {
+        playerState.theaters.splice(ownIdx, 1);
+        modal.close();
+        renderWriting();
+      });
+      modalFoot.querySelector("#mSaveBtn").onclick = () => {
+        const label = modalBody.querySelector("#mThLabel").value.trim();
+        const text = modalBody.querySelector("#mThText").value.trim();
+        if (!label || !text) return;
+        const item = { id, label, text };
+        if (ownIdx >= 0) playerState.theaters[ownIdx] = { ...playerState.theaters[ownIdx], ...item };
+        else playerState.theaters.push(item);
+        modal.close();
+        renderWriting();
+      };
+      modal.showModal();
+    }
+
     function openSnipModal(idx) {
       const p = currentPack();
       const cur = idx >= 0 ? { ...p.snippets[idx] } : { name: "", text: "", hint: "", note: true };
@@ -1597,25 +2455,43 @@
       packs.unshift({
         id,
         name: "新写作包",
-        cards: [],
         fragments: [],
         entries: [],
         lexicon: [],
-        products: {},
-        snippets: []
+        theaters: [],
+        snippets: [],
+        names: {}
       });
       selectedId = id;
       drawerKind = null;
-      document.getElementById("settingsRoot").dataset.pane = "detail";
+      document.getElementById("settingsView").dataset.pane = "detail";
       renderList();
       renderDetail();
     });
 
     // Demo Switcher Controls
     const appWrap = document.getElementById("appWrap");
+    const modeSettingsBtn = document.getElementById("modeSettingsBtn");
+    const modeWritingBtn = document.getElementById("modeWritingBtn");
     const vpDesktopBtn = document.getElementById("vpDesktopBtn");
     const vpMobileBtn = document.getElementById("vpMobileBtn");
     const themeBtn = document.getElementById("themeBtn");
+
+    function setViewMode(mode) {
+      viewMode = mode;
+      document.getElementById("settingsView").style.display = mode === "settings" ? "" : "none";
+      document.getElementById("writingView").style.display = mode === "writing" ? "" : "none";
+      modeSettingsBtn.setAttribute("aria-pressed", mode === "settings" ? "true" : "false");
+      modeWritingBtn.setAttribute("aria-pressed", mode === "writing" ? "true" : "false");
+      if (mode === "writing") renderWriting();
+      else {
+        renderList();
+        renderDetail();
+      }
+    }
+
+    modeSettingsBtn.addEventListener("click", () => setViewMode("settings"));
+    modeWritingBtn.addEventListener("click", () => setViewMode("writing"));
 
     vpDesktopBtn.addEventListener("click", () => {
       appWrap.dataset.vp = "desktop";
