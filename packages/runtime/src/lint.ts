@@ -192,11 +192,16 @@ const INLINE: Entry[] = [
   { pattern: "end of each response", hint: TAIL },
 ]
 
-/** The card's text a hole can sit in: the prose, its asks, its products' questions. */
+/** The card's text a hole can sit in: the prose, its asks, its products' questions, its guard lines, its readouts. */
 const named = (card: Card): [string, string][] => [
   ...texts(card),
   ...(card.asks ?? []).flatMap((f): [string, string][] => (f.text ? [[`asks.${f.id}.text`, f.text]] : [])),
   ...(card.products ?? []).flatMap((p): [string, string][] => (p.text ? [[`products.${p.id}.text`, p.text]] : [])),
+  ...card.guard.map((g, i): [string, string] => [`guard[${i}]`, g]),
+  ...(card.rules.readouts ?? []).flatMap((q): [string, string][] => [
+    [`rules.readouts.${q.id}.text`, q.text],
+    ...q.options.map((o): [string, string] => [`rules.readouts.${q.id}.options.${o.id}.text`, o.text]),
+  ]),
 ]
 
 // ───────── the rules ─────────
