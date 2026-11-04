@@ -94,7 +94,10 @@ export const narratorHistory = <B>(
     ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
     ...tailOf(path, sum).flatMap((t): Msg[] => [
       ...(t.input.text ? [{ role: "user", text: t.input.text } as Msg] : []), // a greeting node has no input
-      ...deliveredIn(t).map((d): Msg => ({ role: "system", text: loreText(d) })),
+      ...deliveredIn(t).flatMap((d): Msg[] => {
+        const text = loreText(d) // "" = the entry is gone: no empty message, a provider refuses one
+        return text ? [{ role: "system", text }] : []
+      }),
       { role: "assistant", text: prose(t), parts: t.reply },
     ]),
   ]

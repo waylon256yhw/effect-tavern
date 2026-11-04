@@ -47,8 +47,8 @@ export const makeDerived = ({
   policy,
 }: {
   rpg: Rpg
-  L: Lore<Paths, readonly string[]>
-  lore: readonly LoreEntry[]
+  L: () => Lore<Paths, readonly string[]> // the card's entries and the mounted packs', read per request
+  lore: readonly LoreEntry[] // the card's own: the entries with a Cond floor (a pack's entry has none)
   products: () => readonly Product[] // the player toggles them mid-session
   policy: () => Policy // the routing can move the narrate window mid-session
 }) => {
@@ -57,7 +57,7 @@ export const makeDerived = ({
    *  keeps the folded prefix; a sibling's reused read comes from the same parent), so a ref off the path is a defect. */
   const textIn = (path: readonly Turn[], d: Disclosure): string => {
     const ref = entryRef(d.id)
-    if (!ref) return L.text(d)
+    if (!ref) return L().text(d)
     const t = path.find((x) => x.id === ref.node)
     if (!t) throw new Error(`${d.id}: node ${ref.node} is not on the path`)
     return itemText((t.products[ref.product] as unknown[])[ref.index])
@@ -136,7 +136,7 @@ export const makeDerived = ({
   const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): Paths => {
     const states = [rpg.initial, ...settledAlong(path).map((o) => o.s)]
     const at = s ?? states.at(-1)!
-    const counters = L.counters([...path.map(deliveredIn), extra]) // the turn being made is the last, shown now
+    const counters = L().counters([...path.map(deliveredIn), extra]) // the turn being made is the last, shown now
     return {
       ...at,
       lore: Object.fromEntries(
@@ -156,8 +156,9 @@ export const makeDerived = ({
     const seen = deliveredOn(path)
     const seenKeys = new Set(seen.map(key))
     const prefix = new Set(path.slice(0, foldOf(path)).map((t) => t.id))
-    const hooks = new Map(L.index(s, seen).map((e) => [e.id, e.hook]))
-    const readable = lore.length ? L.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! })) : []
+    const I = L()
+    const hooks = new Map(I.index(s, seen).map((e) => [e.id, e.hook]))
+    const readable = I.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! }))
     // The product's fold decides which rows exist (a keyed table is the newest row per key: a person re-rowed with what
     // a later scene added is one entry); the seen filter runs after it, so reading the newest row never brings a
     // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did). The
@@ -244,13 +245,14 @@ export const makeDerived = ({
         const before = once(given)
         const g1 = gated(path, before, state)
         const ds1 = deliveredOn(path, before)
-        const offered = L.offers(g1, ds1, [...events, ...last().post]).map(({ id, layer }) => ({ id, layer }))
+        const I = L()
+        const offered = I.offers(g1, ds1, [...events, ...last().post]).map(({ id, layer }) => ({ id, layer }))
         const unforced = offered.filter((d) => !forced.some((f) => f.id === d.id))
         // A window opens current+1; the unseen layers under it are read this turn, told like a lookup's (issue #9).
         // ponytail: a sibling's gate counts those lower layers as shown this turn (they are in base.read), the fresh
         // turn's did not, so a since/shown-gated window over unread layers can close on a reword; store the gate's own
         // deliveries on the turn if a card hits it.
-        const disclosures = once([...before, ...unforced.flatMap((d) => L.read(g1, ds1, d.id) ?? [])])
+        const disclosures = once([...before, ...unforced.flatMap((d) => I.read(g1, ds1, d.id) ?? [])])
         // The pinned entry is open with its forced layer and MUST be told, director or not.
         const open: Disclosure[] = [...forced, ...unforced]
         return { offered, disclosures, open }

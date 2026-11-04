@@ -2,7 +2,7 @@
 // document store: a row is an id and a JSON column, nothing is ever joined. The tables mirror the types. `player`: one
 // row, the Player (reading preferences: writing, language, asks, product toggles, snippets, and which persona it is on
 // each card). `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
-// default in its frame; a story names the one in force on it, `story.persona`). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `secret`:
+// default in its frame; a story names the one in force on it, `story.persona`). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `pack`: the player's writing packs (`Pack`), mounted per card by `Player.packs`. `secret`:
 // the key vault (provider providers.ts `Secret`), the only table holding key material; `provider`: the player's model
 // providers, each naming a secret by id; `routing`: one row, which (provider, model) each stage runs on; `names`: one row,
 // the model-name table last fetched from models.dev and its ETag (names.ts). Export of cards
@@ -22,7 +22,7 @@
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
-import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Hat, Pack } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
 import type { Facets } from "@effect-tavern/runtime/src/session.ts"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -33,6 +33,7 @@ const schema = `
 create table if not exists player (id integer primary key check (id = 1), json text not null);
 create table if not exists persona (id text primary key, name text not null, json text not null);
 create table if not exists hat (id text primary key, name text not null, json text not null);
+create table if not exists pack (id text primary key, name text not null, json text not null);
 create table if not exists secret (id text primary key, name text not null, json text not null);
 create table if not exists provider (id text primary key, name text not null, json text not null);
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
@@ -232,6 +233,7 @@ export const open = (asked: string) => {
       del: (id: string) => void q("delete from persona where id = ?").run(id),
     },
     hats: named<Hat>("hat"),
+    packs: named<Pack>("pack"),
     secrets: named<Secret>("secret"),
     providers: named<Provider>("provider"),
     /** Which (provider, model) runs each stage, one row; what it holds is decoded by the caller. */

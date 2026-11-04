@@ -198,6 +198,32 @@ const over = (data: Data, m: () => Model = model) =>
   )
   lib.personas.del("nun")
   assert.equal(lib.player.persona, undefined)
+  // A pack the same way: off every card it hung on, the others' mounts and order kept, an empty map unset; a card's view
+  // shows the mounted pack's quick inputs before the defaults, and an open session reads the row on its next request.
+  lib.packs.put({ id: "k", name: "K", snippets: [{ name: "kq", text: "Q" }] })
+  lib.packs.put({ id: "l", name: "L" })
+  lib.setPlayer({ ...lib.player, packs: { [chat.id]: ["l", "k"], other: ["k"] } })
+  assert.equal(
+    lib.view(chat.id).snippets.some((x) => x.name === "kq"),
+    true,
+  )
+  assert.equal(
+    lib.session(a).snippets.some((x) => x.name === "kq"),
+    true,
+  )
+  lib.packs.del("k")
+  assert.deepEqual(lib.player.packs, { [chat.id]: ["l"] })
+  assert.equal(
+    lib.view(chat.id).snippets.some((x) => x.name === "kq"),
+    false,
+  )
+  assert.equal(
+    lib.session(a).snippets.some((x) => x.name === "kq"),
+    false,
+  )
+  lib.packs.del("l")
+  assert.equal(lib.player.packs, undefined)
+  assert.deepEqual(lib.packs.list(), [])
 }
 
 // The vault: a value goes in once and comes back only as a hint (first six, last four; none of a short key), except on

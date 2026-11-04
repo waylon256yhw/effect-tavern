@@ -54,8 +54,10 @@ import {
   decodeFragments as frags,
   frame,
   head as headOf,
+  mounted,
   type Format,
   type Hat,
+  type Pack,
   type Player,
   type Snippet,
 } from "./fragment.ts"
@@ -70,7 +72,7 @@ import {
   type Turn as TurnOf,
 } from "./journal.ts"
 import * as Log from "./log.ts"
-import { key, makeLore, type Disclosure } from "./lore.ts"
+import { key, makeLore, type Disclosure, type Lore } from "./lore.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
 import { cap, decodeProducts, entryRef, fold, resolve, shapeSchema, type Product } from "./product.ts"
@@ -263,7 +265,7 @@ export type Facets = ReturnType<typeof facets>
 /** What a client draws a card by (server GET /card, GET /cards/<id>): read off the Card and the player layer alone, so
  *  the card page opens before any story of the card exists. Not the card: fragment bodies, guard lines and lore stay on
  *  the server (a ban is a prompt, to a player too). */
-export const cardView = (card: Card, player: Player) => {
+export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []) => {
   const f = facets(card) // once: the shelf row's facets and the head size are the same reading
   return {
     // its name and one line, the turn-heading reference, and its size as numbers. `input` is the card's default channel,
@@ -298,7 +300,7 @@ export const cardView = (card: Card, player: Player) => {
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
     // in author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
     // mark have nothing to do there
-    snippets: [...(player.snippets ?? []), ...snippets].filter(
+    snippets: [...(player.snippets ?? []), ...packs.flatMap((p) => p.snippets ?? []), ...snippets].filter(
       (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
     ),
     format: [...(player.format ?? []), ...format],
@@ -313,6 +315,7 @@ export const makeSession = ({
   players,
   persona,
   hat,
+  packs,
   policy: P = policyFor(),
 }: {
   card: Card
@@ -325,6 +328,7 @@ export const makeSession = ({
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
   persona?: (player: Player) => string | undefined // the persona in force on this story, read per request (library.ts)
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
+  packs?: () => readonly Pack[] // the library's packs, read per request; `Player.packs[card]` says which are mounted here
   // the fold boundary, a value or read on every fold (library.ts: the narrate model's window, so a routing edit is in
   // force from the next request); tests pass a small budget to fold short scripted prose
   policy?: Policy | (() => Policy)
@@ -344,9 +348,20 @@ export const makeSession = ({
         }
   }
   const rpg = makeCard(card.rules)
-  const L = makeLore<Paths, readonly string[]>(
-    card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) })),
-  )
+  const cardLore = card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) }))
+  let packed: readonly Pack[] | undefined // like `policy`: one read for a synchronous snapshot
+  let indexed: Lore<Paths, readonly string[]> | undefined // the same
+  const inForce = () => packed ?? mounted(player, card.id, packs?.() ?? [])
+  /** The lookup index: the card's lore and the mounted packs' entries. An entry's id carries its pack, a code lock:
+   *  the frame merges by id and deliveries are recorded by id, so none can land on a card's entry. */
+  const loreNow = () =>
+    makeLore<Paths, readonly string[]>([
+      ...cardLore,
+      ...inForce().flatMap((p) =>
+        (p.entries ?? []).map((e) => ({ id: `${p.id}/${e.id}`, layers: [e.text], unlock: () => 1 })),
+      ),
+    ])
+  const L = () => indexed ?? loreNow()
   const held = Log.hold<Turn>(store)
   const chain = (id: number | null) => Log.chain(held.log, id)
   const turnOf = (id: number) => Log.get(held.log, id)
@@ -355,14 +370,20 @@ export const makeSession = ({
   const policyOf = () => (typeof P === "function" ? P() : P)
 
   const wording = (id: string) => wordingOf(player, card, id)
-  const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
-  let products = resolveProducts()
+  /** The player's toggle over the mounted packs' over the card's. Resolved per read: a pack edit touches no session. */
+  const products = () =>
+    resolve(
+      defaultProducts(card.input ?? "act"),
+      card.products,
+      Object.assign({}, ...inForce().map((p) => p.products), player.products),
+    )
+  products() // a card's bad patch fails when the session opens, not on its first turn
   const question = (pr: Product) => questionOf(player, card, pr)
   /** Narrate blocks under the declared product's cap; a block of an undeclared id is kept as written (the Inspector's). */
   const capped = (bs: Readonly<Record<string, string>>) =>
     Object.fromEntries(
       Object.entries(bs).map(([id, v]) => {
-        const p = products.find((x) => x.id === id)
+        const p = products().find((x) => x.id === id)
         return [id, p ? cap(p.shape, v) : v]
       }),
     )
@@ -371,7 +392,7 @@ export const makeSession = ({
     rpg,
     L,
     lore: card.lore,
-    products: () => products,
+    products,
     policy: () => policy ?? policyOf(),
   })
   const project = (t: Turn): Node => derived.at(chain(t.id)).node()
@@ -386,7 +407,7 @@ export const makeSession = ({
   /** A stage's document: the frame at this state, the input and what a thought in it is, then the stage's own ask. */
   const ask = (state: State, input: Input, a: Ask) => {
     const M = modelFor(a.stage)
-    const layers = frame(layered(), card)
+    const layers = frame(layered(), card, inForce())
     const worn = M.hat === undefined ? undefined : hat?.(M.hat)
     return request(
       {
@@ -431,8 +452,9 @@ export const makeSession = ({
    *  one, or the one layer of a recalled product row. Already-seen ones deliver nothing. */
   const deliver = (s: Paths, seen: readonly Disclosure[], ids: readonly string[]): Disclosure[] => {
     const seenKeys = new Set(seen.map(key))
+    const I = L()
     return [...new Set(ids)]
-      .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (L.read(s, seen, id) ?? [])))
+      .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (I.read(s, seen, id) ?? [])))
       .filter((d) => !seenKeys.has(key(d)))
   }
 
@@ -649,7 +671,7 @@ export const makeSession = ({
       const fed = here.known()
       const sum = here.summary()
       // the narrate products on this turn: one ask line each in narrate's tail, each block cut off the reply
-      const penned = products.filter((p) => p.stage === "narrate" && p.on && (!p.when || holds(p.when, s1)))
+      const penned = products().filter((p) => p.stage === "narrate" && p.on && (!p.when || holds(p.when, s1)))
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
@@ -702,7 +724,7 @@ export const makeSession = ({
             fiction: headOf(card.fiction, { state: s1 }),
             history: narratorHistory(path, here.text, sum),
             summarized: sum !== undefined,
-            told: disclosures.map(here.text),
+            told: disclosures.map(here.text).filter(Boolean), // a sibling's reused read may name an entry since gone
             outcome: events,
             current: fed.current, // feed products other than notes: where the scene stands, as data
             must: told(open.filter((d) => brief.must.includes(d.id))),
@@ -753,14 +775,18 @@ export const makeSession = ({
         fired = open.filter((d) => c.fired.includes(d.id))
         violated = [...c.violated]
       }
-      // polish: code scans the final prose for the lexicon (the player's, then the card's); hit sentences go to one call
+      // polish: code scans the final prose for the lexicon (the player's, the mounted packs', then the card's); hit sentences go to one call
       // keyed by target id, and only the answers that differ from their sentence are spliced into the prose. Never on a
       // cut draft or the player's own prose (an edit), same as the correction. The other parts (reasoning) stand.
       const text = proseOf(reply)
       const targets =
         cut || from === "check" || player.writing?.polish === false
           ? []
-          : scan(text, [...(player.writing?.lexicon ?? []), ...(card.lexicon ?? [])])
+          : scan(text, [
+              ...(player.writing?.lexicon ?? []),
+              ...inForce().flatMap((p) => p.lexicon ?? []),
+              ...(card.lexicon ?? []),
+            ])
       if (targets.length) {
         const out = yield* obj(
           emit,
@@ -785,7 +811,7 @@ export const makeSession = ({
       // One call, one schema: product id → its shape, `answers` → the readout enums. The model sees the prose, Known
       // (notes so far), Current (other feed products) and the questions, never the numbers; the chosen options settle by
       // code, so replay never asks again. Caps are applied here, by code.
-      const asked = products.filter((p) => p.stage !== "narrate" && p.on && (!p.when || holds(p.when, s1)))
+      const asked = products().filter((p) => p.stage !== "narrate" && p.on && (!p.when || holds(p.when, s1)))
       const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
       const rec = yield* record(
         emit,
@@ -844,10 +870,12 @@ export const makeSession = ({
     /** Every node projected, and head: what a client opens with. */
     snapshot: (): Log.Snapshot<Node> => {
       policy = policyOf()
+      packed = inForce()
+      indexed = loreNow()
       try {
         return { nodes: [...held.log.nodes.values()].map(project), head: held.log.head, next: held.log.next }
       } finally {
-        policy = undefined
+        policy = packed = indexed = undefined
       }
     },
     /** The log as it stands: head, and every turn by id. */
@@ -867,7 +895,7 @@ export const makeSession = ({
     meta: cardView(card, given).meta,
     fiction: cardView(card, given).fiction,
     get snippets() {
-      return cardView(card, player).snippets
+      return cardView(card, player, inForce()).snippets
     },
     get format() {
       return cardView(card, player).format
@@ -880,7 +908,6 @@ export const makeSession = ({
      *  and the quick inputs follow from the next request on; nothing recorded changes. Written to the store if there is one. */
     setPlayer: (p: Player) => {
       player = p
-      products = resolveProducts()
       players?.write(p)
     },
     /** The player's turn: a child of `parent` (null for a root), every stage the card declares. */
@@ -938,7 +965,7 @@ export const makeSession = ({
      *  forum" kind of card (docs/card-reading-2.md §2). */
     demand: (nodeId: number, productId: string): Events => {
       const t = turnOf(nodeId)
-      const p = products.find((x) => x.id === productId)
+      const p = products().find((x) => x.id === productId)
       if (!p) throw new Error(`${productId}: not a product of this card`)
       return emitting((emit) =>
         Effect.gen(function* () {

@@ -12,7 +12,8 @@
 // that story's session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
 // the install's: the player layer (a write reaches every open session), personas, hats, providers and routing. A hat is the player's too, named by a
 // connection (`Model.hat`) and read from the table on every request the same way: an edit is in force from the
-// next request, and a deleted hat leaves the connection bare (the id resolves to nothing).
+// next request, and a deleted hat leaves the connection bare (the id resolves to nothing). A writing pack the same way:
+// a row `Player.packs[card]` mounts, read on every request; deleting it takes it off every card it hung on.
 // The model each stage runs on is the routing row's (provider, model) pair, the stage's own or the default, resolved
 // from the tables on every call the same way: a routing or provider edit is in force from the next request. A pair
 // that does not resolve (provider gone, disabled, no key, no endpoint) fails that request naming the provider. A stage
@@ -35,7 +36,7 @@ import {
   type Trace,
 } from "@effect-tavern/provider"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
-import { decodePlayer, type Player } from "@effect-tavern/runtime/src/fragment.ts"
+import { decodePlayer, mounted, type Player } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import {
@@ -229,7 +230,17 @@ export const library = ({
     if (!r) throw new Error(`no story ${id}`)
     const card = cards.get(r.card)
     const store = data.store<Logged>(id)
-    const session = makeSession({ card, player, model, store, players, persona: persona(id), hat, policy })
+    const session = makeSession({
+      card,
+      player,
+      model,
+      store,
+      players,
+      persona: persona(id),
+      hat,
+      packs: data.packs.list,
+      policy,
+    })
     const opened = { session, turn: makeTurn(session, (node, calls) => data.calls(id).add(node, calls)) }
     sessions.set(id, opened)
     return opened
@@ -307,10 +318,28 @@ export const library = ({
     /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player layer in force;
      *  throws on no card. */
     view: (card: string) => {
-      const { meta, ...rest } = cardView(cards.get(card), layer())
+      const p = layer()
+      const { meta, ...rest } = cardView(cards.get(card), p, mounted(p, card, data.packs.list()))
       return { ...meta, ...rest }
     },
     hats: data.hats,
+    packs: {
+      ...data.packs,
+      /** Gone from the table, and off every card it was mounted on. */
+      del: (id: string) => {
+        data.packs.del(id)
+        const p = layer()
+        if (Object.values(p.packs ?? {}).some((ids) => ids.includes(id))) {
+          const rest = Object.fromEntries(
+            Object.entries(p.packs!).flatMap(([card, ids]) => {
+              const kept = ids.filter((x) => x !== id)
+              return kept.length ? [[card, kept]] : []
+            }),
+          )
+          setPlayer({ ...p, packs: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key
+        }
+      },
+    },
     /** The vault as the wire lists it: never a value (that is `value`, one key on request). A provider naming a deleted secret has no key. */
     secrets: {
       list: () => data.secrets.list().map(secretView),
