@@ -570,6 +570,15 @@ const packs = [packB, packA]
   const overAsks = row("harness", { asks: [{ id: "product.notes", text: "BASE" }] })
   assert.equal(asked({ harness: overAsks }).text, "BASE")
   assert.equal(asked({ harness: overAsks }, cardAsks).text, "CARD") // the overlay under the card's
+  // the overlay's ask at its rank, under the card's product text; a pack's and the local row's over it
+  const cardText = { ...chat, products: [{ id: "notes", text: "CARD-TEXT" }] }
+  const ask = (text: string) => [{ id: "product.notes", text }]
+  assert.equal(asked({ harness: overAsks }, cardText).text, "CARD-TEXT")
+  assert.equal(
+    asked({ packs: [row("p", { asks: ask("PACK") })], local: here({ mounts: ["p"] }) }, cardText).text,
+    "PACK",
+  )
+  assert.equal(asked({ local: here({ asks: ask("LOCAL") }) }, cardText).text, "LOCAL")
   assert.equal(resolve(chat, { harness: overAsks }).asks["product.notes"], undefined)
   // the same row: its ask over its patch
   assert.equal(

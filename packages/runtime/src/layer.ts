@@ -427,7 +427,6 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     if (!stock.has(p.id) && card.products?.some((c) => c.id === p.id)) stock.set(p.id, { id: p.id, from: "harness" })
     patched("harness", p)
   }
-  for (const p of card.products ?? []) stock.set(p.id, { ...stock.get(p.id), ...p, from: "card" })
   /** An ask `product.<id>` is a text patch at its row's rank; on a product this card does not have it is nothing. */
   const reworded = (from: From, row: Partial<Layer>) => {
     for (const a of row.asks ?? []) {
@@ -436,6 +435,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     }
   }
   if (overlay) reworded("harness", overlay)
+  for (const p of card.products ?? []) stock.set(p.id, { ...stock.get(p.id), ...p, from: "card" })
   reworded("card", cardRow)
   for (const p of stock.values()) validate(p) // the card's own error stands: it fails when the session opens
   for (const { from, row } of mine) {
