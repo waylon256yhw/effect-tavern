@@ -6,13 +6,13 @@ import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import * as Log from "../src/log.ts"
 import type { Turn } from "../src/session.ts"
-import { prose, splitAside } from "../src/journal.ts"
+import { prose, split, splitter } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
 import { readStage } from "./script.ts"
 
 // ───────── Scripted model ─────────
-const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside"> = []
+const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside" | "asides" | "lt"> = []
 const warmths: string[] = [] // scripted readout answers; default "flat"
 const onCheck: Array<() => void> = [] // run inside the next check call, on the session's own path
 let n = 0
@@ -75,6 +75,10 @@ function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
         out = " …and the rest."
         break
       } // resumed after a cut
+      if (o.prompt.some((m) => fakeText(m).startsWith("Write no prose"))) {
+        out = `<<aside>> inner\nINNER#${n}` // a demanded narrate block
+        break
+      }
       const how = narrations.shift() ?? "plain"
       const mayReveal = o.prompt.some((m) => /^(MAY|MUST) reveal/.test(fakeText(m)))
       out = `PROSE#${++n}${how === "fire" && mayReveal ? " the sleeve tears, a crane tattoo" : ""}${how === "kill" ? " KILL" : ""}`
@@ -90,7 +94,11 @@ function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
         out += `.${" The road winds on.".repeat(12)} His knuckles went white. Her knuckles stayed white.`
         delay = 1
       }
-      if (how === "aside") out += ".\n\n<<aside>> 幕后\nBACKSTAGE KILL, a crane tattoo" // what check would flag, if it saw it
+      if (how === "aside") out += ".\n\n<<aside>> inner\nBACKSTAGE KILL, a crane tattoo" // what check would flag, if it saw it
+      // two declared blocks out of order and one undeclared, the delimiter split across deltas wherever it falls
+      if (how === "asides")
+        out += ".\n<<aside>> diary\nDIARY KILL\n<<aside>> inner\nINNER BLOCK\n<<aside>> stray\nSTRAY"
+      if (how === "lt") out += ".\n<<asides are prose>> and <b>"
       break
     }
     case "polish":
@@ -390,12 +398,22 @@ const program = Effect.gen(function* () {
   assert.deepEqual([since(i), ge.parent, prose(ge), ge.opening, ge.sibling], [[], null, "G2", g.turn.opening, "edit"])
   assert.equal(S.node(ge.id).state.bond, 8)
 
-  // A player action on a node: demand a product that is off (inner) over t3's scene. One record call, no new node, the
-  // answer kept on t3 beside the turn's own products; the player's toggle alone could have switched it on for every turn.
+  // A player action on a node: demand a product that is off (inner, a narrate product) over t3's scene. One prose call
+  // (narrate's view, t3's prose the last reply, the one block asked for), no new node, the answer kept on t3 beside the
+  // turn's own products; the player's toggle alone could have switched it on for every turn.
   const size = S.log.nodes.size
   const d = yield* go(S.demand(t3.id, "inner"))
-  assert.deepEqual(since(i), ["record"])
+  assert.deepEqual(since(i), ["narrate"])
+  const demanded = lastNarr()
+  const lastReply = demanded.findLastIndex((m) => m.role === "assistant")
+  assert.equal(msgText(demanded[lastReply]!), prose(t3))
+  assert.match(msgText(demanded[lastReply + 1]!), /^Write no prose/)
+  assert.match(str(demanded.slice(lastReply + 2)), /\ninner: What the character thought/)
   assert.ok(/^INNER#\d+$/.test(d.products.inner as string) && d.products.notes !== undefined)
+  // a record product demanded is still one record call
+  i = calls().length
+  yield* go(S.demand(t3.id, "options"))
+  assert.deepEqual(since(i), ["record"])
   assert.equal(S.log.nodes.size, size)
   assert.equal(S.node(t5.id).turn.products.inner, undefined)
   assert.equal(S.node(t3.id).turn.products.inner, d.products.inner) // the amended node is what the path sees
@@ -611,39 +629,89 @@ const program = Effect.gen(function* () {
   )
   assert.deepEqual([since(i), p4.end, /went white/.test(prose(p4))], [["narrate", "record"], "stopped", true])
 
-  // ───────── Aside: what narrate writes after the `<<aside>>` line is one aside part, never prose ─────────
+  // ───────── Narrate products: each `<<aside>> <id>` block is cut off the prose into products[id] ─────────
   // The fake streams eight characters a delta, so the nine-character delimiter always arrives split across two.
-  const A = makeSession({ card: full, player, model })
+  // `inner` is the harness's narrate product (switched on here), `diary` a card's; `stray` is declared by nobody.
+  const diary = {
+    id: "diary",
+    label: "日记",
+    text: "Her diary entry.",
+    shape: { kind: "text" as const },
+    stage: "narrate" as const,
+  }
+  const A = makeSession({
+    card: { ...full, products: [...(full.products ?? []), diary] },
+    player: { ...player, products: { ...player.products, inner: true } },
+    model,
+  })
+  /** The deltas of one action: prose text and product text by id. */
+  const live = (from: number) => {
+    const ds = events.slice(from).flatMap((e) => (e.kind === "delta" ? [e.part] : []))
+    const by: Record<string, string> = {}
+    for (const d of ds) if (d.type === "product-delta") by[d.id] = (by[d.id] ?? "") + d.text
+    return { text: ds.flatMap((d) => (d.type === "text-delta" ? [d.text] : [])), by }
+  }
   narrations.push("aside")
-  const e0 = events.length
+  let e0 = events.length
   i = calls().length
   const a1 = yield* go(A.act(null, { text: "hello" }))
   const ran = since(i)
-  const deltas = events
-    .slice(e0)
-    .flatMap((e) => (e.kind === "delta" && e.part.type === "text-delta" ? [e.part.text] : []))
-  assert.ok(deltas.join("").includes("<<aside>>") && !deltas.some((d) => d.includes("<<aside>>")))
-  assert.deepEqual(a1.reply.slice(1), [
-    { type: "aside", id: "aside", label: "幕后", text: "BACKSTAGE KILL, a crane tattoo" },
-  ])
-  assert.deepEqual([a1.reply[0]!.type, /^PROSE#\d+\.$/.test(prose(a1))], ["text", true])
+  // the ask: one instruction and one line per narrate product on, in narrate's tail; record is not asked for them
+  assert.match(str(lastNarr()), /<<aside>> <id>[^]*\ninner: What the character thought[^]*\ndiary: Her diary entry\./)
+  assert.ok(!/^(inner|diary): /m.test(str(prompts("record").at(-1)!)))
+  let l = live(e0)
+  assert.ok(!l.text.some((d) => d.includes("<<")) && /^PROSE#\d+\.\s*$/.test(l.text.join("")), l.text.join(""))
+  assert.equal(l.by.inner?.trim(), "BACKSTAGE KILL, a crane tattoo")
+  assert.deepEqual([a1.reply.length, a1.reply[0]!.type, /^PROSE#\d+\.$/.test(prose(a1))], [1, "text", true])
+  assert.equal(a1.products.inner, "BACKSTAGE KILL, a crane tattoo")
   // check saw the prose only: no KILL, no rewrite, nothing fired; record read the prose only
   assert.deepEqual(
     [ran.filter((p) => p === "narrate").length, ran.includes("check"), a1.violated, a1.fired],
     [1, true, [], []],
   )
   for (const phase of ["check", "record"]) assert.ok(!/BACKSTAGE|<<aside>>/.test(str(prompts(phase).at(-1)!)))
-  assert.equal(A.node(a1.id).turn, a1) // the snapshot carries the aside as stored
-  // the next turn's transcript carries a1's prose, not its aside
-  yield* go(A.act(a1.id, { text: "rest" }))
-  assert.ok(str(lastNarr()).includes(prose(a1)) && !/BACKSTAGE|<<aside>>/.test(str(lastNarr())))
-  // no delimiter: the very parts, untouched; a label is optional
-  const plain = [{ type: "text" as const, text: "a\n<<asides are prose>> b" }]
-  assert.equal(splitAside(plain), plain)
-  assert.deepEqual(splitAside([{ type: "text", text: "x\n<<aside>>\ny" }]), [
-    { type: "text", text: "x" },
-    { type: "aside", id: "aside", text: "y" },
-  ])
+  assert.equal(A.node(a1.id).turn, a1)
+  // several blocks in any order land under their ids, an undeclared one cut and kept too; the prose is clean
+  narrations.push("asides")
+  e0 = events.length
+  const a2 = yield* go(A.act(a1.id, { text: "rest" }))
+  assert.ok(str(lastNarr()).includes(prose(a1)) && !/BACKSTAGE/.test(str(lastNarr()))) // a1's block never goes back
+  assert.deepEqual(
+    [a2.products.diary, a2.products.inner, a2.products.stray, /^PROSE#\d+\.$/.test(prose(a2))],
+    ["DIARY KILL", "INNER BLOCK", "STRAY", true],
+  )
+  assert.deepEqual(a2.violated, []) // check never read DIARY KILL
+  l = live(e0)
+  assert.deepEqual(
+    [l.text.some((d) => d.includes("<<")), l.by.diary?.trim(), l.by.inner?.trim(), l.by.stray],
+    [false, "DIARY KILL", "INNER BLOCK", "STRAY"],
+  )
+  yield* go(A.act(a2.id, { text: "on" }))
+  assert.ok(!/DIARY|INNER BLOCK|STRAY/.test(str(lastNarr()))) // the transcript; the ask itself names the delimiter
+  // a line that starts like the delimiter but is not one is held back, then released as prose
+  narrations.push("lt")
+  e0 = events.length
+  const a3 = yield* go(A.act(a2.id, { text: "rest" }))
+  l = live(e0)
+  assert.ok(
+    l.text.join("").endsWith(".\n<<asides are prose>> and <b>") && prose(a3).endsWith("<<asides are prose>> and <b>"),
+  )
+  assert.deepEqual(l.by, {})
+  // no narrate product on: no instruction at all
+  assert.ok(!/<<aside>>/.test(str(prompts("narrate")[0]!))) // c0's, inner off
+  // the cutter alone: no delimiter, the very parts; a bare `<<aside>>` is `aside`; a chunk boundary anywhere holds
+  const kept = [{ type: "text" as const, text: "a\n<<asides are prose>> b" }]
+  assert.equal(split(kept).reply, kept)
+  assert.deepEqual(split([{ type: "text", text: "x\n<<aside>>\ny" }]), {
+    reply: [{ type: "text", text: "x" }],
+    blocks: { aside: "y" },
+  })
+  const cut = splitter()
+  const joined = (ps: { id?: string; text: string }[]) =>
+    ps.reduce<Record<string, string>>((m, p) => ({ ...m, [p.id ?? ""]: (m[p.id ?? ""] ?? "") + p.text }), {})
+  // one character a delta: the held `<` at the end comes out only when the stream ends
+  assert.deepEqual(joined("p\n<<aside>> inner\nq\n<".split("").flatMap((c) => cut(c))), { "": "p\n", inner: "q\n" })
+  assert.deepEqual(cut("", true), [{ id: "inner", text: "<" }])
   // A real recall row in the folded prefix remains pinnable.
   yield* go(S.act(t5.id, { text: "wait", pin: `people@${t1.id}#0` }))
   assert.match(str(lastNarr()), /MUST reveal: name=Li, note=/)

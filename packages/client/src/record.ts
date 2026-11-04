@@ -12,7 +12,7 @@
 // the versions, the scene.
 import { drawn, type Check, type Field, type Rules, type State } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
-import type { Product, Shape } from "@effect-tavern/runtime/src/product.ts"
+import { kindOf, type Product, type Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import type { CardView } from "./store.ts"
@@ -99,17 +99,8 @@ export const fieldChanged = (rules: Rules | undefined, node: Node, prev: Node | 
  *  (store.ts CardView). */
 export type Declared = Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall">
 
-/** A product's kind (docs/theater-brief.md §1), read off what it already declares: the model reads it back (`feed` or
- *  `recall`) and it is replaced or merged by key → world (a value of what is now: the readings page, the ledger);
- *  read back and appended → context (the model's chronicle: the Inspector only); never read back → theater (for the
- *  player alone: inline under its turn). The fold default is product.ts's: append for a list, latest otherwise.
- *  `options` falls under theater by these rules; it has its own container, so the theater drawers skip it. */
-export const kindOf = (p: Pick<Declared, "shape" | "fold" | "feed" | "recall">): "world" | "context" | "theater" =>
-  !p.feed && !p.recall
-    ? "theater"
-    : (p.fold ?? (p.shape.kind === "list" ? "append" : "latest")) === "append"
-      ? "context"
-      : "world"
+/** A product's kind (docs/theater-brief.md §1): one definition, the server's export reads it too. */
+export { kindOf }
 
 /** A value this turn: present, and not an empty list or table (`[]` is "no item this turn"); a text or record counts
  *  by presence. */

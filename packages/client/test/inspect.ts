@@ -10,6 +10,7 @@ import {
   regions,
   rowHits,
   rows,
+  settledAt,
   totals,
   type Call,
 } from "../src/inspect.ts"
@@ -60,6 +61,16 @@ assert.deepEqual(shape(stopped), [
   ["narrate", "stopped"],
   ["record", "ok"],
 ])
+// a narrate after record is a demanded block (a narrate-stage product), not a second draft: no tray, and the stop
+// stays on the prose's narrate
+const demanded = rows([call("narrate"), call("check"), call("record"), call("narrate")], { end: "stopped" })
+assert.deepEqual(shape(demanded), [
+  ["narrate", "stopped"],
+  ["check", "ok"],
+  ["record", "ok"],
+  ["narrate", "ok"],
+])
+assert.equal(settledAt(demanded), 2)
 assert.ok(groups(stopped).every((g) => !isTray(g)))
 
 const bp = { anthropic: { cacheControl: { type: "ephemeral" } } }

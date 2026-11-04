@@ -524,29 +524,36 @@ export const Demand = (props: { node: Node }) => {
 
 /** A turn's 小剧场 between its prose and its row: each theater product the node has an answer for (on by default, or
  *  demanded), drawn by its shape, with one key that asks for it again (the same id demanded: history.ts replaces it in
- *  place). The key shows the way the row's own keys do (reader.css `.acts`). */
-export const Theater = (props: { node: Node }) => {
+ *  place). The key shows the way the row's own keys do (reader.css `.acts`). The draft draws its narrate blocks here
+ *  too while they stream (store.ts `Draft.products`): no node yet, so no key. */
+/** A streaming block's edges, as the landed one will have them (journal.ts `split` trims): no height jump when it lands. */
+const trimmed = (v: unknown) => (typeof v === "string" ? v.trim() : v)
+export const Theater = (props: { products: Readonly<Record<string, unknown>>; node?: Node }) => {
   const view = read(card)
   const busy = read(working)
-  const answered = () => theater(view()?.products ?? []).filter((p) => props.node.turn.products[p.id] !== undefined)
+  const answered = () => theater(view()?.products ?? []).filter((p) => props.products[p.id] !== undefined)
   return (
     <For each={answered()} keyed={(p) => p.id}>
       {(p) => (
         <div class="product theater">
           <div class="head">
             <span class="plabel">{p().label ?? p().id}</span>
-            <span class="acts">
-              <button
-                class="icon"
-                aria-label={t("readings.again")}
-                disabled={busy()}
-                onClick={() => (dismiss(), turn.demand(props.node.id, p().id))}
-              >
-                <Die />
-              </button>
-            </span>
+            <Show when={props.node}>
+              {(n) => (
+                <span class="acts">
+                  <button
+                    class="icon"
+                    aria-label={t("readings.again")}
+                    disabled={busy()}
+                    onClick={() => (dismiss(), turn.demand(n().id, p().id))}
+                  >
+                    <Die />
+                  </button>
+                </span>
+              )}
+            </Show>
           </div>
-          <Shaped shape={p().shape} value={props.node.turn.products[p().id]} />
+          <Shaped shape={p().shape} value={trimmed(props.products[p().id])} />
         </div>
       )}
     </For>

@@ -67,15 +67,20 @@ const answer = (o: FakeCall) => {
         ],
         scene: { place: `苦竹岭茶亭 ${n}`, present: [{ name: "裴青舟", mood: "calm" }] },
         people: [],
-        inner: `裴青舟垂眼看着石桌上的雨水，心里暗自思量你究竟是从何处得知李鹤的名字。`,
       }
       return { ...defaultAnswer(doc, canned), delay: demo ? 1000 : 0 }
     }
-    case "narrate":
+    case "narrate": {
+      // inner is a narrate-stage product: asked for on the turn (an `inner:` ask line) it follows the prose as a block;
+      // demanded on a node ("Write no prose") the block is the whole answer
+      const inner = "裴青舟垂眼看着石桌上的雨水，心里暗自思量你究竟是从何处得知李鹤的名字。"
+      if (text.includes("Write no prose")) return { text: `<<aside>> inner\n${inner}`, delay: 20 }
+      const block = /^inner: /m.test(text) ? `\n<<aside>> inner\n${inner}` : ""
       return {
-        text: `第${++n}段。${text.includes("Previous draft broke") ? "二稿。" : demo ? "一稿。" : ""}${"雨后的苦竹林里雾气未散，竹叶上的水珠顺着亭檐一滴滴落在青石板上。"}${"裴青舟按着乌木剑鞘站在三步开外，目光静静地落在你腰间的旧短剑上。".repeat(demo ? 6 : 2)}`,
+        text: `第${++n}段。${text.includes("Previous draft broke") ? "二稿。" : demo ? "一稿。" : ""}${"雨后的苦竹林里雾气未散，竹叶上的水珠顺着亭檐一滴滴落在青石板上。"}${"裴青舟按着乌木剑鞘站在三步开外，目光静静地落在你腰间的旧短剑上。".repeat(demo ? 6 : 2)}${block}`,
         delay: demo ? 120 : 20,
       }
+    }
     default: // decide ends, polish hands every marked sentence back unchanged (a pass-through, so the prose stands)
       return defaultAnswer(doc)
   }

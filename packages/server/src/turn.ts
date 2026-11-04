@@ -19,6 +19,7 @@ export interface Draft {
   parent: Id | null
   input: Input
   text: string
+  products?: Record<string, string> // narrate blocks so far, by id
   prev?: string
   fresh?: boolean // the line is nowhere else (an act): a client that attaches and sees it fail puts it back in the box
 }
@@ -75,11 +76,18 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
     if (e.kind === "stage") {
       r.phase = e.phase
       // each draft starts over: a narrate after check is the rewrite, the first one kept as `prev`
-      if (e.phase === "narrate" && r.draft?.text) r.draft = { ...r.draft, text: "", prev: r.draft.text }
+      if (e.phase === "narrate" && r.draft?.text) {
+        const { products: _, ...d } = r.draft // the rewrite writes its own blocks
+        r.draft = { ...d, text: "", prev: r.draft.text }
+      }
     }
     if (e.kind === "delta" && e.part.type === "text-delta") {
       r.narrating = true // reasoning is not prose: the client counts the same
       if (r.draft) r.draft = { ...r.draft, text: r.draft.text + e.part.text }
+    }
+    if (e.kind === "delta" && e.part.type === "product-delta" && r.draft) {
+      const { id, text } = e.part
+      r.draft = { ...r.draft, products: { ...r.draft.products, [id]: (r.draft.products?.[id] ?? "") + text } }
     }
   }
   return {

@@ -340,6 +340,7 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
           />
         </div>
       </div>
+      <Theater products={props.d.products ?? {}} />
       <Show when={done()}>
         <footer class="actions">
           <span class="record-pill" role="status" aria-label={t(waiting[props.phase!]!)}>
@@ -493,7 +494,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
       <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={done} />
       </Show>
-      <Theater node={props.node} />
+      <Theater products={props.node.turn.products} node={props.node} />
       {/* the turn's row (#101): the Record pill (a ledger to open), 小剧场, the version count, "stopped"; then, at the right end, this turn's
           actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it
           is over the section, a touch screen always (reader.css) */}

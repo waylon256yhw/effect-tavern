@@ -1,3 +1,4 @@
+import { splitter } from "@effect-tavern/runtime/src/journal.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch, untrack } from "solid-js"
 import { read } from "./bridge.ts"
@@ -11,6 +12,7 @@ import {
   regions,
   rowHits,
   rows,
+  settledAt,
   textOf,
   totals,
   type Call,
@@ -66,6 +68,21 @@ const Marked = (props: { text: string; q: string }) => {
 /** A row's head: what the stage decided, from the call's answer and the node's facts (never a written summary). */
 const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
   const out = () => props.row.call.out as Record<string, unknown>
+  // narrate: the prose's first line and the blocks it opened (journal.ts `splitter`); a demanded block has no prose,
+  // so its own first line stands in
+  const cut = () => {
+    const pieces = splitter()(typeof props.row.call.out === "string" ? props.row.call.out : "", true)
+    const prose = pieces
+      .filter((x) => x.id === undefined)
+      .map((x) => x.text)
+      .join("")
+      .trim()
+    const first = pieces.find((x) => x.id !== undefined)?.text.trim() ?? ""
+    return {
+      blocks: [...new Set(pieces.flatMap((x) => (x.id === undefined ? [] : [x.id])))],
+      line: (prose || first).split("\n")[0],
+    }
+  }
   const ids = (v: unknown) => (Array.isArray(v) ? (v as string[]).join(", ") : "")
   // decide: the nth beat of the turn; its judged check is the one among the beats with a chance up to it
   const beats = () => props.node.turn.beats
@@ -136,7 +153,10 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         <Show when={props.row.status === "stopped"}>
           <span class="pill bad">{t("common.stopped")}</span>
         </Show>
-        <span class="dprose">{(typeof props.row.call.out === "string" ? props.row.call.out : "").split("\n")[0]}</span>
+        <For each={cut().blocks} keyed={(id) => id}>
+          {(id) => <span class="pill">{id()}</span>}
+        </For>
+        <span class="dprose">{cut().line}</span>
       </Match>
       <Match when={props.row.phase === "check"}>
         <Show
@@ -342,7 +362,10 @@ export const Inspect = (props: { id: Id }) => {
     trows()
       .slice(0, trows().indexOf(r))
       .filter((x) => x.phase === r.phase).length
-  const lastNarrate = () => trows().findLast((r) => r.phase === "narrate")
+  const lastNarrate = () =>
+    trows()
+      .slice(0, settledAt(trows()))
+      .findLast((r) => r.phase === "narrate")
   // the one open step, by its index in trows(): the reader's pick holds on the node it was made on; elsewhere the
   // last narrate is open. undefined: every step closed
   const [picked, setPicked] = createSignal<{ id: Id; index: number | undefined }>()

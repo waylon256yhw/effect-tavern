@@ -33,6 +33,17 @@ const back = L.hold<N>(data.store<N>(story))
 assert.deepEqual(L.snapshot(back.log), { nodes: [{ id: 0, parent: null, text: "r" }], head: 0, next: 2 })
 assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
 assert.throws(() => data.store<N>(99).read(), /no story 99/)
+// a node written before #76 §二 holds an `aside` part: read back without it
+back.commit(
+  L.amend(back.log, 0, {
+    reply: [
+      { type: "text", text: "p" },
+      { type: "aside", text: "a" },
+    ],
+  }),
+)
+assert.deepEqual(data.store<N>(story).read()!.nodes[0]!.reply, [{ type: "text", text: "p" }])
+back.commit(L.amend(back.log, 0, { reply: undefined }))
 
 // Calls: filed under a node in order, read back by node; gone with the node, and with the story.
 const trace = data.calls(story)

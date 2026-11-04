@@ -18,18 +18,27 @@ export interface Row {
   draft?: number // narrate and check: which draft; set only when the turn had two
 }
 
+/** Where the prose's calls end: the first polish or record (the whole list when neither ran). A narrate after it is a
+ *  demanded block (a narrate-stage product asked for later, session.ts `demand`), not a draft of the prose. */
+export const settledAt = (calls: readonly { phase: Phase }[]): number => {
+  const i = calls.findIndex((c) => c.phase === "polish" || c.phase === "record")
+  return i === -1 ? calls.length : i
+}
+
 export const rows = (calls: readonly Call[], turn: Pick<Turn<unknown>, "end">): Row[] => {
   let draft = 0
-  const narrates = calls.filter((c) => c.phase === "narrate").length
+  const settled = settledAt(calls)
+  const narrates = calls.filter((c, i) => c.phase === "narrate" && i < settled).length
   return calls.map((c, i) => {
-    if (c.phase === "narrate") draft++
+    const drafting = c.phase === "narrate" && i < settled
+    if (drafting) draft++
     const status: Status =
       c.phase === "check" && calls[i + 1]?.phase === "narrate"
         ? "failed"
-        : c.phase === "narrate" && draft === narrates && turn.end === "stopped"
+        : drafting && draft === narrates && turn.end === "stopped"
           ? "stopped"
           : "ok"
-    const drafted = narrates > 1 && (c.phase === "narrate" || c.phase === "check")
+    const drafted = narrates > 1 && i < settled && (c.phase === "narrate" || c.phase === "check")
     return { phase: c.phase, status, call: c, ...(drafted && { draft }) }
   })
 }

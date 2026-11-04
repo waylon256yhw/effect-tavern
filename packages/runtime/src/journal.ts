@@ -30,7 +30,7 @@ export interface Turn<B> {
   adjust?: readonly (typeof Effect_.Type)[] // the player's field edits on this node, applied last in the fold; replayed like any effect
   violated: readonly string[]
   sibling?: "swipe" | "reword" | "edit" // which action made this sibling; absent on a player's own turn
-  products: Readonly<Record<string, unknown>> // record's answers by product id, shaped by the card (src/product.ts); `notes` is one
+  products: Readonly<Record<string, unknown>> // by id, shaped by the card (src/product.ts): record's answers, narrate's blocks; `notes` is one
 }
 /** The notes product, the compression source: this turn's sentence, as the one-item list every fold joins. A library
  *  written before #82 holds a list per turn; it reads the same. */
@@ -45,20 +45,74 @@ export const textOf = (parts: readonly Part[]): string =>
     .map((p) => p.text)
     .join("")
 export const prose = <B>(t: Turn<B>): string => textOf(t.reply)
-/** The first `<<aside>>` line splits the prose (see Part): the text before it is the one text part, in the first text
- *  part's place; everything after it is one aside part, last. No such line: the parts as given. */
-export const splitAside = (parts: readonly Part[]): readonly Part[] => {
+// The narrate stage's products (product.ts `stage`): after the prose, each block opens on a line `<<aside>> <id>` and
+// runs to the next such line or the end. One cutter for both faces: `splitter` takes the stream as it comes (the live
+// split is presentation only), `split` runs it over the landed reply, which is the truth.
+const DELIM = "<<aside>>"
+/** The block id a whole line opens, or undefined when it is not a delimiter; a bare `<<aside>>` opens `aside`. */
+const opens = (line: string): string | undefined => {
+  const m = /^[ \t]*<<aside>>(.*)$/.exec(line.replace(/\r?\n$/, ""))
+  return m ? m[1]!.trim().split(/\s+/)[0] || "aside" : undefined
+}
+export type Piece = { id?: string; text: string }
+/** Text in, pieces out: prose (no id) or a block's text (its id). The delimiter line never comes out; a line start that
+ *  could still become one (`<<as`) is held until it resolves: at its newline, once it no longer can, or at `end`. */
+export const splitter = () => {
+  let id: string | undefined // the block being written; undefined: still the prose
+  let held = "" // the current line's start while it may be a delimiter
+  let start = true // at a line start
+  return (chunk: string, end = false): Piece[] => {
+    const out: Piece[] = []
+    let free = ""
+    const flush = () => {
+      if (free) out.push(id === undefined ? { text: free } : { id, text: free })
+      free = ""
+    }
+    const settle = () => {
+      const o = opens(held)
+      if (o === undefined) free += held
+      else {
+        flush()
+        id = o
+      }
+      held = ""
+    }
+    for (const c of chunk) {
+      if (!start) {
+        free += c
+        start = c === "\n"
+        continue
+      }
+      held += c
+      const t = held.replace(/^[ \t]*/, "")
+      if (c === "\n") settle()
+      else if (!DELIM.startsWith(t) && !t.startsWith(DELIM)) {
+        free += held // it can no longer be a delimiter: the line is prose (or block text) to its end
+        held = ""
+        start = false
+      }
+    }
+    if (end && held) settle()
+    flush()
+    return out
+  }
+}
+/** The landed reply cut: the text before the first delimiter is the prose, one text part in the first text part's
+ *  place; each block's text, trimmed, is the product under its id (the same id twice joins). No delimiter: the parts
+ *  as given. */
+export const split = (parts: readonly Part[]): { reply: readonly Part[]; blocks: Readonly<Record<string, string>> } => {
   const all = textOf(parts)
-  const m = /^[ \t]*<<aside>>(.*)$/m.exec(all)
-  if (!m) return parts
-  const label = m[1]!.trim()
+  const blocks: Record<string, string> = {}
+  let prose = ""
+  for (const p of splitter()(all, true))
+    if (p.id === undefined) prose += p.text
+    else blocks[p.id] = [blocks[p.id], p.text.trim()].filter(Boolean).join("\n\n")
+  if (prose === all) return { reply: parts, blocks }
   let first = true
-  return [
-    ...parts.flatMap((p): Part[] =>
-      p.type !== "text" ? [p] : first ? ((first = false), [{ ...p, text: all.slice(0, m.index).trimEnd() }]) : [],
-    ),
-    { type: "aside", id: "aside", ...(label ? { label } : {}), text: all.slice(m.index + m[0].length).trim() }, // one per reply
-  ]
+  const reply = parts.flatMap((p): Part[] =>
+    p.type !== "text" ? [p] : first ? ((first = false), [{ ...p, text: prose.trimEnd() }]) : [],
+  )
+  return { reply, blocks }
 }
 
 export const deliveredIn = <B>(t: Turn<B>): Disclosure[] => [...t.read, ...t.fired]
