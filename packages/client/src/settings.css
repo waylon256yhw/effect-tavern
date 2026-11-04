@@ -1154,6 +1154,166 @@
   line-height: var(--leading-prose);
 }
 
+/* ── writing packs ── */
+.pack-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pack-mod {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.name-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.name-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--control);
+  padding: 0 10px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+.name-chip:focus-within {
+  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
+}
+.hole-key {
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  user-select: none;
+}
+.name-chip input {
+  width: 6.5rem;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-footnote);
+  outline: none;
+}
+.name-chip input::placeholder {
+  color: var(--ink-3);
+}
+.pack-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pack-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease);
+}
+.pack-row:hover {
+  background: var(--alpha-2);
+}
+.pack-row[data-off="true"] .row-text {
+  opacity: 0.45;
+}
+.pack-row .row-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-footnote);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.item-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: var(--ink);
+  font-size: var(--text-footnote);
+  max-width: 17rem;
+  transition: background var(--dur-2) var(--ease);
+}
+.item-pill:hover {
+  background: var(--alpha-2);
+}
+.item-pill > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-pill .preview {
+  color: var(--ink-3);
+  font-size: var(--text-caption);
+}
+.item-pill .dot-on {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.pack-drawer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--alpha-1);
+  color: var(--ink);
+  text-align: left;
+  transition: background var(--dur-2) var(--ease);
+}
+.pack-drawer-row:hover {
+  background: var(--alpha-2);
+}
+.pack-drawer-row .d-name {
+  flex: none;
+  max-width: 9rem;
+  font-weight: 550;
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pack-drawer-row .d-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.settings .btn.danger {
+  color: var(--danger);
+}
+.settings .modal-foot .spacer {
+  flex: 1;
+}
+
 /* desktop: the three cards on the canvas under .shell-top, replacing the card sidebar and stage card */
 @media (min-width: 72rem) {
   .settings {

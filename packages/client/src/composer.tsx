@@ -10,6 +10,7 @@ import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { roam } from "./controls.tsx"
+import { fillKnown } from "./pack.ts"
 import {
   acting,
   aside,
@@ -89,7 +90,9 @@ export const Composer = () => {
     const a = el?.selectionStart ?? v.length
     const b = el?.selectionEnd ?? a
     const inner = v.slice(a, b)
-    put(v.slice(0, a) + s.text + inner + (s.after ?? "") + v.slice(b), a + s.text.length + inner.length, note)
+    const before = fillKnown(s.text, view()?.names)
+    const after = s.after ? fillKnown(s.after, view()?.names) : ""
+    put(v.slice(0, a) + before + inner + after + v.slice(b), a + before.length + inner.length, note)
   }
   const Items = (p: { of: readonly Snippet[] }) => (
     <For each={p.of} keyed={(s) => s.name}>

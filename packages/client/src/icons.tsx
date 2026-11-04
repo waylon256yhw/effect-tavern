@@ -43,6 +43,7 @@ export { default as Home } from "~icons/ph/books" // home's placeholder mark (ho
 export { default as Card } from "~icons/ph/cards" // a card page's tab icon (shell.tsx)
 export { default as Chat } from "~icons/ph/chat-circle" // the reader's tab icon (shell.tsx)
 export { default as Template } from "~icons/ph/brackets-curly"
+export { default as Package } from "~icons/ph/package"
 export { default as User } from "~icons/ph/user"
 export { default as Minus } from "~icons/ph/minus"
 export { default as Eye } from "~icons/ph/eye"

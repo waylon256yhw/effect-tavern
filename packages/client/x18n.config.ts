@@ -34,6 +34,7 @@ export default {
       "settings.routing",
       "settings.templates",
       "settings.personas",
+      "settings.packs",
       "app.phase*",
       "card.spec*",
       "card.facet*",

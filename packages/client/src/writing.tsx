@@ -8,11 +8,12 @@
 // in a modal). Every edit is one `PUT /player` on change (blur or Enter), as the settings commit; nothing is
 // optimistic. switches.ts, requirements.ts, lexicon.ts and inserts.ts hold the pure parts (tested).
 import type { Format, Player, Snippet, Writing } from "@effect-tavern/runtime/src/fragment.ts"
+import { unfilled } from "@effect-tavern/runtime/src/names.ts"
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Modal, newId, Switch } from "./controls.tsx"
-import { Back, Clue, Close, Export, Import, Snippets as Plus } from "./icons.tsx"
+import { Back, Clue, Close, Export, Import, Next, Snippets as Plus } from "./icons.tsx"
 import {
   caretOf,
   defaultsOf,
@@ -24,15 +25,22 @@ import {
   type InsertDraft,
 } from "./inserts.ts"
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
+import { cardNameKeys, orderedPacks, toggleMount, withCardName, withoutTheater, withTheater } from "./pack.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
+import { openSettings } from "./settings.tsx"
 import { close, open } from "./pages.ts"
-import { activeOf, card, player, registry, stories, tabs } from "./store.ts"
+import { card, packs, player } from "./store.ts"
 import { kindOf } from "./record.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
-import { fetchCard, fetchCardOf, putPlayer } from "./wire.ts"
+import { putPlayer, refreshActiveCard } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
 
 export const openWriting = () => open("writing")
+
+const putAndRefresh = async (edit: (p: Player) => Player) => {
+  await putPlayer(edit)
+  await refreshActiveCard()
+}
 
 type Tab = "switches" | "prose" | "polish" | "inputs"
 const TABS: [Tab, Key][] = [
@@ -70,6 +78,7 @@ export const WritingPage = () => {
             </For>
           </nav>
         </header>
+        <MountStrip />
         <div class="wbody">
           <Show when={tab() === "switches"}>
             <Switches />
@@ -89,6 +98,70 @@ export const WritingPage = () => {
   )
 }
 
+/** Per-card pack mounting chips (mounted first in priority order) and derived proper-noun inputs (`holes ∪ names \ {"user"}`). */
+const MountStrip = () => {
+  const view = read(card)
+  const me = read(player)
+  const allPacks = read(packs)
+  const cardId = () => view()?.id ?? ""
+  const mountedIds = () => me()?.packs?.[cardId()] ?? []
+  const chips = () => orderedPacks(allPacks(), mountedIds())
+  const nameKeys = () => cardNameKeys(view()?.holes, view()?.names)
+  return (
+    <div class="wmount">
+      <div class="wmount-row">
+        <span class="wmount-label">{t("settings.packs")}</span>
+        <For each={chips()} keyed={(p) => p.id}>
+          {(p) => (
+            <button
+              type="button"
+              class="pack-chip"
+              aria-pressed={mountedIds().includes(p().id) ? "true" : "false"}
+              disabled={!me() || !cardId()}
+              onClick={() => {
+                const cid = cardId()
+                const pid = p().id
+                void putAndRefresh((pl) => toggleMount(pl, cid, pid))
+              }}
+            >
+              <span>{p().name}</span>
+            </button>
+          )}
+        </For>
+        <button type="button" class="btn sm ghost" onClick={() => openSettings("packs")}>
+          <span>{t("packs.manage")}</span> <Next />
+        </button>
+      </div>
+      <Show when={nameKeys().length > 0}>
+        <div class="wmount-row">
+          <span class="wmount-label">{t("packs.names")}</span>
+          <span class="tag mono">{`{{user}} = ${view()?.names?.user ?? ""}`}</span>
+          <For each={nameKeys()} keyed={(k) => k}>
+            {(k) => (
+              <label class="name-chip" data-unfilled={view()?.holes?.includes(k()) ? "true" : "false"}>
+                <span class="hole-key mono">{`{{${k()}}}`}</span>
+                <input
+                  value={view()?.names?.[k()] ?? ""}
+                  placeholder={t("packs.unfilled")}
+                  aria-label={k()}
+                  disabled={!me() || !cardId()}
+                  onChange={(e) => {
+                    const cid = cardId()
+                    const key = k()
+                    const val = e.currentTarget.value
+                    void putAndRefresh((pl) => withCardName(pl, cid, key, val))
+                  }}
+                  onKeyDown={leave}
+                />
+              </label>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 /** The player layer's `writing` rewritten by `f`; nothing until the layer has arrived. */
 const useWriting = () => {
   const me = read(player)
@@ -100,9 +173,16 @@ const useWriting = () => {
 
 // ───────── 开关与记录: the four switches, then the record products ─────────
 const BUILTIN_PRODUCTS = new Set(["notes", "options", "inner"])
+interface TheaterDraft {
+  id: string
+  isNew: boolean
+  label: string
+  text: string
+}
 const Switches = () => {
   const { me, write } = useWriting()
   const view = read(card)
+  const allPacks = read(packs)
   const w = () => me()?.writing
   const set = (key: SwitchKey, value: string | boolean) => write((x) => ({ ...x, [key]: pressing(key, x, value) })) // undefined leaves the JSON: unset
   const reset = () => write(({ pov: _p, echo: _e, agency: _a, verbosity: _v, ...rest }) => rest)
@@ -119,6 +199,50 @@ const Switches = () => {
     })
   }
   const lit = () => products().filter((p) => onOf(p)).length
+  const [editingTh, setEditingTh] = createSignal<TheaterDraft | null>(null)
+  let thDlg!: HTMLDialogElement
+  const openNewTheater = () => {
+    setEditingTh({ id: newId("th"), isNew: true, label: "", text: "" })
+    thDlg.showModal()
+  }
+  const openEditTheater = (p: { id: string; label?: string; text?: string }) => {
+    setEditingTh({ id: p.id, isNew: false, label: p.label ?? p.id, text: p.text ?? "" })
+    thDlg.showModal()
+  }
+  const saveTheater = () => {
+    const d = editingTh()
+    if (!d || !d.label.trim() || !d.text.trim()) return
+    const item = {
+      id: d.id,
+      label: d.label.trim(),
+      text: d.text.trim(),
+      ...(d.isNew ? { on: false } : {}),
+    }
+    void putAndRefresh((p) => {
+      const list = withTheater(p.theaters, item)
+      return list.length ? { ...p, theaters: list } : p
+    })
+    thDlg.close()
+  }
+  const removeTheater = () => {
+    const d = editingTh()
+    if (!d) return
+    void putAndRefresh(({ theaters, ...p }) => {
+      const list = withoutTheater(theaters, d.id)
+      return list.length ? { ...p, theaters: list } : p
+    })
+    thDlg.close()
+  }
+  const sourceOf = (id: string): string | undefined => {
+    const cid = view()?.id ?? ""
+    const mountedIds = me()?.packs?.[cid] ?? []
+    for (let i = mountedIds.length - 1; i >= 0; i--) {
+      const pk = allPacks().find((x) => x.id === mountedIds[i])
+      if (pk?.theaters?.some((t) => t.id === id)) return pk.name
+    }
+    if (!BUILTIN_PRODUCTS.has(id) && !me()?.theaters?.some((t) => t.id === id)) return view()?.title
+    return undefined
+  }
   /** One of the three kinds (record.ts `kindOf`) under its interface word; a kind the card has none of is not drawn. */
   const Group = (props: { kind: ReturnType<typeof kindOf>; title: string }) => {
     const of = () => products().filter((p) => kindOf(p) === props.kind)
@@ -126,15 +250,26 @@ const Switches = () => {
       <Show when={of().length}>
         <h4 class="prod-kind">{props.title}</h4>
         <For each={of()} keyed={(p) => p.id}>
-          {(p) => (
-            <div class="prod-item">
-              <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
-              <Show when={!BUILTIN_PRODUCTS.has(p().id) && view()?.title}>{(t) => <span class="tag">{t()}</span>}</Show>
-              <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
-                <Switch on={onOf(p())} label={p().label ?? p().id} onFlip={() => flip(p())} />
-              </Show>
-            </div>
-          )}
+          {(p) => {
+            const editable = () => props.kind === "theater" && p().shape.kind === "text"
+            const missing = () => (props.kind === "theater" ? unfilled(p().text ?? "", view()?.names ?? {}) : [])
+            return (
+              <div
+                class="prod-item"
+                data-editable={editable() ? "true" : undefined}
+                onClick={() => editable() && openEditTheater(p())}
+              >
+                <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
+                <For each={missing()}>{(m) => <span class="tag warn mono">{`{{${m}}}`}</span>}</For>
+                <Show when={sourceOf(p().id)}>{(src) => <span class="tag">{src()}</span>}</Show>
+                <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Switch on={onOf(p())} label={p().label ?? p().id} onFlip={() => flip(p())} />
+                  </span>
+                </Show>
+              </div>
+            )
+          }}
         </For>
       </Show>
     )
@@ -185,6 +320,9 @@ const Switches = () => {
             <span class="tag mono">
               {lit()} / {products().length}
             </span>
+            <button type="button" class="btn sm" disabled={!me()} onClick={openNewTheater}>
+              <Plus /> <span>{t("packs.addTheater")}</span>
+            </button>
           </div>
         </div>
         <div class="prod-grid scroller fade">
@@ -193,6 +331,57 @@ const Switches = () => {
           <Group kind="theater" title={t("writing.kindTheater")} />
         </div>
       </div>
+      <Modal
+        title={editingTh()?.isNew ? t("packs.addTheater") : t("packs.editTheater")}
+        dialog={(el) => (thDlg = el)}
+        onClose={() => setEditingTh(null)}
+      >
+        <Show when={editingTh()}>
+          {(d) => (
+            <>
+              <div class="modal-body">
+                <label class="mfield">
+                  <span>{t("writing.name")}</span>
+                  <input
+                    class="field"
+                    value={d().label}
+                    onInput={(e) => setEditingTh({ ...d(), label: e.currentTarget.value })}
+                  />
+                </label>
+                <label class="mfield">
+                  <span>{t("packs.prompt")}</span>
+                  <div class="field-well">
+                    <textarea
+                      rows="6"
+                      value={d().text}
+                      onInput={(e) => setEditingTh({ ...d(), text: e.currentTarget.value })}
+                    />
+                  </div>
+                </label>
+              </div>
+              <div class="modal-foot">
+                <Show when={!d().isNew && me()?.theaters?.some((x) => x.id === d().id)}>
+                  <button type="button" class="btn sm ghost danger" onClick={removeTheater}>
+                    {t("common.delete")}
+                  </button>
+                  <span class="spacer" />
+                </Show>
+                <button type="button" class="btn sm ghost" onClick={() => thDlg.close()}>
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  class="btn sm primary"
+                  disabled={!d().label.trim() || !d().text.trim()}
+                  onClick={saveTheater}
+                >
+                  {t("common.save")}
+                </button>
+              </div>
+            </>
+          )}
+        </Show>
+      </Modal>
     </section>
   )
 }
@@ -615,25 +804,16 @@ const Inputs = () => {
   // the harness defaults, as the composer shows them after the player's: listed, not edited
   const keyDefaults = () => defaultsOf(view()?.format ?? [], keys(), (k) => `${k.label}\0${k.text}`)
   const snipDefaults = () => defaultsOf(view()?.snippets ?? [], snips(), (s) => s.name)
-  // the composer reads the card view's merged lists: a write to the player's is followed by a read of the view
-  const put = async (edit: (p: Player) => Player) => {
-    const t = activeOf(registry.get(tabs))
-    const valid = () => activeOf(registry.get(tabs)) === t
-    await putPlayer(edit)
-    if (!valid() || t.card === null) return
-    const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
-    await (own ? fetchCard(valid) : fetchCardOf(t.card, valid))
-  }
   const setKeys = (edit: (list: readonly Format[]) => readonly Format[]) => {
     if (me())
-      void put(({ format, ...p }) => {
+      void putAndRefresh(({ format, ...p }) => {
         const list = edit(format ?? [])
         return list.length ? { ...p, format: list } : p
       })
   }
   const setSnips = (edit: (list: readonly Snippet[]) => readonly Snippet[]) => {
     if (me())
-      void put(({ snippets, ...p }) => {
+      void putAndRefresh(({ snippets, ...p }) => {
         const list = edit(snippets ?? [])
         return list.length ? { ...p, snippets: list } : p
       })

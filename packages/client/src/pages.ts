@@ -23,6 +23,7 @@ const kindOf = (p: Page): Kind => (typeof p === "object" ? "inspect" : p)
 const loads: Partial<Record<Kind, () => unknown>> = {
   inspect: wire.fetchCalls,
   settings: wire.fetchSettings,
+  writing: wire.fetchPacks,
 }
 const tab = () => activeOf(registry.get(tabs)) // the page stack is the active tab's (tabs.ts)
 
@@ -133,6 +134,7 @@ export const boot = async (): Promise<void> => {
     wire.fetchStories(),
     wire.fetchCards(),
     wire.fetchPersonas(),
+    wire.fetchPacks(),
     wire.fetchPlayer(),
     wire.fetchRouting(),
   ])

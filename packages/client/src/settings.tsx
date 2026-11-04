@@ -12,16 +12,17 @@ import { Dynamic, type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
-import { Back, Close, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
+import { Back, Close, Package, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
 import { pairKey, pairOf, stalePair } from "./connections.ts"
+import { Packs } from "./packs.tsx"
 import { Providers } from "./providers.tsx"
 import { close, open } from "./pages.ts"
 import * as Atom from "./atom.ts"
 import { cards, hats, personas, player, providers, registry, routing, type Pair } from "./store.ts"
 import { type Key, t } from "./i18n.ts"
-import { deleteHat, deletePersona, putHat, putPersona, putRouting } from "./wire.ts"
+import { deleteHat, deletePersona, putHat, putPersona, putRouting, refreshActiveCard } from "./wire.ts"
 
-export type Section = "providers" | "routing" | "templates" | "personas"
+export type Section = "providers" | "routing" | "templates" | "personas" | "packs"
 /** The section shown: written by every way in, so the settings layer moves to the section asked for. */
 const section = Atom.make<Section>("providers").pipe(Atom.keepAlive)
 /** The settings layer on a section, 模型服务 when none is named: a missing model opens it on 默认模型 (the draft's
@@ -36,6 +37,7 @@ const SECTIONS: [Section, Key, (p: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.E
   ["routing", "settings.routing", Sliders],
   ["templates", "settings.templates", Template],
   ["personas", "settings.personas", User],
+  ["packs", "settings.packs", Package],
 ]
 
 export const Settings = () => {
@@ -107,6 +109,9 @@ export const Settings = () => {
       </Show>
       <Show when={at() === "personas"}>
         <Personas {...paneOf("personas")} />
+      </Show>
+      <Show when={at() === "packs"}>
+        <Packs {...paneOf("packs")} />
       </Show>
       <Confirm />
     </div>
@@ -423,7 +428,7 @@ const Personas = (props: Pane) => {
                 <Name
                   value={x().name}
                   label={t("settings.personaName")}
-                  onCommit={(name) => void putPersona({ ...x(), name })}
+                  onCommit={(name) => void putPersona({ ...x(), name }).then(refreshActiveCard)}
                 />
                 <For each={onCards(x().id)}>{(t) => <span class="tag">{t}</span>}</For>
                 <span class="spacer" />
@@ -432,7 +437,10 @@ const Personas = (props: Pane) => {
                   class="icon sm"
                   aria-label={t("settings.deletePersona")}
                   onClick={() =>
-                    ask(t("settings.confirmDeletePersona", { name: x().name }), () => void deletePersona(x().id))
+                    ask(
+                      t("settings.confirmDeletePersona", { name: x().name }),
+                      () => void deletePersona(x().id).then(refreshActiveCard),
+                    )
                   }
                 >
                   <Trash />

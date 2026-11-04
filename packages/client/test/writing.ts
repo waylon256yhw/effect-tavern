@@ -4,6 +4,18 @@ import { frame, type Player, writing } from "@effect-tavern/runtime/src/fragment
 import assert from "node:assert/strict"
 import { caretOf, defaultsOf, draftOfFormat, draftOfSnippet, emptyDraft, formatOf, snippetOf } from "../src/inserts.ts"
 import { mergeLexicon, parseLexicon, serializeLexicon } from "../src/lexicon.ts"
+import {
+  cardNameKeys,
+  fillKnown,
+  orderedPacks,
+  packCount,
+  packHoles,
+  toggleMount,
+  withCardName,
+  withoutTheater,
+  withPackName,
+  withTheater,
+} from "../src/pack.ts"
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "../src/requirements.ts"
 import { chosen, moot, pressing, sentence, SWITCHES } from "../src/switches.ts"
 
@@ -115,4 +127,55 @@ assert.deepEqual(
 )
 assert.equal(caretOf({ text: "「", after: "」" }), "「」")
 assert.equal(caretOf({ text: "继续。" }), "继续。")
+
+// packs, theaters, and proper-noun holes
+assert.equal(
+  fillKnown("推进到{{char}}与{{user}}在{{char_place}}重逢", { char: "谢危", user: "姜雪宁" }),
+  "推进到谢危与姜雪宁在{{char_place}}重逢",
+)
+const samplePack = {
+  id: "wuxia-pack",
+  name: "古风江湖",
+  fragments: [{ id: "f1", text: "多写{{char_place}}风物" }],
+  entries: [{ id: "竹叶青", text: "烈酒" }],
+  lexicon: [{ pattern: "眸子", hint: "眼睛" }],
+  theaters: [{ id: "reading", label: "阅读体", text: "{{char}}与{{user}}观影", on: false }],
+  snippets: [{ name: "重逢", text: "{{char1}}见{{char2}}" }],
+  names: { extra_key: "默认" },
+}
+assert.equal(packCount(samplePack), 5)
+assert.deepEqual(packHoles(samplePack), ["char_place", "char", "char1", "char2", "extra_key"])
+const pNamed = withPackName(samplePack, "char_place", " 临安 ")
+assert.deepEqual(pNamed.names, { extra_key: "默认", char_place: "临安" })
+assert.deepEqual(withPackName(withPackName(pNamed, "char_place", ""), "extra_key", "").names, undefined)
+
+assert.deepEqual(cardNameKeys(["char", "user", "char2"], { user: "玩家", char: "伴星", char_place: "新艾利都" }), [
+  "char",
+  "char2",
+  "char_place",
+])
+const plNamed = withCardName({ global: [], forCard: {} }, "wuxia", "char", " 燕惊寒 ")
+assert.deepEqual(plNamed.names, { wuxia: { char: "燕惊寒" } })
+assert.equal(withCardName(plNamed, "wuxia", "char", "").names, undefined)
+
+const pkA = { id: "a", name: "A" }
+const pkB = { id: "b", name: "B" }
+const pkC = { id: "c", name: "C" }
+assert.deepEqual(
+  orderedPacks([pkA, pkB, pkC], ["c", "a"]).map((p) => p.id),
+  ["c", "a", "b"],
+)
+const mounted1 = toggleMount({ global: [], forCard: {} }, "wuxia", "b")
+assert.deepEqual(mounted1.packs, { wuxia: ["b"] })
+assert.equal(toggleMount(mounted1, "wuxia", "b").packs, undefined)
+
+const ths = withTheater([{ id: "inner", on: true }], {
+  id: "inner",
+  label: "人物心声",
+  text: "写{{char}}心声",
+  on: true,
+})
+assert.deepEqual(ths, [{ id: "inner", label: "人物心声", text: "写{{char}}心声", on: true }])
+assert.deepEqual(withoutTheater(ths, "inner"), [])
+
 console.log("writing ok")

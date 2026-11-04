@@ -1385,7 +1385,7 @@
       },
       {
         id: "pack-lotm",
-        name: "诡秘序列与民俗世界书",
+        name: "诡秘序列与民俗词条",
         fragments: [
           {
             id: "req-1",
@@ -1479,7 +1479,9 @@
         ...p.theaters.map((x) => x.text),
         ...p.snippets.map((x) => x.text),
       ].join("\n");
-      return holesOf(allText).filter((k) => k !== "user");
+      const found = holesOf(allText).filter((k) => k !== "user");
+      for (const k of Object.keys(p.names || {})) if (k !== "user" && !found.includes(k)) found.push(k);
+      return found;
     };
 
     function currentPack() {
@@ -1549,7 +1551,7 @@
                 ${pHoles.map((k) => `
                   <label class="name-chip">
                     <span class="hole-key">{{${k}}}</span>
-                    <input value="${p.names?.[k] || ""}" data-pack-name="${k}" placeholder="随卡填写" />
+                    <input value="${p.names?.[k] || ""}" data-pack-name="${k}" placeholder="默认值" />
                   </label>
                 `).join("")}
               </div>
@@ -1585,10 +1587,10 @@
             ` : ""}
           </div>
 
-          <!-- 2. 世界书词条 -->
+          <!-- 2. 线索词条 -->
           <div class="mod-card">
             <div class="mod-head">
-              <h3>世界书词条</h3>
+              <h3>线索词条</h3>
               <span class="tag mono">${p.entries.length}</span>
               <div class="mod-actions">
                 ${p.entries.length > 0 ? `<button type="button" class="btn sm ghost" id="openEntriesDrawerBtn"><span>管理</span> ${ICONS.chevRight}</button>` : ""}
@@ -1785,7 +1787,7 @@
           .filter(({ e }) => !drawerQuery || e.id.includes(drawerQuery) || e.text.includes(drawerQuery));
         return `
           <div class="drawer-head">
-            <h3>世界书词条</h3>
+            <h3>线索词条</h3>
             <span class="tag mono">${p.entries.length}</span>
             <span class="spacer"></span>
             <button type="button" class="btn sm" id="drawerAddBtn">${ICONS.plus} <span>添加词条</span></button>
@@ -1924,18 +1926,21 @@
         ]),
         ...theaters.map((t) => t.text)
       ].join("\n");
-      const allHoles = holesOf(outTexts).filter((k) => k !== "user");
-      // Also include any keys defined in card.names or player.names[cid]
-      for (const k of Object.keys(baseNames)) if (k !== "user" && !allHoles.includes(k)) allHoles.push(k);
-      for (const k of Object.keys(playerState.names[cid] || {})) if (k !== "user" && !allHoles.includes(k)) allHoles.push(k);
+      // Server GET /card computes `names` (merged) and `holes` (unfilled in order of appearance).
+      // Client UI derives the row keys strictly from `holes ∪ (Object.keys(names) \ {"user"})`:
+      const serverHoles = unfilledOf(outTexts, mergedNames);
+      const nameKeys = [
+        ...serverHoles,
+        ...Object.keys(mergedNames).filter((k) => k !== "user" && !serverHoles.includes(k))
+      ];
 
-      return { card, mountedIds, mountedPacks, baseNames, mergedNames, theaters, allHoles };
+      return { card, mountedIds, mountedPacks, mergedNames, serverHoles, theaters, allHoles: nameKeys };
     }
 
     function renderWriting() {
       const sheet = document.getElementById("writingSheet");
       const ctx = computeCardContext(activeCardId);
-      const { card, mountedIds, baseNames, mergedNames, theaters, allHoles } = ctx;
+      const { card, mountedIds, mergedNames, theaters, allHoles } = ctx;
       const libraryPacks = packs.filter((p) => p.id !== "pack-new" || totalCount(p) > 0);
 
       sheet.innerHTML = `
@@ -1982,14 +1987,12 @@
               <span class="tag mono">{{user}} = ${mergedNames.user}</span>
               ${allHoles.map((k) => {
                 const val = mergedNames[k] || "";
-                const playerVal = playerState.names[activeCardId]?.[k] ?? "";
-                const defVal = baseNames[k] || "";
                 return `
                   <label class="name-chip" data-unfilled="${!val ? "true" : "false"}">
                     <span class="hole-key">{{${k}}}</span>
                     <input
-                      value="${playerVal}"
-                      placeholder="${defVal || "未填写"}"
+                      value="${val}"
+                      placeholder="未填写"
                       data-card-hole="${k}"
                     />
                   </label>

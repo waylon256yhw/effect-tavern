@@ -8,6 +8,7 @@
 // drops the draft; the turn runs on, on the server, and is there to attach to when the player comes back.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action } from "@effect-tavern/runtime/src/session.ts"
+import { fillKnown } from "./pack.ts"
 import {
   card,
   clear,
@@ -55,7 +56,10 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
   }
   return {
     /** The player's line (and note) as a new turn under head; revising, beside the revised one under the same parent. */
-    act: (text: string, note: string): void => {
+    act: (rawText: string, rawNote: string): void => {
+      const dict = registry.get(card)?.names
+      const text = fillKnown(rawText, dict)
+      const note = fillKnown(rawNote, dict)
       if (registry.get(revising)) {
         const { n, input } = revised(text, note)
         return start(n.parent, input, { kind: "act", parent: n.parent, input })
@@ -89,8 +93,9 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
       start(n.parent, n.turn.input, { kind: "edit", node: id, text }, text)
     },
     /** The revised line sent with the prose kept: a sibling whose record is redone over the same prose. */
-    keep: (text: string, note: string): void => {
-      const { n, input } = revised(text, note)
+    keep: (rawText: string, rawNote: string): void => {
+      const dict = registry.get(card)?.names
+      const { n, input } = revised(fillKnown(rawText, dict), fillKnown(rawNote, dict))
       start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
     },
     setField: (id: Id, effects: Extract<Action, { kind: "setField" }>["effects"]): void =>

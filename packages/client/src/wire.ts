@@ -11,7 +11,7 @@
 // stream); `GET /turn` picks up the turn in flight on a story the client lands on (204 when there is none).
 import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
-import type { Hat, Player } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Hat, Pack, Player } from "@effect-tavern/runtime/src/fragment.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
@@ -24,6 +24,7 @@ import {
   hats,
   log,
   names,
+  packs,
   type Persona,
   personas,
   player,
@@ -36,6 +37,8 @@ import {
   type CardView,
   type Routing,
   type Wire,
+  activeOf,
+  tabs,
 } from "./store.ts"
 
 const base = "/api"
@@ -86,6 +89,15 @@ export const fetchCalls = async (): Promise<void> => {
 const keep = (l: Listing): void => registry.update(stories, (prev) => (prev ? { ...l, current: prev.current } : l))
 export const fetchStories = async (): Promise<void> => keep(await got(call(`${base}/stories`)))
 export const fetchPersonas = async (): Promise<void> => registry.set(personas, await got(call(`${base}/personas`)))
+/** Re-reads the active tab's card view after a write that changes it: packs, mounts, names, theaters, persona,
+ *  snippets, format keys. A tab switched meanwhile keeps the read from landing on the wrong card. */
+export const refreshActiveCard = async (): Promise<void> => {
+  const cur = activeOf(registry.get(tabs))
+  const valid = () => activeOf(registry.get(tabs)) === cur
+  if (cur.card === null) return
+  const own = registry.get(stories)?.stories.find((s) => s.id === cur.story)?.card === cur.card
+  await (own ? fetchCard(valid) : fetchCardOf(cur.card, valid))
+}
 export const fetchPlayer = async (): Promise<void> => registry.set(player, await got(call(`${base}/player`)))
 
 export type Listing = { current: number | null; stories: readonly StoryRow[] }
@@ -184,10 +196,17 @@ export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, json("PUT", body))))
 export const deleteHat = async (id: string): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
+export const fetchPacks = async (): Promise<void> => registry.set(packs, await got(call(`${base}/packs`)))
+export const putPack = async ({ id, ...body }: Pack): Promise<void> =>
+  registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, json("PUT", body))))
+export const deletePack = async (id: string): Promise<void> => {
+  registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, { method: "DELETE" })))
+  await fetchPlayer() // the mount on any card it held is gone with it
+}
 /** What the settings page reads when it opens (pages.ts): every list it draws, the cards and the model names its
  *  menus name things by. */
 export const fetchSettings = (): Promise<unknown> =>
-  Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchCards(), fetchNames()])
+  Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchPacks(), fetchCards(), fetchNames()])
 
 /** Sends one action; returns what closes its stream (the turn goes on on the server). */
 export const send = (action: Action): (() => void) =>
