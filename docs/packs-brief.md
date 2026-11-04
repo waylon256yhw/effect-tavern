@@ -274,3 +274,50 @@ harness（代码默认 + 玩家叠加按 id 盖上）→ 卡 → `local.mounts` 
 ### 4. 改动清单
 
 runtime `layer.ts`：`Rows` 去 `base`；`From` 去 `"base"`；叠加行走 `locked` 与新 id 编译；片段按 `mode`。server：`library.ts`（`baseOf` 删除，列表 `[harness, ...packs]`，`DELETE` 只拒 `harness`）、`serve.ts` 头注释、`data.ts` 两处迁移。client：`isReservedPack` 只认 `harness`，列表与注释去 base，其余不动（行模板已同构）。测试：`test/layer.ts` 的 base 用例改写为叠加行用例（yield 缺省、override 压卡、新 id 小剧场、与包和本卡的序），`data.ts` 加 base→harness 迁移用例，`serve.ts` 列表长度。GLOSSARY / README 的"基底"字样删除。
+
+## 十一、§九/§十 落地后的审阅修正（2026-11-04 晚，f8bd8c2）
+
+一轮长 session 之后的对照审阅（本文 + 两份代码审阅），修的都是边角，口径定下来不再重开：
+
+### 1. `taken`：谁占着一个槽
+
+只算**头区里有正文、未禁用、洞已填**的条目。三种不算：卡留空的槽位（`{ id: "pov" }`，fragment.ts 说它"留给玩家填"，所以它不挡玩家的开关，`taken.pov` 在没人填时为 null）；尾区的同名指令（`at: "tail"` 不是槽位，0ab9aec 改了合并键，这次把 `taken` 也改到同一口径）；洞未填被 `fill` 丢掉的条目。
+
+### 2. `mode: "yield"` 的精确含义
+
+"低等级已填这个槽就不站上去"，**编译出的开关也算填过**：本卡行的自由文本写了 `yield`，下面某个包的开关句子站着，它就让位。编译片段"一律让位"说的是对卡和对本行或更高等级的自由文本。模块头注释按此改写；`test/layer.ts` 原有的断言就是这个口径。
+
+### 3. 产物的 `from` 跟着问法走
+
+`from` 是**写下生效问法的那一行**。只拨 `on`、只改 `label` 的补丁不换作者：卡的产物在本卡行上关掉之后仍是 `from: "card"`，`shown` 照旧脱它的 text；内置的 `inner` 改个名仍是内置的，之后在「内置」改问法仍到得了这张卡。客户端配套：Writing 页只发改过的 `label` / `text`（可以只改名），「恢复默认」只清 `label` / `text` 保留 `on`。
+
+### 4. 卡的词表整条出门
+
+§九 4 说"唯一脱敏是 `from === "card"` 的条目不带 text"，`shown` 却又滤掉了卡的 `lexicon`，两条测试也按"不出门"写。定：**禁词是给润色阶段的指令，不是卡的虚构，整条出门**，与 `cardView` 和 `shown` 注释里的那句"a ban is a prompt, to a player too"一致。客户端目前没有地方读 `layer.lexicon`；要不要在 Writing 页画"生效中的禁词"是下一个产品问题。
+
+### 5. `options` 可改问法
+
+§七"options 只留开关"是 `products{}` 还是布尔表时的话；§九 明说"notes、options 的问法由此可见可改，形状、阶段、折叠不动"，`locked` 已锁形状。Writing 页与写作包页保留点开改问法；它归在小剧场组只是 `kindOf` 的归类。
+
+### 6. 两把小锁
+
+词条 id 不含 `/`（resolve 里落 `dropped`，kind `entry`），包 id 不含 `/`（`library.ts put` 拒绝）：`/` 是行与词条之间的连字，含它就会与别的行的词条同名，`new Map` 静默留后者。
+
+### 7. `view.ts` 与 session 同步
+
+预览漏了三样：lore 索引不展开代称、不含包词条；`rpg.questions` / `asked` 不传 `R.names`；narrate 文档没有 `blocks`。都补上，多一节 "narrate blocks"；`test/view.ts` 对 session 真实文档的逐消息比对照过。
+
+### 8. 客户端写路径
+
+- `putPack(id, edit)` 走与 `putLocal` 同形的串行写链，对最后一次应答的行做 edit；此前每个 tab 发整行快照，同一手势两次写第二次冲掉第一次。
+- 选人设、改人设正文后 `refreshActiveCard()`：否则 `names.user` 与 `holes` 是旧的，客户端用旧表填 `{{user}}` 进历史。
+- 「内置」的自带快捷输入 / 格式键不给删（`overlayOf` 表达不了删除，缺项即复位）：改过才显示「恢复默认」，键字段锁住；ProductsTab 同口径。
+- `isLocalOnly`（弹窗按钮是「删除」还是「恢复默认」）= `from === "local"` 且 id 是本客户端造的（`th-`）且库里没有包声明它；不再看有没有挂包。
+- 侧栏写作芯片：槽被接管（`taken` 非空且非编译）时不报那组开关的值。
+
+### 9. 看到但不改的
+
+- 产物问法有两种写法：`products[].text` 与 `asks` 的 `product.<id>`，同一行两个都写时 ask 赢；没有调用方用后者。
+- `GET /packs` 的 `overlaid` 与 `PUT /packs/harness` 的 `overlayOf` 写死 `"act"`：差异行与通道无关，唯一例外是玩家改了 `options` 的问法后 note 卡也拿到 act 的措辞。
+- 读库不解码（`named.list` / `locals.list` 直接 `JSON.parse` 喂 `resolve`），表视为可信；只有迁移产物和手改库能造出坏行。
+
