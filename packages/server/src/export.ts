@@ -1,9 +1,10 @@
 // A story leaves the library two ways (#75): as a backup, the log tree whole as JSON (every node, every branch, head
 // and next), what an import would read back; and as a reading copy, the head's line as Markdown: the opening, each
-// player line (and the note that went with it) and the prose, nothing the model was asked and nothing it was
+// player line (and the note that went with it), the prose and its 小剧场, nothing the model was asked and nothing it was
 // judged by. Both are pure over what the library holds, so they are built here and tested without a server.
-import { splitAside, textOf, type Input } from "@effect-tavern/runtime/src/journal.ts"
+import { textOf, type Input } from "@effect-tavern/runtime/src/journal.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
+import { kindOf, render, type Product } from "@effect-tavern/runtime/src/product.ts"
 import type { Turn } from "@effect-tavern/runtime/src/session.ts"
 import type { StoryRow } from "./data.ts"
 
@@ -11,6 +12,7 @@ export interface Exported {
   card: { id: string; title: string }
   story: StoryRow
   snapshot: L.Snapshot<Turn>
+  products: readonly Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall">[] // the card's, as declared
 }
 /** The backup: a format name and version first, so a reader knows what it holds before the tree. */
 export const backup = (x: Exported, at = new Date()) => ({
@@ -43,14 +45,17 @@ const asked = (i: Input): string[] => {
   }
   return out
 }
-/** The reply as it reads: the prose whole, and an aside after it in italics, named when it was. */
-const told = (t: Turn): string[] => {
-  const parts = splitAside(t.reply)
-  const prose = textOf(parts).trim()
-  const aside = parts.find((p) => p.type === "aside")
+/** The reply as it reads: the prose whole, then each of the node's 小剧场 (product.ts `kindOf` theater, not options;
+ *  either stage) in italics, named, in the card's order. */
+const told = (t: Turn, products: Exported["products"]): string[] => {
+  const prose = textOf(t.reply).trim()
   const out = prose ? [prose] : []
-  if (aside?.text.trim())
-    out.push(`*${"label" in aside && aside.label ? `（${aside.label}）` : ""}${aside.text.trim()}*`)
+  for (const p of products) {
+    const v = t.products[p.id]
+    if (p.id === "options" || kindOf(p) !== "theater" || v === undefined) continue
+    const text = render(p.shape, v).trim()
+    if (text) out.push(`*（${p.label ?? p.id}）${text}*`)
+  }
   return out
 }
 /** The reading copy. Blocks are separated by a blank line; a turn is its quote then its prose; a greeting (no input)
@@ -60,7 +65,7 @@ export const markdown = (x: Exported, at = new Date()): string => {
   const head = `# ${x.story.title ?? "New story"}\n\n${x.card.title} · ${x.story.turns} 轮 · 导出于 ${at.toISOString().slice(0, 10)}\n\n---`
   const blocks = line.flatMap((t) => {
     const quote = asked(t.input)
-    return [...(quote.length ? [quote.join("\n")] : []), ...told(t)]
+    return [...(quote.length ? [quote.join("\n")] : []), ...told(t, x.products)]
   })
   return `${[head, ...blocks].join("\n\n")}\n`
 }

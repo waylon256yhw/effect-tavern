@@ -72,6 +72,7 @@ export type Ask =
       may: readonly Told[]
       tone?: string
       correction?: string
+      blocks?: { question: string; asks: readonly string[] } // narrate products: the `narrate.blocks` ask, `<id>: <question>` lines
     }
   | { stage: "check"; rules: readonly string[]; open: readonly Told[]; must: readonly string[]; prose: string }
   | { stage: "polish"; question: string; hints: readonly string[]; prose: string } // prose with <target> marks
@@ -162,6 +163,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...noteOf(c.input),
         ...thoughtOf(c),
         ...(a.correction ? [sys(a.correction)] : []),
+        ...(a.blocks?.asks.length ? [sys([a.blocks.question, ...a.blocks.asks].join("\n"))] : []),
         ...[...(c.tail ?? []), ...spoken(w.hat?.narrate?.tail)].map(toP(w)),
       ]
     case "check": // nothing open (a guard-only turn): no empty Open / Must labels, the rules alone are the question

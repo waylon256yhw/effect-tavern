@@ -42,9 +42,13 @@ assert.equal(registry.get(draft)!.text, "h") // the first frame reveals one grap
 let n = 0
 while (registry.get(draft)!.text !== "hello" && n++ < 120) tick()
 assert.equal(registry.get(draft)!.text, "hello") // the rest plays out at the stream's rate, well within two seconds
+// a narrate block grows under its id, never in the prose
+apply({ kind: "delta", part: { type: "product-delta", id: "inner", text: "想" } })
+apply({ kind: "delta", part: { type: "product-delta", id: "inner", text: "说" } })
+assert.deepEqual([registry.get(draft)!.text, registry.get(draft)!.products], ["hello", { inner: "想说" }])
 apply({ kind: "stage", phase: "check" })
 apply({ kind: "stage", phase: "narrate" }) // the rewrite
-assert.equal(registry.get(draft)!.text, "")
+assert.deepEqual([registry.get(draft)!.text, registry.get(draft)!.products], ["", undefined])
 apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "again" } })
 apply({ kind: "change", node: node(3, 1, "again"), head: 3 })
 assert.notEqual(registry.get(draft), null) // the node waits behind the queued graphemes

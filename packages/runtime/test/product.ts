@@ -113,5 +113,9 @@ assert.throws(() => resolve(defaults, [{ id: "ghost" }]), /needs text and shape/
 assert.throws(() => resolve(defaults, [{ ...inventory, recall: "weight" }]), /names a column/)
 assert.throws(() => resolve(defaults, [{ ...scene, recall: true }]), /only lists and tables/)
 assert.throws(() => resolve(defaults, [{ ...inventory, fold: { key: "weight" } }]), /fold key names a table column/)
+// narrate has no schema to force a shape: a narrate product is text; a patch moves a text product to narrate
+assert.throws(() => resolve(defaults, [{ ...inventory, stage: "narrate" }]), /a narrate product is text/)
+const diary = { id: "diary", text: "d", shape: { kind: "text" as const } }
+assert.equal(resolve(defaults, [diary, { id: "diary", stage: "narrate" }]).at(-1)!.stage, "narrate")
 
 console.log("ok")

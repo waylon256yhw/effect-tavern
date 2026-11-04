@@ -30,13 +30,15 @@
 // before this turn's input. The transcript is append-only, so everything before the input is a cached read next turn;
 // no padding for the model's minimum prefix, which a head plus one turn crosses on its own.
 // Events: `stage` when a stage begins, `delta` for each narrate part as it streams, `call` when a call returns (the
-// request, the answer, the cost: what the inspector shows), `node` when a node is saved or amended. Prose and products
-// are different roads: the prose streams by part, a product arrives whole with record's `call`.
+// request, the answer, the cost: what the inspector shows), `node` when a node is saved or amended. A product's road
+// is its stage: a narrate block streams as `product-delta` parts, split live off the prose (journal.ts `splitter`),
+// a record product arrives whole with record's `call`. The node's reply and blocks come from the landed split.
 // Errors: a model failure is a `ModelError` on the stream; an action that names what does not exist (a node, an
 // option, a product, a value outside a field) is a defect, the caller's bug.
 import {
   object,
   streamed,
+  text as whole,
   type Message,
   type Model,
   type ModelError,
@@ -58,7 +60,15 @@ import {
   type Snippet,
 } from "./fragment.ts"
 import { narratorHistory, policyFor, type Policy } from "./history.ts"
-import { deliveredOn, splitAside, textOf as proseOf, type Brief, type Input, type Turn as TurnOf } from "./journal.ts"
+import {
+  deliveredOn,
+  split,
+  splitter,
+  textOf as proseOf,
+  type Brief,
+  type Input,
+  type Turn as TurnOf,
+} from "./journal.ts"
 import * as Log from "./log.ts"
 import { key, makeLore, type Disclosure } from "./lore.ts"
 import { marked, scan, splice } from "./polish.ts"
@@ -71,9 +81,11 @@ export type Phase = (typeof phases)[number]
 export type { Node } from "./derived.ts" // the node projection lives with the facts it carries; the client imports it here
 export type Event =
   | { kind: "stage"; phase: Phase }
-  | { kind: "delta"; part: Part }
+  | { kind: "delta"; part: Part | ProductDelta }
   | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number }
   | ({ kind: "change" } & Change) // the log moved: a node landed or was amended, nodes dropped, and where head is now
+/** A narrate block's text as it streams, beside the provider's `text-delta`: the block `<<aside>> <id>` opened. */
+export type ProductDelta = { type: "product-delta"; id: string; text: string }
 export type Events = Stream.Stream<Event, ModelError>
 export type Change = Log.Change<Node>
 /** A stop signal: completes when the player halts the prose (a Deferred's await on the wire). Only narrate listens. */
@@ -113,6 +125,13 @@ export const asks = frags([
     text: "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.",
   },
   { id: "narrate.correction", text: "Previous draft broke:" },
+  // The narrate products' one instruction, before their `<id>: <question>` lines; sent only when one is on.
+  {
+    id: "narrate.blocks",
+    text: "After the prose, write each of these as its own block: a line `<<aside>> <id>` with the id below, then the block's text. One block per id, in any order, never inside the prose.",
+  },
+  // A narrate product demanded on a node: the scene is already the last reply, so the call writes the one block alone.
+  { id: "narrate.demand", text: "Write no prose: answer with only the block asked for below, about the last scene." },
   {
     id: "polish",
     text: "Each sentence marked <target> uses wording the reader has seen too often: the words in its hits, and what its hint below names. Rewrite each so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks.",
@@ -142,7 +161,7 @@ export const format: readonly Format[] = [
   { label: "（）", text: "（", after: "）" },
   { label: "《》", text: "《", after: "》" },
 ]
-// The default products (src/product.ts): what record asks for on every card unless the card patches or the player
+// The default products (src/product.ts): what the model is asked for on every card unless the card patches or the player
 // toggles. `notes` is the compression source and the only one on by default. A product's question is its `text`,
 // overridden like any ask by the fragment id `product.<id>`. The options question follows the card's input channel,
 // because an option goes into the box as the player's next input: on an act card it is their own line (the first Haiku
@@ -176,6 +195,7 @@ export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
       label: "人物心声",
       text: "What the character thought this scene but did not say, one short paragraph.",
       shape: { kind: "text" },
+      stage: "narrate", // the narrator's own voice, streamed, no extra call
       on: false,
     },
   ])
@@ -338,6 +358,14 @@ export const makeSession = ({
   const resolveProducts = () => resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
   let products = resolveProducts()
   const question = (pr: Product) => questionOf(player, card, pr)
+  /** Narrate blocks under the declared product's cap; a block of an undeclared id is kept as written (the Inspector's). */
+  const capped = (bs: Readonly<Record<string, string>>) =>
+    Object.fromEntries(
+      Object.entries(bs).map(([id, v]) => {
+        const p = products.find((x) => x.id === id)
+        return [id, p ? cap(p.shape, v) : v]
+      }),
+    )
   // ───────── Derived facts along a path (src/derived.ts) ─────────
   const derived = makeDerived({
     rpg,
@@ -448,6 +476,38 @@ export const makeSession = ({
         products: Object.fromEntries(asked.map((p) => [p.id, cap(p.shape, fresh(p, out[p.id]))])),
         answers: out.answers as Record<string, string> | undefined,
       }
+    })
+
+  /** A narrate product demanded on a node: one prose call over narrate's view of the path up to and including the
+   *  node (its prose is the last reply), asking for that one block alone. A reply without the delimiter is the block. */
+  // ponytail: lands whole; stream the demand block as product deltas when a long one keeps the player waiting
+  const block = (emit: Emit, p: Product, path: readonly Turn[], state: State) =>
+    Effect.gen(function* () {
+      const here = derived.at(path)
+      const sum = here.summary()
+      const msgs = ask(
+        state,
+        { text: "", note: wording("narrate.demand") },
+        {
+          stage: "narrate",
+          fiction: headOf(card.fiction, { state }),
+          history: narratorHistory(path, here.text, sum),
+          summarized: sum !== undefined,
+          told: [],
+          outcome: [],
+          current: here.known().current,
+          must: [],
+          may: [],
+          blocks: { question: wording("narrate.blocks"), asks: [`${p.id}: ${question(p)}`] },
+        },
+      )
+      const M = modelFor("narrate")
+      yield* emit({ kind: "stage", phase: "narrate" })
+      const t0 = Date.now()
+      const r = yield* whole(M, msgs, { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort })
+      yield* emit({ kind: "call", phase: "narrate", msgs, out: r.text, usage: r.usage, ms: Date.now() - t0 })
+      const { reply, blocks } = split(r.parts)
+      return capped({ [p.id]: blocks[p.id] ?? proseOf(reply).trim() })
     })
 
   // ───────── The turn ─────────
@@ -588,25 +648,41 @@ export const makeSession = ({
       // narrate, streamed, with truncation recovery and at most one correction rewrite
       const fed = here.known()
       const sum = here.summary()
+      // the narrate products on this turn: one ask line each in narrate's tail, each block cut off the reply
+      const penned = products.filter((p) => p.stage === "narrate" && p.on && (!p.when || holds(p.when, s1)))
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
       // A stopped stream ends after the current pull without the `finish` part: the text so far is the reply, usage unknown.
       let cut = false
-      const write = (msgs: Message[]) =>
+      // The deltas go out split live: prose as `text-delta`, a block's text as `product-delta`, the delimiter line never.
+      const write = (msgs: Message[], live: ReturnType<typeof splitter>) =>
         Effect.gen(function* () {
           yield* emit({ kind: "stage", phase: "narrate" })
           const t0 = Date.now()
           const { parts, reply } = yield* streamed(M, msgs, opts)
           let text = ""
           let finished = false
+          const pieces = (chunk: string, end?: boolean) =>
+            Effect.forEach(live(chunk, end), (p) =>
+              emit({
+                kind: "delta",
+                part:
+                  p.id === undefined
+                    ? { type: "text-delta", id: "0", text: p.text }
+                    : { type: "product-delta", id: p.id, text: p.text },
+              }),
+            )
           yield* Stream.runForEach(stop ? parts.pipe(Stream.haltWhen(stop)) : parts, (part) => {
             if (part.type === "text-delta") text += part.text
             if (part.type === "finish") finished = true
-            return part.type === "text-delta" || part.type === "reasoning-delta"
-              ? emit({ kind: "delta", part })
-              : Effect.void
+            return part.type === "text-delta"
+              ? pieces(part.text)
+              : part.type === "reasoning-delta"
+                ? emit({ kind: "delta", part })
+                : Effect.void
           })
+          yield* pieces("", true) // a line still held at the end resolves now
           cut = !finished
           const r = cut
             ? {
@@ -633,15 +709,16 @@ export const makeSession = ({
             may: told(open.filter((d) => brief.may.includes(d.id))),
             tone: brief.tone,
             correction,
+            blocks: { question: wording("narrate.blocks"), asks: penned.map((p) => `${p.id}: ${question(p)}`) },
           })
-          const r = yield* write(msgs)
-          // ponytail: the deltas stream raw, the `<<aside>>` line and the aside included; only the node's reply is split.
-          // Hold text deltas back at a line start that could become the delimiter if the live draft must not show it.
-          if (r.finishReason !== "length" || !M.prefill) return splitAside(r.parts)
-          const r2 = yield* write([...msgs, { role: "assistant", content: r.text }]) // resume with the partial as prefix
-          return splitAside([...r.parts, ...r2.parts])
+          const live = splitter() // one draft, one cut, across a resumed write
+          const r = yield* write(msgs, live)
+          if (r.finishReason !== "length" || !M.prefill) return split(r.parts)
+          const r2 = yield* write([...msgs, { role: "assistant", content: r.text }], live) // resume with the partial as prefix
+          return split([...r.parts, ...r2.parts])
         })
-      let reply: Turn["reply"] = from === "check" ? base!.reply : yield* narrate()
+      // an edit keeps the player's prose and writes no block
+      let { reply, blocks: written } = from === "check" ? { reply: base!.reply, blocks: {} } : yield* narrate()
       let fired: Disclosure[] = []
       let violated: string[] = []
       if (!cut && (card.guard.length > 0 || open.length > 0)) {
@@ -667,8 +744,9 @@ export const makeSession = ({
           // A stop that fired while check ran halts the rewrite before its first character: the first draft stands,
           // stopped, with its verdict (the halted rewrite once became an empty stopped node).
           // A rewrite the player cut is not judged either (the first draft's verdict stands only when it stands).
-          if (!cut || proseOf(again)) {
-            reply = again
+          if (!cut || proseOf(again.reply)) {
+            reply = again.reply
+            written = again.blocks
             c = cut ? { fired: [], violated: [] } : yield* check(proseOf(reply))
           }
         }
@@ -707,7 +785,7 @@ export const makeSession = ({
       // One call, one schema: product id → its shape, `answers` → the readout enums. The model sees the prose, Known
       // (notes so far), Current (other feed products) and the questions, never the numbers; the chosen options settle by
       // code, so replay never asks again. Caps are applied here, by code.
-      const asked = products.filter((p) => p.on && (!p.when || holds(p.when, s1)))
+      const asked = products.filter((p) => p.stage !== "narrate" && p.on && (!p.when || holds(p.when, s1)))
       const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
       const rec = yield* record(
         emit,
@@ -732,7 +810,7 @@ export const makeSession = ({
         violated,
         ...(base?.opening && { opening: base.opening }), // an edited opening keeps its effects
         ...(base && { sibling: SIBLING[from] }),
-        products: rec.products,
+        products: { ...capped(written), ...rec.products },
       })
       yield* emit({ kind: "change", ...change(held.commit(c)) })
     })
@@ -865,8 +943,12 @@ export const makeSession = ({
       return emitting((emit) =>
         Effect.gen(function* () {
           const up = chain(t.parent)
-          const rec = yield* record(emit, [p], up, derived.at(up).settle(t).pre, t)
-          const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...rec.products } })
+          const pre = derived.at(up).settle(t).pre
+          const got =
+            p.stage === "narrate"
+              ? yield* block(emit, p, chain(nodeId), pre)
+              : (yield* record(emit, [p], up, pre, t)).products
+          const amended = Log.amend(held.log, nodeId, { products: { ...t.products, ...got } })
           yield* emit({ kind: "change", ...change(held.commit(amended)) })
         }),
       )

@@ -290,12 +290,18 @@ export const library = ({
       /** The stories (a card's, or every card's) that hold `q` on their head's line (data.ts `Hit`). The title is the
        *  client's to match. */
       search: (q: string, card?: string) => data.stories.search(card, q),
-      /** One story whole for export.ts: its row, the card it is of, and its log tree; none when there is no story. */
+      /** One story whole for export.ts: its row, the card it is of (and its products, to name the 小剧场), and its log
+       *  tree; none when there is no story. A card gone from the shelf exports the prose alone. */
       export: (id: Id): Exported | undefined => {
         const story = data.stories.list(undefined, id)[0]
         if (!story) return undefined
-        const card = cards.list().find((c) => c.id === story.card) ?? { id: story.card, title: story.card }
-        return { card, story, snapshot: data.store<Logged>(id).read()! }
+        const found = cards.list().find((c) => c.id === story.card)
+        return {
+          card: found ?? { id: story.card, title: story.card },
+          story,
+          snapshot: data.store<Logged>(id).read()!,
+          products: found ? cardView(cards.get(story.card), layer()).products : [],
+        }
       },
     },
     /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player layer in force;

@@ -63,6 +63,11 @@ const migrations: readonly { table: string; column: string; add: string }[] = [
 ]
 type Row = Record<string, unknown>
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
+/** A node's reply parts of a type that no longer exists (the `aside` part before #76 §二) dropped on read; no migration. */
+const known = <T>(n: T): T => {
+  const reply = (n as { reply?: { type: string }[] }).reply
+  return reply ? { ...n, reply: reply.filter((p) => p.type === "text" || p.type === "reasoning") } : n
+}
 /** A player's input as the node keeps it: the line, and a note to the narrator when one went with it. */
 export interface Input {
   text: string
@@ -412,7 +417,7 @@ export const open = (asked: string) => {
         const s = q("select head, next from story where id = ?").get(story) as Row | undefined
         if (!s) throw new Error(`no story ${story}`)
         const nodes = (q("select json from node where story = ? order by id").all(story) as Row[]).map((r) =>
-          parse<T>(r)!,
+          known(parse<T>(r)!),
         )
         return { nodes, head: s["head"] as Id | null, next: s["next"] as Id }
       },

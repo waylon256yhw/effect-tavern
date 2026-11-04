@@ -20,6 +20,7 @@ export interface Draft {
   parent: Id | null
   input: { text: string; note?: string }
   text: string
+  products?: Record<string, string> // narrate blocks so far by id (`product-delta`), drawn where the node's 小剧场 lands
   prev?: string // the discarded first draft, shown greyed under the rewrite
   fresh?: boolean // the line is nowhere else (an act, a revised line): a failed turn puts it back in the composer
 }
@@ -322,12 +323,14 @@ const tick = () => {
 // nothing waits; behind a waiting event they wait too, in order.
 let held: Wire[] = []
 const made: Call[] = [] // this action's calls, filed under its node when it lands (as the server files them)
+// A block's delta waits too: it is drawn under the prose, so it starts once the prose above it has played out.
+const flows = (e: Wire) => e.kind === "delta" && e.part.type !== "product-delta"
 export const apply = (e: Wire): void => {
-  if (held.length || (play.queue.length && e.kind !== "delta")) held.push(e)
+  if (held.length || (play.queue.length && !flows(e))) held.push(e)
   else applyNow(e)
 }
 const drain = () => {
-  while (held.length && (play.queue.length === 0 || held[0]!.kind === "delta")) applyNow(held.shift()!)
+  while (held.length && (play.queue.length === 0 || flows(held[0]!))) applyNow(held.shift()!)
 }
 /** The open story's row in the listing as its stream says (a stage, or the turn over): the server writes `busy` too,
  *  but the client reads it again only at a stream's end or the sidebar's poll, and a tab's dot must not wait. A story
@@ -356,12 +359,18 @@ const applyNow = (e: Wire): void => {
       if (e.phase === "narrate") {
         resetPlay()
         play.ended = false
-        registry.update(draft, (d) => (d ? { ...d, text: "", prev: d.text || d.prev } : d))
+        registry.update(draft, (d) => (d ? { ...d, text: "", prev: d.text || d.prev, products: undefined } : d))
       }
       if (settling(e.phase)) play.ended = true // the prose is complete: the queue plays out
       return
     case "delta":
       if (e.part.type === "text-delta") enqueue(e.part.text)
+      if (e.part.type === "product-delta") {
+        const { id, text } = e.part
+        registry.update(draft, (d) =>
+          d ? { ...d, products: { ...d.products, [id]: (d.products?.[id] ?? "") + text } } : d,
+        )
+      }
       return
     case "call":
       made.push(e)

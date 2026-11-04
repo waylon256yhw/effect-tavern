@@ -1,4 +1,4 @@
-// Products: what the model is asked for at a fixed point after the prose (the record stage), as data. The ecosystem's
+// Products: what the model is asked for at a fixed point after the prose, as data. The ecosystem's
 // per-turn string variables, option menus, inner thoughts, inventories and chronicles are all this one thing
 // (docs/card-reading-2.md §7, docs/memory-table-reading.md §5): a declared question with a closed SHAPE for the answer.
 // Shapes: text, list (of text), record (fixed keys; a key may hold a list or table, one level), table (rows over typed
@@ -7,7 +7,8 @@
 // one declaration that feed (Known / Current), recall (the lookup index) and a client drawing the product all read.
 // `feed` says whether the folded value goes back to the model next turn; `recall` makes the folded items readable by
 // the lookup stage like lore (hook = the item, or one column). The harness owns a default list (notes, options, inner);
-// a card patches by id; the player toggles `on`.
+// a card patches by id; the player toggles `on`. `stage` says who writes it: record (one structured call, any shape) or
+// narrate (the narrator after the prose, in a block opened by `<<aside>> <id>`, streamed, text only: no schema to force).
 // Retraction is not a verb (issue #7): a fact that can change is a row of a `{ key }` table (record re-rows it, the fold
 // keeps the newest), and a row that should vanish re-rows into a `filter` column that hides it; `notes` stays an
 // append-only chronicle, what was said stays said, and its weight is the compression policy's business (issue #6).
@@ -51,6 +52,7 @@ export const Product = Schema.Struct({
   label: Schema.optionalKey(Schema.String), // the shown name (the Writing page's toggle, a drawn product); the id when absent
   text: Schema.String, // the question; overridden per id by the player's / card's `asks` (fragment id `product.<id>`)
   shape: Shape,
+  stage: Schema.optionalKey(Schema.Literals(["narrate", "record"])), // default record
   fold: Schema.optionalKey(Fold),
   when: Schema.optionalKey(Cond), // asked only when it holds on the post-settlement state
   on: Schema.optionalKey(Schema.Boolean), // default true; the player's toggle wins
@@ -173,6 +175,17 @@ export const entryRef = (id: string): { product: string; node: number; index: nu
   return m ? { product: m[1]!, node: Number(m[2]), index: Number(m[3]) } : undefined
 }
 
+/** The three kinds (docs/theater-brief.md §1), read off what the model reads back and how it folds: read back and replaced
+ *  or merged by key → world (what is now: the readings page, the ledger); read back and appended → context (the model's
+ *  chronicle: the Inspector only); never read back → theater (for the player alone: inline under its turn). Orthogonal
+ *  to `stage`. `options` falls under theater by these rules; it has its own container, so the theater drawers skip it. */
+export const kindOf = (p: Pick<Product, "shape" | "fold" | "feed" | "recall">): "world" | "context" | "theater" =>
+  !p.feed && !p.recall
+    ? "theater"
+    : (p.fold ?? (p.shape.kind === "list" ? "append" : "latest")) === "append"
+      ? "context"
+      : "world"
+
 /** Harness defaults, patched by the card per id, `on` decided by the player. Validates completeness, `fold` and `recall`. */
 export const resolve = (
   defaults: readonly Product[],
@@ -188,6 +201,7 @@ export const resolve = (
       !(p.shape.kind === "table" && p.shape.columns.some((c) => c.key === (p.fold as { key: string }).key))
     )
       throw new Error(`${p.id}: fold key names a table column`)
+    if (p.stage === "narrate" && p.shape.kind !== "text") throw new Error(`${p.id}: a narrate product is text`)
     if (p.recall !== undefined) {
       if (p.shape.kind === "list" && p.recall !== true) throw new Error(`${p.id}: recall on a list is true`)
       if (p.shape.kind === "table" && !p.shape.columns.some((c) => c.key === p.recall))
