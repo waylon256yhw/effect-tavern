@@ -1,6 +1,6 @@
-// The Writing page's pure parts: the switch table against the sentences it compiles to, the lexicon file format, and
-// the prose requirements over the player layer.
-import { frame, type Player, writing } from "@effect-tavern/runtime/src/fragment.ts"
+// The Writing page's and pack workbench's pure parts: the switch table against the sentences it compiles to, the
+// lexicon file format, and the prose requirements and proper-noun holes over `Layer` and `Local`.
+import { harness, type Layer, type Local } from "@effect-tavern/runtime/src/layer.ts"
 import assert from "node:assert/strict"
 import { caretOf, defaultsOf, draftOfFormat, draftOfSnippet, emptyDraft, formatOf, snippetOf } from "../src/inserts.ts"
 import { mergeLexicon, parseLexicon, serializeLexicon } from "../src/lexicon.ts"
@@ -8,22 +8,55 @@ import {
   cardNameKeys,
   fillKnown,
   orderedPacks,
-  packCount,
   packHoles,
   toggleMount,
-  withCardName,
-  withoutTheater,
+  withoutProductPatch,
   withPackName,
-  withTheater,
+  withProductPatch,
 } from "../src/pack.ts"
-import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "../src/requirements.ts"
-import { chosen, moot, pressing, sentence, SWITCHES } from "../src/switches.ts"
+import {
+  addFragment,
+  atOf,
+  extraOf,
+  removeFragment,
+  setFragmentAt,
+  setFragmentText,
+  withExtra,
+} from "../src/requirements.ts"
+import { chosen, moot, pressing, sentence, SWITCHES, takenBy } from "../src/switches.ts"
 
-// every value the table offers compiles to a sentence, and only those values do
+// every value the table offers compiles to a sentence in `harness`, and only those values do
 for (const s of SWITCHES)
   for (const [v] of s.values) assert.ok(sentence(s.key, v), `${s.key}=${String(v)} has a sentence`)
 assert.equal(sentence("pov", "first"), "")
-assert.equal(writing({ pov: "second" })[0]!.text, sentence("pov", "second"))
+assert.equal(sentence("pov", "second"), harness("act").asks?.find((a) => a.id === "switch.pov.second")?.text)
+assert.equal(sentence("pov", "second", { "switch.pov.second": "自定义第二人称" }), "自定义第二人称")
+
+// takenBy: null when compiled, `From` when taken over by free text
+assert.equal(
+  takenBy("pov", {
+    frame: [{ id: "pov", text: "x", from: "base", compiled: true }],
+    tail: [],
+    switches: { taken: { pov: "base", verbosity: null } },
+  }),
+  null,
+)
+assert.equal(
+  takenBy("pov", {
+    frame: [{ id: "pov", from: "card" }],
+    tail: [],
+    switches: { taken: { pov: "card", verbosity: null } },
+  }),
+  "card",
+)
+assert.equal(
+  takenBy("echo", {
+    frame: [{ id: "pov", text: "free", from: "pack-1" }],
+    tail: [],
+    switches: { taken: { pov: "pack-1", verbosity: null } },
+  }),
+  "pack-1",
+)
 
 // the chips: what is set, by name; nothing set reads 跟随卡片; echo and agency are moot with no player in the fiction
 assert.deepEqual(chosen(undefined), ["跟随卡片"])
@@ -53,51 +86,47 @@ assert.deepEqual(mergeLexicon([{ pattern: "a", hint: "mine" }], [{ pattern: "a",
   { pattern: "a", hint: "mine" },
   { pattern: "b" },
 ])
-// the per-card supplement: one tail fragment under `extra`, beside whatever else the card's list holds; cleared, it
-// leaves, and an emptied card leaves the map
-const p0: Player = { global: [], forCard: { wuxia: [{ id: "style", text: "S" }] } }
-const p1 = withExtra(p0, "wuxia", "  多写风物  ")
-assert.deepEqual(p1.forCard, {
-  wuxia: [
-    { id: "style", text: "S" },
-    { id: "extra", at: "tail", mode: "both", text: "多写风物" },
-  ],
-})
-assert.equal(extraOf(p1, "wuxia"), "多写风物")
-assert.equal(extraOf(p1, "yandao"), "")
-assert.deepEqual(withExtra(p1, "wuxia", "改").forCard.wuxia!.at(-1), {
+
+// the per-card supplement: one tail fragment under `extra` in `local.fragments`; cleared, it leaves
+const l0: Local = { id: "local", name: "local", card: "wuxia", fragments: [{ id: "style", text: "S" }] }
+const l1 = withExtra(l0, "  多写风物  ")
+assert.deepEqual(l1.fragments, [
+  { id: "style", text: "S" },
+  { id: "extra", at: "tail", mode: "both", text: "多写风物" },
+])
+assert.equal(extraOf(l1), "多写风物")
+assert.equal(extraOf(undefined), "")
+assert.deepEqual(withExtra(l1, "改").fragments!.at(-1), {
   id: "extra",
   at: "tail",
   mode: "both",
   text: "改",
 })
-assert.deepEqual(withExtra(p1, "wuxia", " ").forCard, { wuxia: [{ id: "style", text: "S" }] })
-assert.deepEqual(withExtra(withExtra(p0, "yandao", "x"), "yandao", "").forCard, p0.forCard)
-// in the head it lands after the global layer and before the card's frame, at the tail it leaves the head
-const head = frame(withExtra(p0, "wuxia", "x"), { id: "wuxia", frame: [{ id: "pov", text: "P" }] }).map((f) => f.id)
-assert.deepEqual(head, ["style", "extra", "pov"])
-// the global requirements: new ones go first, text edits keep the fragment's other keys, a cleared text removes it,
-// the position is a key that leaves for the head
-const g0: Player = {
-  global: [{ id: "language", text: "L", mode: "override", when: { path: "x", is: true } }],
-  forCard: {},
+assert.deepEqual(withExtra(l1, " ").fragments, [{ id: "style", text: "S" }])
+const bareLocal: Local = { id: "local", name: "local", card: "yandao" }
+assert.equal(withExtra(withExtra(bareLocal, "x"), "").fragments, undefined)
+
+// fragment list helpers on a Layer: new ones go first, text edits keep the fragment's other keys, a cleared text removes it
+const g0: Layer = {
+  id: "base",
+  name: "全局基底",
+  fragments: [{ id: "language", text: "L", mode: "override" }],
 }
-const g1 = addGlobal(g0, "req-1", " 白描 ", "tail")
-assert.deepEqual(g1.global[0], { id: "req-1", at: "tail", text: "白描" })
-assert.equal(addGlobal(g0, "req-2", "  ", "tail"), g0)
-assert.deepEqual(setGlobalText(g1, 1, " L2 ").global[1], {
+const g1 = addFragment(g0, "req-1", " 白描 ", "tail")
+assert.deepEqual(g1.fragments![0], { id: "req-1", at: "tail", text: "白描" })
+assert.equal(addFragment(g0, "req-2", "  ", "tail"), g0)
+assert.deepEqual(setFragmentText(g1, 1, " L2 ").fragments![1], {
   id: "language",
   text: "L2",
   mode: "override",
-  when: { path: "x", is: true },
 })
-assert.deepEqual(setGlobalText(g1, 0, "").global, g0.global)
-assert.deepEqual(setGlobalAt(g1, 0, "head").global[0], { id: "req-1", text: "白描" })
-assert.deepEqual(setGlobalAt(g1, 1, "tail").global[1]!.at, "tail")
-assert.deepEqual([atOf(g1.global[0]!), atOf(g1.global[1]!)], ["tail", "head"])
-assert.deepEqual(removeGlobal(g1, 0).global, g0.global)
-// the quick inputs: a key or a snippet round-trips through the editor's draft; the caret between the halves keeps
-// `after`, at the end drops it; a blank label falls back to the glyph; a snippet needs a name and keeps only set keys
+assert.deepEqual(setFragmentText(g1, 0, "").fragments, g0.fragments)
+assert.deepEqual(setFragmentAt(g1, 0, "head").fragments![0], { id: "req-1", text: "白描" })
+assert.equal(setFragmentAt(g1, 1, "tail").fragments![1]!.at, "tail")
+assert.deepEqual([atOf(g1.fragments![0]!), atOf(g1.fragments![1]!)], ["tail", "head"])
+assert.deepEqual(removeFragment(g1, 0).fragments, g0.fragments)
+
+// the quick inputs: a key or a snippet round-trips through the editor's draft
 assert.deepEqual(formatOf(draftOfFormat({ label: "「」", text: "「", after: "」" })), {
   label: "「」",
   text: "「",
@@ -128,22 +157,21 @@ assert.deepEqual(
 assert.equal(caretOf({ text: "「", after: "」" }), "「」")
 assert.equal(caretOf({ text: "继续。" }), "继续。")
 
-// packs, theaters, and proper-noun holes
+// packs, product patches, and proper-noun holes
 assert.equal(
   fillKnown("推进到{{char}}与{{user}}在{{char_place}}重逢", { char: "谢危", user: "姜雪宁" }),
   "推进到谢危与姜雪宁在{{char_place}}重逢",
 )
-const samplePack = {
+const samplePack: Layer = {
   id: "wuxia-pack",
   name: "古风江湖",
   fragments: [{ id: "f1", text: "多写{{char_place}}风物" }],
   entries: [{ id: "竹叶青", text: "烈酒" }],
   lexicon: [{ pattern: "眸子", hint: "眼睛" }],
-  theaters: [{ id: "reading", label: "阅读体", text: "{{char}}与{{user}}观影", on: false }],
+  products: [{ id: "reading", label: "阅读体", text: "{{char}}与{{user}}观影", on: false }],
   snippets: [{ name: "重逢", text: "{{char1}}见{{char2}}" }],
   names: { extra_key: "默认" },
 }
-assert.equal(packCount(samplePack), 5)
 assert.deepEqual(packHoles(samplePack), ["char_place", "char", "char1", "char2", "extra_key"])
 const pNamed = withPackName(samplePack, "char_place", " 临安 ")
 assert.deepEqual(pNamed.names, { extra_key: "默认", char_place: "临安" })
@@ -154,28 +182,27 @@ assert.deepEqual(cardNameKeys(["char", "user", "char2"], { user: "玩家", char:
   "char2",
   "char_place",
 ])
-const plNamed = withCardName({ global: [], forCard: {} }, "wuxia", "char", " 燕惊寒 ")
-assert.deepEqual(plNamed.names, { wuxia: { char: "燕惊寒" } })
-assert.equal(withCardName(plNamed, "wuxia", "char", "").names, undefined)
 
-const pkA = { id: "a", name: "A" }
-const pkB = { id: "b", name: "B" }
-const pkC = { id: "c", name: "C" }
+const pkHarness: Layer = { id: "harness", name: "内置" }
+const pkBase: Layer = { id: "base", name: "全局基底" }
+const pkA: Layer = { id: "a", name: "A" }
+const pkB: Layer = { id: "b", name: "B" }
+const pkC: Layer = { id: "c", name: "C" }
 assert.deepEqual(
-  orderedPacks([pkA, pkB, pkC], ["c", "a"]).map((p) => p.id),
+  orderedPacks([pkHarness, pkBase, pkA, pkB, pkC], ["c", "a"]).map((p) => p.id),
   ["c", "a", "b"],
 )
-const mounted1 = toggleMount({ global: [], forCard: {} }, "wuxia", "b")
-assert.deepEqual(mounted1.packs, { wuxia: ["b"] })
-assert.equal(toggleMount(mounted1, "wuxia", "b").packs, undefined)
+const mounted1 = toggleMount(bareLocal, "b")
+assert.deepEqual(mounted1.mounts, ["b"])
+assert.equal(toggleMount(mounted1, "b").mounts, undefined)
 
-const ths = withTheater([{ id: "inner", on: true }], {
+const ths = withProductPatch([{ id: "inner", on: true }], {
   id: "inner",
   label: "人物心声",
   text: "写{{char}}心声",
   on: true,
 })
 assert.deepEqual(ths, [{ id: "inner", label: "人物心声", text: "写{{char}}心声", on: true }])
-assert.deepEqual(withoutTheater(ths, "inner"), [])
+assert.deepEqual(withoutProductPatch(ths, "inner"), [])
 
 console.log("writing ok")

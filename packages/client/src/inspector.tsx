@@ -395,7 +395,7 @@ export const Inspect = (props: { id: Id }) => {
     const x = node()
     return r && x ? fields(r, x, parent(), whens(view())) : []
   })
-  const shapeOf = (id: string) => view()?.products.find((p) => p.id === id)?.shape
+  const shapeOf = (id: string) => view()?.layer?.products.find((p) => p.id === id)?.shape
   const One = (p: { row: Row }) => (
     <Step
       row={p.row}

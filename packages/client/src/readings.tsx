@@ -412,7 +412,7 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
   const els = createMemo(
     () => {
       const r = view()?.rules
-      return r ? record(r, props.node, props.prev, view()?.products, whens(view())) : []
+      return r ? record(r, props.node, props.prev, view()?.layer?.products, whens(view())) : []
     },
     { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
   )
@@ -505,7 +505,7 @@ export const Demand = (props: { node: Node }) => {
   const busy = read(working)
   const failed = read(error)
   const asked = read(demanded)
-  const demands = () => demandable(view()?.products ?? [], props.node)
+  const demands = () => demandable(view()?.layer?.products ?? [], props.node)
   return (
     <>
       <Show when={demands().length}>
@@ -531,7 +531,7 @@ const trimmed = (v: unknown) => (typeof v === "string" ? v.trim() : v)
 export const Theater = (props: { products: Readonly<Record<string, unknown>>; node?: Node }) => {
   const view = read(card)
   const busy = read(working)
-  const answered = () => theater(view()?.products ?? []).filter((p) => props.products[p.id] !== undefined)
+  const answered = () => theater(view()?.layer?.products ?? []).filter((p) => props.products[p.id] !== undefined)
   return (
     <For each={answered()} keyed={(p) => p.id}>
       {(p) => (
@@ -570,7 +570,7 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
   let dlg!: HTMLDialogElement
   const prev = () => parentOf(all(), props.node)
   return (
-    <Show when={marked(view()?.rules, props.node, prev(), view()?.products)}>
+    <Show when={marked(view()?.rules, props.node, prev(), view()?.layer?.products)}>
       <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
         <Record aria-hidden="true" />
       </button>
@@ -648,7 +648,7 @@ const World = () => {
   const line = read(path)
   const now = createMemo(
     () => {
-      const ws = (view()?.products ?? []).filter((p) => kindOf(p) === "world")
+      const ws = (view()?.layer?.products ?? []).filter((p) => kindOf(p) === "world")
       const v = fold(
         ws,
         line().map((n) => n.turn.products),
@@ -677,7 +677,7 @@ export const hasReadings = (view: CardView | null | undefined) =>
   !!view &&
   (view.rules.fields.some((f) => !f.hidden) ||
     view.lore.entries > 0 ||
-    view.products.some((p) => kindOf(p) === "world"))
+    view.layer.products.some((p) => kindOf(p) === "world"))
 
 /** 读数, a page over the reader: the world now, as one column: the pin, Status, and the world products' folded values.
  *  A turn's change is its Record pill's (`RecordSheet`), not this page's. */

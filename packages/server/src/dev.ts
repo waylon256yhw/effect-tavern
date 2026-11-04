@@ -111,7 +111,7 @@ const files = at
 export const { handler } = tavern({
   data,
   cards: shelf(files, data),
-  player,
+  base: player.base,
   model,
   pinned: scripted, // MODEL=fake scripts every stage, whatever the routing says
   ...(key && { seed: { key } }), // a first start puts the local key in the vault (tavern.ts `seed`)

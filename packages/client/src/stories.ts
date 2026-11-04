@@ -47,12 +47,14 @@ export const openOn = (
 /** The persona id the workspace's row shows: the open story's own, else the card's default; none = the card's own. */
 export const personaOn = (
   lib: { current: number | null; stories: readonly StoryRow[] } | null,
-  defaults: Readonly<Record<string, string>> | undefined,
+  defaults: Readonly<Record<string, string | { persona?: string }>> | undefined,
   card: string | null,
   page: Page,
 ): string | undefined => {
   const s = openOn(lib, card, page)
-  return s ? (s.persona ?? undefined) : defaults?.[card ?? ""]
+  if (s) return s.persona ?? undefined
+  const d = defaults?.[card ?? ""]
+  return typeof d === "string" ? d : d?.persona
 }
 export const busyOn = (rows: readonly StoryRow[], card: string): boolean =>
   rows.some((s) => s.card === card && s.busy !== null)

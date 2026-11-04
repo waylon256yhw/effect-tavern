@@ -1,7 +1,7 @@
 // The wire adapter at the session's seam: one process, a session per story, no logic of its own. A request names its
 // story in `x-tavern-story` (the client's `stories.current`); a story route (/card, /nodes, /calls, /turn, /stop,
 // POST /, DELETE /nodes/<id>) without the header, or with one naming no story, is a 404. The rest (/stories, /cards,
-// /player, /personas, /hats, /packs, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
+// /personas, /hats, /packs, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
 // one turn at a time (turn.ts): an action on a story whose turn is in flight, a synchronous one too (greet, checkout,
 // setField, a node dropped), is a 409 {error, code: "busy"}, and so is deleting the story (the batch delete skips it);
 // stories run side by side, with no lock across them.
@@ -16,14 +16,12 @@
 //                 interrupted and nothing is saved (its stream ends, nothing more), after it the prose halts and the
 //                 turn finishes a `stopped` node down the same streams; null when nothing ran.
 //   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
-//   GET  /player  the player layer in force; PUT /player replaces it whole (decoded as `Player` at this boundary,
-//                 written to the library, in force from the next request; a bad body is a 400).
 //   GET  /stories every card's stories (id, card, title or null, starred, persona or null, turns: the nodes with a player line or note,
 //                 so a greeting is none, last: the last turn's input or null, updated, busy: the phase of a turn in
 //                 flight or null), newest first, and `current`: the story the client is to be on (the one it named
 //                 while that one is there, else the newest, null on an empty library).
 //                 POST /stories {card} makes a new one of that card (400 when there is none), on the card's default
-//                 persona (`Player.persona[card]`), and answers it as `current`, PUT /stories/<id> answers that one (404
+//                 persona (`local.persona`), and answers it as `current`, PUT /stories/<id> answers that one (404
 //                 when there is none), with a body {title?: string | null, starred?: boolean, persona?: string | null}
 //                 names, stars or picks its persona instead (this story's alone; blank title = null, null persona = the
 //                 card's own; `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
@@ -36,14 +34,16 @@
 //                 attachments named by the title.
 //   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
 //                 where it is picked), DELETE /personas/<id> removes it and its picks, the stories' and the card
-//                 defaults' (the client re-reads /player and /stories). Both answer the list. Which persona is in force
-//                 is the story's (`persona` on its row); `Player.persona[card]` is the card's default a new story takes.
+//                 defaults' (the client re-reads the card and /stories). Both answer the list. Which persona is in force
+//                 is the story's (`persona` on its row); `local.persona` is the card's default a new story takes.
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
-//   GET  /packs   the player's writing packs; PUT /packs/<id> {name, fragments?, entries?, lexicon?, products?, snippets?}
-//                 writes one (decoded as `Pack`, in force from the next request on a card that mounts it), DELETE
-//                 /packs/<id> removes it and takes it off every card (the client re-reads /player). Both answer the
-//                 list. Mounting is `packs` on PUT /player.
+//   GET  /packs   the player's rows, one template (runtime layer.ts `Layer`): [harness, base, ...packs], the harness row
+//                 whole (the code's defaults under its overlay). PUT /packs/<id> {name, fragments?, switches?, asks?,
+//                 products?, entries?, lexicon?, snippets?, format?, names?} writes one whole (decoded at this boundary,
+//                 in force from the next request); on `harness` only the difference from the code's defaults is stored,
+//                 an item left out is its default again. DELETE /packs/<id> removes a pack and takes it off every card;
+//                 harness and base are a 400, and so is a PUT naming `card` or `local`. Both answer the list.
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
 //                 {name, type?, value} adds one and answers it the same way; PUT /secrets/<id> {name, type?, value?} renames,
 //                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
@@ -72,16 +72,21 @@
 //                 (library.ts `CardRow`): the card files, then the library's table (tavern.ts `shelf`).
 //                 GET /cards/<id> is what a client draws that card by (404 when there is none), before any
 //                 story of it exists: id, title and summary, the default channel, the rules as data (field bounds,
-//                 options, action ids), the openings whole, the declared products' shapes, the quick inputs
-//                 (snippets), the format keys, the fiction's modules without their text, the guard and lore as counts,
-//                 what the card's text costs each turn, estimated, the 代称 in force (names) and the holes nothing
-//                 fills yet (holes) (session.ts `cardView`).
-//                 Fragment bodies, guard lines and lore never leave the server.
+//                 options, action ids), the openings whole, the fiction's modules without their text, the guard and
+//                 lore as counts, what the card's text costs each turn, estimated (session.ts `cardView`); `local`, the
+//                 player's row on the card; `mounts`, its packs as {id, name}; `layer`, the one merge (layer.ts
+//                 `Resolved`: frame, tail, asks, products, entries, lexicon, snippets, format, names, holes, switches,
+//                 dropped, each item with its `from`), a card's item without its `text`, a card's lexicon entry not at all.
+//                 A client merges nothing.
+//                 The card's fragment bodies, guard lines and lore never leave the server.
+//                 GET /cards/<id>/local is that row alone, PUT /cards/<id>/local writes it whole (decoded as `Local`,
+//                 its card the URL's; in force from the next request; 404 when there is no such card, a bad body a 400).
 //   GET  /card    the same for the story's own card.
 // `inspect` keeps the request messages on `call` events (the stream and /calls); they carry the card's fragment
 // bodies, so a player client gets phase, answer and usage only.
 import { Provider, Secret } from "@effect-tavern/provider"
-import { decodePlayer, Hat, Pack } from "@effect-tavern/runtime/src/fragment.ts"
+import { Hat } from "@effect-tavern/runtime/src/fragment.ts"
+import { decodeHarness, decodeLayer, decodeLocal } from "@effect-tavern/runtime/src/layer.ts"
 import { decodeAction, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
@@ -113,10 +118,9 @@ const failure = (c: Cause.Cause<unknown>): { message: string; code?: string } =>
   return { message: e instanceof Error ? e.message : String(e) }
 }
 
-// The body besides Action and Player, decoded here like them.
+// The body besides Action and the player's rows, decoded here like them.
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
-const PackBody = Schema.decodeUnknownSync(Pack.mapFields(Struct.omit(["id"])))
 const ProviderBody = Schema.decodeUnknownSync(Provider.mapFields(Struct.omit(["id"])))
 const SecretBody = Schema.decodeUnknownSync(
   Schema.Struct({ name: Secret.fields.name, type: Schema.optionalKey(Secret.fields.type), value: Secret.fields.value }),
@@ -235,8 +239,10 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (packAt && (req.method === "PUT" || req.method === "DELETE")) {
       const id = decodeURIComponent(packAt[1]!)
       return reply(async () => {
-        if (req.method === "PUT") lib.packs.put({ id, ...(await read(PackBody)) })
-        else lib.packs.del(id)
+        if (req.method === "PUT") {
+          const raw = (await read((u) => u)) as object
+          lib.packs.put((id === "harness" ? decodeHarness : decodeLayer)({ ...raw, id }))
+        } else lib.packs.del(id)
         return lib.packs.list()
       })
     }
@@ -278,10 +284,19 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (req.method === "GET" && req.url === "/routing") return json(200, lib.routing.read())
     if (req.method === "PUT" && req.url === "/routing")
       return reply(async () => (lib.routing.write(await read(RoutingBody)), lib.routing.read()))
-    if (req.method === "GET" && req.url === "/player") return json(200, lib.player)
-    if (req.method === "PUT" && req.url === "/player")
-      return reply(async () => (lib.setPlayer(await read(decodePlayer)), lib.player))
     if (req.method === "GET" && req.url === "/cards") return json(200, lib.cards())
+    const localAt = /^\/cards\/([^/]+)\/local$/.exec(req.url ?? "")
+    if (localAt && (req.method === "GET" || req.method === "PUT")) {
+      const card = decodeURIComponent(localAt[1]!)
+      if (!lib.cards().some((c) => c.id === card)) return json(404, { error: `no card ${card}` })
+      return reply(async () => {
+        if (req.method === "PUT") {
+          const raw = (await read((u) => u)) as object
+          lib.locals.write(decodeLocal({ ...raw, id: "local", name: card, card }))
+        }
+        return lib.locals.read(card)
+      })
+    }
     const cardAt = req.method === "GET" && /^\/cards\/([^/]+)$/.exec(req.url ?? "")
     if (cardAt) return reply(() => lib.view(decodeURIComponent(cardAt[1]!)), 404)
     // Everything below is one story's: the one the request names.

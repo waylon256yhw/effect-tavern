@@ -9,13 +9,13 @@ import { read } from "./bridge.ts"
 import { roam } from "./controls.tsx"
 import { Check, Close, Clue, Jump } from "./icons.tsx"
 import { Manager } from "./manager.tsx"
-import { dropTag, renameTag, tagCounts } from "./query.ts"
+import { dropTag, renameTag, tagCounts, tagsOfLocals, withTags } from "./query.ts"
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
-import { focus, log, page, personas, player, stories, type StoryRow } from "./store.ts"
+import { focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
 import { openOn, personaOn } from "./stories.ts"
-import { exportUrl, nameStory, pickStoryPersona, putPlayer } from "./wire.ts"
+import { exportUrl, nameStory, pickStoryPersona, putLocal } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const bound = {
@@ -39,14 +39,14 @@ export const openTagManager = (): void => bound.tags()
 export const StoryDialogs = () => {
   const lib = read(stories)
   const people = read(personas)
-  const me = read(player)
+  const allLocals = read(locals)
   const cardId = read(focus)
   const pg = read(page)
   const nodes = read(log)
   // the persona in force: the open story's when it is of the focused card, and the pick writes that story alone; on
-  // the card's page or with none open there, the card's default (the player layer), which a new story of the card
+  // the card's page or with none open there, the card's default (`Local.persona`), which a new story of the card
   // starts on
-  const current = () => people().find((p) => p.id === personaOn(lib(), me()?.persona, cardId(), pg()))
+  const current = () => people().find((p) => p.id === personaOn(lib(), allLocals(), cardId(), pg()))
   // the picker: the search over name and text, the rows it leaves; opened from the workspace's row, closed by a pick
   const [q, setQ] = createSignal("")
   const hits = createMemo(() => {
@@ -70,18 +70,14 @@ export const StoryDialogs = () => {
   }
   const pick = (id: string | undefined) => {
     const c = cardId()
-    if (!me() || c === null) return
+    if (c === null) return
     const s = openOn(lib(), c, pg())
     if (s) return void pickStoryPersona(s.id, id ?? null)
     // the card's page: Begin lands in the open story when it is empty and of this card (card.tsx `fresh`), so that one
     // takes the new default too
     const kept = openOn(lib(), c, "reader")
     if (kept && nodes().nodes.size === 0) void pickStoryPersona(kept.id, id ?? null)
-    void putPlayer((p) => {
-      const { [c]: _, ...rest } = p.persona ?? {}
-      const next = id === undefined ? rest : { ...rest, [c]: id }
-      return { ...p, persona: Object.keys(next).length ? next : undefined }
-    }) // an empty map leaves the JSON like any unset key
+    void putLocal(c, ({ persona: _p, ...rest }) => (id === undefined ? rest : { ...rest, persona: id }))
   }
   // the rename dialog: the confirm's shape with a field; Enter or Save names it, blank clears the name back to
   // "New story", Escape or Cancel keeps it
@@ -133,11 +129,24 @@ export const StoryDialogs = () => {
   // the tag manager: one fixed order (most cards, then the word); a click on a word edits it in place, Enter renames it
   // on every card, Escape or a blur keeps it; × drops it from every card (no confirm: one PUT, the word can be retyped)
   let tagman!: HTMLDialogElement
-  const counts = createMemo(() => tagCounts(me()?.tags))
+  const allTags = createMemo(() => tagsOfLocals(allLocals()))
+  const counts = createMemo(() => tagCounts(allTags()))
   const [editing, setEditing] = createSignal<string | null>(null)
   bound.tags = () => {
     setEditing(null)
     tagman.showModal()
+  }
+  const applyRenameTag = (from: string, to: string) => {
+    const cur = allTags()
+    const next = renameTag(cur, from, to)
+    for (const c of Object.keys(cur))
+      if (cur[c]?.includes(from)) void putLocal(c, (l) => withTags(l, () => next?.[c] ?? []))
+  }
+  const applyDropTag = (word: string) => {
+    const cur = allTags()
+    const next = dropTag(cur, word)
+    for (const c of Object.keys(cur))
+      if (cur[c]?.includes(word)) void putLocal(c, (l) => withTags(l, () => next?.[c] ?? []))
   }
   return (
     <>
@@ -253,7 +262,7 @@ export const StoryDialogs = () => {
                             const from = row()[0]
                             const to = e.currentTarget.value
                             setEditing(null)
-                            if (to.trim() && to.trim() !== from) void putPlayer((p) => renameTag(p, from, to))
+                            if (to.trim() && to.trim() !== from) applyRenameTag(from, to)
                           }
                         }}
                       />
@@ -265,7 +274,7 @@ export const StoryDialogs = () => {
                       type="button"
                       class="del"
                       aria-label={`${row()[0]} · ${t("common.delete")}`}
-                      onClick={() => void putPlayer((p) => dropTag(p, row()[0]))}
+                      onClick={() => applyDropTag(row()[0])}
                     >
                       <Close aria-hidden="true" />
                     </button>

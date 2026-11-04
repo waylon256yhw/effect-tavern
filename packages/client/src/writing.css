@@ -1,11 +1,12 @@
-/* ───────── Writing: the player's writing workbench over the reader (writing.tsx, issue #69) ─────────
-   page === "writing": the fields of the player layer that are not the persona pick, in tabs. Desktop: one bounded
-   sheet centred on the canvas, a fixed head (back, title, the card, the tabs) over one body; each tab is a column that
-   fills the sheet and scrolls inside itself, so a tab change never moves the sheet's edges. A phone: the sheet is the
-   viewport, the tabs a second row under the head. The shared controls (.btn, .switch, .tag, .field, .block-title,
-   .inline-search, .scroller, .empty-card) are settings.css's; .inspect (inspector.css) is the fixed page shell. */
+/* ───────── Writing: the per-card writing workbench over the reader (writing.tsx, docs/packs-brief.md §九 §7) ─────────
+   The page is the whole stage card, matching card.css (.manifest / .cardsheet). On a stage of 52rem or more, two
+   columns fill the stage's height without scrolling the page: left (the header, the pack mounting block with 管理 →
+   pinned to its right, the proper-noun defaults, and the per-card extra requirement filling the rest of the column);
+   right (the four narration switches with their compiled sentence and the per-turn record products scrolling inside
+   their share). On a narrower stage the columns stack and the page scrolls. Also holds the shared styles for the
+   6-tab pack editor in settings (packs.tsx). */
 .wpage {
-  display: flex;
+  overflow-y: auto;
   font-size: var(--text-body);
 }
 .wpage .mono {
@@ -21,47 +22,114 @@
   height: var(--icon-sm);
 }
 .wsheet {
-  flex: 1;
+  box-sizing: border-box;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  padding: var(--space-4);
+}
+.wsheet > * {
+  min-height: 0;
+}
+.wcol {
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  background: var(--surface-1);
+  gap: var(--space-4);
 }
 .whead {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: calc(var(--space-2) + var(--safe-top)) var(--space-3) var(--space-2) var(--space-2);
-  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
+}
+.whead .icon {
+  margin-left: -6px;
 }
 .whead h1 {
   margin: 0;
-  font-size: var(--text-heading);
+  font-size: var(--text-title);
   font-weight: 650;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.whead .spacer {
+.dropped-strip {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.wcard {
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.wcard.grow {
   flex: 1;
 }
-/* the tabs: a pill row, the open one lifted; on a phone the head's second row, each tab an equal share */
+.wcard.grow .field-well {
+  height: 12rem;
+}
+.pack-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pack-chip {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+.pack-chip:hover:not(:disabled) {
+  background: var(--alpha-2);
+  color: var(--ink);
+}
+.pack-chip[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.name-chip[data-unfilled="true"] {
+  background: var(--warn-soft);
+}
+.name-chip[data-unfilled="true"] .hole-key {
+  color: var(--warn);
+}
+
+/* the tabs: a pill row, the open one lifted (used in packs.tsx) */
 .wtabs {
   flex: none;
   box-sizing: border-box;
-  width: 100%;
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
 }
 .wtabs button {
-  flex: 1;
+  flex: none;
   min-width: 0;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: var(--radius-pill);
   color: var(--ink-2);
   font-size: var(--text-footnote);
@@ -83,7 +151,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px var(--space-3);
+  padding: 10px var(--space-4);
   background: var(--surface-2);
   box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--line);
 }
@@ -99,41 +167,11 @@
   color: var(--ink-3);
   margin-right: 4px;
 }
-.pack-chip {
-  height: 28px;
-  padding: 0 11px;
-  border-radius: var(--radius-pill);
-  background: var(--alpha-1);
-  color: var(--ink-2);
-  font-size: var(--text-footnote);
-  font-weight: 550;
-  transition:
-    background var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease);
-}
-.pack-chip:hover {
-  background: var(--alpha-2);
-  color: var(--ink);
-}
-.pack-chip[aria-pressed="true"] {
-  background: var(--primary);
-  color: var(--primary-ink);
-}
 .wmount .name-chip {
   height: 28px;
   padding: 0 9px;
 }
-.wmount .name-chip[data-missing="true"] {
-  background: var(--warn-soft);
-}
-.wmount .name-chip[data-missing="true"] .hole-key {
-  color: var(--warn);
-}
-.wbody {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
+
 .wpanel {
   flex: 1;
   min-width: 0;
@@ -154,20 +192,21 @@
   flex: 1;
 }
 /* a scroller whose ends fade into the panel, like the reader's column: its padding is the fade */
-.wpage .fade {
+.wpage .fade,
+.pack-detail-card .fade {
   padding-top: var(--fade);
   padding-bottom: var(--fade);
   mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
 }
 .wpage .none {
   margin: 0;
-  padding: var(--space-2);
+  padding: var(--space-1) 0;
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
 
-/* the switches: a card per switch, its name over a row of pills, the set one solid; a moot one (no player in the
-   fiction: echo and agency) is a disabled fieldset, dimmed with its buttons */
+/* the switches: a card per switch, its name over a row of pills and its compiled sentence below; a moot or taken one
+   is a disabled fieldset, dimmed with its buttons */
 .sw-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -184,7 +223,13 @@
   transition: opacity var(--dur-3) var(--ease);
 }
 .sw-card:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
+}
+.sw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 .sw-card legend {
   padding: 0;
@@ -218,8 +263,14 @@
   background: var(--primary);
   color: var(--primary-ink);
 }
+.sw-sentence {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  line-height: 1.45;
+}
 
-/* the record products: a 2-column grid of compact cards (matching .sw-grid above), not full-width bars */
+/* the record products: compact cards grouped by kind, with their prompt preview visible underneath */
 .prod-grid {
   flex: 1;
   min-height: 0;
@@ -228,7 +279,6 @@
   align-content: start;
   gap: var(--space-2);
 }
-/* a kind's word over its products, across the grid */
 .prod-kind {
   grid-column: 1 / -1;
   margin: var(--space-2) 0 0;
@@ -242,17 +292,25 @@
 .prod-item {
   box-sizing: border-box;
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 44px;
-  padding: 0 var(--space-3);
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-card);
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
+.prod-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
 .prod-item .pname {
   flex: 1;
   min-width: 0;
+  font-weight: 550;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -260,6 +318,13 @@
 .prod-item .pid {
   font-family: var(--font-mono);
   color: var(--ink-2);
+}
+.prod-preview {
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .prod-item[data-editable="true"] {
   cursor: pointer;
@@ -274,23 +339,7 @@
   font-weight: 600;
 }
 
-/* the prose requirements: two cards, this card's supplement (one text that fills its card) and the global list (a bar
-   over a text each: the position, the count, the remove). A phone stacks the cards and scrolls the stack; the desktop
-   sets them side by side, each as tall as the sheet, the list scrolling inside its card behind the fade */
-.prose-grid {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color var(--dur-3) var(--ease);
-}
-.prose-grid:hover {
-  scrollbar-color: var(--alpha-2) transparent;
-}
+/* shared card & well styles (used in writing.tsx and packs.tsx) */
 .prose-card {
   flex: none;
   min-width: 0;
@@ -303,14 +352,12 @@
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
+.prose-card.grow {
+  flex: 1;
+}
 .prose-card .spacer {
   flex: 1;
 }
-.prose-card.mine .field-well {
-  height: 12rem;
-}
-/* a text in a well: the well draws the fill, the radius and the focus hairline; the textarea inside is bare, its thin
-   thumb shown under the pointer, its ends fading into the well's padding (the composer's box, reader.css) */
 .field-well {
   flex: none;
   min-height: 0;
@@ -318,6 +365,9 @@
   border-radius: var(--radius);
   background: var(--alpha-1);
   transition: box-shadow var(--dur-2) var(--ease);
+}
+.field-well.grow {
+  flex: 1;
 }
 .field-well:focus-within {
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
@@ -350,6 +400,8 @@
   opacity: 0.5;
 }
 .frag-list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -360,8 +412,11 @@
   flex-direction: column;
   gap: var(--space-1);
 }
+.frag-row[data-off="true"] .field-well {
+  opacity: 0.45;
+}
 .frag-row .field-well {
-  height: 6.5rem;
+  height: 5.5rem;
 }
 .frag-bar {
   display: flex;
@@ -369,7 +424,9 @@
   gap: var(--space-2);
   min-height: var(--control-sm);
 }
-/* the position: two pills, the one in force solid */
+.frag-bar .spacer {
+  flex: 1;
+}
 .at-toggle {
   display: inline-flex;
   gap: 2px;
@@ -398,8 +455,7 @@
   opacity: 0.5;
 }
 
-/* the lexicon: the title row holds the count, the search, the file buttons, add, and the polish switch (it wraps on
-   a phone); the list is a card with a fixed column head over its own scroller, dimmed while polish is off */
+/* lexicon table (used in packs.tsx) */
 .lex-title {
   flex-wrap: wrap;
   row-gap: var(--space-2);
@@ -467,8 +523,7 @@
   margin: 0;
 }
 
-/* the quick inputs: the keys as a row of glyphs, the snippets as rows that fill the rest; the player's own open the
-   editor, the harness defaults sit after them, dimmed and labelled */
+/* quick inputs (used in packs.tsx) */
 .input-card {
   flex: none;
   min-height: 0;
@@ -568,7 +623,8 @@
 .builtin {
   opacity: 0.6;
 }
-/* the editor: the settings' modal (controls.tsx) over this page: its dialog rules, then labelled fields in a column */
+
+/* modal over .wpage */
 .wpage .modal {
   box-sizing: border-box;
   width: min(29rem, calc(100% - 2 * var(--space-4)));
@@ -621,66 +677,24 @@
   color: var(--danger);
 }
 
-/* desktop: the sheet is a card on the canvas, the head one row, the switches and products two across */
-@media (min-width: 52rem) {
+/* full-stage two-column layout on stages >= 52rem (matching card.css) */
+@container stage (width >= 52rem) {
   .wpage {
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-5);
-    background: var(--surface-0);
+    overflow: hidden;
   }
   .wsheet {
-    flex: none;
-    width: 100%;
-    max-width: 56rem;
-    height: min(42rem, 100%);
-    border-radius: var(--radius-dialog);
-    box-shadow: var(--shadow-2);
+    flex: 1;
+    grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: var(--space-6);
+    padding: var(--space-6);
   }
-  .whead {
-    flex-wrap: nowrap;
-    min-height: 56px;
-    box-sizing: border-box;
-    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
-  }
-  .wtabs {
-    width: auto;
-  }
-  .wtabs button {
-    flex: none;
-    padding: 0 14px;
-  }
-  .wmount {
-    padding: 10px var(--space-5);
-  }
-  .wpanel {
-    gap: var(--space-5);
-    padding: var(--space-5);
+  .wcard.grow .field-well {
+    flex: 1;
+    height: auto;
   }
   .sw-grid,
   .prod-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .prose-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow: visible;
-  }
-  .prose-card.mine .field-well {
-    flex: 1;
-    height: auto;
-  }
-  .frag-list {
-    flex: 1;
-    min-height: 0;
-    padding-block: var(--fade);
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color var(--dur-3) var(--ease);
-    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
-  }
-  .frag-list:hover {
-    scrollbar-color: var(--alpha-2) transparent;
   }
 }

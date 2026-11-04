@@ -34,7 +34,12 @@ const scripted = {
 const model = () => scripted
 const shared = open(":memory:")
 const chats = shelf([chat], open(":memory:")) // a shelf of one, for the taverns whose card does not matter
-const lib = library({ data: shared, cards: shelf([{ ...chat, greetings: [{ text: "G" }] }], shared), player, model })
+const lib = library({
+  data: shared,
+  cards: shelf([{ ...chat, greetings: [{ text: "G" }], lexicon: [{ pattern: "CARD-BAN" }] }], shared),
+  base: player.base,
+  model,
+})
 
 const wired = (v: unknown) => JSON.parse(JSON.stringify(v)) as unknown // what JSON keeps: no `undefined` keys
 const sse = (text: string) =>
@@ -75,17 +80,35 @@ const run = async (inspect: boolean) => {
       ],
     )
 
-    // the player layer: read whole, replaced whole; the card's quick inputs follow it at once, a bad body is a 400
-    assert.deepEqual(await (await fetch(`${base}/player`)).json(), wired(player))
-    const mine = { ...player, writing: { pov: "third" as const }, snippets: [{ name: "Q", text: "q" }] }
-    const put = (v: unknown) => fetch(`${base}/player`, { method: "PUT", body: JSON.stringify(v) })
-    assert.deepEqual(await (await put(mine)).json(), wired(mine))
+    assert.ok(!JSON.stringify(about).includes("CARD-BAN")) // a card's lexicon entry does not leave the server at all
+    // what the card page reads: the player's row, its mounts by name, the one merge, a card's items without their text
+    assert.deepEqual([about["local"], about["mounts"]], [{ id: "local", name: chat.id, card: chat.id }, []])
+    const merged = about["layer"] as { frame: { from: string; text?: string }[]; names: unknown }
+    assert.ok(merged.frame.some((f) => f.from === "base" && f.text))
+    assert.ok(merged.frame.some((f) => f.from === "card") && merged.frame.every((f) => f.from !== "card" || !f.text))
+    assert.equal((await fetch(`${base}/player`)).status, 404) // no such route any more
+
+    // the local row: read whole, replaced whole, its card the URL's; the card follows at once, a bad body is a 400
+    const local = (v?: unknown, card = chat.id) =>
+      fetch(`${base}/cards/${card}/local`, v === undefined ? {} : { method: "PUT", body: JSON.stringify(v) })
+    assert.deepEqual(await (await local()).json(), { id: "local", name: chat.id, card: chat.id })
+    const put = await local({ card: "elsewhere", snippets: [{ name: "Q", text: "q" }], switches: { pov: "third" } })
+    assert.deepEqual(await put.json(), {
+      id: "local",
+      name: chat.id,
+      card: chat.id,
+      snippets: [{ name: "Q", text: "q" }],
+      switches: { pov: "third" },
+    })
     assert.equal(
-      ((await (await fetch(`${base}/card`)).json()) as { snippets: { name: string }[] }).snippets[0]!.name,
+      ((await (await fetch(`${base}/card`)).json()) as { layer: { snippets: { name: string }[] } }).layer.snippets[0]!
+        .name,
       "Q",
     )
-    assert.equal((await put({ global: "no" })).status, 400)
-    assert.equal((await put(player)).status, 200)
+    assert.equal((await local({ snippets: "no" })).status, 400)
+    assert.equal((await local(undefined, "none")).status, 404)
+    assert.equal((await local({}, "none")).status, 404)
+    assert.equal((await local({})).status, 200)
 
     const r = await post({ kind: "act", parent: null, input: { text: "hi" } })
     assert.equal(r.headers.get("content-type"), "text/event-stream")
@@ -206,7 +229,7 @@ const run = async (inspect: boolean) => {
     const again = sse(await (await post({ kind: "act", parent: null, input: { text: "hi" } })).text())
     assert.equal((again.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id, u.id + 1) // one past every id ever handed out, the dropped tail's included
 
-    // The library on the wire. A persona is the player's, picked per card on the player row: the pick puts its text in
+    // The library on the wire. A persona is the player's, picked per card on the local row: the pick puts its text in
     // the narrator's head (seen when inspecting) from the next request on, an edit of the persona too, no new story;
     // deleting it drops the pick. A new story opens empty; switching back finds the first story's nodes; a story that is
     // not there is a 404.
@@ -220,8 +243,7 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await (await persona("monk", { name: monk.name, text: monk.text })).json(), [monk])
     assert.equal((await persona("monk", { name: 1 })).status, 400)
     assert.deepEqual(await (await fetch(`${base}/personas`)).json(), [monk])
-    const me = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
-    await fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...me, persona: { [chat.id]: "monk" } }) })
+    await local({ persona: "monk" })
     const opened = (await (
       await fetch(`${base}/stories`, { method: "POST", body: JSON.stringify({ card: chat.id }) })
     ).json()) as {
@@ -376,40 +398,73 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await (await hat()).json(), [])
     assert.equal((await headOf("gone")).includes("HAT-TAIL"), false)
 
-    // A pack is a library row `Player.packs[card]` mounts: put and mounted, its fragment is in the next head; a bad body
-    // is a 400; deleted, gone from the list and from /player, and from the head.
-    const pack = (v?: unknown) =>
-      fetch(`${base}/packs/kit`, {
+    // A pack is a library row `local.mounts` names: put and mounted, its fragment is in the next head; a bad body is a
+    // 400; deleted, gone from the list, the mounts and the head. `when` and `role` do not get through the boundary.
+    const pack = (v?: unknown, id = "kit") =>
+      fetch(`${base}/packs/${id}`, {
         method: v === undefined ? "DELETE" : "PUT",
         body: v === undefined ? undefined : JSON.stringify(v),
       })
     const kit = { name: "文风", fragments: [{ id: "style", text: "PACK-STYLE" }] }
-    assert.deepEqual(await (await pack(kit)).json(), [{ id: "kit", ...kit }])
+    const noRanks = (rows: { id: string }[]) => rows.filter((r) => r.id !== "harness" && r.id !== "base")
+    const packsIn = async (r: Response) => noRanks((await r.json()) as { id: string }[])
+    assert.deepEqual(
+      await packsIn(await pack({ ...kit, fragments: [{ ...kit.fragments[0], role: "user", when: { all: [] } }] })),
+      [{ id: "kit", ...kit }],
+    )
     assert.equal((await pack({ name: 1 })).status, 400)
     assert.equal((await pack({ name: "x", entries: [{ id: "a", layers: [] }] })).status, 400)
-    assert.deepEqual(await (await fetch(`${base}/packs`)).json(), [{ id: "kit", ...kit }])
-    const layer = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
-    await fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...layer, packs: { [chat.id]: ["kit"] } }) })
-    assert.deepEqual(((await (await fetch(`${base}/player`)).json()) as { packs: unknown }).packs, {
-      [chat.id]: ["kit"],
-    })
+    assert.equal((await pack({ name: "x" }, "local")).status, 400)
+    const layerRows = (await (await fetch(`${base}/packs`)).json()) as {
+      id: string
+      asks?: { id: string; text: string }[]
+    }[]
+    assert.deepEqual(
+      layerRows.map((r) => r.id),
+      ["harness", "base", "kit"],
+    )
+    assert.equal(
+      layerRows[0]!.asks!.some((a) => a.id === "switch.pov.second"),
+      true,
+    ) // the harness row whole
+    await local({ persona: "monk", mounts: ["kit"] })
+    assert.deepEqual(((await (await local()).json()) as { mounts: unknown }).mounts, ["kit"])
+    assert.deepEqual(((await (await fetch(`${base}/cards/${chat.id}`)).json()) as { mounts: unknown }).mounts, [
+      { id: "kit", name: "文风" },
+    ])
     assert.equal((await headOf("packed")).includes("PACK-STYLE"), inspect)
-    assert.deepEqual(await (await pack()).json(), [])
-    assert.equal(((await (await fetch(`${base}/player`)).json()) as { packs?: unknown }).packs, undefined)
+    assert.deepEqual(await packsIn(await pack()), [])
+    assert.equal(((await (await local()).json()) as { mounts?: unknown }).mounts, undefined)
     assert.equal((await headOf("unpacked")).includes("PACK-STYLE"), false)
-    // 代称: `PUT /player` keeps the player's table, a bad value is refused at the boundary, /cards/<id> reads it back
-    const before = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
-    const putNames = (names: unknown) =>
-      fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...before, names }) })
-    assert.equal((await putNames({ [chat.id]: { char: "两\n行" } })).status, 400)
-    await putNames({ [chat.id]: { char: "依瑞丝" } })
-    assert.deepEqual(((await (await fetch(`${base}/player`)).json()) as { names: unknown }).names, {
-      [chat.id]: { char: "依瑞丝" },
-    })
-    const view = (await (await fetch(`${base}/cards/${chat.id}`)).json()) as { names: unknown; holes: unknown }
-    assert.deepEqual(view.names, { user: "玩家", char: "依瑞丝" })
-    assert.deepEqual(view.holes, [])
-    await putNames(undefined)
+    // the harness row: only the difference stored, the rest its default; neither rank can be deleted
+    const edited = {
+      ...layerRows[0],
+      asks: layerRows[0]!.asks!.map((a) => (a.id === "lookup" ? { ...a, text: "OVERLAY" } : a)),
+    }
+    const after = (await (await pack(edited, "harness")).json()) as typeof layerRows
+    assert.equal(after[0]!.asks!.find((a) => a.id === "lookup")!.text, "OVERLAY")
+    assert.equal(after[0]!.asks!.length, layerRows[0]!.asks!.length)
+    assert.deepEqual(
+      shared.packs.list().find((p) => p.id === "harness"),
+      { id: "harness", name: "内置", asks: [{ id: "lookup", text: "OVERLAY" }] },
+    )
+    await pack(layerRows[0], "harness")
+    assert.equal(
+      shared.packs.list().find((p) => p.id === "harness"),
+      undefined,
+    )
+    assert.equal((await pack(undefined, "harness")).status, 400)
+    assert.equal((await pack(undefined, "base")).status, 400)
+    // 代称: the local row keeps the player's table, a bad value is refused at the boundary, /cards/<id> reads it back
+    assert.equal((await local({ names: { char: "两\n行" } })).status, 400)
+    await local({ names: { char: "依瑞丝" } })
+    assert.deepEqual(((await (await local()).json()) as { names: unknown }).names, { char: "依瑞丝" })
+    const view = (await (await fetch(`${base}/cards/${chat.id}`)).json()) as {
+      layer: { names: unknown; holes: unknown }
+    }
+    assert.deepEqual(view.layer.names, { user: "玩家", char: "依瑞丝" })
+    assert.deepEqual(view.layer.holes, [])
+    await local({})
   } finally {
     server.close()
   }
@@ -437,7 +492,7 @@ await run(false)
   const { lib: guarded, handler } = tavern({
     data,
     cards: shelf([{ ...chat, guard: ["R"] }], data),
-    player,
+    base: player.base,
     model: () => drafts,
   })
   const story = guarded.stories.create(chat.id)
@@ -477,7 +532,7 @@ await run(false)
     const doc = readStage(o)
     return doc.phase === "narrate" ? { text: "hello world ".repeat(5), delay: 20 } : defaultAnswer(doc, canned)
   })
-  const { handler } = tavern({ data, cards: shelf([chat, two], data), player, model: () => slowly })
+  const { handler } = tavern({ data, cards: shelf([chat, two], data), base: player.base, model: () => slowly })
   const server = createServer(handler).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const on = (id: number, init: RequestInit = {}) => ({ ...init, headers: { "x-tavern-story": String(id) } })
@@ -525,7 +580,9 @@ await run(false)
   const dead = createServer().listen(0)
   const deadUrl = `http://localhost:${(dead.address() as AddressInfo).port}`
   dead.close()
-  const server = createServer(tavern({ data: open(":memory:"), cards: chats, player, model }).handler).listen(0)
+  const server = createServer(
+    tavern({ data: open(":memory:"), cards: chats, base: player.base, model }).handler,
+  ).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const call = async (method: string, path: string, v?: unknown) => {
     const r = await fetch(base + path, { method, body: v === undefined ? undefined : JSON.stringify(v) })
@@ -645,7 +702,7 @@ await run(false)
 // A tavern with no routing and no environment model still answers GET /nodes (the fold reads no model); the first line
 // it is sent fails with the code the client links to Settings → 默认模型 by (issue #61).
 {
-  const t = tavern({ data: open(":memory:"), cards: chats, player })
+  const t = tavern({ data: open(":memory:"), cards: chats, base: player.base })
   const headers = { "x-tavern-story": String(t.lib.stories.create(chat.id)) }
   const bare = createServer(t.handler).listen(0)
   const base = `http://localhost:${(bare.address() as AddressInfo).port}`

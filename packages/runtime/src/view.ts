@@ -1,17 +1,17 @@
 // What a stage reads at a state, as plain text for a person or an agent writing a card (issue #28): the head fragment by
 // fragment, the lore at that state, what record asks, and each fiction band beside the readout that moves its field.
-// Pure: a card, a player layer and a state in, text out. Nothing here renders a message: the head goes through
-// fragment.ts `head`, the lore through lore.ts, the wordings and products through session.ts, and the document whose
+// Pure: a card, the player's rows and a state in, text out. Nothing here renders a message: the head goes through
+// fragment.ts `head`, the lore through lore.ts, the wordings and products through layer.ts, and the document whose
 // total is printed is `request()` itself, so what prints is what the call would send.
 import type { Message } from "@effect-tavern/provider"
 import { drawn, makeCard, type Card, type State } from "./card.ts"
 import { holds, reads, type Cond } from "./cond.ts"
-import { frame, head, type Fragment, type Player } from "./fragment.ts"
+import { head, type Fragment } from "./fragment.ts"
+import { resolve, type Rows } from "./layer.ts"
 import { hook, makeLore } from "./lore.ts"
+import { fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
-import { resolve } from "./product.ts"
 import { floorAt } from "./derived.ts"
-import { defaultProducts, questionOf, wordingOf } from "./session.ts"
 import { tokens } from "./tokens.ts"
 
 export const stages = ["narrate", "record", "lookup"] as const
@@ -42,7 +42,7 @@ const textOf = (m: Message) =>
 const when = (c?: Cond) => (c ? ` when ${JSON.stringify(c)}` : "")
 const indent = (t: string) => t.replace(/^/gm, "    ")
 
-export const view = (card: Card, player: Player, o: Options = {}): View => {
+export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const stage = o.stage ?? "narrate"
   const rpg = makeCard(card.rules)
   // The state: initial, a greeting's opening, then the overrides as `set` effects (validated like any effect).
@@ -58,7 +58,9 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
   ).s
 
   // ───────── head ─────────
-  const layers = frame(player, card)
+  const R = resolve(card, rows)
+  const fiction = fill(card.fiction, R.names)
+  const layers = [...R.frame, ...R.tail]
   const frag = (zone: string, f: Fragment) => {
     const on = head([f], { state: s })
     const name = `[${zone}] ${f.id}${f.label ? ` ${f.label}` : ""}${when(f.when)}`
@@ -71,7 +73,7 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
     ...layers
       .filter((f) => stage === "narrate" || f.at !== "tail")
       .map((f) => frag(f.at === "tail" ? "tail" : "frame", f)),
-    ...(stage === "narrate" ? card.fiction.map((f) => frag("fiction", f)) : []),
+    ...(stage === "narrate" ? fiction.map((f) => frag("fiction", f)) : []),
   ]
 
   // ───────── lore ─────────
@@ -106,22 +108,21 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
   })
 
   // ───────── record ─────────
-  const products = resolve(defaultProducts(card.input ?? "act"), card.products, [], player.products) // a 小剧场 is narrate's, not this record document's
-  const asks = products
-    .filter((p) => p.on && (!p.when || holds(p.when, s)))
-    .map((p) => `${p.id}: ${questionOf(player, card, p)}`)
+  const asks = R.products // a 小剧场 is narrate's, not this record document's
+    .filter((p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, s)))
+    .map((p) => `${p.id}: ${p.text}`)
   const qs = rpg.questions(s)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
 
   // ───────── the document ─────────
   const ask: Ask =
     stage === "lookup"
-      ? { stage, question: wordingOf(player, card, "lookup"), index }
+      ? { stage, question: R.asks["lookup"]!.text, index }
       : stage === "record"
-        ? { stage, known: "Known: ", asks, readout: wordingOf(player, card, "record.readout"), questions, prose: "" }
+        ? { stage, known: "Known: ", asks, readout: R.asks["record.readout"]!.text, questions, prose: "" }
         : {
             stage,
-            fiction: head(card.fiction, { state: s }),
+            fiction: head(fiction, { state: s }),
             history: [],
             summarized: false,
             told: [],
@@ -131,16 +132,10 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
           }
   const doc = request(
     {
-      frame: head(
-        layers.filter((f) => f.at !== "tail"),
-        { state: s },
-      ),
-      tail: head(
-        layers.filter((f) => f.at === "tail"),
-        { state: s },
-      ),
+      frame: head(R.frame, { state: s }),
+      tail: head(R.tail, { state: s }),
       input: { text: "" },
-      thought: wordingOf(player, card, "input.thought"),
+      thought: R.asks["input.thought"]!.text,
     },
     ask,
   )
@@ -215,9 +210,9 @@ export const fields = (card: Card): string[] =>
  *  prose is written: the fiction bands that hold, the lore windows open for turn 1, the readouts record asks after it.
  *  An observation, not a rule (#83): an opening that fires an event on turn 1 may be meant; the author reads it here
  *  rather than in a live run (ri's single opening set 好感度 60, and the confession opened and was judged on turn 1). */
-export const openings = (card: Card, player: Player): string[] =>
+export const openings = (card: Card, rows: Rows): string[] =>
   card.greetings.map((_, i) => {
-    const v = view(card, player, { greeting: i })
+    const v = view(card, rows, { greeting: i })
     const state = Object.entries(v.state).map(([k, x]) => `${k}=${x}`)
     const list = (xs: string[]) => (xs.length ? xs.join(", ") : "-")
     return `greeting ${i}  ${state.length ? state.join(" ") : "(no fields)"}  bands: ${list(v.bands)}  windows: ${list(v.windows)}  readouts: ${list(v.asked)}`

@@ -1,36 +1,54 @@
-// The prose requirements as the Writing page edits them (the 文风与要求 tab), pure over the player layer: the per-card
-// supplement is one tail fragment under a fixed id in `Player.forCard[card]` (the rest of that card's list, hand-written
-// or imported, is left as it is); the global requirements are `Player.global` with text and position exposed, every
-// other key of a fragment (mode, when, role, label) kept as the layer has it. A text cleared is the fragment removed.
-import type { Fragment, Player } from "@effect-tavern/runtime/src/fragment.ts"
+// The prose requirements as the Writing page and Settings → 写作包 edit them, pure over a `Layer` / `Local` row: the
+// per-card supplement is one tail fragment under a fixed id (`extra`) in `Local.fragments` (the rest of the row's list
+// is left as it is); a row's `fragments` list exposes text, position (`at`), slot (`id`) and `mode`. A text cleared is
+// the fragment removed.
+import type { Fragment } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Layer } from "@effect-tavern/runtime/src/layer.ts"
 
 /** The per-card supplement's slot id: no card frame names it, so it meets nothing and `mode` is moot; `both` says so. */
 export const EXTRA = "extra"
 export type At = NonNullable<Fragment["at"]>
 
-export const extraOf = (p: Player, card: string): string => p.forCard[card]?.find((f) => f.id === EXTRA)?.text ?? ""
-export const withExtra = (p: Player, card: string, text: string): Player => {
-  const { [card]: mine = [], ...others } = p.forCard
-  const rest = mine.filter((f) => f.id !== EXTRA)
+export const extraOf = (r: Partial<Layer> | undefined): string => r?.fragments?.find((f) => f.id === EXTRA)?.text ?? ""
+export const withExtra = <R extends Layer>(r: R, text: string): R => {
+  const rest = (r.fragments ?? []).filter((f) => f.id !== EXTRA)
   const t = text.trim()
   const list = t ? [...rest, { id: EXTRA, at: "tail" as const, mode: "both" as const, text: t }] : rest
-  return { ...p, forCard: list.length ? { ...others, [card]: list } : others }
+  const { fragments: _, ...base } = r
+  return (list.length ? { ...base, fragments: list } : base) as R
 }
 
 /** Where a fragment goes: absent is the head (fragment.ts). */
 export const atOf = (f: Fragment): At => f.at ?? "head"
-export const addGlobal = (p: Player, id: string, text: string, at: At): Player =>
-  text.trim() ? { ...p, global: [{ id, at, text: text.trim() }, ...p.global] } : p
-export const removeGlobal = (p: Player, i: number): Player => ({ ...p, global: p.global.filter((_, j) => j !== i) })
-export const setGlobalText = (p: Player, i: number, text: string): Player =>
+const withFragments = <R extends Layer>(r: R, list: readonly Fragment[]): R => {
+  const { fragments: _, ...base } = r
+  return (list.length ? { ...base, fragments: list } : base) as R
+}
+export const addFragment = <R extends Layer>(r: R, id: string, text: string, at: At): R =>
   text.trim()
-    ? { ...p, global: p.global.map((f, j) => (j === i ? { ...f, text: text.trim() } : f)) }
-    : removeGlobal(p, i)
-export const setGlobalAt = (p: Player, i: number, at: At): Player => ({
-  ...p,
-  global: p.global.map((f, j) => {
-    if (j !== i) return f
-    const { at: _at, ...rest } = f
-    return at === "head" ? rest : { ...rest, at } // head is the absent default: the key leaves
-  }),
-})
+    ? withFragments(r, [
+        { id, ...(at === "tail" ? { at: "tail" as const } : {}), text: text.trim() },
+        ...(r.fragments ?? []),
+      ])
+    : r
+export const removeFragment = <R extends Layer>(r: R, i: number): R =>
+  withFragments(
+    r,
+    (r.fragments ?? []).filter((_, j) => j !== i),
+  )
+export const setFragmentText = <R extends Layer>(r: R, i: number, text: string): R =>
+  text.trim()
+    ? withFragments(
+        r,
+        (r.fragments ?? []).map((f, j) => (j === i ? { ...f, text: text.trim() } : f)),
+      )
+    : removeFragment(r, i)
+export const setFragmentAt = <R extends Layer>(r: R, i: number, at: At): R =>
+  withFragments(
+    r,
+    (r.fragments ?? []).map((f, j) => {
+      if (j !== i) return f
+      const { at: _at, ...rest } = f
+      return at === "head" ? rest : { ...rest, at } // head is the absent default: the key leaves
+    }),
+  )

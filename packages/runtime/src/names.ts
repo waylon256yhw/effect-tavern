@@ -4,9 +4,11 @@
 // per entry before a request is assembled (docs/packs-brief.md §八); history and the player's input are never expanded.
 import { Schema } from "effect"
 
+/** A value's lock: one line, no `{{`. The schema holds it at a boundary, layer.ts again over whatever a row holds. */
+export const nameOk = (v: string) => !/[\r\n]|\{\{/.test(v)
 export const Names = Schema.Record(
   Schema.String,
-  Schema.String.check(Schema.makeFilter((v) => !/[\r\n]|\{\{/.test(v) || "a name is one line with no {{")),
+  Schema.String.check(Schema.makeFilter((v) => nameOk(v) || "a name is one line with no {{")),
 )
 export type Names = typeof Names.Type
 

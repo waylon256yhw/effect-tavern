@@ -24,7 +24,7 @@ const scripted = fake((o) => ({
   text: (o.responseFormat?.type === "json" && answers[o.responseFormat.name!]) || "PROSE",
 }))
 const model = () => scripted
-const S = makeSession({ card: yandao, player, model })
+const S = makeSession({ card: yandao, rows: () => player, model })
 const root = S.greet(yandao.greetings[1]!).node!.id
 S.setField(root, [{ path: "局势", set: 8 }])
 const calls = new Map<string, readonly Message[]>()
@@ -67,7 +67,7 @@ const gated: Card = {
     readouts: yandao.rules.readouts!.map((q) => ({ ...q, when: { path: "局势", op: "lt", value: 0 } as const })),
   },
 }
-const G = makeSession({ card: gated, player, model })
+const G = makeSession({ card: gated, rows: () => player, model })
 calls.clear()
 await Effect.runPromise(
   Stream.runForEach(G.act(G.greet(gated.greetings[0]!).node!.id, { text: "", note: "继续" }), (e) =>

@@ -7,7 +7,7 @@
 // one declaration that feed (Known / Current), recall (the lookup index) and a client drawing the product all read.
 // `feed` says whether the folded value goes back to the model next turn; `recall` makes the folded items readable by
 // the lookup stage like lore (hook = the item, or one column). The harness owns a default list (notes, options, inner);
-// a card patches by id; a pack or the player declares 小剧场 (`resolve`); the player toggles `on`. `stage` says who writes it: record (one structured call, any shape) or
+// a card patches by id, a player row patches label, text and `on` or declares a 小剧场 (layer.ts). `stage` says who writes it: record (one structured call, any shape) or
 // narrate (the narrator after the prose, in a block opened by `<<aside>> <id>`, streamed, text only: no schema to force).
 // Retraction is not a verb (issue #7): a fact that can change is a row of a `{ key }` table (record re-rows it, the fold
 // keeps the newest), and a row that should vanish re-rows into a `filter` column that hides it; `notes` stays an
@@ -15,7 +15,6 @@
 // Ceilings: pinning a row so record leaves it alone; a cap derived from state; `every` n turns.
 import { Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
-import type { Theater } from "./fragment.ts"
 
 const Int = Schema.Int
 export const Col = Schema.Struct({
@@ -51,12 +50,12 @@ export type Fold = typeof Fold.Type
 export const Product = Schema.Struct({
   id: Schema.String,
   label: Schema.optionalKey(Schema.String), // the shown name (the Writing page's toggle, a drawn product); the id when absent
-  text: Schema.String, // the question; overridden per id by the player's / card's `asks` (fragment id `product.<id>`)
+  text: Schema.String, // the question; an ask `product.<id>` is a text patch at its row's rank (layer.ts)
   shape: Shape,
   stage: Schema.optionalKey(Schema.Literals(["narrate", "record"])), // default record
   fold: Schema.optionalKey(Fold),
   when: Schema.optionalKey(Cond), // asked only when it holds on the post-settlement state
-  on: Schema.optionalKey(Schema.Boolean), // default true; the player's toggle wins
+  on: Schema.optionalKey(Schema.Boolean), // default true; the later row wins (layer.ts)
   feed: Schema.optionalKey(Schema.Boolean), // default false: fold goes back to the model (Known / Current)
   recall: Schema.optionalKey(Schema.Union([Schema.Literal(true), Schema.String])), // list: true; table: the hook column
 })
@@ -187,38 +186,21 @@ export const kindOf = (p: Pick<Product, "shape" | "fold" | "feed" | "recall">): 
       ? "context"
       : "world"
 
-/** Harness defaults, patched by the card per id, then by the 小剧场 (the mounted packs', then the player's), `on` decided
- *  by the player's toggles. Validates completeness, `fold` and `recall`. The lock: a theater carries only label, text and
- *  on. It lands on a text theater, which keeps its stage, cap and `when`, or as a new narrate text product, which needs
- *  text. Anything else (`notes`, `options`, a card's table, a new id with no text) is dropped, not thrown, since a throw
- *  here would kill a card at session open for what a pack happens to declare. */
-export const resolve = (
-  defaults: readonly Product[],
-  card: readonly ProductPatch[] = [],
-  theaters: readonly Theater[] = [],
-  toggles: Readonly<Record<string, boolean>> = {},
-): Product[] => {
-  const byId = new Map<string, Partial<Product> & { id: string }>(defaults.map((p) => [p.id, p]))
-  for (const c of card) byId.set(c.id, { ...byId.get(c.id), ...c })
-  for (const t of theaters) {
-    const was = byId.get(t.id)
-    if (was ? !(was.shape?.kind === "text" && kindOf(was as Product) === "theater") : t.text === undefined) continue
-    byId.set(t.id, was ? { ...was, ...t } : { ...t, shape: { kind: "text" }, stage: "narrate" })
+/** A product once its patches are in (layer.ts walks the ranks): complete, its `fold` and `recall` fitting its shape, `on`
+ *  decided. Throws, naming it: a card's bad patch fails when the session opens. */
+export const validate = <P extends Partial<Product> & { id: string }>(p: P): P & Product => {
+  if (!p.shape || p.text === undefined) throw new Error(`${p.id}: a product needs text and shape`)
+  if (
+    typeof p.fold === "object" &&
+    !(p.shape.kind === "table" && p.shape.columns.some((c) => c.key === (p.fold as { key: string }).key))
+  )
+    throw new Error(`${p.id}: fold key names a table column`)
+  if (p.stage === "narrate" && p.shape.kind !== "text") throw new Error(`${p.id}: a narrate product is text`)
+  if (p.recall !== undefined) {
+    if (p.shape.kind === "list" && p.recall !== true) throw new Error(`${p.id}: recall on a list is true`)
+    if (p.shape.kind === "table" && !p.shape.columns.some((c) => c.key === p.recall))
+      throw new Error(`${p.id}: recall names a column`)
+    if (p.shape.kind === "text" || p.shape.kind === "record") throw new Error(`${p.id}: only lists and tables recall`)
   }
-  return [...byId.values()].map((p) => {
-    if (!p.shape || p.text === undefined) throw new Error(`${p.id}: a product needs text and shape`)
-    if (
-      typeof p.fold === "object" &&
-      !(p.shape.kind === "table" && p.shape.columns.some((c) => c.key === (p.fold as { key: string }).key))
-    )
-      throw new Error(`${p.id}: fold key names a table column`)
-    if (p.stage === "narrate" && p.shape.kind !== "text") throw new Error(`${p.id}: a narrate product is text`)
-    if (p.recall !== undefined) {
-      if (p.shape.kind === "list" && p.recall !== true) throw new Error(`${p.id}: recall on a list is true`)
-      if (p.shape.kind === "table" && !p.shape.columns.some((c) => c.key === p.recall))
-        throw new Error(`${p.id}: recall names a column`)
-      if (p.shape.kind === "text" || p.shape.kind === "record") throw new Error(`${p.id}: only lists and tables recall`)
-    }
-    return { ...(p as Product), on: toggles[p.id] ?? p.on ?? true }
-  })
+  return { ...(p as P & Product), on: p.on ?? true }
 }

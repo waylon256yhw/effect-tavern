@@ -41,11 +41,11 @@ export const Composer = () => {
   // The card's default channel is the mode for the whole session (GET /card `input`): in participant mode the box is the
   // character's line, a thought is this turn's deviation inside it, and a note to the narrator is a second box under it
   // that goes with the line or alone; in author mode every input is direction and neither exists (store.ts `acting`).
-  const quick = () => view()?.snippets ?? []
+  const quick = () => view()?.layer?.snippets ?? []
   // The snippets menu groups by meaning: a note snippet is a word to the narrator, the rest stay in the story.
   const inStory = () => quick().filter((s) => !s.note)
   const toNarrator = () => quick().filter((s) => s.note)
-  const keys = () => view()?.format ?? []
+  const keys = () => view()?.layer?.format ?? []
   // The note box is open (participant mode only). It is one state, not a tag per snippet: any number of note snippets
   // may go into that box; it clears after the send.
   const toNarratorOn = read(aside)
@@ -90,8 +90,8 @@ export const Composer = () => {
     const a = el?.selectionStart ?? v.length
     const b = el?.selectionEnd ?? a
     const inner = v.slice(a, b)
-    const before = fillKnown(s.text, view()?.names)
-    const after = s.after ? fillKnown(s.after, view()?.names) : ""
+    const before = fillKnown(s.text, view()?.layer?.names)
+    const after = s.after ? fillKnown(s.after, view()?.layer?.names) : ""
     put(v.slice(0, a) + before + inner + after + v.slice(b), a + before.length + inner.length, note)
   }
   const Items = (p: { of: readonly Snippet[] }) => (

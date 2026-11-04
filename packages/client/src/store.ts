@@ -6,8 +6,8 @@ import type { Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
-import type { Format, Hat, Pack, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
-import type { Product } from "@effect-tavern/runtime/src/product.ts"
+import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Layer, Local, shown } from "@effect-tavern/runtime/src/layer.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Event, Facets, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
@@ -49,20 +49,13 @@ export interface CardView {
   tokens: { head: number } // what the card's own text costs each turn, estimated
   fiction: readonly { id: string; label?: string; when?: Cond }[] // the fiction's modules without their text
   rules: Rules
-  /** The record products as declared (card and theaters over harness): the shown name, the wording a theater is edited
-   *  by, the shape the inspector draws by, and the default state the player's toggle (`Player.products`) overrides on
-   *  the Writing page; `fold` / `feed` / `recall` say which of the three kinds it is (record.ts `kindOf`). */
-  products: readonly (Pick<Product, "id" | "label" | "text" | "shape" | "fold" | "feed" | "recall"> & {
-    on: boolean
-  })[]
-  snippets: readonly Snippet[]
-  format: readonly Format[]
-  names?: Readonly<Record<string, string>>
-  holes?: readonly string[]
+  local: Local
+  mounts: readonly { id: string; name: string }[]
+  layer: ReturnType<typeof shown>
 }
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
-/** The library (GET /stories, /personas, /player): every card's stories and which is open (a story is one root's tree),
- *  the player's personas, and the player layer the writing switches and the persona pick live in. Read at open. */
+/** The library (GET /stories, /personas, /cards/<id>/local): every card's stories and which is open (a story is one root's tree),
+ *  the player's personas, and each card's local row (mounts, persona default, tags, switches, fragments). Read at open. */
 export interface StoryRow {
   id: Id
   card: string // the card it is of
@@ -82,9 +75,9 @@ export interface Persona {
 /** `current` is none on an empty library: the client is on the first card's page, no story yet. */
 export const stories = Atom.make<{ current: Id | null; stories: readonly StoryRow[] } | null>(null).pipe(Atom.keepAlive)
 export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
-export const player = Atom.make<Player | null>(null).pipe(Atom.keepAlive)
-/** The player's settings (GET /providers, /secrets, /routing, /hats): the model providers, the key vault as hints,
- *  which (provider, model) runs each stage, the hats (提示词模板 in the UI). Read when the settings page opens. */
+export const locals = Atom.make<Readonly<Record<string, Local>>>({}).pipe(Atom.keepAlive)
+/** The player's settings (GET /providers, /secrets, /routing, /hats, /packs): the model providers, the key vault as hints,
+ *  which (provider, model) runs each stage, the hats (提示词模板 in the UI), and the player's rows ([harness, base, ...packs]). */
 export type Pair = { provider: string; model: string }
 export interface Routing {
   default?: Pair
@@ -102,7 +95,7 @@ export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
 export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)
 export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
 export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)
-export const packs = Atom.make<readonly Pack[]>([]).pipe(Atom.keepAlive)
+export const packs = Atom.make<readonly Layer[]>([]).pipe(Atom.keepAlive)
 export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
 export const compose = Atom.make("") // the composer's main box: the line (participant mode) or the direction (author mode); an Options row writes here and never sends
 export const noted = Atom.make("") // the note box under the line: a word to the narrator that goes with this send (participant mode only)

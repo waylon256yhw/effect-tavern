@@ -1,8 +1,9 @@
 // The install's library: one SQLite file through `node:sqlite` (built into Bun and Node, no dependency), used as a
-// document store: a row is an id and a JSON column, nothing is ever joined. The tables mirror the types. `player`: one
-// row, the Player (reading preferences: writing, language, asks, product toggles, snippets, and which persona it is on
-// each card). `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
-// default in its frame; a story names the one in force on it, `story.persona`). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `pack`: the player's writing packs (`Pack`), mounted per card by `Player.packs`. `secret`:
+// document store: a row is an id and a JSON column, nothing is ever joined. The tables mirror the types. `pack`: the
+// player's rows (runtime layer.ts `Layer`): `harness` (the overlay, only what differs from the code's defaults), `base`,
+// and each writing pack, mounted per card by `local.mounts`. `local`: one row a card, the player on that card (`Local`).
+// `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
+// default in its frame; a story names the one in force on it, `story.persona`). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `secret`:
 // the key vault (provider providers.ts `Secret`), the only table holding key material; `provider`: the player's model
 // providers, each naming a secret by id; `routing`: one row, which (provider, model) each stage runs on; `names`: one row,
 // the model-name table last fetched from models.dev and its ETag (names.ts). Export of cards
@@ -15,14 +16,15 @@
 // A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
-// for a fresh file. The stories' search (`stories.search`) walks each story's line and reads the player's lines and
+// for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
 // the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
 // filter: absent, every card's. Ceilings: an FTS5 index over nodes once a
 // library holds hundreds of long stories; sync between two installs (the Android copy is a copy of this file).
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
-import type { Hat, Pack } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
+import { locked, type Layer, type Local } from "@effect-tavern/runtime/src/layer.ts"
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
 import type { Facets } from "@effect-tavern/runtime/src/session.ts"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -30,10 +32,10 @@ import { basename, dirname, join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 const schema = `
-create table if not exists player (id integer primary key check (id = 1), json text not null);
 create table if not exists persona (id text primary key, name text not null, json text not null);
 create table if not exists hat (id text primary key, name text not null, json text not null);
 create table if not exists pack (id text primary key, name text not null, json text not null);
+create table if not exists local (card text primary key, json text not null);
 create table if not exists secret (id text primary key, name text not null, json text not null);
 create table if not exists provider (id text primary key, name text not null, json text not null);
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
@@ -52,17 +54,74 @@ export const traced = 200
 /** Columns added to a table after libraries were made with it, each applied on open when the table lacks it. */
 const migrations: readonly { table: string; column: string; add: string }[] = [
   { table: "story", column: "starred", add: "alter table story add column starred integer not null default 0" },
-  // the card's pick (`Player.persona[card]`) as it stood copied in, so a running story keeps its persona on upgrade
+  // the card's pick (the old player row's `persona[card]`) as it stood copied in, so a running story keeps its persona on
+  // upgrade; the fresh schema has no `player` table, so a file that never had one gets an empty one here, and `open` drops it
   {
     table: "story",
     column: "persona",
-    add: `alter table story add column persona text;
+    add: `create table if not exists player (id integer primary key check (id = 1), json text not null);
+      alter table story add column persona text;
       update story set persona = (select p.value from player, json_each(player.json, '$.persona') p where p.key = story.card);`,
   },
   { table: "card", column: "summary", add: "alter table card add column summary text" },
   { table: "card", column: "facets", add: "alter table card add column facets text" },
 ]
 type Row = Record<string, unknown>
+/** The shape of the `player` row before layer.ts, as far as the one-shot below reads it. */
+interface OldPlayer {
+  writing?: Record<string, unknown> & { lexicon?: unknown[] }
+  global?: { mode?: string }[]
+  forCard?: Record<string, { mode?: string }[]>
+  persona?: Record<string, string>
+  packs?: Record<string, string[]>
+  names?: Record<string, Record<string, string>>
+  tags?: Record<string, string[]>
+  defaults?: { global?: string; forCard?: string }
+  asks?: { id: string; text?: string }[]
+  products?: Record<string, boolean>
+  theaters?: { id: string }[]
+  snippets?: unknown[]
+  format?: unknown[]
+}
+/** The old row as the new rows. Global → the base, per-card maps → a local row per card. What a default mode said is
+ *  written on the fragment (the rule now is override; a global fragment yielded). The product toggles go on the base and
+ *  on each local row: a toggle was the last word over a pack's 小剧场, and only a rank above the packs still is. */
+const fromPlayer = (p: OldPlayer): { base: Layer; locals: Local[] } => {
+  const { lexicon, ...switches } = p.writing ?? {}
+  const toggles = Object.entries(p.products ?? {}).map(([id, on]) => ({ id, on }))
+  const moded = (fs: readonly { mode?: string }[] | undefined, mode: string | undefined) =>
+    fs?.map((f) => ({ ...f, ...((f.mode ?? mode) && { mode: f.mode ?? mode }) }))
+  const set = <V>(k: string, v: V | undefined) => (v === undefined || (Array.isArray(v) && !v.length) ? {} : { [k]: v })
+  const base = locked({
+    id: "base",
+    name: "全局基底",
+    ...set("fragments", moded(p.global, p.defaults?.global ?? "yield")),
+    ...(Object.keys(switches).length && { switches }),
+    ...set(
+      "asks",
+      p.asks?.flatMap((a) => (a.text === undefined ? [] : [{ id: a.id, text: a.text }])),
+    ),
+    ...set("products", [...(p.theaters ?? []), ...toggles]),
+    ...set("lexicon", lexicon),
+    ...set("snippets", p.snippets),
+    ...set("format", p.format),
+  } as Layer)
+  const cards = new Set([p.forCard, p.persona, p.packs, p.names, p.tags].flatMap((m) => Object.keys(m ?? {})))
+  const locals = [...cards].map((card) =>
+    locked({
+      id: "local",
+      name: card,
+      card,
+      ...set("fragments", moded(p.forCard?.[card], p.defaults?.forCard)),
+      ...set("products", toggles),
+      ...set("names", p.names?.[card]),
+      ...set("mounts", p.packs?.[card]),
+      ...set("persona", p.persona?.[card]),
+      ...set("tags", p.tags?.[card]),
+    } as Local),
+  )
+  return { base, locals }
+}
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
 /** A node's reply parts of a type that no longer exists (the `aside` part before #76 §二) dropped on read; no migration. */
 const known = <T>(n: T): T => {
@@ -188,6 +247,34 @@ export const open = (asked: string) => {
     db.exec("pragma foreign_keys = on")
   }
   const q = (sql: string) => db.prepare(sql)
+  // The player row of a library from before layer.ts, once, and the table with it. A pack row's `theaters` become its
+  // product patches (`Pack` is a `Layer` now); an older `products` map, which turned nothing on, goes.
+  if (q("select 1 from sqlite_master where type = 'table' and name = 'player'").get()) {
+    const old = parse<OldPlayer>(q("select json from player where id = 1").get() as Row | undefined)
+    db.exec("begin")
+    try {
+      for (const r of q("select id, json from pack").all() as Row[]) {
+        const { theaters, products, ...rest } = parse<{ theaters?: unknown[]; products?: unknown }>(r)!
+        const kept = [...(theaters ?? []), ...(Array.isArray(products) ? products : [])]
+        q("update pack set json = ? where id = ?").run(
+          JSON.stringify({ ...rest, ...(kept.length && { products: kept }) }),
+          r["id"] as string,
+        )
+      }
+      if (old) {
+        const { base, locals } = fromPlayer(old)
+        const { id, name, ...rest } = base
+        q("insert or replace into pack (id, name, json) values (?, ?, ?)").run(id, name, JSON.stringify(rest))
+        for (const l of locals)
+          q("insert or replace into local (card, json) values (?, ?)").run(l.card, JSON.stringify(l))
+      }
+      db.exec("drop table player")
+      db.exec("commit")
+    } catch (e) {
+      db.exec("rollback")
+      throw e
+    }
+  }
   const tx = <A>(f: () => A): A => {
     db.exec("begin")
     try {
@@ -212,10 +299,13 @@ export const open = (asked: string) => {
   return {
     /** The file open: the one asked for, or this process's own when another process holds that one. */
     file,
-    /** The player layer, one row: the session's `players` store. What it holds is decoded by the caller. */
-    player: {
-      read: (): unknown => parse<unknown>(q("select json from player where id = 1").get() as Row | undefined),
-      write: (p: unknown) => void q("insert or replace into player (id, json) values (1, ?)").run(JSON.stringify(p)),
+    /** The player on each card, a row a card, decoded at the wire (serve.ts). */
+    locals: {
+      get: (card: string): Local | undefined =>
+        parse<Local>(q("select json from local where card = ?").get(card) as Row | undefined),
+      list: (): Local[] => (q("select json from local").all() as Row[]).map((r) => parse<Local>(r)!),
+      put: (l: Local) =>
+        void q("insert or replace into local (card, json) values (?, ?)").run(l.card, JSON.stringify(l)),
     },
     personas: {
       list: (): Persona[] =>
@@ -233,7 +323,7 @@ export const open = (asked: string) => {
       del: (id: string) => void q("delete from persona where id = ?").run(id),
     },
     hats: named<Hat>("hat"),
-    packs: named<Pack>("pack"),
+    packs: named<Layer>("pack"),
     secrets: named<Secret>("secret"),
     providers: named<Provider>("provider"),
     /** Which (provider, model) runs each stage, one row; what it holds is decoded by the caller. */
