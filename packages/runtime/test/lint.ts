@@ -218,6 +218,43 @@ assert.deepEqual(
   ],
 )
 
+// unfilled-name: a hole the card gives no default, wherever its text is; `user` needs none.
+const holed: Card = {
+  ...base,
+  names: { char: "依瑞丝" },
+  frame: [{ id: "style", text: "{{char}} 与 {{user}}，{{a}}" }],
+  fiction: [{ id: "f", text: "{{b}}" }],
+  greetings: [{ text: "{{c}}" }],
+  lore: [{ id: "l", layers: ["{{d}}。"], unlock: { all: [] }, offer: { any: [] } }],
+  asks: [{ id: "product.notes", text: "{{e}}" }],
+  products: [{ id: "town", text: "{{f}}" }],
+}
+assert.deepEqual(said(holed, "unfilled-name"), [
+  "warn frame.style.text: {{a}} has no default in the card's names",
+  "warn fiction.f.text: {{b}} has no default in the card's names",
+  "warn lore.l.layers[0]: {{d}} has no default in the card's names",
+  "warn greetings[0].text: {{c}} has no default in the card's names",
+  "warn asks.product.notes.text: {{e}} has no default in the card's names",
+  "warn products.town.text: {{f}} has no default in the card's names",
+])
+// unsupported-macro: a scripted macro or anything else in braces that is not a plain key; a plain hole is not one.
+assert.deepEqual(
+  said(
+    {
+      ...base,
+      names: { x: "X" },
+      frame: [{ id: "style", text: "{{x}} {{setvar::hp::1}} {{random::a,b}}" }],
+      products: [{ id: "town", text: "{{ 1x }}" }],
+    },
+    "unsupported-macro",
+  ),
+  [
+    "error frame.style.text: {{setvar::hp::1}} is not a name: only a plain {{key}} is filled",
+    "error frame.style.text: {{random::a,b}} is not a name: only a plain {{key}} is filled",
+    "error products.town.text: {{ 1x }} is not a name: only a plain {{key}} is filled",
+  ],
+)
+
 // inline-product: an output format asked in the text.
 assert.deepEqual(of({ ...base, frame: [{ id: "style", text: "每次回复末尾附上状态栏，并给出三个选项。" }] }), [
   "error inline-product frame.style.text",

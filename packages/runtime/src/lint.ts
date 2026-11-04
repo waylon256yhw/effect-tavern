@@ -6,6 +6,7 @@ import type { Card, Effect_, Field } from "./card.ts"
 import { type Cond, holds, reads } from "./cond.ts"
 import { SLOTS } from "./fragment.ts"
 import { hook } from "./lore.ts"
+import { HOLE, unfilled } from "./names.ts"
 import { type Entry, scan } from "./polish.ts"
 
 export interface Diagnostic {
@@ -191,6 +192,13 @@ const INLINE: Entry[] = [
   { pattern: "end of each response", hint: TAIL },
 ]
 
+/** The card's text a hole can sit in: the prose, its asks, its products' questions. */
+const named = (card: Card): [string, string][] => [
+  ...texts(card),
+  ...(card.asks ?? []).flatMap((f): [string, string][] => (f.text ? [[`asks.${f.id}.text`, f.text]] : [])),
+  ...(card.products ?? []).flatMap((p): [string, string][] => (p.text ? [[`products.${p.id}.text`, p.text]] : [])),
+]
+
 // ───────── the rules ─────────
 const HOOK = 40 // ponytail: characters; a hook is the player's own words for the thing, one short sentence
 
@@ -219,6 +227,29 @@ const rules: Rule[] = [
         message: `${f.id} is not a frame slot (${SLOTS.join(", ")}); every stage reads it as part of the frame`,
         hint: "a person, a cast or a world goes in fiction; keep it in the frame only as a slot the player may fill",
       })),
+  // A hole with no default: the entry stays out of the request, and an opening refuses, until a pack or the player names
+  // it. A warn, since leaving one to the player may be the card's design. `user` always has a value.
+  (card) =>
+    named(card).flatMap(([path, t]) =>
+      unfilled(t, { user: "", ...card.names }).map((k) => ({
+        rule: "unfilled-name",
+        level: "warn" as const,
+        path,
+        message: `{{${k}}} has no default in the card's names`,
+        hint: "give it in `names`; a pack or the player can still override it",
+      })),
+    ),
+  // The ecosystem's scripted macros are not holes: nothing expands them, so the model would read them as written.
+  (card) =>
+    named(card).flatMap(([path, t]) =>
+      Array.from(t.replace(HOLE, "").matchAll(/\{\{.*?\}\}/gs), ([m]) => ({
+        rule: "unsupported-macro",
+        level: "error" as const,
+        path,
+        message: `${m} is not a name: only a plain {{key}} is filled`,
+        hint: "write the text out; state and randomness are fields, actions and products",
+      })),
+    ),
   // A path no field declares throws only when evaluation reaches it (holds, apply), and decode never sees it.
   (card) => {
     const known = new Set([

@@ -169,7 +169,13 @@ const over = (data: Data, m: () => Model = model) =>
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), false)
   await run(lib.turn(r).start(act("who")))
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), true)
+  // its name is `user`: the story's own pick on the story's view, with no story the card's default
+  assert.deepEqual(
+    [lib.view(chat.id, r).names.user, lib.view(chat.id, p).names.user, lib.view(chat.id).names.user],
+    ["行脚僧", "玩家", "玩家"],
+  )
   lib.setPlayer({ ...lib.player, persona: { [chat.id]: "monk" } })
+  assert.equal(lib.view(chat.id).names.user, "行脚僧")
   const s = lib.stories.create(chat.id)
   assert.deepEqual(
     [p, q, s].map((id) => lib.stories.list().find((x) => x.id === id)!.persona),

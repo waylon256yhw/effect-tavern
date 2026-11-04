@@ -11,6 +11,7 @@
 import { Effect, Random, Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
+import { expand, Names } from "./names.ts"
 import { Entry } from "./polish.ts"
 import { ProductPatch } from "./product.ts"
 
@@ -206,15 +207,25 @@ export const makeCard = (r: Rules) => {
         `${a.id}: ${a.text}${a.roll && typeof a.roll === "object" && "judge" in a.roll ? ` (estimate chance: ${a.roll.judge})` : ""}`,
     )
   // Readouts: asked on the post-settlement state; the enum per question is the gate. Nothing asked → no schema.
-  const asked = (s: State) => (r.readouts ?? []).filter((q) => !q.when || holds(q.when, s))
-  const readoutSchema = (s: State) => {
-    const qs = asked(s)
+  // With `names`, the wording expanded; a readout with an unfilled hole in its question or an option is not asked.
+  const asked = (s: State, names?: Names) =>
+    (r.readouts ?? [])
+      .filter((q) => !q.when || holds(q.when, s))
+      .flatMap((q) => {
+        if (!names) return [q]
+        const [text, ...options] = [q.text, ...q.options.map((o) => o.text)].map((t) => expand(t, names))
+        return text === undefined || options.includes(undefined)
+          ? []
+          : [{ ...q, text, options: q.options.map((o, i) => ({ ...o, text: options[i]! })) }]
+      })
+  const readoutSchema = (s: State, names?: Names) => {
+    const qs = asked(s, names)
     return qs.length
       ? Schema.Struct(Object.fromEntries(qs.map((q) => [q.id, Schema.Literals(q.options.map((o) => o.id))])))
       : undefined
   }
-  const questions = (s: State) =>
-    asked(s).map((q) => `${q.id}: ${q.text} [${q.options.map((o) => `${o.id}: ${o.text}`).join(" | ")}]`)
+  const questions = (s: State, names?: Names) =>
+    asked(s, names).map((q) => `${q.id}: ${q.text} [${q.options.map((o) => `${o.id}: ${o.text}`).join(" | ")}]`)
   const settleReadouts = (s: State, a: Answers) => {
     let out = { s, events: [] as string[] }
     for (const [qid, oid] of Object.entries(a)) {
@@ -283,6 +294,7 @@ export const Card = Schema.Struct({
   asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // record products: patches over the harness defaults by id, or new ones
   lexicon: Schema.optionalKey(Schema.Array(Entry)), // slop patterns the polish stage scans for, after the player's own
+  names: Schema.optionalKey(Names), // the author's defaults for the `{{key}}` holes in its text (GLOSSARY 代称)
 })
 export type Card = typeof Card.Type
 export type LoreEntry = typeof LoreEntry.Type

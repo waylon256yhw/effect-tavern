@@ -73,6 +73,7 @@ import {
 } from "./journal.ts"
 import * as Log from "./log.ts"
 import { key, makeLore, type Disclosure, type Lore } from "./lore.ts"
+import { expand, fill, unfilled, type Names } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
 import { cap, decodeProducts, entryRef, fold, resolve, shapeSchema, type Product } from "./product.ts"
@@ -220,9 +221,14 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       : Schema.Struct(violated)
 }
 
-/** An ask's wording: the player's, then the card's, then the session's own. */
-export const wordingOf = (player: Player, card: Card, id: string) =>
-  [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
+/** An ask's wording: the player's, then the card's, then the session's own. A question cannot be skipped, so with `names`
+ *  the chain yields: the first that expands whole, and the session's own has no holes. */
+export const wordingOf = (player: Player, card: Card, id: string, names?: Names) => {
+  const chain = [...(player.asks ?? []), ...(card.asks ?? []), ...asks].flatMap((f) =>
+    f.id === id ? (f.text ?? []) : [],
+  )
+  return (names ? chain.flatMap((t) => expand(t, names) ?? []) : chain)[0]!
+}
 /** A product's question: `product.<id>` from the player or the card, else the product's own text. */
 export const questionOf = (player: Player, card: Card, pr: Product) =>
   [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
@@ -270,8 +276,54 @@ const theatersOf = (player: Player, packs: readonly Pack[]) => [
   ...packs.flatMap((p) => p.theaters ?? []),
   ...(player.theaters ?? []),
 ]
-export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []) => {
+type Persona = { name: string; text: string }
+/** The player layer as the frame reads it: the persona in force, when there is one, joins the per-card layer last. */
+const withPersona = (player: Player, card: string, persona?: Persona): Player =>
+  persona
+    ? {
+        ...player,
+        forCard: {
+          ...player.forCard,
+          [card]: [...(player.forCard[card] ?? []), { id: "persona", text: persona.text }],
+        },
+      }
+    : player
+/** The 代称 in force: the harness's `user`, the card's, the mounted packs' in mount order, the player's for this card,
+ *  and the persona's name as `user` last. */
+const namesOf = (card: Card, player: Player, packs: readonly Pack[], persona?: Persona): Names => ({
+  user: "玩家",
+  ...card.names,
+  ...Object.assign({}, ...packs.map((p) => p.names)),
+  ...player.names?.[card.id],
+  ...(persona && { user: persona.name }),
+})
+export const cardView = (card: Card, player: Player, packs: readonly Pack[] = [], persona?: Persona) => {
   const f = facets(card) // once: the shelf row's facets and the head size are the same reading
+  const names = namesOf(card, player, packs, persona)
+  const products = resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, packs))
+  const mine = [...(player.snippets ?? []), ...packs.flatMap((p) => p.snippets ?? [])]
+  // the asks overriding the harness's words: down each id's chain to the first that expands, the ones under it never go out
+  const worded = new Set<string>()
+  const overrides = [...(player.asks ?? []), ...(card.asks ?? [])].flatMap((x) => {
+    if (!x.text || x.id.startsWith("product.") || worded.has(x.id)) return []
+    if (expand(x.text, names) !== undefined) worded.add(x.id)
+    return [x.text]
+  })
+  // every text that goes out, or that a client fills and sends: what a player may be asked to name
+  const out = [
+    ...frame(withPersona(player, card.id, persona), card, packs).flatMap((x) =>
+      x.enabled === false ? [] : (x.text ?? []),
+    ),
+    ...card.fiction.flatMap((x) => x.text ?? []),
+    ...card.greetings.map((g) => g.text),
+    ...card.lore.flatMap((e) => e.layers),
+    ...packs.flatMap((p) => (p.entries ?? []).map((e) => e.text)),
+    ...card.guard,
+    ...(card.rules.readouts ?? []).flatMap((q) => [q.text, ...q.options.map((o) => o.text)]),
+    ...products.map((p) => questionOf(player, card, p)),
+    ...overrides,
+    ...mine.flatMap((s) => [s.text, s.after ?? ""]),
+  ]
   return {
     // its name and one line, the turn-heading reference, and its size as numbers. `input` is the card's default channel,
     // the one client-facing coordinate of participant vs author mode: on `act` the box is the player's line and a note or
@@ -292,7 +344,7 @@ export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []
     rules: card.rules,
     // the products as the harness, the card and the 小剧场 declare them, before the player's toggles: how a client draws
     // a node's products by shape, and the Writing page's toggles and wording (the player's toggle wins over `on`)
-    products: resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, packs)).map((p) => ({
+    products: products.map((p) => ({
       id: p.id,
       label: p.label,
       text: p.text,
@@ -306,10 +358,10 @@ export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
     // in author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
     // mark have nothing to do there
-    snippets: [...(player.snippets ?? []), ...packs.flatMap((p) => p.snippets ?? []), ...snippets].filter(
-      (s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text)),
-    ),
+    snippets: [...mine, ...snippets].filter((s) => card.input !== "note" || (s.text !== "" && !/⦅/.test(s.text))),
     format: [...(player.format ?? []), ...format],
+    names, // what a client fills a snippet and the box with before sending
+    holes: unfilled(out.join("\n"), names), // the holes nothing fills yet, in order of first appearance
   }
 }
 
@@ -332,7 +384,7 @@ export const makeSession = ({
   model: (phase: Phase) => Model
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   players?: { read: () => Player | undefined; write: (p: Player) => void } // the player layer's persistence
-  persona?: (player: Player) => string | undefined // the persona in force on this story, read per request (library.ts)
+  persona?: (player: Player) => Persona | undefined // the persona in force on this story, read per request (library.ts)
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
   packs?: () => readonly Pack[] // the library's packs, read per request; `Player.packs[card]` says which are mounted here
   // the fold boundary, a value or read on every fold (library.ts: the narrate model's window, so a routing edit is in
@@ -340,33 +392,41 @@ export const makeSession = ({
   policy?: Policy | (() => Policy)
 }) => {
   let player = players?.read() ?? given
-  /** The player layer as the frame reads it: the persona in force, when there is one, joins the per-card layer last. */
-  const layered = (): Player => {
-    const text = persona?.(player)
-    return text === undefined
-      ? player
-      : {
-          ...player,
-          forCard: {
-            ...player.forCard,
-            [card.id]: [...(player.forCard[card.id] ?? []), { id: "persona", text }],
-          },
-        }
-  }
   const rpg = makeCard(card.rules)
   const cardLore = card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) }))
   let packed: readonly Pack[] | undefined // like `policy`: one read for a synchronous snapshot
   let indexed: Lore<Paths, readonly string[]> | undefined // the same
   const inForce = () => packed ?? mounted(player, card.id, packs?.() ?? [])
-  /** The lookup index: the card's lore and the mounted packs' entries. An entry's id carries its pack, a code lock:
-   *  the frame merges by id and deliveries are recorded by id, so none can land on a card's entry. */
-  const loreNow = () =>
-    makeLore<Paths, readonly string[]>([
-      ...cardLore,
-      ...inForce().flatMap((p) =>
-        (p.entries ?? []).map((e) => ({ id: `${p.id}/${e.id}`, layers: [e.text], unlock: () => 1 })),
-      ),
-    ])
+  const namesNow = () => namesOf(card, player, inForce(), persona?.(player))
+  /** A text that must go out whole, or the action is refused, naming the hole. */
+  const named = (what: string, text: string) => {
+    const N = namesNow()
+    const out = expand(text, N)
+    if (out === undefined)
+      throw new Error(
+        `${what}: unfilled ${unfilled(text, N)
+          .map((k) => `{{${k}}}`)
+          .join(", ")}`,
+      )
+    return out
+  }
+  /** The lookup index: the card's lore and the mounted packs' entries, their text expanded. An entry with an unfilled
+   *  hole in any layer is not in it, and a node that already told it replays "" (lore.ts `text`). An entry's id carries
+   *  its pack, a code lock: the frame merges by id and deliveries are recorded by id, so none can land on a card's entry. */
+  const loreNow = () => {
+    const N = namesNow()
+    return makeLore<Paths, readonly string[]>(
+      [
+        ...cardLore,
+        ...inForce().flatMap((p) =>
+          (p.entries ?? []).map((e) => ({ id: `${p.id}/${e.id}`, layers: [e.text], unlock: () => 1 })),
+        ),
+      ].flatMap((e) => {
+        const layers = e.layers.map((l) => expand(l, N))
+        return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
+      }),
+    )
+  }
   const L = () => indexed ?? loreNow()
   const held = Log.hold<Turn>(store)
   const chain = (id: number | null) => Log.chain(held.log, id)
@@ -375,12 +435,13 @@ export const makeSession = ({
   let policy: Policy | undefined // one read for a synchronous snapshot; never retained across requests
   const policyOf = () => (typeof P === "function" ? P() : P)
 
-  const wording = (id: string) => wordingOf(player, card, id)
+  const wording = (id: string) => wordingOf(player, card, id, namesNow())
   /** The player's toggle over the 小剧场 over the card's. Resolved per read: a pack edit touches no session. */
   const products = () =>
     resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, inForce()), player.products)
   products() // a card's bad patch fails when the session opens, not on its first turn
-  const question = (pr: Product) => questionOf(player, card, pr)
+  /** A product's question expanded; undefined when a hole is unfilled: the product is not asked this turn. */
+  const question = (pr: Product) => expand(questionOf(player, card, pr), namesNow())
   /** Narrate blocks under the declared product's cap; a block of an undeclared id is kept as written (the Inspector's). */
   const capped = (bs: Readonly<Record<string, string>>) =>
     Object.fromEntries(
@@ -409,7 +470,8 @@ export const makeSession = ({
   /** A stage's document: the frame at this state, the input and what a thought in it is, then the stage's own ask. */
   const ask = (state: State, input: Input, a: Ask) => {
     const M = modelFor(a.stage)
-    const layers = frame(layered(), card, inForce())
+    const N = namesNow()
+    const layers = fill(frame(withPersona(player, card.id, persona?.(player)), card, inForce()), N)
     const worn = M.hat === undefined ? undefined : hat?.(M.hat)
     return request(
       {
@@ -425,9 +487,21 @@ export const makeSession = ({
         thought: wording("input.thought"),
       },
       a,
-      { reasoningBack: M.reasoningBack, ttl: M.ttl, ...(worn && { hat: worn }) },
+      {
+        reasoningBack: M.reasoningBack,
+        ttl: M.ttl,
+        ...(worn && {
+          hat: {
+            ...worn,
+            narrate: { head: fill(worn.narrate?.head ?? [], N), tail: fill(worn.narrate?.tail ?? [], N) },
+            review: { head: fill(worn.review?.head ?? [], N) },
+          },
+        }),
+      },
     )
   }
+  /** The fiction at this state, expanded: narrate's alone. */
+  const fictionAt = (state: State) => headOf(fill(card.fiction, namesNow()), { state })
 
   // ───────── Calls, each announced before and reported after ─────────
   const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(
@@ -514,7 +588,7 @@ export const makeSession = ({
         { text: "", note: wording("narrate.demand") },
         {
           stage: "narrate",
-          fiction: headOf(card.fiction, { state }),
+          fiction: fictionAt(state),
           history: narratorHistory(path, here.text, sum),
           summarized: sum !== undefined,
           told: [],
@@ -554,6 +628,8 @@ export const makeSession = ({
       const path = chain(parent)
       const here = derived.at(path)
       const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: here.text(d) }))
+      // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
+      const guard = card.guard.flatMap((g) => expand(g, namesNow()) ?? [])
       const s0 = here.state
       const g0 = here.gated()
       const seen = deliveredOn(path)
@@ -658,7 +734,7 @@ export const makeSession = ({
                   stage: "direct",
                   question: wording("direct"),
                   ledger: here.ledger(),
-                  rules: card.guard,
+                  rules: guard,
                   open: told(open),
                   events: gateEvents,
                 }),
@@ -673,7 +749,9 @@ export const makeSession = ({
       const fed = here.known()
       const sum = here.summary()
       // the narrate products on this turn: one ask line each in narrate's tail, each block cut off the reply
-      const penned = products().filter((p) => p.stage === "narrate" && p.on && (!p.when || holds(p.when, s1)))
+      const penned = products().filter(
+        (p) => p.stage === "narrate" && p.on && (!p.when || holds(p.when, s1)) && question(p) !== undefined,
+      )
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
@@ -723,7 +801,7 @@ export const makeSession = ({
         Effect.gen(function* () {
           const msgs = ask(s1, input, {
             stage: "narrate",
-            fiction: headOf(card.fiction, { state: s1 }),
+            fiction: fictionAt(s1),
             history: narratorHistory(path, here.text, sum),
             summarized: sum !== undefined,
             told: disclosures.map(here.text).filter(Boolean), // a sibling's reused read may name an entry since gone
@@ -745,13 +823,13 @@ export const makeSession = ({
       let { reply, blocks: written } = from === "check" ? { reply: base!.reply, blocks: {} } : yield* narrate()
       let fired: Disclosure[] = []
       let violated: string[] = []
-      if (!cut && (card.guard.length > 0 || open.length > 0)) {
+      if (!cut && (guard.length > 0 || open.length > 0)) {
         const check = (text: string) =>
           obj(
             emit,
             "check",
-            Check(openIds, card.guard),
-            ask(s1, input, { stage: "check", rules: card.guard, open: told(open), must: brief.must, prose: text }),
+            Check(openIds, guard),
+            ask(s1, input, { stage: "check", rules: guard, open: told(open), must: brief.must, prose: text }),
           ).pipe(
             Effect.map((c) => {
               const r = c as { fired?: readonly string[]; violated?: readonly string[] }
@@ -813,15 +891,18 @@ export const makeSession = ({
       // One call, one schema: product id → its shape, `answers` → the readout enums. The model sees the prose, Known
       // (notes so far), Current (other feed products) and the questions, never the numbers; the chosen options settle by
       // code, so replay never asks again. Caps are applied here, by code.
-      const asked = products().filter((p) => p.stage !== "narrate" && p.on && (!p.when || holds(p.when, s1)))
-      const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
+      const asked = products().filter(
+        (p) => p.stage !== "narrate" && p.on && (!p.when || holds(p.when, s1)) && question(p) !== undefined,
+      )
+      const N = namesNow()
+      const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1, N) : undefined
       const rec = yield* record(
         emit,
         asked,
         path,
         s1,
         { input, reply },
-        qs ? { schema: qs, lines: rpg.questions(s1) } : undefined,
+        qs ? { schema: qs, lines: rpg.questions(s1, N) } : undefined,
       )
       const answers = (rec.answers ?? {}) as Answers
       rpg.settleReadouts(s1, answers) // validate now, not on the first replay
@@ -861,7 +942,7 @@ export const makeSession = ({
             answers: {},
             end: "end",
             brief: { must: [], may: [] },
-            reply: [{ type: "text", text: g.text }],
+            reply: [{ type: "text", text: named("opening", g.text) }], // the transcript holds the names as they stand now
             fired: [],
             violated: [],
             products: {},
@@ -971,6 +1052,7 @@ export const makeSession = ({
       const t = turnOf(nodeId)
       const p = products().find((x) => x.id === productId)
       if (!p) throw new Error(`${productId}: not a product of this card`)
+      named(productId, questionOf(player, card, p))
       return emitting((emit) =>
         Effect.gen(function* () {
           const up = chain(t.parent)

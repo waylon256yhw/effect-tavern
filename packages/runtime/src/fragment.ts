@@ -2,6 +2,7 @@
 // Frame ids are slots; how a player's slot meets the card's same slot is the player's per-fragment setting.
 import { Schema, Struct } from "effect"
 import { Cond, holds, type State } from "./cond.ts"
+import { Names } from "./names.ts"
 import { Entry } from "./polish.ts"
 
 export const Fragment = Schema.Struct({
@@ -132,6 +133,7 @@ export const Player = Schema.Struct({
   forCard: Schema.Record(Schema.String, Schema.Array(Fragment)),
   persona: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)), // card id → the persona (a library id) the player is on that card; none = the card's own
   packs: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))), // card id → the packs (library ids) mounted on that card, in mount order
+  names: Schema.optionalKey(Schema.Record(Schema.String, Names)), // card id → the player's 代称 on that card, over the packs' and the card's
   tags: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))), // card id → the player's filing words on that card (#133); the harness never reads, generates or translates them
   defaults: Schema.optionalKey(
     Schema.Struct({ global: Schema.optionalKey(ModeSchema), forCard: Schema.optionalKey(ModeSchema) }),
@@ -172,6 +174,7 @@ export const Pack = Schema.Struct({
   lexicon: Schema.optionalKey(Schema.Array(Entry)),
   theaters: Schema.optionalKey(Schema.Array(Theater)),
   snippets: Schema.optionalKey(Schema.Array(Snippet)),
+  names: Schema.optionalKey(Names), // defaults for holes (GLOSSARY 代称): over the card's, under the player's
 })
 export type Pack = typeof Pack.Type
 /** The packs mounted on a card, in mount order; an id the library no longer has is skipped. */
