@@ -106,7 +106,7 @@ export const view = (card: Card, player: Player, o: Options = {}): View => {
   })
 
   // ───────── record ─────────
-  const products = resolve(defaultProducts(card.input ?? "act"), card.products, player.products)
+  const products = resolve(defaultProducts(card.input ?? "act"), card.products, [], player.products) // a 小剧场 is narrate's, not this record document's
   const asks = products
     .filter((p) => p.on && (!p.when || holds(p.when, s)))
     .map((p) => `${p.id}: ${questionOf(player, card, p)}`)

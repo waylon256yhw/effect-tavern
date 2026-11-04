@@ -1,10 +1,12 @@
 // Writing packs (docs/packs-brief.md), the five seams: the frame, the lookup index, replay after a pack is gone, the
-// lexicon, the product toggles, the quick inputs. A session over a scripted model; what the wire does with a pack is
+// lexicon, the 小剧场 (§七), the quick inputs. A session over a scripted model; what the wire does with a pack is
 // the server's test/serve.ts and test/library.ts.
 import { fake, type Message } from "@effect-tavern/provider"
 import { Effect, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
 import { frame, mounted, Pack, type Player } from "../src/fragment.ts"
+import { prose as proseOf } from "../src/journal.ts"
+import { kindOf } from "../src/product.ts"
 import { cardView, makeSession, snippets, type Event } from "../src/session.ts"
 import { chat, plain } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "./script.ts"
@@ -169,23 +171,97 @@ const card = { ...chat, lore }
   assert.equal(asked(unmounted, "polish"), undefined)
 }
 
-// ───────── Products: the player's toggle over the packs', and a pack edit in force from the next request ─────────
+// ───────── 小剧场: the packs' in mount order, then the player's, under the player's toggle (§七) ─────────
 {
-  const asks = (es: readonly Event[], id: string) =>
-    texts(asked(es, "record")).some((t) => new RegExp(`^${id}: `, "m").test(t))
-  const library: Pack[] = [{ id: "quiet", name: "Q", products: { options: false } }]
+  prose.text = "hello\n<<aside>> town\nGOSSIP"
   const bare = (...ids: string[]): Player => ({ global: [], forCard: {}, packs: { [chat.id]: ids } }) // no toggle of its own
-  const S = makeSession({ card: chat, player: bare("quiet"), model, packs: () => library })
-  assert.equal(asks(await collect(S.act(null, { text: "a" })), "options"), false)
-  library[0] = { id: "quiet", name: "Q", products: { options: true } } // no setPlayer: the row is read per request
-  assert.equal(asks(await collect(S.act(null, { text: "b" })), "options"), true)
-  library[0] = { id: "quiet", name: "Q", products: { options: false } }
-  S.setPlayer({ ...bare("quiet"), products: { options: true } })
-  assert.equal(asks(await collect(S.act(null, { text: "c" })), "options"), true) // the player wins
-  // of two packs, the later one wins
-  library.push({ id: "loud", name: "L", products: { options: true } })
-  S.setPlayer(bare("quiet", "loud"))
-  assert.equal(asks(await collect(S.act(null, { text: "d" })), "options"), true)
+  const narrateAsks = (es: readonly Event[], line: string) => texts(asked(es, "narrate")).join("\n").includes(line)
+  const town = { id: "town", label: "T", text: "The town's gossip." }
+  const library: Pack[] = [{ id: "t", name: "T", theaters: [{ ...town, on: true }] }]
+  const S = makeSession({ card: chat, player: bare("t"), model, packs: () => library })
+  // on: asked of the narrator (not of record), its block landing on the node as a product
+  const es = await collect(S.act(null, { text: "a" }))
+  assert.ok(narrateAsks(es, "town: The town's gossip."))
+  assert.ok(!texts(asked(es, "record")).join("\n").includes("town: "))
+  const n1 = nodeOf(es)
+  assert.equal(n1.turn.products.town, "GOSSIP")
+  assert.equal(proseOf(n1.turn).trim(), "hello")
+  // off, read per request with no setPlayer: not asked, still a declared 小剧场 a demand can ask for (client `demandable`)
+  prose.text = "hello"
+  library[0] = { id: "t", name: "T", theaters: [{ ...town, on: false }] }
+  const off = await collect(S.act(n1.id, { text: "b" }))
+  assert.ok(!narrateAsks(off, "town: "))
+  const n2 = nodeOf(off)
+  assert.equal(n2.turn.products.town, undefined)
+  const declared = S.products.find((p) => p.id === "town")!
+  assert.deepEqual([kindOf(declared), declared.on, declared.text], ["theater", false, town.text])
+  prose.text = "DEMANDED"
+  assert.equal(nodeOf(await collect(S.demand(n2.id, "town"))).turn.products.town, "DEMANDED")
+  // the player's toggle over the pack's default
+  prose.text = "hello"
+  S.setPlayer({ ...bare("t"), products: { town: true } })
+  assert.ok(narrateAsks(await collect(S.act(n2.id, { text: "c" })), "town: "))
+  // on `inner`: the pack changes its wording and its default; of two packs the later one wins, the player's over both
+  const inner = (id: string, text: string) => ({ id, name: id, theaters: [{ id: "inner", text, on: true }] })
+  library.splice(0, 1, inner("p", "PACK-P"), inner("q", "PACK-Q"))
+  S.setPlayer(bare("p", "q"))
+  assert.ok(narrateAsks(await collect(S.act(n2.id, { text: "d" })), "inner: PACK-Q"))
+  S.setPlayer({ ...bare("q", "p"), theaters: [{ id: "inner", text: "MINE" }] })
+  assert.ok(narrateAsks(await collect(S.act(n2.id, { text: "e" })), "inner: MINE"))
+
+  // The lock: a theater on `notes`, `options` or a keyed table is dropped and the session opens as it would without.
+  const people = {
+    id: "people",
+    text: "Who is here.",
+    shape: { kind: "table" as const, columns: [{ key: "name", type: "text" as const }] },
+    fold: { key: "name" },
+    feed: true,
+  }
+  const tabled = { ...chat, products: [people] }
+  const clash: Pack = {
+    id: "clash",
+    name: "C",
+    theaters: ["notes", "options", "people"].map((id) => ({ id, label: "X", text: "CLASH", on: true })),
+  }
+  const opened = makeSession({
+    card: tabled,
+    player: { ...bare("clash"), theaters: [{ id: "notes", text: "CLASH" }] },
+    model,
+    packs: () => [clash],
+  })
+  assert.deepEqual(opened.products, cardView(tabled, bare()).products)
+  prose.text = "hello"
+  const clashed = await collect(opened.act(null, { text: "x" }))
+  assert.ok(!texts(asked(clashed, "record")).join("\n").includes("CLASH"))
+
+  // cardView: the packs' and the player's, with their text; `on` as declared, the player's toggle left to the client
+  const view = cardView(
+    chat,
+    { ...bare("t"), theaters: [{ id: "mine", text: "Mine.", on: false }], products: { mine: true, town: false } },
+    [{ id: "t", name: "T", theaters: [{ ...town, on: true }] }],
+  ).products
+  const row = (id: string) => view.find((p) => p.id === id)!
+  assert.deepEqual([row("town").on, row("town").text, row("town").label], [true, town.text, "T"])
+  assert.deepEqual([row("mine").on, row("mine").text], [false, "Mine."])
+  assert.ok(view.every((p) => typeof p.text === "string")) // every product's question, the built-in `inner`'s too
+  // not mounted, not there
+  assert.equal(
+    cardView(chat, bare()).products.some((p) => p.id === "town"),
+    false,
+  )
+
+  // A new id with no text: not in the products, and the session opens.
+  const blank: Pack = { id: "blank", name: "B", theaters: [{ id: "x" }] }
+  const unfinished = makeSession({ card: chat, player: bare("blank"), model, packs: () => [blank] })
+  assert.equal(
+    unfinished.products.some((p) => p.id === "x"),
+    false,
+  )
+
+  // A stored row from before §七: the old `products` key decodes away and turns nothing off.
+  const old = decodePack({ id: "old", name: "O", products: { options: false } })
+  assert.deepEqual(old, { id: "old", name: "O" })
+  assert.deepEqual(cardView(chat, bare("old"), [old]).products, cardView(chat, bare()).products)
 }
 
 // ───────── Quick inputs: the player's, the packs', the defaults, through the same note-channel filter ─────────

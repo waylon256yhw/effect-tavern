@@ -117,6 +117,15 @@ export const writing = (w: Writing = {}): Fragment[] => {
 
 // The player layer as data: what the library stores and `PUT /player` decodes at the trust boundary.
 const ModeSchema = Schema.Literals(["override", "yield", "both"])
+// A 小剧场 the player declares, on their own layer or in a pack (docs/packs-brief.md §七): a restricted patch over the
+// products by id, or a new one the narrator writes as plain text. `product.ts` `resolve` compiles it and holds the lock.
+export const Theater = Schema.Struct({
+  id: Schema.String,
+  label: Schema.optionalKey(Schema.String),
+  text: Schema.optionalKey(Schema.String), // none = the patched product's question; a new id without one is dropped
+  on: Schema.optionalKey(Schema.Boolean), // the default once mounted; `Player.products[id]` still has the last word
+})
+export type Theater = typeof Theater.Type
 export const Player = Schema.Struct({
   writing: Schema.optionalKey(Writing), // compiled into the global layer first: a global fragment on the same slot overrides it
   global: Schema.Array(Fragment),
@@ -129,6 +138,7 @@ export const Player = Schema.Struct({
   ), // harness-level setting, also the player's
   asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id (see session `asks`)
   products: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)), // record products on/off by id: the player's toggle wins over card and defaults
+  theaters: Schema.optionalKey(Schema.Array(Theater)), // the player's own 小剧场, on every card, after the mounted packs'
   snippets: Schema.optionalKey(Schema.Array(Snippet)), // the player's quick inputs, before the harness defaults
   format: Schema.optionalKey(Schema.Array(Format)), // the player's format keys, before the harness defaults
 })
@@ -160,7 +170,7 @@ export const Pack = Schema.Struct({
   fragments: Schema.optionalKey(Schema.Array(Fragment.mapFields(Struct.omit(["when", "role"])))), // the id is the slot, `at` head or tail
   entries: Schema.optionalKey(Schema.Array(PackEntry)),
   lexicon: Schema.optionalKey(Schema.Array(Entry)),
-  products: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
+  theaters: Schema.optionalKey(Schema.Array(Theater)),
   snippets: Schema.optionalKey(Schema.Array(Snippet)),
 })
 export type Pack = typeof Pack.Type

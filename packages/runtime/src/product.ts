@@ -7,7 +7,7 @@
 // one declaration that feed (Known / Current), recall (the lookup index) and a client drawing the product all read.
 // `feed` says whether the folded value goes back to the model next turn; `recall` makes the folded items readable by
 // the lookup stage like lore (hook = the item, or one column). The harness owns a default list (notes, options, inner);
-// a card patches by id; the player toggles `on`. `stage` says who writes it: record (one structured call, any shape) or
+// a card patches by id; a pack or the player declares 小剧场 (`resolve`); the player toggles `on`. `stage` says who writes it: record (one structured call, any shape) or
 // narrate (the narrator after the prose, in a block opened by `<<aside>> <id>`, streamed, text only: no schema to force).
 // Retraction is not a verb (issue #7): a fact that can change is a row of a `{ key }` table (record re-rows it, the fold
 // keeps the newest), and a row that should vanish re-rows into a `filter` column that hides it; `notes` stays an
@@ -15,6 +15,7 @@
 // Ceilings: pinning a row so record leaves it alone; a cap derived from state; `every` n turns.
 import { Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
+import type { Theater } from "./fragment.ts"
 
 const Int = Schema.Int
 export const Col = Schema.Struct({
@@ -186,14 +187,24 @@ export const kindOf = (p: Pick<Product, "shape" | "fold" | "feed" | "recall">): 
       ? "context"
       : "world"
 
-/** Harness defaults, patched by the card per id, `on` decided by the player. Validates completeness, `fold` and `recall`. */
+/** Harness defaults, patched by the card per id, then by the 小剧场 (the mounted packs', then the player's), `on` decided
+ *  by the player's toggles. Validates completeness, `fold` and `recall`. The lock: a theater carries only label, text and
+ *  on. It lands on a text theater, which keeps its stage, cap and `when`, or as a new narrate text product, which needs
+ *  text. Anything else (`notes`, `options`, a card's table, a new id with no text) is dropped, not thrown, since a throw
+ *  here would kill a card at session open for what a pack happens to declare. */
 export const resolve = (
   defaults: readonly Product[],
   card: readonly ProductPatch[] = [],
-  player: Readonly<Record<string, boolean>> = {},
+  theaters: readonly Theater[] = [],
+  toggles: Readonly<Record<string, boolean>> = {},
 ): Product[] => {
   const byId = new Map<string, Partial<Product> & { id: string }>(defaults.map((p) => [p.id, p]))
   for (const c of card) byId.set(c.id, { ...byId.get(c.id), ...c })
+  for (const t of theaters) {
+    const was = byId.get(t.id)
+    if (was ? !(was.shape?.kind === "text" && kindOf(was as Product) === "theater") : t.text === undefined) continue
+    byId.set(t.id, was ? { ...was, ...t } : { ...t, shape: { kind: "text" }, stage: "narrate" })
+  }
   return [...byId.values()].map((p) => {
     if (!p.shape || p.text === undefined) throw new Error(`${p.id}: a product needs text and shape`)
     if (
@@ -208,6 +219,6 @@ export const resolve = (
         throw new Error(`${p.id}: recall names a column`)
       if (p.shape.kind === "text" || p.shape.kind === "record") throw new Error(`${p.id}: only lists and tables recall`)
     }
-    return { ...(p as Product), on: player[p.id] ?? p.on ?? true }
+    return { ...(p as Product), on: toggles[p.id] ?? p.on ?? true }
   })
 }

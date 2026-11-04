@@ -211,8 +211,15 @@ const over = (data: Data, m: () => Model = model) =>
     lib.session(a).snippets.some((x) => x.name === "kq"),
     true,
   )
+  // Its 小剧场 too, and they name the block in an export; the session reads the row like the view.
+  lib.packs.put({ id: "k", name: "K", theaters: [{ id: "town", label: "T", text: "gossip", on: false }] })
+  const town = (ps: readonly { id: string; label?: string | undefined }[]) => ps.find((x) => x.id === "town")?.label
+  assert.equal(town(lib.view(chat.id).products), "T")
+  assert.equal(town(lib.session(a).products), "T")
+  assert.equal(town(lib.stories.export(a)!.products), "T")
   lib.packs.del("k")
   assert.deepEqual(lib.player.packs, { [chat.id]: ["l"] })
+  assert.equal(town(lib.view(chat.id).products), undefined)
   assert.equal(
     lib.view(chat.id).snippets.some((x) => x.name === "kq"),
     false,

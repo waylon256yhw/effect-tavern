@@ -307,11 +307,12 @@ export const library = ({
         const story = data.stories.list(undefined, id)[0]
         if (!story) return undefined
         const found = cards.list().find((c) => c.id === story.card)
+        const p = layer()
         return {
           card: found ?? { id: story.card, title: story.card },
           story,
           snapshot: data.store<Logged>(id).read()!,
-          products: found ? cardView(cards.get(story.card), layer()).products : [],
+          products: found ? cardView(cards.get(story.card), p, mounted(p, story.card, data.packs.list())).products : [],
         }
       },
     },
