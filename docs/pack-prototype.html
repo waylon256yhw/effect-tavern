@@ -1,0 +1,1641 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Settings · 写作包原型 (Issue #69)</title>
+  <style>
+    /* ───────── 1. Design Tokens ───────── */
+    :root {
+      color-scheme: light dark;
+
+      --surface-0: light-dark(#f3f3ef, #0b0b0b);
+      --surface-1: light-dark(#fcfcfb, #151514);
+      --surface-2: light-dark(#ffffff, #1c1c1b);
+      --surface-3: light-dark(#ffffff, #242423);
+
+      --ink: light-dark(#151515, #f5f5f3);
+      --ink-2: light-dark(#525252, #a3a3a1);
+      --ink-3: light-dark(#8a8a8a, #6f6f6d);
+
+      --alpha-1: light-dark(rgb(20 20 20 / 0.04), rgb(255 255 255 / 0.045));
+      --alpha-2: light-dark(rgb(20 20 20 / 0.08), rgb(255 255 255 / 0.085));
+      --alpha-3: light-dark(rgb(20 20 20 / 0.16), rgb(255 255 255 / 0.16));
+      --alpha-4: light-dark(rgb(20 20 20 / 0.28), rgb(255 255 255 / 0.28));
+      --ghost-hover: var(--alpha-1);
+
+      --primary: var(--ink);
+      --primary-ink: var(--surface-1);
+      --danger: light-dark(#dc2626, #f87171);
+      --ok: light-dark(#16a34a, #22c55e);
+      --ok-soft: light-dark(rgb(22 163 74 / 0.12), rgb(34 197 94 / 0.15));
+      --scrim: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.58));
+      --ring: var(--alpha-4);
+
+      --shadow-1:
+        0 1px 2px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.4)),
+        0 2px 8px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.4));
+      --shadow-2:
+        0 2px 4px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.45)),
+        0 8px 20px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.45));
+      --shadow-pop:
+        0 16px 44px light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.72)),
+        0 4px 12px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.5));
+
+      --radius-sm: 6px;
+      --radius: 9px;
+      --radius-card: 12px;
+      --radius-dialog: 16px;
+      --radius-pill: 999px;
+
+      --shell-top: 38px;
+      --control-lg: 36px;
+      --control: 32px;
+      --control-sm: 26px;
+
+      --font-sans:
+        system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        "Noto Sans SC", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      --text-caption: 0.75rem;
+      --text-footnote: 0.8125rem;
+      --text-body: 0.875rem;
+      --text-heading: 1rem;
+      --text-title: 1.25rem;
+
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 28px;
+
+      --dur-1: 80ms;
+      --dur-2: 150ms;
+      --dur-3: 240ms;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: var(--text-body);
+      line-height: 1.5;
+      color: var(--ink);
+      background: var(--surface-0);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+    }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+    }
+    h1, h2, h3, h4, p, ul { margin: 0; padding: 0; list-style: none; }
+    .mono { font-family: var(--font-mono); }
+    .spacer { flex: 1; }
+
+    /* ───────── 2. Floating Demo Switcher (Bottom-Right) ───────── */
+    .demo-dock {
+      position: fixed;
+      bottom: 14px;
+      right: 14px;
+      z-index: 95;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--text-caption);
+      user-select: none;
+    }
+    .demo-dock button {
+      height: 24px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+    .demo-dock button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface-1);
+      font-weight: 600;
+    }
+
+    /* ───────── 3. Viewport & Top Shell Bar (.shell-top) ───────── */
+    .app-wrap {
+      height: 100dvh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface-0);
+    }
+    .app-wrap[data-vp="mobile"] {
+      background: light-dark(#e2e2de, #050505);
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-3);
+    }
+    .shell-frame {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface-0);
+      position: relative;
+    }
+    .app-wrap[data-vp="mobile"] .shell-frame {
+      max-width: 390px;
+      max-height: 820px;
+      border-radius: 38px;
+      box-shadow: var(--shadow-pop);
+      background: var(--surface-1);
+    }
+
+    .shell-top {
+      flex: none;
+      height: var(--shell-top);
+      padding: 0 20px 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-0);
+      color: var(--ink-2);
+      font-size: var(--text-footnote);
+      user-select: none;
+    }
+    .app-wrap[data-vp="mobile"] .shell-top {
+      display: none;
+    }
+    .shell-back {
+      height: 26px;
+      padding: 0 8px 0 6px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--ink-2);
+      font-weight: 550;
+    }
+    .shell-back:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .shell-back svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* ───────── 4. Shared Controls (Borderless Tonal Surfaces) ───────── */
+    .scroller {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color var(--dur-3) var(--ease);
+    }
+    .scroller:hover {
+      scrollbar-color: var(--alpha-2) transparent;
+    }
+
+    .icon-btn {
+      width: var(--control);
+      height: var(--control);
+      border-radius: var(--radius);
+      display: inline-grid;
+      place-items: center;
+      color: var(--ink-2);
+      flex: none;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .icon-btn:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+    .icon-btn.sm {
+      width: var(--control-sm);
+      height: var(--control-sm);
+      border-radius: var(--radius-sm);
+    }
+    .icon-btn.sm svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .btn {
+      height: var(--control);
+      padding: 0 12px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex: none;
+      background: var(--alpha-1);
+      font-size: var(--text-footnote);
+      font-weight: 550;
+      white-space: nowrap;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .btn:hover {
+      background: var(--alpha-2);
+    }
+    .btn svg {
+      width: 14px;
+      height: 14px;
+    }
+    .btn.sm {
+      height: var(--control-sm);
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      font-size: var(--text-caption);
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: var(--primary-ink);
+    }
+    .btn.primary:hover {
+      opacity: 0.92;
+      background: var(--primary);
+    }
+    .btn.ghost {
+      background: none;
+      color: var(--ink-2);
+    }
+    .btn.ghost:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .btn.danger {
+      color: var(--danger);
+    }
+
+    .tag {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 7px;
+      border-radius: var(--radius-sm);
+      background: var(--alpha-1);
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      white-space: nowrap;
+    }
+
+    .switch {
+      flex: none;
+      width: 36px;
+      height: 20px;
+      padding: 2px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-3);
+      transition: background var(--dur-2) var(--ease);
+    }
+    .switch[aria-checked="true"] {
+      background: var(--ok);
+    }
+    .switch .thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+      transition: translate var(--dur-2) var(--ease);
+    }
+    .switch[aria-checked="true"] .thumb {
+      translate: 16px 0;
+    }
+
+    /* ───────── 5. Settings Three-Card Canvas (.settings) ───────── */
+    .settings {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 13.5rem 16.5rem minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      gap: 8px;
+      padding: 0 8px 8px;
+      background: var(--surface-0);
+    }
+    .phone-bar,
+    .mobile-back {
+      display: none;
+    }
+
+    /* Left Card: Navigation */
+    .nav-card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-5) var(--space-3);
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+      user-select: none;
+    }
+    .nav-head {
+      display: flex;
+      align-items: center;
+      min-height: var(--control);
+      padding-left: var(--space-3);
+    }
+    .nav-head h1 {
+      font-size: var(--text-title);
+      font-weight: 650;
+    }
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+    .nav-item,
+    .p-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      height: 40px;
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      text-align: left;
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex: none;
+      color: var(--ink-3);
+    }
+    .nav-item:hover,
+    .p-row:hover {
+      background: var(--ghost-hover);
+      color: var(--ink);
+    }
+    .nav-item[aria-current="page"],
+    .p-row[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: var(--shadow-1);
+    }
+    .nav-item[aria-current="page"] svg {
+      color: var(--ink);
+    }
+
+    /* Middle Card: Pack List + Unobstructed Bottom Actions */
+    .master-card,
+    .detail-card {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-1);
+      box-shadow: var(--shadow-1);
+    }
+    .detail-card {
+      box-shadow: var(--shadow-2);
+    }
+    .master-list {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: var(--space-4) var(--space-3) var(--space-2);
+    }
+    .p-row {
+      flex: none;
+      height: 42px;
+      padding: 0 10px;
+    }
+    .p-name {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .master-foot {
+      display: flex;
+      gap: var(--space-2);
+      padding: var(--space-3);
+    }
+    .master-foot .btn {
+      flex: 1;
+      height: 36px;
+    }
+
+    /* Right Card: Detail Header + 5 Borderless Module Blocks */
+    .detail-header {
+      flex: none;
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-6) var(--space-1);
+    }
+    .name-input {
+      font-size: var(--text-heading);
+      font-weight: 650;
+      height: var(--control);
+      padding: 0 var(--space-2);
+      margin-left: calc(-1 * var(--space-2));
+      border-radius: var(--radius-sm);
+      min-width: 7rem;
+      max-width: 16rem;
+    }
+    .name-input:hover,
+    .name-input:focus {
+      background: var(--alpha-1);
+      outline: none;
+    }
+
+    /* ───────── 6. The 5 Fixed Modules (Soft Tonal Wells, Zero Divider Lines) ───────── */
+    .detail-scroll {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-6) var(--space-6);
+    }
+
+    .mod-card {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-card);
+      background: var(--alpha-1);
+    }
+    .mod-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 26px;
+    }
+    .mod-head h3 {
+      font-size: var(--text-body);
+      font-weight: 600;
+    }
+    .mod-actions {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mod-card .btn {
+      background: var(--surface-2);
+    }
+    .mod-card .btn:hover {
+      background: var(--surface-3);
+    }
+    .mod-card .btn.ghost {
+      background: none;
+    }
+    .mod-card .btn.ghost:hover {
+      background: var(--alpha-1);
+    }
+
+    /* Compact item pills inside a module */
+    .item-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .item-pill {
+      height: 30px;
+      max-width: 100%;
+      padding: 0 11px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--text-footnote);
+      color: var(--ink);
+      transition: background var(--dur-1);
+    }
+    .item-pill:hover {
+      background: var(--surface-3);
+    }
+    .item-pill .preview {
+      max-width: 16rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--ink-2);
+    }
+
+    /* Compact 1-line summary rows for fragments */
+    .compact-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .compact-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      height: 34px;
+      padding: 0 10px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      text-align: left;
+      cursor: pointer;
+      transition: background var(--dur-1);
+    }
+    .compact-row:hover {
+      background: var(--surface-3);
+    }
+    .compact-row[data-off="true"] .row-text {
+      opacity: 0.45;
+    }
+    .compact-row .row-text {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Product toggle pills */
+    .prod-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .prod-pill {
+      height: 30px;
+      padding: 0 12px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      transition: background var(--dur-1), color var(--dur-1);
+    }
+    .prod-pill:hover {
+      background: var(--surface-3);
+      color: var(--ink);
+    }
+    .prod-pill[aria-pressed="true"] {
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-weight: 600;
+    }
+
+    /* ───────── 7. Spatial Layer 1: Slide-Over Side Drawer (.side-drawer) ───────── */
+    .drawer-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      background: var(--scrim);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur-3) var(--ease);
+    }
+    .drawer-scrim[data-open="true"] {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .side-drawer {
+      position: absolute;
+      top: var(--space-3);
+      right: var(--space-3);
+      bottom: var(--space-3);
+      width: min(28rem, calc(100% - 2 * var(--space-3)));
+      z-index: 35;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      box-shadow: var(--shadow-pop);
+      display: flex;
+      flex-direction: column;
+      translate: calc(100% + var(--space-4)) 0;
+      transition: translate var(--dur-3) var(--ease);
+      overflow: hidden;
+    }
+    .side-drawer[data-open="true"] {
+      translate: 0 0;
+    }
+    .drawer-head {
+      flex: none;
+      height: 52px;
+      padding: var(--space-2) var(--space-3) 0 var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .drawer-head h3 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .drawer-search {
+      flex: none;
+      padding: var(--space-2) var(--space-4);
+    }
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      height: var(--control);
+      padding: 0 var(--space-3);
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+    }
+    .search-box svg {
+      width: 15px;
+      height: 15px;
+      color: var(--ink-3);
+      flex: none;
+    }
+    .search-box input {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--text-footnote);
+      outline: none;
+    }
+    .drawer-body {
+      flex: 1;
+      min-height: 0;
+      padding: var(--space-2) var(--space-4) var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .drawer-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      height: 38px;
+      padding: 0 12px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      cursor: pointer;
+      transition: background var(--dur-1);
+    }
+    .drawer-row:hover {
+      background: var(--alpha-2);
+    }
+    .drawer-row .d-name {
+      font-size: var(--text-footnote);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .drawer-row .d-preview {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--text-footnote);
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ───────── 8. Spatial Layer 2: Centered Dialog Modal (<dialog class="modal">) ───────── */
+    dialog.modal {
+      width: min(26rem, calc(100vw - 2 * var(--space-4)));
+      margin: auto;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-dialog);
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-pop);
+      outline: none;
+      overflow: hidden;
+    }
+    dialog.modal[open] {
+      display: flex;
+      flex-direction: column;
+    }
+    dialog.modal::backdrop {
+      background: var(--scrim);
+    }
+    .modal-head {
+      height: 48px;
+      padding: var(--space-2) var(--space-3) 0 var(--space-4);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-head h3 {
+      font-size: var(--text-heading);
+      font-weight: 650;
+    }
+    .modal-body {
+      padding: var(--space-3) var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .modal-foot {
+      padding: var(--space-2) var(--space-4) var(--space-4);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--space-2);
+    }
+    .mfield {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mfield > span {
+      font-size: var(--text-footnote);
+      color: var(--ink-3);
+    }
+    .mfield input,
+    .mfield textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      background: var(--alpha-1);
+      font-size: var(--text-body);
+      line-height: 1.55;
+      resize: none;
+      outline: none;
+    }
+    .mfield input:focus,
+    .mfield textarea:focus {
+      background: var(--alpha-2);
+    }
+    .at-toggle {
+      display: inline-flex;
+      align-self: flex-start;
+      gap: 2px;
+      padding: 2px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .at-toggle button {
+      height: 26px;
+      padding: 0 12px;
+      border-radius: var(--radius-pill);
+      color: var(--ink-2);
+      font-size: var(--text-caption);
+      font-weight: 550;
+    }
+    .at-toggle button[aria-pressed="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+    }
+
+    /* ───────── 9. Mobile 390px Rules ───────── */
+    .app-wrap[data-vp="mobile"] .settings {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 0;
+      padding: 0;
+      background: var(--surface-1);
+    }
+    .app-wrap[data-vp="mobile"] .nav-card {
+      display: none;
+    }
+    .app-wrap[data-vp="mobile"] .phone-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 10px var(--space-3) 6px var(--space-2);
+    }
+    .phone-bar .title {
+      flex: 1;
+      font-size: var(--text-heading);
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .phone-bar .tabs {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--alpha-1);
+    }
+    .phone-bar .tabs button {
+      width: 32px;
+      height: 28px;
+      border-radius: var(--radius-pill);
+      display: grid;
+      place-items: center;
+      color: var(--ink-3);
+    }
+    .phone-bar .tabs button svg {
+      width: 16px;
+      height: 16px;
+    }
+    .phone-bar .tabs button[aria-selected="true"] {
+      background: var(--surface-3);
+      color: var(--ink);
+      box-shadow: var(--shadow-1);
+    }
+    .app-wrap[data-vp="mobile"] .master-card,
+    .app-wrap[data-vp="mobile"] .detail-card {
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .app-wrap[data-vp="mobile"] .settings[data-pane="list"] .detail-card,
+    .app-wrap[data-vp="mobile"] .settings[data-pane="detail"] .master-card {
+      display: none;
+    }
+    .app-wrap[data-vp="mobile"] .mobile-back {
+      display: inline-grid;
+    }
+    .app-wrap[data-vp="mobile"] .detail-header {
+      min-height: 48px;
+      padding: var(--space-2) var(--space-3);
+    }
+    .app-wrap[data-vp="mobile"] .detail-scroll {
+      padding: var(--space-2) var(--space-3) var(--space-6);
+      gap: var(--space-2);
+    }
+    .app-wrap[data-vp="mobile"] .mod-card {
+      padding: 10px var(--space-3);
+    }
+    .app-wrap[data-vp="mobile"] dialog.modal {
+      width: calc(min(390px, 100vw) - 24px);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-wrap" id="appWrap" data-vp="desktop">
+    <div class="shell-frame">
+      <header class="shell-top">
+        <button type="button" class="shell-back">
+          <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 128H40M112 56l-72 72 72 72"/></svg>
+          <span>返回</span>
+        </button>
+      </header>
+
+      <div class="settings" id="settingsRoot" data-pane="detail">
+        <!-- Column 1: Left Navigation Card -->
+        <nav class="nav-card" aria-label="设置">
+          <div class="nav-head">
+            <h1>设置</h1>
+          </div>
+          <div class="nav-list">
+            <button type="button" class="nav-item">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M136 64l56 56-36 36-56-56 36-36ZM64 136l56 56-28 28a24 24 0 0 1-34 0l-22-22a24 24 0 0 1 0-34l28-28Z"/><path d="M144 144l-32 32M112 112l-32 32M64 192l-32 32M224 32l-32 32"/></svg>
+              <span>模型服务</span>
+            </button>
+            <button type="button" class="nav-item">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><line x1="40" y1="64" x2="216" y2="64"/><line x1="40" y1="128" x2="216" y2="128"/><line x1="40" y1="192" x2="216" y2="192"/><circle cx="96" cy="64" r="20" fill="var(--surface-1)"/><circle cx="168" cy="128" r="20" fill="var(--surface-1)"/><circle cx="112" cy="192" r="20" fill="var(--surface-1)"/></svg>
+              <span>默认模型</span>
+            </button>
+            <button type="button" class="nav-item">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M80 40c-24 0-32 16-32 40v24c0 16-16 24-16 24s16 8 16 24v24c0 24 8 40 32 40M176 40c24 0 32 16 32 40v24c0 16 16 24 16 24s-16 8-16 24v24c0 24-8 40-32 40"/></svg>
+              <span>提示词模板</span>
+            </button>
+            <button type="button" class="nav-item">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="128" cy="96" r="56"/><path d="M40 216c18-38 50-56 88-56s70 18 88 56"/></svg>
+              <span>玩家人设</span>
+            </button>
+            <button type="button" class="nav-item" aria-current="page">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M224 177.32V78.68a8 8 0 0 0-4.08-6.97l-88-49.5a8 8 0 0 0-7.84 0l-88 49.5A8 8 0 0 0 32 78.68v98.64a8 8 0 0 0 4.08 6.97l88 49.5a8 8 0 0 0 7.84 0l88-49.5a8 8 0 0 0 4.08-6.97Z"/><polyline points="32.7 76.92 128 129.08 223.3 76.92"/><line x1="128" y1="236" x2="128" y2="129.08"/></svg>
+              <span>写作包</span>
+            </button>
+          </div>
+        </nav>
+
+        <!-- Phone Top Bar -->
+        <header class="phone-bar">
+          <button type="button" class="icon-btn" aria-label="返回">
+            <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 128H40M112 56l-72 72 72 72"/></svg>
+          </button>
+          <span class="title">写作包</span>
+          <div class="tabs" role="tablist">
+            <button type="button" role="tab" aria-label="模型服务" aria-selected="false">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M136 64l56 56-36 36-56-56 36-36ZM64 136l56 56-28 28a24 24 0 0 1-34 0l-22-22a24 24 0 0 1 0-34l28-28Z"/></svg>
+            </button>
+            <button type="button" role="tab" aria-label="默认模型" aria-selected="false">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><line x1="40" y1="64" x2="216" y2="64"/><line x1="40" y1="128" x2="216" y2="128"/><line x1="40" y1="192" x2="216" y2="192"/></svg>
+            </button>
+            <button type="button" role="tab" aria-label="提示词模板" aria-selected="false">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M80 40c-24 0-32 16-32 40v24c0 16-16 24-16 24s16 8 16 24v24c0 24 8 40 32 40M176 40c24 0 32 16 32 40v24c0 16 16 24 16 24s-16 8-16 24v24c0 24-8 40-32 40"/></svg>
+            </button>
+            <button type="button" role="tab" aria-label="玩家人设" aria-selected="false">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="128" cy="96" r="56"/><path d="M40 216c18-38 50-56 88-56s70 18 88 56"/></svg>
+            </button>
+            <button type="button" role="tab" aria-label="写作包" aria-selected="true">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M224 177.32V78.68a8 8 0 0 0-4.08-6.97l-88-49.5a8 8 0 0 0-7.84 0l-88 49.5A8 8 0 0 0 32 78.68v98.64a8 8 0 0 0 4.08 6.97l88 49.5a8 8 0 0 0 7.84 0l88-49.5a8 8 0 0 0 4.08-6.97Z"/><polyline points="32.7 76.92 128 129.08 223.3 76.92"/><line x1="128" y1="236" x2="128" y2="129.08"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Column 2: Master List Card -->
+        <aside class="master-card" aria-label="写作包">
+          <div class="master-list scroller" id="packList"></div>
+          <div class="master-foot">
+            <button type="button" class="btn" id="newPackBtn">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M128 40v176M40 128h176"/></svg>
+              <span>新建写作包</span>
+            </button>
+            <button type="button" class="btn" id="importPackBtn" style="flex:0 0 auto;">
+              <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M80 88l48-48 48 48M128 40v112M216 152v56a8 8 0 0 1-8 8H48a8 8 0 0 1-8-8v-56"/></svg>
+              <span>导入</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- Column 3: Detail Card -->
+        <section class="detail-card" aria-label="写作包详情" id="packDetail"></section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Centered Dialog Modal -->
+  <dialog class="modal" id="itemModal">
+    <div class="modal-head">
+      <h3 id="modalTitle">添加</h3>
+      <button type="button" class="icon-btn sm" id="closeModalBtn" aria-label="关闭">
+        <svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M200 56L56 200M200 200L56 56"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </dialog>
+
+  <!-- Prototype Switcher Dock -->
+  <div class="demo-dock" role="toolbar" aria-label="原型演示切换">
+    <button type="button" id="vpDesktopBtn" aria-pressed="true">桌面端</button>
+    <button type="button" id="vpMobileBtn" aria-pressed="false">手机 390px</button>
+    <button type="button" id="themeBtn" aria-pressed="false">深色</button>
+  </div>
+
+  <script>
+    const ICONS = {
+      plus: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M128 40v176M40 128h176"/></svg>`,
+      back: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 128H40M112 56l-72 72 72 72"/></svg>`,
+      trash: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M216 56H40M104 104v64M152 104v64M200 56v152a8 8 0 0 1-8 8H64a8 8 0 0 1-8-8V56M168 56V40a16 16 0 0 0-16-16h-48a16 16 0 0 0-16 16v16"/></svg>`,
+      export: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M80 112l48 48 48-48M128 40v120M216 152v56a8 8 0 0 1-8 8H48a8 8 0 0 1-8-8v-56"/></svg>`,
+      close: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><path d="M200 56L56 200M200 200L56 56"/></svg>`,
+      search: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"><circle cx="116" cy="116" r="76"/><path d="M170 170l50 50"/></svg>`,
+      chevRight: `<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M96 48l80 80-80 80"/></svg>`,
+    };
+
+    const hookOf = (text) => (text.trim().split(/(?<=[.。!?！？])\s*/)[0] || "").trim();
+
+    const packs = [
+      {
+        id: "pack-new",
+        name: "新写作包",
+        cards: [],
+        fragments: [],
+        entries: [],
+        lexicon: [],
+        products: {},
+        snippets: []
+      },
+      {
+        id: "pack-lotm",
+        name: "诡秘序列与民俗世界书",
+        cards: ["理"],
+        fragments: [
+          {
+            id: "req-1",
+            at: "head",
+            enabled: true,
+            text: "时代底色为蒸汽与机械并存的维多利亚雾都：煤气路灯、马车、报童、神秘学结社与非凡特性守恒定律并存。"
+          }
+        ],
+        entries: [
+          { id: "占卜家途径", text: "占卜家途径的序列晋升与扮演守则。序列9占卜家重在敬畏命运；序列8小丑学会在危机中保持肢体协调与面具般的微笑；序列7魔术师从不打无准备之仗。" },
+          { id: "非凡特性定律", text: "非凡特性聚合定律与守恒定律。同途径或相邻途径的非凡者会在命运牵引下无意相遇，高序列者对低序列存在天然吸引。" },
+          { id: "贝克兰德街区", text: "贝克兰德各街区风貌与阶级分布。皇后区为贵族府邸，乔伍德区居住体面中产，东区与码头区则是浓雾、煤灰与帮派滋生的温床。" },
+          { id: "灵界与七光", text: "灵界穿梭与占卜启示的视觉表现。灵界由破碎色块、历史残影与灵界生物构成，七光居于高处。" }
+        ],
+        lexicon: [
+          { pattern: "魔法能量", hint: "灵性" }
+        ],
+        products: {},
+        snippets: [
+          { name: "灵视观察", text: "我悄然开启灵视，端详对方的以太体与情绪颜色。", hint: "场内动作", note: false }
+        ]
+      },
+      {
+        id: "pack-wuxia",
+        name: "冷峻武侠与去八股",
+        cards: ["竹林", "盐道"],
+        fragments: [
+          { id: "req-1", at: "head", enabled: true, text: "行文取古龙与早年武侠之冷峻克制：多用短句与白描，动作交代干脆，兵刃交击只写分寸与落点。" },
+          { id: "req-2", at: "tail", enabled: true, text: "收尾停在对方动作或话音落定处，严禁在段末升华主题或感叹江湖宿命。" }
+        ],
+        entries: [],
+        lexicon: [
+          { pattern: "指节发白", hint: "手部具体动作" },
+          { pattern: "一丝不易察觉", hint: "神态细节" },
+          { pattern: "瞳孔微缩", hint: "呼吸或目光停顿" },
+          { pattern: "嘴角勾起一抹", hint: "平实写笑" }
+        ],
+        products: { inner: true },
+        snippets: [
+          { name: "慢镜交手", text: "放慢镜头，逐招写出这一合的方位与兵刃试探。", hint: "拆招细写", note: true }
+        ]
+      }
+    ];
+
+    let selectedId = "pack-new";
+    let drawerKind = null;
+    let drawerQuery = "";
+
+    const totalCount = (p) =>
+      p.fragments.length +
+      p.entries.length +
+      p.lexicon.length +
+      Object.keys(p.products).length +
+      p.snippets.length;
+
+    function currentPack() {
+      return packs.find((p) => p.id === selectedId) || packs[0];
+    }
+
+    function renderList() {
+      const el = document.getElementById("packList");
+      el.innerHTML = packs.map((p) => `
+        <button
+          type="button"
+          class="p-row"
+          aria-selected="${p.id === selectedId ? "true" : "false"}"
+          data-pick="${p.id}"
+        >
+          <span class="p-name">${p.name}</span>
+          ${p.cards.map((c) => `<span class="tag">${c}</span>`).join("")}
+          <span class="tag mono">${totalCount(p)}</span>
+        </button>
+      `).join("");
+
+      el.querySelectorAll("[data-pick]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selectedId = btn.dataset.pick;
+          drawerKind = null;
+          document.getElementById("settingsRoot").dataset.pane = "detail";
+          renderList();
+          renderDetail();
+        });
+      });
+    }
+
+    function renderDetail() {
+      const p = currentPack();
+      const detail = document.getElementById("packDetail");
+
+      detail.innerHTML = `
+        <header class="detail-header">
+          <button type="button" class="icon-btn mobile-back" id="backToListBtn" aria-label="返回列表">
+            ${ICONS.back}
+          </button>
+          <input class="name-input" value="${p.name}" aria-label="写作包名称" id="packNameInput" />
+          ${p.cards.map((c) => `<span class="tag">${c}</span>`).join("")}
+          <span class="spacer"></span>
+          <button type="button" class="btn sm ghost">
+            ${ICONS.export} <span>导出</span>
+          </button>
+          <button type="button" class="icon-btn sm" aria-label="删除写作包" id="delPackBtn">
+            ${ICONS.trash}
+          </button>
+        </header>
+
+        <div class="detail-scroll scroller">
+          <!-- 1. 文风与要求 -->
+          <div class="mod-card">
+            <div class="mod-head">
+              <h3>文风与要求</h3>
+              <span class="tag mono">${p.fragments.length}</span>
+              <div class="mod-actions">
+                <button type="button" class="btn sm" id="addFragBtn">${ICONS.plus} <span>添加要求</span></button>
+              </div>
+            </div>
+            ${p.fragments.length > 0 ? `
+              <div class="compact-rows">
+                ${p.fragments.map((f, i) => `
+                  <div class="compact-row" data-off="${f.enabled === false ? "true" : "false"}" data-edit-frag="${i}">
+                    <span class="tag">${f.at === "tail" ? "每轮末尾" : "开头"}</span>
+                    <span class="row-text">${f.text}</span>
+                    <button
+                      type="button"
+                      class="switch"
+                      role="switch"
+                      aria-checked="${f.enabled !== false ? "true" : "false"}"
+                      data-toggle-frag="${i}"
+                      aria-label="启用"
+                    ><span class="thumb"></span></button>
+                  </div>
+                `).join("")}
+              </div>
+            ` : ""}
+          </div>
+
+          <!-- 2. 世界书词条 -->
+          <div class="mod-card">
+            <div class="mod-head">
+              <h3>世界书词条</h3>
+              <span class="tag mono">${p.entries.length}</span>
+              <div class="mod-actions">
+                ${p.entries.length > 0 ? `<button type="button" class="btn sm ghost" id="openEntriesDrawerBtn"><span>管理</span> ${ICONS.chevRight}</button>` : ""}
+                <button type="button" class="btn sm" id="addEntryBtn">${ICONS.plus} <span>添加词条</span></button>
+              </div>
+            </div>
+            ${p.entries.length > 0 ? `
+              <div class="item-pills">
+                ${p.entries.map((e, i) => `
+                  <button type="button" class="item-pill" data-edit-entry="${i}">
+                    <span>${e.id}</span>
+                  </button>
+                `).join("")}
+              </div>
+            ` : ""}
+          </div>
+
+          <!-- 3. 润色禁词 -->
+          <div class="mod-card">
+            <div class="mod-head">
+              <h3>润色禁词</h3>
+              <span class="tag mono">${p.lexicon.length}</span>
+              <div class="mod-actions">
+                ${p.lexicon.length > 0 ? `<button type="button" class="btn sm ghost" id="openLexDrawerBtn"><span>管理</span> ${ICONS.chevRight}</button>` : ""}
+                <button type="button" class="btn sm" id="addLexBtn">${ICONS.plus} <span>添加禁词</span></button>
+              </div>
+            </div>
+            ${p.lexicon.length > 0 ? `
+              <div class="item-pills">
+                ${p.lexicon.map((x, i) => `
+                  <button type="button" class="item-pill" data-edit-lex="${i}">
+                    <span>${x.pattern}</span>
+                    ${x.hint ? `<span class="preview">→ ${x.hint}</span>` : ""}
+                  </button>
+                `).join("")}
+              </div>
+            ` : ""}
+          </div>
+
+          <!-- 4. 产物开关 -->
+          <div class="mod-card">
+            <div class="mod-head">
+              <h3>产物开关</h3>
+              <span class="tag mono">${Object.keys(p.products).length}</span>
+            </div>
+            <div class="prod-pills">
+              <button type="button" class="prod-pill" aria-pressed="${p.products.inner ? "true" : "false"}" data-prod="inner">
+                <span>人物心声</span>
+              </button>
+              <button type="button" class="prod-pill" aria-pressed="${p.products.options ? "true" : "false"}" data-prod="options">
+                <span>行动选项</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 5. 快捷输入 -->
+          <div class="mod-card">
+            <div class="mod-head">
+              <h3>快捷输入</h3>
+              <span class="tag mono">${p.snippets.length}</span>
+              <div class="mod-actions">
+                <button type="button" class="btn sm" id="addSnipBtn">${ICONS.plus} <span>添加片段</span></button>
+              </div>
+            </div>
+            ${p.snippets.length > 0 ? `
+              <div class="item-pills">
+                ${p.snippets.map((s, i) => `
+                  <button type="button" class="item-pill" data-edit-snip="${i}">
+                    <span>${s.name}</span>
+                  </button>
+                `).join("")}
+              </div>
+            ` : ""}
+          </div>
+        </div>
+
+        <!-- Slide-Over Side Drawer -->
+        <div class="drawer-scrim" data-open="${drawerKind ? "true" : "false"}" id="drawerScrim"></div>
+        <aside class="side-drawer" data-open="${drawerKind ? "true" : "false"}" aria-label="列表管理">
+          ${renderDrawerContent(p)}
+        </aside>
+      `;
+
+      detail.querySelector("#backToListBtn")?.addEventListener("click", () => {
+        document.getElementById("settingsRoot").dataset.pane = "list";
+      });
+      detail.querySelector("#packNameInput")?.addEventListener("change", (e) => {
+        p.name = e.target.value.trim() || p.name;
+        renderList();
+      });
+      detail.querySelector("#drawerScrim")?.addEventListener("click", () => {
+        drawerKind = null;
+        renderDetail();
+      });
+      detail.querySelector("#closeDrawerBtn")?.addEventListener("click", () => {
+        drawerKind = null;
+        renderDetail();
+      });
+
+      detail.querySelector("#addFragBtn")?.addEventListener("click", () => openFragModal(-1));
+      detail.querySelectorAll("[data-toggle-frag]").forEach((sw) => {
+        sw.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const i = Number(sw.dataset.toggleFrag);
+          p.fragments[i].enabled = p.fragments[i].enabled === false;
+          renderDetail();
+        });
+      });
+      detail.querySelectorAll("[data-edit-frag]").forEach((row) =>
+        row.addEventListener("click", () => openFragModal(Number(row.dataset.editFrag)))
+      );
+
+      detail.querySelector("#addEntryBtn")?.addEventListener("click", () => openEntryModal(-1));
+      detail.querySelectorAll("[data-edit-entry]").forEach((btn) =>
+        btn.addEventListener("click", () => openEntryModal(Number(btn.dataset.editEntry)))
+      );
+      detail.querySelector("#openEntriesDrawerBtn")?.addEventListener("click", () => {
+        drawerKind = "entries";
+        drawerQuery = "";
+        renderDetail();
+      });
+
+      detail.querySelector("#addLexBtn")?.addEventListener("click", () => openLexModal(-1));
+      detail.querySelectorAll("[data-edit-lex]").forEach((btn) =>
+        btn.addEventListener("click", () => openLexModal(Number(btn.dataset.editLex)))
+      );
+      detail.querySelector("#openLexDrawerBtn")?.addEventListener("click", () => {
+        drawerKind = "lexicon";
+        drawerQuery = "";
+        renderDetail();
+      });
+
+      detail.querySelectorAll("[data-prod]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const k = btn.dataset.prod;
+          if (p.products[k]) delete p.products[k];
+          else p.products[k] = true;
+          renderList();
+          renderDetail();
+        });
+      });
+
+      detail.querySelector("#addSnipBtn")?.addEventListener("click", () => openSnipModal(-1));
+      detail.querySelectorAll("[data-edit-snip]").forEach((btn) =>
+        btn.addEventListener("click", () => openSnipModal(Number(btn.dataset.editSnip)))
+      );
+
+      detail.querySelector("#drawerAddBtn")?.addEventListener("click", () => {
+        if (drawerKind === "entries") openEntryModal(-1);
+        else if (drawerKind === "lexicon") openLexModal(-1);
+      });
+      detail.querySelectorAll("[data-drawer-edit]").forEach((row) => {
+        row.addEventListener("click", () => {
+          const idx = Number(row.dataset.drawerEdit);
+          if (drawerKind === "entries") openEntryModal(idx);
+          else if (drawerKind === "lexicon") openLexModal(idx);
+        });
+      });
+      const dsInput = detail.querySelector("#drawerSearchInput");
+      if (dsInput) {
+        dsInput.addEventListener("input", () => {
+          drawerQuery = dsInput.value;
+          renderDetail();
+          const next = document.getElementById("drawerSearchInput");
+          if (next) {
+            next.focus();
+            next.setSelectionRange(drawerQuery.length, drawerQuery.length);
+          }
+        });
+      }
+    }
+
+    function renderDrawerContent(p) {
+      if (!drawerKind) return "";
+      if (drawerKind === "entries") {
+        const rows = p.entries
+          .map((e, i) => ({ e, i }))
+          .filter(({ e }) => !drawerQuery || e.id.includes(drawerQuery) || e.text.includes(drawerQuery));
+        return `
+          <div class="drawer-head">
+            <h3>世界书词条</h3>
+            <span class="tag mono">${p.entries.length}</span>
+            <span class="spacer"></span>
+            <button type="button" class="btn sm" id="drawerAddBtn">${ICONS.plus} <span>添加词条</span></button>
+            <button type="button" class="icon-btn sm" id="closeDrawerBtn">${ICONS.close}</button>
+          </div>
+          <div class="drawer-search">
+            <div class="search-box">
+              ${ICONS.search}
+              <input type="search" id="drawerSearchInput" placeholder="搜索…" value="${drawerQuery}" />
+            </div>
+          </div>
+          <div class="drawer-body scroller">
+            ${rows.map(({ e, i }) => `
+              <div class="drawer-row" data-drawer-edit="${i}">
+                <span class="d-name">${e.id}</span>
+                <span class="d-preview">${hookOf(e.text)}</span>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+      const rows = p.lexicon
+        .map((e, i) => ({ e, i }))
+        .filter(({ e }) => !drawerQuery || e.pattern.includes(drawerQuery) || (e.hint || "").includes(drawerQuery));
+      return `
+        <div class="drawer-head">
+          <h3>润色禁词</h3>
+          <span class="tag mono">${p.lexicon.length}</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn sm" id="drawerAddBtn">${ICONS.plus} <span>添加禁词</span></button>
+          <button type="button" class="icon-btn sm" id="closeDrawerBtn">${ICONS.close}</button>
+        </div>
+        <div class="drawer-search">
+          <div class="search-box">
+            ${ICONS.search}
+            <input type="search" id="drawerSearchInput" placeholder="搜索…" value="${drawerQuery}" />
+          </div>
+        </div>
+        <div class="drawer-body scroller">
+          ${rows.map(({ e, i }) => `
+            <div class="drawer-row" data-drawer-edit="${i}">
+              <span class="d-name">${e.pattern}</span>
+              <span class="d-preview">${e.hint || ""}</span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    // ───────── Modal Helpers ─────────
+    const modal = document.getElementById("itemModal");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalFoot = document.getElementById("modalFoot");
+    document.getElementById("closeModalBtn").addEventListener("click", () => modal.close());
+
+    function openFragModal(idx) {
+      const p = currentPack();
+      const cur = idx >= 0 ? { ...p.fragments[idx] } : { id: `req-${p.fragments.length + 1}`, at: "tail", enabled: true, text: "" };
+      modalTitle.textContent = idx >= 0 ? "编辑要求" : "添加要求";
+      modalBody.innerHTML = `
+        <div class="mfield">
+          <span>位置</span>
+          <div class="at-toggle">
+            <button type="button" id="mAtTail" aria-pressed="${cur.at === "tail" ? "true" : "false"}">每轮末尾</button>
+            <button type="button" id="mAtHead" aria-pressed="${cur.at !== "tail" ? "true" : "false"}">开头</button>
+          </div>
+        </div>
+        <label class="mfield">
+          <span>要求</span>
+          <textarea id="mFragText" rows="5">${cur.text}</textarea>
+        </label>
+      `;
+      modalFoot.innerHTML = `
+        ${idx >= 0 ? `<button type="button" class="btn sm ghost danger" id="mDelBtn">删除</button><span class="spacer"></span>` : ""}
+        <button type="button" class="btn sm ghost" id="mCancelBtn">取消</button>
+        <button type="button" class="btn sm primary" id="mSaveBtn">保存</button>
+      `;
+      let at = cur.at;
+      modalBody.querySelector("#mAtTail").onclick = () => {
+        at = "tail";
+        modalBody.querySelector("#mAtTail").setAttribute("aria-pressed", "true");
+        modalBody.querySelector("#mAtHead").setAttribute("aria-pressed", "false");
+      };
+      modalBody.querySelector("#mAtHead").onclick = () => {
+        at = "head";
+        modalBody.querySelector("#mAtHead").setAttribute("aria-pressed", "true");
+        modalBody.querySelector("#mAtTail").setAttribute("aria-pressed", "false");
+      };
+      modalFoot.querySelector("#mCancelBtn").onclick = () => modal.close();
+      modalFoot.querySelector("#mDelBtn")?.addEventListener("click", () => {
+        p.fragments.splice(idx, 1);
+        modal.close();
+        renderList();
+        renderDetail();
+      });
+      modalFoot.querySelector("#mSaveBtn").onclick = () => {
+        const text = modalBody.querySelector("#mFragText").value.trim();
+        if (!text) return;
+        const item = { id: cur.id, at, enabled: cur.enabled !== false, text };
+        if (idx >= 0) p.fragments[idx] = item;
+        else p.fragments.push(item);
+        modal.close();
+        renderList();
+        renderDetail();
+      };
+      modal.showModal();
+    }
+
+    function openEntryModal(idx) {
+      const p = currentPack();
+      const cur = idx >= 0 ? { ...p.entries[idx] } : { id: "", text: "" };
+      modalTitle.textContent = idx >= 0 ? "编辑词条" : "添加词条";
+      modalBody.innerHTML = `
+        <label class="mfield">
+          <span>名称</span>
+          <input id="mEntryId" value="${cur.id}" />
+        </label>
+        <label class="mfield">
+          <span>内容</span>
+          <textarea id="mEntryText" rows="6">${cur.text}</textarea>
+        </label>
+      `;
+      modalFoot.innerHTML = `
+        ${idx >= 0 ? `<button type="button" class="btn sm ghost danger" id="mDelBtn">删除</button><span class="spacer"></span>` : ""}
+        <button type="button" class="btn sm ghost" id="mCancelBtn">取消</button>
+        <button type="button" class="btn sm primary" id="mSaveBtn">保存</button>
+      `;
+      modalFoot.querySelector("#mCancelBtn").onclick = () => modal.close();
+      modalFoot.querySelector("#mDelBtn")?.addEventListener("click", () => {
+        p.entries.splice(idx, 1);
+        modal.close();
+        renderList();
+        renderDetail();
+      });
+      modalFoot.querySelector("#mSaveBtn").onclick = () => {
+        const text = modalBody.querySelector("#mEntryText").value.trim();
+        if (!text) return;
+        const id = modalBody.querySelector("#mEntryId").value.trim() || hookOf(text).slice(0, 12);
+        if (idx >= 0) p.entries[idx] = { id, text };
+        else p.entries.push({ id, text });
+        modal.close();
+        renderList();
+        renderDetail();
+      };
+      modal.showModal();
+    }
+
+    function openLexModal(idx) {
+      const p = currentPack();
+      const cur = idx >= 0 ? { ...p.lexicon[idx] } : { pattern: "", hint: "" };
+      modalTitle.textContent = idx >= 0 ? "编辑禁词" : "添加禁词";
+      modalBody.innerHTML = `
+        <label class="mfield">
+          <span>匹配词条</span>
+          <input id="mLexPat" value="${cur.pattern}" />
+        </label>
+        <label class="mfield">
+          <span>替代写法</span>
+          <input id="mLexHint" value="${cur.hint || ""}" />
+        </label>
+      `;
+      modalFoot.innerHTML = `
+        ${idx >= 0 ? `<button type="button" class="btn sm ghost danger" id="mDelBtn">删除</button><span class="spacer"></span>` : ""}
+        <button type="button" class="btn sm ghost" id="mCancelBtn">取消</button>
+        <button type="button" class="btn sm primary" id="mSaveBtn">保存</button>
+      `;
+      modalFoot.querySelector("#mCancelBtn").onclick = () => modal.close();
+      modalFoot.querySelector("#mDelBtn")?.addEventListener("click", () => {
+        p.lexicon.splice(idx, 1);
+        modal.close();
+        renderList();
+        renderDetail();
+      });
+      modalFoot.querySelector("#mSaveBtn").onclick = () => {
+        const pattern = modalBody.querySelector("#mLexPat").value.trim();
+        const hint = modalBody.querySelector("#mLexHint").value.trim();
+        if (!pattern) return;
+        const item = hint ? { pattern, hint } : { pattern };
+        if (idx >= 0) p.lexicon[idx] = item;
+        else p.lexicon.push(item);
+        modal.close();
+        renderList();
+        renderDetail();
+      };
+      modal.showModal();
+    }
+
+    function openSnipModal(idx) {
+      const p = currentPack();
+      const cur = idx >= 0 ? { ...p.snippets[idx] } : { name: "", text: "", hint: "", note: true };
+      modalTitle.textContent = idx >= 0 ? "编辑片段" : "新片段";
+      modalBody.innerHTML = `
+        <label class="mfield">
+          <span>名称</span>
+          <input id="mSnipName" value="${cur.name}" />
+        </label>
+        <div class="mfield">
+          <span>发给谁</span>
+          <div class="at-toggle">
+            <button type="button" id="mChStory" aria-pressed="${!cur.note ? "true" : "false"}">故事里</button>
+            <button type="button" id="mChNote" aria-pressed="${cur.note ? "true" : "false"}">给叙事者</button>
+          </div>
+        </div>
+        <label class="mfield">
+          <span>插入内容</span>
+          <textarea id="mSnipText" rows="3">${cur.text}</textarea>
+        </label>
+      `;
+      modalFoot.innerHTML = `
+        ${idx >= 0 ? `<button type="button" class="btn sm ghost danger" id="mDelBtn">删除</button><span class="spacer"></span>` : ""}
+        <button type="button" class="btn sm ghost" id="mCancelBtn">取消</button>
+        <button type="button" class="btn sm primary" id="mSaveBtn">保存</button>
+      `;
+      let note = !!cur.note;
+      modalBody.querySelector("#mChStory").onclick = () => {
+        note = false;
+        modalBody.querySelector("#mChStory").setAttribute("aria-pressed", "true");
+        modalBody.querySelector("#mChNote").setAttribute("aria-pressed", "false");
+      };
+      modalBody.querySelector("#mChNote").onclick = () => {
+        note = true;
+        modalBody.querySelector("#mChNote").setAttribute("aria-pressed", "true");
+        modalBody.querySelector("#mChStory").setAttribute("aria-pressed", "false");
+      };
+      modalFoot.querySelector("#mCancelBtn").onclick = () => modal.close();
+      modalFoot.querySelector("#mDelBtn")?.addEventListener("click", () => {
+        p.snippets.splice(idx, 1);
+        modal.close();
+        renderList();
+        renderDetail();
+      });
+      modalFoot.querySelector("#mSaveBtn").onclick = () => {
+        const name = modalBody.querySelector("#mSnipName").value.trim();
+        const text = modalBody.querySelector("#mSnipText").value.trim();
+        if (!name || !text) return;
+        const item = { name, text, note };
+        if (idx >= 0) p.snippets[idx] = item;
+        else p.snippets.push(item);
+        modal.close();
+        renderList();
+        renderDetail();
+      };
+      modal.showModal();
+    }
+
+    // New Pack button
+    document.getElementById("newPackBtn").addEventListener("click", () => {
+      const id = `pack-${Date.now()}`;
+      packs.unshift({
+        id,
+        name: "新写作包",
+        cards: [],
+        fragments: [],
+        entries: [],
+        lexicon: [],
+        products: {},
+        snippets: []
+      });
+      selectedId = id;
+      drawerKind = null;
+      document.getElementById("settingsRoot").dataset.pane = "detail";
+      renderList();
+      renderDetail();
+    });
+
+    // Demo Switcher Controls
+    const appWrap = document.getElementById("appWrap");
+    const vpDesktopBtn = document.getElementById("vpDesktopBtn");
+    const vpMobileBtn = document.getElementById("vpMobileBtn");
+    const themeBtn = document.getElementById("themeBtn");
+
+    vpDesktopBtn.addEventListener("click", () => {
+      appWrap.dataset.vp = "desktop";
+      vpDesktopBtn.setAttribute("aria-pressed", "true");
+      vpMobileBtn.setAttribute("aria-pressed", "false");
+    });
+    vpMobileBtn.addEventListener("click", () => {
+      appWrap.dataset.vp = "mobile";
+      vpMobileBtn.setAttribute("aria-pressed", "true");
+      vpDesktopBtn.setAttribute("aria-pressed", "false");
+    });
+    themeBtn.addEventListener("click", () => {
+      const html = document.documentElement;
+      const dark = html.dataset.theme !== "dark";
+      html.dataset.theme = dark ? "dark" : "light";
+      themeBtn.setAttribute("aria-pressed", dark ? "true" : "false");
+    });
+
+    renderList();
+    renderDetail();
+  </script>
+</body>
+</html>
