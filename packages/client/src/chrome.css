@@ -318,8 +318,7 @@
 .badge[data-hit] {
   color: var(--ok);
 }
-.clue,
-.notes {
+.clue {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
@@ -327,16 +326,14 @@
   border-radius: var(--radius);
   background: var(--alpha-1);
 }
-.clue > svg,
-.notes > svg {
+.clue > svg {
   flex: none;
   width: var(--icon-sm);
   height: var(--icon-sm);
   margin-top: 2px;
   color: var(--ink-3);
 }
-.clue p,
-.notes p {
+.clue p {
   flex: 1;
   text-align: left;
 }
@@ -360,6 +357,14 @@
   border-radius: var(--radius);
   background: var(--alpha-1);
   overflow-wrap: anywhere;
+}
+/* a 小剧场 block under its turn's prose: the name, its once-more key at the right (reader.css `.acts`) */
+.theater .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  margin: -4px -5px -4px 0;
 }
 .product .plabel {
   font-size: var(--text-footnote);
@@ -403,8 +408,8 @@
   padding: 1px var(--space-2) 1px 0;
   vertical-align: top;
 }
-/* the demand menu in the actions bar: a button that ends the bar, its menu above it with right edges aligned (the
-   composer's menu rules anchor to the composer; this one anchors to its invoker) */
+/* the 小剧场 menu in the turn's row: a button at the row's start, its menu above it with left edges aligned, opening
+   rightward into the prose column (the composer's menu rules anchor to the composer; this one anchors to its invoker) */
 .actions .btn {
   height: var(--control-sm);
   padding: 0 10px;
@@ -413,7 +418,7 @@
 }
 .actions .snippets {
   position-anchor: auto;
-  position-area: top span-left;
+  position-area: top span-right;
   position-try-fallbacks: flip-block;
   width: max-content;
   min-width: 8rem;

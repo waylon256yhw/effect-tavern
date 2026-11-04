@@ -33,6 +33,7 @@ import {
 } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
 import { drag, remembered, SIDE } from "./fold.ts"
+import { hasReadings } from "./readings.tsx"
 import { InstallKeys, Sidebar } from "./side.tsx"
 import { card, cards, isHome, page, type Page, path, stories, tabs } from "./store.ts"
 import { add, remove, unread } from "./tabs.ts"
@@ -195,7 +196,7 @@ export const Shell = (props: { children: JSX.Element }) => {
   // ── the phone's drawer ──
   let drawer: HTMLDialogElement | undefined
   const leaveDrawer = () => drawer?.close()
-  /** The reader's three keys: Timeline, Inspector, 读数, one behaviour (a page in place, Escape and Back to return);
+  /** The reader's three keys: Timeline, Inspector, 读数 (when the card has one), one behaviour (a page in place, Escape and Back to return);
    *  small on the canvas, the strip's size on the phone. They are the reader's, so no page they open is ever under
    *  them: no key of the three has a pressed state. */
   const Keys = () => (
@@ -212,15 +213,18 @@ export const Shell = (props: { children: JSX.Element }) => {
       >
         <Probe />
       </button>
-      <button
-        type="button"
-        class={{ icon: true, sm: wide() }}
-        aria-label={t("side.readings")}
-        disabled={line().length === 0}
-        onClick={() => open("status")}
-      >
-        <Status />
-      </button>
+      {/* a card with nothing to read (no shown field, no lore, no world product) has no 读数 page: no key */}
+      <Show when={hasReadings(view())}>
+        <button
+          type="button"
+          class={{ icon: true, sm: wide() }}
+          aria-label={t("side.readings")}
+          disabled={line().length === 0}
+          onClick={() => open("status")}
+        >
+          <Status />
+        </button>
+      </Show>
     </>
   )
   return (

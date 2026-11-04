@@ -1,16 +1,41 @@
 // The Record's pieces: one renderer per reading element (src/record.ts projects them; this file only draws), the
 // full-page sheet they sit in on the phone, the pin button, the sibling actions a turn's row holds, the Status
 // table, and the 读数 page they make up. The reader (App.tsx) and the inspector (inspector.tsx) draw with these.
-import type { Shape, TableShape } from "@effect-tavern/runtime/src/product.ts"
+import { fold, type Shape, type TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
-import { Back, Change, Close, Clue, Die, Edit, Notes, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
+import { Back, Change, Close, Clue, Die, Edit, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { close } from "./pages.ts"
-import { heading, marked, parentOf, record, status, whens, type Declared, type Element } from "./record.ts"
-import { card, dismiss, draft, editing, error, type Id, latest, log, path, pin, registry, working } from "./store.ts"
+import {
+  fresh,
+  heading,
+  kindOf,
+  marked,
+  parentOf,
+  record,
+  status,
+  whens,
+  type Declared,
+  type Element,
+} from "./record.ts"
+import {
+  card,
+  type CardView,
+  demanded,
+  dismiss,
+  editing,
+  error,
+  type Id,
+  latest,
+  log,
+  path,
+  pin,
+  registry,
+  working,
+} from "./store.ts"
 import { turn } from "./turn.ts"
 import { t } from "./i18n.ts"
 
@@ -335,14 +360,6 @@ export const Reading = (props: { el: Element }) => (
         </div>
       )}
     </Match>
-    <Match when={is(props.el, "notes")}>
-      {(el) => (
-        <div class="notes">
-          <Notes aria-hidden="true" />
-          <p>{el().text}</p>
-        </div>
-      )}
-    </Match>
     <Match when={is(props.el, "product")}>
       {(el) => (
         <div class="product">
@@ -354,10 +371,15 @@ export const Reading = (props: { el: Element }) => (
   </Switch>
 )
 
-/** The products a node can still be asked for (the `demand` action): declared, and not on the node (off by the
- *  player, or not produced this turn); one asked for leaves the list as it lands. */
+/** A card's 小剧场: its theater products (record.ts `kindOf`) but options, which has its own container. */
+const theater = (products: readonly Declared[]) => products.filter((p) => p.id !== "options" && kindOf(p) === "theater")
+
+/** The 小剧场 a node can still be asked for (the `demand` action): theater, and not on the node (off by the player, or
+ *  not produced this turn); one asked for leaves the list as it lands. */
 export const demandable = (products: readonly Declared[], node: Node): Option<string>[] =>
-  products.filter((p) => node.turn.products[p.id] === undefined).map((p) => ({ value: p.id, label: p.label ?? p.id }))
+  theater(products)
+    .filter((p) => node.turn.products[p.id] === undefined)
+    .map((p) => ({ value: p.id, label: p.label ?? p.id }))
 
 /** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
  *  with a close, the body, an optional footer. Scrim click and Escape close it (closedby). Record and Status share it;
@@ -473,32 +495,67 @@ export const Rewrite = (props: {
   )
 }
 
-/** 小剧场: a menu of the products a node can still be asked for (the `demand` action: one record call over the
- *  node's scene, the answer kept on the node, no turn), named by the card; nothing to ask for, the button is off. Not
- *  a sibling action (the demand runs no narrate), and its shape is not settled (#101): it stays at its old places, the
- *  Record sheet's footer on the phone and the right card's on the desktop, until it has a page of its own. A failed
- *  demand has no draft to carry its ghost: the reason shows beside the button until the next action. */
-export const Demand = (props: { node: Id; demands: readonly Option<string>[]; onPick?: () => void }) => {
+/** 小剧场 in a turn's row, beside the Record pill: a menu of the theater products the node can still be asked for (the
+ *  `demand` action: one record call over the node's scene, the answer kept on the node, no turn), named by the card;
+ *  nothing to ask for, no button. Not a sibling action (the demand runs no narrate). A failed demand has no draft to
+ *  carry its ghost: the reason shows after the menu in the row of the node that asked (store.ts `demanded`, set by the
+ *  menu and by a theater block's dice alike), until the next action clears it. */
+export const Demand = (props: { node: Node }) => {
+  const view = read(card)
   const busy = read(working)
-  const d = read(draft)
   const failed = read(error)
+  const asked = read(demanded)
+  const demands = () => demandable(view()?.products ?? [], props.node)
   return (
-    <footer class="actions">
-      <span class="spacer" />
-      <Show when={!d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
-      <Menu
-        action={t("readings.aside")}
-        label={t("readings.aside")}
-        value={undefined}
-        options={busy() ? [] : props.demands}
-        onPick={(id) => (props.onPick?.(), dismiss(), turn.demand(props.node, id))}
-      />
-    </footer>
+    <>
+      <Show when={demands().length}>
+        <Menu
+          action={t("readings.aside")}
+          label={t("readings.aside")}
+          value={undefined}
+          options={busy() ? [] : demands()}
+          onPick={(id) => (dismiss(), turn.demand(props.node.id, id))}
+        />
+      </Show>
+      <Show when={asked() === props.node.id && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
+    </>
   )
 }
 
-/** The Record pill under a turn and the readings panel it opens: what the turn changed and produced, by the card's
- *  heading or the turn's number; 小剧场 at its foot. The turn's own actions sit in the row beside the pill (`Rewrite`). */
+/** A turn's 小剧场 between its prose and its row: each theater product the node has an answer for (on by default, or
+ *  demanded), drawn by its shape, with one key that asks for it again (the same id demanded: history.ts replaces it in
+ *  place). The key shows the way the row's own keys do (reader.css `.acts`). */
+export const Theater = (props: { node: Node }) => {
+  const view = read(card)
+  const busy = read(working)
+  const answered = () => theater(view()?.products ?? []).filter((p) => props.node.turn.products[p.id] !== undefined)
+  return (
+    <For each={answered()} keyed={(p) => p.id}>
+      {(p) => (
+        <div class="product theater">
+          <div class="head">
+            <span class="plabel">{p().label ?? p().id}</span>
+            <span class="acts">
+              <button
+                class="icon"
+                aria-label={t("readings.again")}
+                disabled={busy()}
+                onClick={() => (dismiss(), turn.demand(props.node.id, p().id))}
+              >
+                <Die />
+              </button>
+            </span>
+          </div>
+          <Shaped shape={p().shape} value={props.node.turn.products[p().id]} />
+        </div>
+      )}
+    </For>
+  )
+}
+
+/** The Record pill under a turn and the sheet it opens: the turn's ledger (record.ts `record`), by the card's heading or
+ *  the turn's number. An empty ledger has nothing to open: no pill (`marked`). The turn's own actions sit in the row
+ *  beside it (`Demand`, `Rewrite`). */
 export const RecordSheet = (props: { node: Node; n: number }) => {
   const all = read(log)
   const view = read(card)
@@ -506,32 +563,20 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
   let dlg!: HTMLDialogElement
   const prev = () => parentOf(all(), props.node)
   return (
-    <>
+    <Show when={marked(view()?.rules, props.node, prev(), view()?.products)}>
       <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
         <Record aria-hidden="true" />
-        <Show when={marked(view()?.rules, props.node, prev(), view()?.products)}>
-          <i class="dot" />
-        </Show>
       </button>
       <Sheet
         dialog={(el) => (dlg = el)}
         onClose={() => setShown(false)}
         heading={heading(view()?.heading, props.node) ?? t("common.turnN", { n: props.n })}
-        footer={
-          <Show when={shown()}>
-            <Demand
-              node={props.node.id}
-              demands={demandable(view()?.products ?? [], props.node)}
-              onPick={() => dlg.close()}
-            />
-          </Show>
-        }
       >
         <Show when={shown()}>
           <TurnRecord node={props.node} prev={prev()} />
         </Show>
       </Sheet>
-    </>
+    </Show>
   )
 }
 
@@ -589,42 +634,63 @@ const Pinned = () => {
   )
 }
 
-/** 读数, a page over the reader: at the left the world's standing slice (the pin, Status), at the right this turn's
- *  change (its Record, 小剧场 at its foot). Two bounded columns side by side when the stage card has room, else one
- *  over the other; a left block with nothing in it (a card without rules, no pin) is not drawn (shell.css). */
-export const StatusPage = () => {
+/** The world products' values now: each folded along the reading line by its own fold (runtime product.ts `fold`),
+ *  drawn by its shape, in the card's order; one no node has yet, or whose rows are still none, is absent (`fresh`). */
+const World = () => {
   const view = read(card)
-  const last = read(latest)
+  const line = read(path)
+  const now = createMemo(
+    () => {
+      const ws = (view()?.products ?? []).filter((p) => kindOf(p) === "world")
+      const v = fold(
+        ws,
+        line().map((n) => n.turn.products),
+      )
+      return ws.filter((p) => fresh(v[p.id])).map((p) => ({ p, value: v[p.id] }))
+    },
+    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+  )
   return (
-    <div class="status-page">
-      <header>
-        <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
-          <Back />
-        </button>
-        <h1>{t("side.readings")}</h1>
-      </header>
-      <div class="status-body">
-        <div class="still">
-          <Pinned />
-          <section class="status">
-            <h2>{t("common.status")}</h2>
-            <StatusTable />
-          </section>
-        </div>
-        <div class="moved">
-          <Show when={last()}>
-            {(l) => (
-              <>
-                <section>
-                  <h2>{t("common.record")}</h2>
-                  <TurnRecord node={l().node} prev={l().prev} />
-                </section>
-                <Demand node={l().node.id} demands={demandable(view()?.products ?? [], l().node)} />
-              </>
-            )}
-          </Show>
-        </div>
-      </div>
-    </div>
+    <For each={now()} keyed={(x) => x.p.id}>
+      {(x) => (
+        <section class="world">
+          <h2>{x().p.label ?? x().p.id}</h2>
+          <div class="product">
+            <Shaped shape={x().p.shape} value={x().value} />
+          </div>
+        </section>
+      )}
+    </For>
   )
 }
+
+/** Does the card have a 读数 page at all: a shown field, a lore entry (a pin), or a world product. Without one the
+ *  page's key is not drawn (shell.tsx `Keys`). */
+export const hasReadings = (view: CardView | null | undefined) =>
+  !!view &&
+  (view.rules.fields.some((f) => !f.hidden) ||
+    view.lore.entries > 0 ||
+    view.products.some((p) => kindOf(p) === "world"))
+
+/** 读数, a page over the reader: the world now, as one column: the pin, Status, and the world products' folded values.
+ *  A turn's change is its Record pill's (`RecordSheet`), not this page's. */
+export const StatusPage = () => (
+  <div class="status-page">
+    <header>
+      <button type="button" class="icon" aria-label={t("common.backToStory")} onClick={close}>
+        <Back />
+      </button>
+      <h1>{t("side.readings")}</h1>
+    </header>
+    <div class="status-body">
+      <div class="still">
+        <Pinned />
+        <section class="status">
+          <h2>{t("common.status")}</h2>
+          <StatusTable />
+        </section>
+        <World />
+      </div>
+    </div>
+  </div>
+)

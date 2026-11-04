@@ -320,17 +320,6 @@ section:has(> .editor) > .actions {
   gap: var(--space-1);
 }
 
-/* a dot in the corner of a key: on the Record pill when this turn moved the state */
-.record-pill .dot {
-  position: absolute;
-  top: 2px; /* the pill is 24 to the bar key's 32: the same corner of the same 16px glyph */
-  right: 2px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
-}
-
 /* the reader's line: a sunken block, the only framed thing in the flow, and plain (#101): its text on its tint, nothing
    in it to click. The block (.spoke) stands at the column's right (the turn alternates: the player's line on the
    right, the prose from the left), in a lane of 80% of the column and no more than 36rem (shrinkwrap.ts `LANE`), so
@@ -377,7 +366,7 @@ section:has(> .editor) > .actions {
    settings. Hidden at rest on desktop, they fade and settle in while the pointer is on the block or turn they belong
    to (or while focus or an open reword box holds them); a touch screen, having no pointer to hover with, shows every
    row */
-:is(.spoke, .actions, .group > summary) .acts {
+:is(.spoke, .actions, .theater, .group > summary) .acts {
   display: flex;
   flex: none;
   align-items: center;
@@ -390,7 +379,7 @@ section:has(> .editor) > .actions {
 }
 .spoke:is(:hover, :focus-within) .acts,
 .group > summary:is(:hover, :focus-within) .acts,
-main > section:is(:hover, :focus-within) > .actions .acts,
+main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts,
 .actions:has(> .direction) .acts {
   opacity: 1;
   translate: 0 0;
@@ -398,7 +387,7 @@ main > section:is(:hover, :focus-within) > .actions .acts,
 /* the keys: matched to the stage keys' ink-2 weight and 26px box so they read as interactive controls, brightening to
    ink on hover with a subtle press scale. The line's row sits close under its bubble and ends on the bubble's own text
    axis (14px in) */
-:is(.spoke .acts, .actions, .editkeys) .icon {
+:is(.spoke .acts, .actions, .theater, .editkeys) .icon {
   width: 26px;
   height: 26px;
   border-radius: 6px;
@@ -408,14 +397,14 @@ main > section:is(:hover, :focus-within) > .actions .acts,
     color var(--dur-2) var(--ease),
     scale var(--dur-1) var(--ease);
 }
-:is(.spoke .acts, .actions, .editkeys) .icon:hover:not(:disabled) {
+:is(.spoke .acts, .actions, .theater, .editkeys) .icon:hover:not(:disabled) {
   background: var(--ghost-hover);
   color: var(--ink);
 }
-:is(.spoke .acts, .actions, .editkeys) .icon:active:not(:disabled) {
+:is(.spoke .acts, .actions, .theater, .editkeys) .icon:active:not(:disabled) {
   scale: 0.94;
 }
-:is(.spoke .acts, .actions, .editkeys) .icon svg {
+:is(.spoke .acts, .actions, .theater, .editkeys) .icon svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
 }
@@ -428,11 +417,11 @@ main > section:is(:hover, :focus-within) > .actions .acts,
 }
 /* on the draft (or while a turn streams) disabled action keys hide in place: the row keeps its height, so nothing
    moves when the node lands */
-:is(.spoke, .actions, .group > summary) .acts .icon:disabled {
+:is(.spoke, .actions, .theater, .group > summary) .acts .icon:disabled {
   visibility: hidden;
 }
 @media (hover: none) {
-  :is(.spoke, .actions, .group > summary) .acts {
+  :is(.spoke, .actions, .theater, .group > summary) .acts {
     opacity: 1;
     translate: 0 0;
   }

@@ -1,5 +1,5 @@
 // The readings a client draws, as data: one pure projection per panel, one element kind per data shape
-// (docs/client-design-brief-3.md §1). `record` is a turn's Record: only what it changed or produced. `status` is the
+// (docs/client-design-brief-3.md §1). `record` is a turn's ledger: only what it changed, and its world products' new values. `status` is the
 // full table at a node, grouped by the fields' `group`. Both choose a field's element the same way (`reading`): an enum
 // is a step track, an int with both bounds a meter, anything else (an int bounded on one side, a number, a boolean) a
 // value row, so no field is lost: that row is where a missing display declaration shows itself concretely. A meter is
@@ -8,11 +8,11 @@
 // bands); the cuts come from the bands' `when`, and the card's `view` overrides the guess.
 // Beside the readings, the rest of what the chrome reads off a node, each its own pure function over the log, the card
 // view or the node (review/architecture-review-2026-10-30.html card 4: one module, no eager node object): the field
-// rows alone and the two dots' yes/no (`fields`, `fieldChanged`, `marked`), the input line and its channel, the parent,
+// rows alone, the Status dot and the pill's yes/no (`fields`, `fieldChanged`, `marked`), a product's kind (`kindOf`), the input line and its channel, the parent,
 // the versions, the scene.
 import { drawn, type Check, type Field, type Rules, type State } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
-import type { Shape } from "@effect-tavern/runtime/src/product.ts"
+import type { Product, Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import type { CardView } from "./store.ts"
@@ -34,8 +34,7 @@ export type Element =
   | { kind: "check"; check: Check }
   | { kind: "clue"; id: string; text: string; pinnable: boolean } // pinnable: a deeper layer is still untold
   | { kind: "pin"; id: string; hook: string; told: boolean } // the entry this act pinned, by its hook (the parent's readable list; told, it has left this node's); untold: check never saw it fire, it can be pinned again
-  | { kind: "notes"; text: string }
-  | { kind: "product"; id: string; label: string; shape: Shape; value: unknown } // any other product on the node (a card's, or one demanded), drawn by its shape; options are the Options container's
+  | { kind: "product"; id: string; label: string; shape: Shape; value: unknown } // a world product's value this turn, drawn by its shape
 
 export const reading = (
   f: Field,
@@ -96,23 +95,28 @@ export const fieldChanged = (rules: Rules | undefined, node: Node, prev: Node | 
   return rules.fields.some((f) => !f.hidden && was[f.path] !== node.state[f.path])
 }
 
-/** Does the Record hold anything but notes (a field change, a check, a clue, a pin, a declared product): the Record
- *  pill's dot. Notes alone light nothing: every turn has them. */
-export const marked = (
-  rules: Rules | undefined,
-  node: Node,
-  prev: Node | undefined,
-  products: readonly Declared[] = [],
-): boolean =>
-  rules !== undefined &&
-  (fieldChanged(rules, node, prev) ||
-    node.checks.length > 0 ||
-    node.delivered.length > 0 ||
-    node.turn.input.pin !== undefined ||
-    products.some((p) => p.id !== "notes" && p.id !== "options" && node.turn.products[p.id] !== undefined))
+/** What the card view says of a product: its id, shown name, shape, and the three declarations its kind is read off
+ *  (store.ts CardView). */
+export type Declared = Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall">
 
-/** What the card view says of a product: its id, shown name and shape (store.ts CardView). */
-export type Declared = { id: string; label?: string; shape: Shape }
+/** A product's kind (docs/theater-brief.md §1), read off what it already declares: the model reads it back (`feed` or
+ *  `recall`) and it is replaced or merged by key → world (a value of what is now: the readings page, the ledger);
+ *  read back and appended → context (the model's chronicle: the Inspector only); never read back → theater (for the
+ *  player alone: inline under its turn). The fold default is product.ts's: append for a list, latest otherwise.
+ *  `options` falls under theater by these rules; it has its own container, so the theater drawers skip it. */
+export const kindOf = (p: Pick<Declared, "shape" | "fold" | "feed" | "recall">): "world" | "context" | "theater" =>
+  !p.feed && !p.recall
+    ? "theater"
+    : (p.fold ?? (p.shape.kind === "list" ? "append" : "latest")) === "append"
+      ? "context"
+      : "world"
+
+/** A value this turn: present, and not an empty list or table (`[]` is "no item this turn"); a text or record counts
+ *  by presence. */
+export const fresh = (v: unknown) => v !== undefined && !(Array.isArray(v) && v.length === 0)
+
+/** A turn's ledger: what it changed (field rows, checks, clues delivered, the pin) and the world products' new values or
+ *  rows. The model's chronicle (context) and the player's 小剧场 (theater) are not in it. */
 export const record = (
   rules: Rules,
   node: Node,
@@ -132,16 +136,21 @@ export const record = (
       hook: prev?.readable.find((r) => r.id === p)?.hook ?? p,
       told: node.turn.fired.some((d) => d.id === p),
     })
-  const notes = node.turn.products.notes as string | readonly string[] | undefined // a list in libraries before #82
-  const text = Array.isArray(notes) ? notes.join(" ") : (notes as string | undefined)
-  if (text) out.push({ kind: "notes", text })
   for (const p of products) {
-    if (p.id === "notes" || p.id === "options") continue
     const value = node.turn.products[p.id]
-    if (value !== undefined) out.push({ kind: "product", id: p.id, label: p.label ?? p.id, shape: p.shape, value })
+    if (kindOf(p) === "world" && fresh(value))
+      out.push({ kind: "product", id: p.id, label: p.label ?? p.id, shape: p.shape, value })
   }
   return out
 }
+
+/** Is the ledger non-empty: the one rule for drawing a turn's Record pill. */
+export const marked = (
+  rules: Rules | undefined,
+  node: Node,
+  prev: Node | undefined,
+  products: readonly Declared[] = [],
+): boolean => rules !== undefined && record(rules, node, prev, products).length > 0
 
 /** Every field at a state, in the card's order, grouped by `group` in order of first appearance; ungrouped fields
  *  come first under no name. */

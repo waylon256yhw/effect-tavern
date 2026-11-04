@@ -11,6 +11,7 @@ import type { Action } from "@effect-tavern/runtime/src/session.ts"
 import {
   card,
   clear,
+  demanded,
   draft,
   error,
   type Id,
@@ -41,6 +42,7 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
    *  record run over it. A fresh line (an act, a revised line) is nowhere else: a failed turn puts it back in the box. */
   const start = (parent: Id | null, input: { text: string; note?: string }, action: Action, text = "") => {
     registry.set(error, null)
+    registry.set(demanded, null)
     registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
     go(action)
   }
@@ -94,7 +96,11 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
     setField: (id: Id, effects: Extract<Action, { kind: "setField" }>["effects"]): void =>
       go({ kind: "setField", node: id, effects }),
     /** One product asked for over a node's scene: a record call, the answer kept on the node, no turn and no draft. */
-    demand: (id: Id, product: string): void => go({ kind: "demand", node: id, product }),
+    demand: (id: Id, product: string): void => {
+      registry.set(error, null)
+      registry.set(demanded, id)
+      go({ kind: "demand", node: id, product })
+    },
     stop: async (): Promise<void> => {
       if (!registry.get(working)) return
       const mine = streams
