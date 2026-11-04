@@ -142,7 +142,11 @@ export const makeDerived = ({
       lore: Object.fromEntries(
         lore.map((e) => [
           e.id,
-          { ...counters[e.id], floor: Math.max(...[...states, at].map((x) => floorAt(e.unlock, x))) },
+          // an entry out of the index for an unfilled hole has no counters; a Cond reading them still gets an answer
+          {
+            ...(counters[e.id] ?? { since: Infinity, shown: 0 }),
+            floor: Math.max(...[...states, at].map((x) => floorAt(e.unlock, x))),
+          },
         ]),
       ),
     }

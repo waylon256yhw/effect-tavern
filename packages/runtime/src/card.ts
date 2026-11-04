@@ -11,6 +11,7 @@
 import { Effect, Random, Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
+import { Names } from "./names.ts"
 import { Entry } from "./polish.ts"
 import { ProductPatch } from "./product.ts"
 
@@ -283,6 +284,7 @@ export const Card = Schema.Struct({
   asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // record products: patches over the harness defaults by id, or new ones
   lexicon: Schema.optionalKey(Schema.Array(Entry)), // slop patterns the polish stage scans for, after the player's own
+  names: Schema.optionalKey(Names), // the author's defaults for the `{{key}}` holes in its text (GLOSSARY 代称)
 })
 export type Card = typeof Card.Type
 export type LoreEntry = typeof LoreEntry.Type

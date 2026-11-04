@@ -213,10 +213,9 @@ export const library = ({
     write: data.player.write,
   }
   /** The persona in force on story `id`, its row read per request (a pick is live from the next one). */
-  const persona = (id: Id) => () => {
-    const pid = data.stories.get(id)?.persona
-    return pid == null ? undefined : data.personas.list().find((x) => x.id === pid)?.text
-  }
+  const persona = (id: Id) => () => personaOf(data.stories.get(id)?.persona)
+  const personaOf = (pid: string | null | undefined) =>
+    pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
   const sessions = new Map<Id, { session: Session; turn: Turn }>()
@@ -316,11 +315,12 @@ export const library = ({
         }
       },
     },
-    /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player layer in force;
-     *  throws on no card. */
-    view: (card: string) => {
+    /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player layer in force and the
+     *  story's persona, with no story the card's default; throws on no card. */
+    view: (card: string, story?: Id) => {
       const p = layer()
-      const { meta, ...rest } = cardView(cards.get(card), p, mounted(p, card, data.packs.list()))
+      const picked = personaOf(story === undefined ? p.persona?.[card] : row(story)?.persona)
+      const { meta, ...rest } = cardView(cards.get(card), p, mounted(p, card, data.packs.list()), picked)
       return { ...meta, ...rest }
     },
     hats: data.hats,

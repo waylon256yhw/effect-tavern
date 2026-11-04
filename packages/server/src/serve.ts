@@ -74,7 +74,8 @@
 //                 story of it exists: id, title and summary, the default channel, the rules as data (field bounds,
 //                 options, action ids), the openings whole, the declared products' shapes, the quick inputs
 //                 (snippets), the format keys, the fiction's modules without their text, the guard and lore as counts,
-//                 and what the card's text costs each turn, estimated (session.ts `cardView`).
+//                 what the card's text costs each turn, estimated, the 代称 in force (names) and the holes nothing
+//                 fills yet (holes) (session.ts `cardView`).
 //                 Fragment bodies, guard lines and lore never leave the server.
 //   GET  /card    the same for the story's own card.
 // `inspect` keeps the request messages on `call` events (the stream and /calls); they carry the card's fragment
@@ -288,7 +289,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const story = asked
     const s = lib.session(story)
     const turn = lib.turn(story)
-    if (req.method === "GET" && req.url === "/card") return json(200, lib.view(lib.cardOf(story)!))
+    if (req.method === "GET" && req.url === "/card") return json(200, lib.view(lib.cardOf(story)!, story))
     if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
     if (req.method === "GET" && req.url === "/calls")
       return json(

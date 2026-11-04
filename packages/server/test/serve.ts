@@ -397,6 +397,19 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await (await pack()).json(), [])
     assert.equal(((await (await fetch(`${base}/player`)).json()) as { packs?: unknown }).packs, undefined)
     assert.equal((await headOf("unpacked")).includes("PACK-STYLE"), false)
+    // 代称: `PUT /player` keeps the player's table, a bad value is refused at the boundary, /cards/<id> reads it back
+    const before = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
+    const putNames = (names: unknown) =>
+      fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...before, names }) })
+    assert.equal((await putNames({ [chat.id]: { char: "两\n行" } })).status, 400)
+    await putNames({ [chat.id]: { char: "依瑞丝" } })
+    assert.deepEqual(((await (await fetch(`${base}/player`)).json()) as { names: unknown }).names, {
+      [chat.id]: { char: "依瑞丝" },
+    })
+    const view = (await (await fetch(`${base}/cards/${chat.id}`)).json()) as { names: unknown; holes: unknown }
+    assert.deepEqual(view.names, { user: "玩家", char: "依瑞丝" })
+    assert.deepEqual(view.holes, [])
+    await putNames(undefined)
   } finally {
     server.close()
   }

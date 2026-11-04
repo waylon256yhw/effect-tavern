@@ -83,6 +83,8 @@ _不用_："导演"来指作者视角（director 是 harness 的阶段）、"小
 
 **玩家层（Player）**：玩家自己的框架 fragment、写作开关、`asks` 覆盖、产物开关、`snippets`。**写作开关（writing）**是框架槽位的有界前端：人称（你 / 名字 / 没有玩家角色）、转述与否、抢话与否合成一条 `pov` 槽，篇幅是 `verbosity` 槽，每个值编译成 harness 自己的一句话，同 id 的自由文本槽（玩家的或卡的）照常覆盖；和 Cond、产物一样有三张脸：可编译成头区文字、可画成开关、可从一句话解码。排在卡的框架之前。**enhancer（写作包）** 是它的装配形式：库里带名字的一行（`/packs`），一组玩家层 fragment（id 是槽位，`at` 定头尾）加几条**小剧场**（`Theater`，玩家层自己也可声明：只带名称、问法与默认开关：落在 text 形状的小剧场上是补丁，它的阶段不变；新 id 带问法就是一条 narrate 阶段的 text；其余一律丢弃，不报错）、**词条**（单层、无条件、首句即 hook）、禁词和快捷输入，生态里叫 text LoRA。**按卡挂载**（`Player.packs[卡]`，按挂载顺序），每次请求从库里读；碰不到卡的 `Cond` 与状态。_不用_："预设"（作为提示词对象不存在，只剩 provider 配置）。
 
+**代称（names）**：一张专有名词字典（键是纯标识符，值是一行名字），单遍纯替换文本里的**洞**（`{{key}}`），不是模板语言。`user` / `char` 是两个约定键名，不是引擎特例。三层声明，后者压前者：`Card.names`、`Pack.names`（按挂载顺序）、`Player.names[卡]`；`user` 默认"玩家"，生效的人设名最后压过它。按条目在组装前展开，洞未填的那一条不发；开场与索取则拒绝并报洞名。history 与玩家输入不展开，lexicon 不展开。_不用_："宏""变量"（生态的 `{{setvar::…}}` 一类带参数、有副作用的脚本宏不做，lint `unsupported-macro`）。
+
 **asks**：harness 在固定点向模型提的问法，带 id 的默认 fragment（lookup、direct、decide.first、decide.again、narrate.correction、record.readout、input.thought 等），按 id 由玩家层、再由卡覆盖。数据行是格式，留在代码里。
 
 **snippets（快捷片段）**：`{ name, text, after?, hint?, note? }`，有游戏意义的快捷输入（心声的记号、场外通道、给叙事者的指示），玩家层数据，harness 带默认几条。客户端按 `+` 或空框按 `/` 拉出，分"故事里 / 给叙事者"两组，插进光标处，从不代发。_不用_：把格式键混进来。
