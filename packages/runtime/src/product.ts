@@ -188,9 +188,10 @@ export const kindOf = (p: Pick<Product, "shape" | "fold" | "feed" | "recall">): 
       : "world"
 
 /** Harness defaults, patched by the card per id, then by the 小剧场 (the mounted packs', then the player's), `on` decided
- *  by the player's toggles. Validates completeness, `fold` and `recall`. The lock: a theater lands on a new id or on a
- *  text theater; on anything else (`notes`, `options`, a card's table) it is dropped, not thrown, since a throw here
- *  would kill a card at session open for what a pack happens to declare. A patch keeps the card's cap and `when`. */
+ *  by the player's toggles. Validates completeness, `fold` and `recall`. The lock: a theater carries only label, text and
+ *  on. It lands on a text theater, which keeps its stage, cap and `when`, or as a new narrate text product, which needs
+ *  text. Anything else (`notes`, `options`, a card's table, a new id with no text) is dropped, not thrown, since a throw
+ *  here would kill a card at session open for what a pack happens to declare. */
 export const resolve = (
   defaults: readonly Product[],
   card: readonly ProductPatch[] = [],
@@ -201,8 +202,8 @@ export const resolve = (
   for (const c of card) byId.set(c.id, { ...byId.get(c.id), ...c })
   for (const t of theaters) {
     const was = byId.get(t.id)
-    if (was && !(was.shape?.kind === "text" && kindOf(was as Product) === "theater")) continue
-    byId.set(t.id, { shape: { kind: "text" }, ...was, ...t, stage: "narrate" })
+    if (was ? !(was.shape?.kind === "text" && kindOf(was as Product) === "theater") : t.text === undefined) continue
+    byId.set(t.id, was ? { ...was, ...t } : { ...t, shape: { kind: "text" }, stage: "narrate" })
   }
   return [...byId.values()].map((p) => {
     if (!p.shape || p.text === undefined) throw new Error(`${p.id}: a product needs text and shape`)

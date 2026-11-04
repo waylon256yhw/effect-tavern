@@ -250,6 +250,14 @@ const card = { ...chat, lore }
     false,
   )
 
+  // A new id with no text: not in the products, and the session opens.
+  const blank: Pack = { id: "blank", name: "B", theaters: [{ id: "x" }] }
+  const unfinished = makeSession({ card: chat, player: bare("blank"), model, packs: () => [blank] })
+  assert.equal(
+    unfinished.products.some((p) => p.id === "x"),
+    false,
+  )
+
   // A stored row from before §七: the old `products` key decodes away and turns nothing off.
   const old = decodePack({ id: "old", name: "O", products: { options: false } })
   assert.deepEqual(old, { id: "old", name: "O" })

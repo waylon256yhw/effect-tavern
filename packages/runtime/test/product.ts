@@ -148,24 +148,25 @@ assert.equal(
   )!.text,
   "mine",
 )
-// a new id without text is resolve's existing error
-assert.throws(() => resolve(stock, [], [{ id: "town" }]), /needs text and shape/)
+// a new id without text is dropped, not thrown; a later theater with text still declares it
+assert.deepEqual(resolve(stock, [], [{ id: "town" }]), resolve(stock))
+assert.equal(by(resolve(stock, [], [{ id: "town" }, { id: "town", text: "mine" }]), "town")!.text, "mine")
 // on `inner`: wording and default change; no text keeps the question; the toggle still has the last word
 const patched = by(resolve(stock, [], [{ id: "inner", text: "mine", on: true }]), "inner")!
 assert.deepEqual([patched.text, patched.on, patched.label, patched.stage], ["mine", true, "心声", "narrate"])
 assert.equal(by(resolve(stock, [], [{ id: "inner", on: true }]), "inner")!.text, "thoughts")
 assert.equal(by(resolve(stock, [], [{ id: "inner", on: true }], { inner: false }), "inner")!.on, false)
-// a card's text theater: the patch lands over its `when` and its cap, and the card's patch came first
+// a card's text theater: the patch keeps its `when`, its cap and its stage, here the default record
 const capped = {
   id: "diary",
   text: "d",
   shape: { kind: "text" as const, max: 9 },
   when: { path: "n", op: "gt" as const, value: 0 },
 }
-const onDiary = by(resolve(stock, [capped], [{ id: "diary", text: "mine" }]), "diary")!
+const onDiary = by(resolve(stock, [capped], [{ id: "diary", label: "mine" }]), "diary")!
 assert.deepEqual(
-  [onDiary.text, onDiary.shape, onDiary.when, onDiary.stage],
-  ["mine", capped.shape, capped.when, "narrate"],
+  [onDiary.label, onDiary.shape, onDiary.when, onDiary.stage],
+  ["mine", capped.shape, capped.when, undefined],
 )
 // The lock: on context (`notes`), a list (`options`), a keyed world table or a text the model reads back the patch is
 // dropped whole, not thrown: the entry is what it was without the theater.
