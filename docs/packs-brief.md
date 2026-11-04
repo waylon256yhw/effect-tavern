@@ -89,13 +89,13 @@ export const Theater = Schema.Struct({
 // Player 加 theaters?: Theater[]（全局，Writing 页编辑）；Pack 的 products 删除，换 theaters?: Theater[]
 ```
 
-编译成 `Product` 时固定 `stage: "narrate"`、`shape: { kind: "text" }`，无 `feed` / `recall` / `fold` / `when`。新 id = 新产物（`text` 此时必填，缺失按 `resolve` 现有的"a product needs text and shape"报）。
+一条小剧场只带 label / text / on。**新 id** 编译成固定的 `stage: "narrate"`、`shape: { kind: "text" }`，无 `feed` / `recall` / `fold` / `when`，`text` 必填；**补丁到已有条目**只改这三项，那条的 `stage`、`shape.max`、`when` 原样保留（包不能抬卡的上限、改卡的条件，也不改谁写它）。（落地 #142 时定：原稿"新 id 缺 text 走现有报错"改为丢弃，见下。）
 
 ### 合并：`resolve` 加一层，带一把锁
 
 `resolve(defaults, card, theaters, toggles)`：默认 → 卡的补丁 → **小剧场补丁（挂载的包按序，再玩家自己的）** → 玩家开关。补丁按 id：撞上 `inner` 就是改它的文字与默认开关。
 
-**锁（代码，不是提示词）**：一条小剧场补丁只能落在"不存在的 id"或"已有条目是 text 形状的 theater（`kindOf === "theater" && shape.kind === "text"`）"上。撞上 `notes`（context）、`options`（list 形状）或卡的 world 表（竹林的 `people`，`fold: { key }`）时**丢弃这条补丁**，不抛：抛会让一张挂了包的卡在 session 打开时就死（`products()` 在构造时调一次）。测试断言丢弃，lint 以后再说。
+**锁（代码，不是提示词）**：一条小剧场补丁只能落在"不存在的 id"或"已有条目是 text 形状的 theater（`kindOf === "theater" && shape.kind === "text"`）"上。撞上 `notes`（context）、`options`（list 形状）或卡的 world 表（竹林的 `people`，`fold: { key }`）时，以及**新 id 没有 `text`** 时，**丢弃这条**，不抛：抛会让一张挂了包的卡在 session 打开时就死（`products()` 在构造时调一次）。测试断言丢弃，lint 以后再说。
 
 ### `cardView.products` 两处补
 
