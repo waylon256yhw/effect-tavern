@@ -279,7 +279,7 @@ export interface Resolved {
   asks: Record<string, Item<{ text: string }>> // every id: the highest on the chain that fills whole
   products: Item<Product>[] // `on` decided; the question filled, or `unasked` with its raw text when it does not fill
   entries: Item<{ id: string; text: string }>[] // the lookup index's player-layer entries
-  lexicon: LexiconEntry[]
+  lexicon: Item<LexiconEntry>[] // no id, so no merge: every rank's stands, the highest first
   snippets: Item<Snippet>[]
   format: Item<Format>[]
   names: Names
@@ -410,7 +410,10 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   const stock = new Map<string, Partial<Product> & { id: string; from: From }>(
     (code.products ?? []).map((p) => [p.id, { ...p, from: "harness" }]),
   )
+  /** A toggle on an id this card does not declare says nothing about this card (a base's `people` on a card without it). */
+  const toggleOnly = (p: { id: string }) => Object.keys(p).every((k) => k === "id" || k === "on")
   for (const p of overlay?.products ?? []) {
+    if (!stock.has(p.id) && toggleOnly(p)) continue
     const merged = { ...stock.get(p.id), ...p, from: "harness" }
     try {
       validate(merged)
@@ -435,6 +438,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
       const { id, ...patch } = p as { id: string; label?: string; text?: string; on?: boolean }
       const was = stock.get(id)
       if (was) stock.set(id, { ...was, ...patch, from })
+      else if (toggleOnly(p)) continue
       else if (patch.text === undefined) dropped.push({ from, kind: "product", id, why: "a new product needs text" })
       else stock.set(id, { id, ...patch, text: patch.text, shape: { kind: "text" }, stage: "narrate", from })
     }
@@ -489,7 +493,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     asks: Object.fromEntries(asks),
     products: asked,
     entries,
-    lexicon: down.flatMap(({ row }) => row.lexicon ?? []),
+    lexicon: down.flatMap(({ from, row }) => (row.lexicon ?? []).map((e) => ({ ...e, from }))),
     snippets: quick,
     format: menu(
       (r) => r.format,
@@ -506,7 +510,8 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   }
 }
 
-/** A resolved layer as it leaves the server: the one redaction, a card's item goes without its text. */
+/** A resolved layer as it leaves the server: a card's item goes without its text, a card's lexicon entry goes whole (the
+ *  pattern is the text, and a ban is a prompt, to a player too). */
 export const shown = (r: Resolved) => {
   const bare = <T extends { from: From; text?: string }>(x: T) => {
     if (x.from !== "card") return x
@@ -518,6 +523,7 @@ export const shown = (r: Resolved) => {
     frame: r.frame.map(bare),
     tail: r.tail.map(bare),
     products: r.products.map(bare),
+    lexicon: r.lexicon.filter((e) => e.from !== "card"),
     asks: Object.fromEntries(Object.entries(r.asks).map(([id, a]) => [id, bare(a)])),
     switches: {
       ...r.switches,

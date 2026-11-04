@@ -36,7 +36,7 @@ const shared = open(":memory:")
 const chats = shelf([chat], open(":memory:")) // a shelf of one, for the taverns whose card does not matter
 const lib = library({
   data: shared,
-  cards: shelf([{ ...chat, greetings: [{ text: "G" }] }], shared),
+  cards: shelf([{ ...chat, greetings: [{ text: "G" }], lexicon: [{ pattern: "CARD-BAN" }] }], shared),
   base: player.base,
   model,
 })
@@ -80,6 +80,7 @@ const run = async (inspect: boolean) => {
       ],
     )
 
+    assert.ok(!JSON.stringify(about).includes("CARD-BAN")) // a card's lexicon entry does not leave the server at all
     // what the card page reads: the player's row, its mounts by name, the one merge, a card's items without their text
     assert.deepEqual([about["local"], about["mounts"]], [{ id: "local", name: chat.id, card: chat.id }, []])
     const merged = about["layer"] as { frame: { from: string; text?: string }[]; names: unknown }

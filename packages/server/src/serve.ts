@@ -76,7 +76,8 @@
 //                 lore as counts, what the card's text costs each turn, estimated (session.ts `cardView`); `local`, the
 //                 player's row on the card; `mounts`, its packs as {id, name}; `layer`, the one merge (layer.ts
 //                 `Resolved`: frame, tail, asks, products, entries, lexicon, snippets, format, names, holes, switches,
-//                 dropped, each item with its `from`), a card's item without its `text`. A client merges nothing.
+//                 dropped, each item with its `from`), a card's item without its `text`, a card's lexicon entry not at all.
+//                 A client merges nothing.
 //                 The card's fragment bodies, guard lines and lore never leave the server.
 //                 GET /cards/<id>/local is that row alone, PUT /cards/<id>/local writes it whole (decoded as `Local`,
 //                 its card the URL's; in force from the next request; 404 when there is no such card, a bad body a 400).

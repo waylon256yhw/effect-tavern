@@ -452,7 +452,7 @@ const packs = [packB, packA]
   })
   assert.equal(kindOf(town), "theater")
   const blank = resolve(chat, {
-    packs: [row("p", { products: [{ id: "x", on: true }] })],
+    packs: [row("p", { products: [{ id: "x", label: "X", on: true }] })],
     local: here({ mounts: ["p"] }),
   })
   assert.equal(
@@ -460,6 +460,16 @@ const packs = [packB, packA]
     false,
   )
   assert.deepEqual(blank.dropped, [{ from: "p", kind: "product", id: "x", why: "a new product needs text" }])
+  // a toggle on an id this card does not declare says nothing about this card: ignored, no warning, at any rank
+  const toggled = resolve(
+    { ...chat, products: [] },
+    {
+      harness: row("harness", { products: [{ id: "people", on: false }] }),
+      base: row("base", { products: [{ id: "people", on: false }] }),
+      local: here({ products: [{ id: "people", on: true }] }),
+    },
+  )
+  assert.deepEqual([toggled.dropped, toggled.products.some((p) => p.id === "people")], [[], false])
   // an earlier row's new id is there for a later row to patch
   assert.equal(
     P(
@@ -478,7 +488,7 @@ const packs = [packB, packA]
     () => resolve({ ...chat, products: [{ id: "n", text: "t", shape: { kind: "list" }, stage: "narrate" }] }, {}),
     /a narrate product is text/,
   )
-  const badOverlay = resolve(chat, { harness: row("harness", { products: [{ id: "ghost" }] }) })
+  const badOverlay = resolve(chat, { harness: row("harness", { products: [{ id: "ghost", label: "G" }] }) })
   assert.deepEqual(
     [badOverlay.products.some((p) => p.id === "ghost"), badOverlay.dropped[0]!.id, badOverlay.dropped[0]!.from],
     [false, "ghost", "harness"],
@@ -636,6 +646,7 @@ const packs = [packB, packA]
     ],
     asks: [{ id: "lookup", text: "ASK-SECRET" }],
     products: [{ id: "scene", text: "PRODUCT-SECRET", shape: { kind: "text" } }],
+    lexicon: [{ pattern: "LEXICON-SECRET" }],
   }
   const R = shown(resolve(c, { base: row("base", { fragments: [{ id: "mine", text: "MINE" }] }) }))
   const wire = JSON.stringify(R)
@@ -650,6 +661,7 @@ const packs = [packB, packA]
   assert.equal(R.products.find((p) => p.id === "scene")!.from, "card")
   assert.ok("text" in R.products.find((p) => p.id === "notes")!) // the harness's question is the player's to read
   assert.ok(wire.includes("MINE"))
+  assert.deepEqual(resolve(c, {}).lexicon, [{ pattern: "LEXICON-SECRET", from: "card" }]) // polish still scans it
   // cardView carries it, with the card's own projection beside it
   const v = cardView(c, {})
   assert.deepEqual(Object.keys(v).sort(), ["fiction", "greetings", "layer", "meta", "rules"])
@@ -814,7 +826,7 @@ const mount = (...mounts: string[]) => here({ mounts })
   // a refused row opens: a new id with no text, in the ledger, and the session runs as it would without
   const refused = makeSession({
     card: chat,
-    rows: () => ({ base: row("base", { products: [{ id: "x" }] }) }),
+    rows: () => ({ base: row("base", { products: [{ id: "x", label: "X" }] }) }),
     model,
   })
   assert.deepEqual(
