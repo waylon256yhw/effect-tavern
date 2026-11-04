@@ -132,10 +132,9 @@ const reloaded = (): boolean => {
 export const boot = async (): Promise<void> => {
   await Promise.all([
     wire.fetchStories(),
-    wire.fetchCards(),
+    wire.fetchCards().then(wire.fetchLocals),
     wire.fetchPersonas(),
     wire.fetchPacks(),
-    wire.fetchPlayer(),
     wire.fetchRouting(),
   ])
   const kept = remembered() // the tabs the device holds, on stories and cards still there (tabs.ts)

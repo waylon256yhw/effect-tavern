@@ -1,11 +1,12 @@
-// The writing switches as the client draws them (the Writing page's first tab, the session's summary chips): each
-// switch is a key of `Writing`, the values named in the language of the sentences they compile to (fragment.ts
-// `SENTENCES`, shown as each value's title). A value not set leaves the card's own text in force, and pressing the
-// set one again unsets it. Pure data and helpers, so a test and the side panel read them without the page.
-import { SENTENCES, type Writing } from "@effect-tavern/runtime/src/fragment.ts"
+// The writing switches as the client draws them (the Writing page, the session's summary chips): each switch is a key
+// of `Writing`, the values named in the language of the sentences they compile to (layer.ts `harness`, shown on the
+// switch card). A value not set leaves the card's or lower rank's text in force, and pressing the set one again unsets
+// it. Pure data and helpers, so a test and the side panel read them without the page.
+import type { Writing } from "@effect-tavern/runtime/src/fragment.ts"
+import { harness, type From } from "@effect-tavern/runtime/src/layer.ts"
 import { type Key, t } from "./i18n.ts"
 
-export type SwitchKey = keyof typeof SENTENCES
+export type SwitchKey = "pov" | "echo" | "agency" | "verbosity"
 export interface Switch {
   key: SwitchKey
   label: Key
@@ -47,9 +48,39 @@ export const SWITCHES: Switch[] = [
     ],
   },
 ]
-/** The sentence a value compiles to: the title on its button. */
-export const sentence = (key: SwitchKey, value: string | boolean): string => SENTENCES[key][String(value)] ?? ""
-/** Whether a switch is moot: with no player in the fiction (`pov: none`), echo and agency drop (fragment.ts `writing`). */
+const defaults = new Map((harness("act").asks ?? []).map((a) => [a.id, a.text]))
+
+/** The sentence a value compiles to: from the resolved `sentences` map when given, else the code's default. */
+export const sentence = (
+  key: SwitchKey,
+  value: string | boolean,
+  sentences?: Readonly<Record<string, string>>,
+): string => {
+  const id = `switch.${key}.${String(value)}`
+  return sentences?.[id] ?? defaults.get(id) ?? ""
+}
+/** Which frame slot a switch compiles into (`pov` holds pov, echo, agency; `verbosity` holds verbosity). */
+export const slotOfSwitch = (key: SwitchKey): "pov" | "verbosity" => (key === "verbosity" ? "verbosity" : "pov")
+/** Who took over the switch's slot with free text (card or a fragment that is not `compiled: true`), or null when the
+ *  switches remain in control. */
+export const takenBy = (
+  key: SwitchKey,
+  layer:
+    | {
+        frame: readonly { id: string; compiled?: boolean; [k: string]: unknown }[]
+        tail: readonly { id: string; compiled?: boolean; [k: string]: unknown }[]
+        switches: { taken: { pov: From | null; verbosity: From | null } }
+      }
+    | undefined,
+): From | null => {
+  if (!layer) return null
+  const slot = slotOfSwitch(key)
+  const who = layer.switches.taken[slot]
+  if (!who) return null
+  const compiled = [...layer.frame, ...layer.tail].some((f) => f.id === slot && f.compiled)
+  return compiled ? null : who
+}
+/** Whether a switch is moot: with no player in the fiction (`pov: none`), echo and agency drop (layer.ts `compile`). */
 export const moot = (key: SwitchKey, w: Writing | undefined): boolean =>
   (key === "echo" || key === "agency") && w?.pov === "none"
 /** The value a press leaves: pressing the set value unsets it. */

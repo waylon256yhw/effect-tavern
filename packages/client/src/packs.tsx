@@ -1,52 +1,88 @@
-// Settings → 写作包 (docs/packs-brief.md): the library of packs as the settings page's master list and detail. A
-// pack's detail is one scrolling column of sections (names, 文风与要求, 线索词条, 润色禁词, 小剧场, 快捷输入), each
-// row edited in a modal; a long list opens in a drawer with a search. Every edit is one `PUT /packs/<id>` and a
-// re-read of the active card view (the merged names and holes come from the server). pack.ts holds the pure parts.
-import type { Fragment, Pack, PackEntry, Theater } from "@effect-tavern/runtime/src/fragment.ts"
+// Settings → 写作包 (docs/packs-brief.md §九 §7): `[harness, base, ...packs]` share one row shape (`Layer`) and one
+// 6-tab full-height workbench (文风与要求, 线索词条, 润色禁词, 记录与小剧场, 快捷输入, 问法). `harness` is marked 内置 and
+// neither `harness` nor `base` can be deleted. Every edit is one `PUT /packs/<id>` and a re-read of the active card.
+import { SLOTS, type Format, type Fragment, type Snippet } from "@effect-tavern/runtime/src/fragment.ts"
+import { harness, type Ask, type Layer, type PackEntry } from "@effect-tavern/runtime/src/layer.ts"
 import { hook } from "@effect-tavern/runtime/src/lore.ts"
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { ask, Drawer, Modal, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
-import { Clue, Close, Export, Import, Next, Snippets as Plus, Trash } from "./icons.tsx"
-import { draftOfSnippet, emptyDraft, snippetOf, type InsertDraft } from "./inserts.ts"
-import { packCount, packHoles, serializePack, withPackName } from "./pack.ts"
-import { cards, packs, player } from "./store.ts"
-import { t } from "./i18n.ts"
+import { ask, Modal, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
+import { Clue, Close, Export, Import, Snippets as Plus, Trash } from "./icons.tsx"
+import { caretOf, draftOfFormat, draftOfSnippet, emptyDraft, formatOf, snippetOf, type InsertDraft } from "./inserts.ts"
+import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
+import {
+  isReservedPack,
+  packHoles,
+  serializePack,
+  withoutProductPatch,
+  withPackName,
+  withProductPatch,
+} from "./pack.ts"
+import { addFragment, atOf, removeFragment, setFragmentAt, setFragmentText } from "./requirements.ts"
+import { cards, locals, packs } from "./store.ts"
+import { SWITCHES } from "./switches.ts"
+import { type Key, t } from "./i18n.ts"
 import { deletePack, putPack, refreshActiveCard } from "./wire.ts"
 
-// ───────── 写作包 ─────────
-type DrawerKind = "entries" | "lexicon" | "theaters"
-type ModalEdit =
-  | { kind: "frag"; idx: number; id: string; at: "head" | "tail"; enabled: boolean; text: string }
-  | { kind: "entry"; idx: number; id: string; text: string }
-  | { kind: "lex"; idx: number; pattern: string; hint: string }
-  | { kind: "theater"; idx: number; id: string; label: string; on: boolean; text: string }
-  | { kind: "snip"; idx: number; draft: InsertDraft }
+type PackTab = "prose" | "entries" | "lexicon" | "products" | "inputs" | "asks"
+const PACK_TABS: [PackTab, Key][] = [
+  ["prose", "writing.tabProse"],
+  ["entries", "packs.entries"],
+  ["lexicon", "packs.lexicon"],
+  ["products", "packs.tabProducts"],
+  ["inputs", "writing.tabInputs"],
+  ["asks", "packs.tabAsks"],
+]
+
+const CODE_HARNESS = harness("act")
+const DEFAULT_ASKS = new Map((CODE_HARNESS.asks ?? []).map((a) => [a.id, a.text]))
+const DEFAULT_PRODUCTS = new Map((CODE_HARNESS.products ?? []).map((p) => [p.id, p]))
+
+const stageAskLabels = (): [string, string][] => [
+  ["lookup", t("settings.stageLookup")],
+  ["direct", t("settings.stageDirect")],
+  ["decide.first", t("packs.askDecideFirst")],
+  ["decide.again", t("packs.askDecideAgain")],
+  ["record.readout", t("packs.askRecordReadout")],
+  ["narrate.correction", t("packs.askNarrateCorrection")],
+  ["narrate.blocks", t("packs.askNarrateBlocks")],
+  ["narrate.demand", t("packs.askNarrateDemand")],
+  ["polish", t("settings.stagePolish")],
+  ["input.thought", t("packs.askInputThought")],
+]
+
+const leaveArea = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
+  if (e.key !== "Escape") return
+  e.preventDefault()
+  e.currentTarget.blur()
+}
+const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+  if (e.isComposing || (e.key !== "Enter" && e.key !== "Escape")) return
+  e.preventDefault()
+  e.currentTarget.blur()
+}
 
 export const Packs = (props: Pane) => {
   const list = read(packs)
-  const me = read(player)
+  const allLocals = read(locals)
   const known = read(cards)
   const pack = () => list().find((p) => p.id === props.picked) ?? list()[0]
-  const [drawer, setDrawer] = createSignal<DrawerKind | null>(null)
-  const [dq, setDq] = createSignal("")
-  const [editing, setEditing] = createSignal<ModalEdit | null>(null)
-  let modalDlg!: HTMLDialogElement
+  const [tab, setTab] = createSignal<PackTab>("prose")
   let fileInput!: HTMLInputElement
 
-  /** Player.packs read backwards: each pack's mounted cards by title. */
+  /** Each pack's mounted cards by title, derived from `locals[cardId].mounts`. */
   const mounts = createMemo(() => {
     const by = new Map<string, string[]>()
-    for (const [cid, pids] of Object.entries(me()?.packs ?? {})) {
+    for (const [cid, loc] of Object.entries(allLocals())) {
       const title = known().find((x) => x.id === cid)?.title ?? cid
-      for (const pid of pids) by.set(pid, [...(by.get(pid) ?? []), title])
+      for (const pid of loc.mounts ?? []) by.set(pid, [...(by.get(pid) ?? []), title])
     }
     return by
   })
   const onCards = (id: string) => mounts().get(id) ?? []
 
-  const savePack = async (next: Pack) => {
+  const savePack = async (next: Layer) => {
     await putPack(next)
     await refreshActiveCard()
   }
@@ -60,7 +96,6 @@ export const Packs = (props: Pane) => {
     props.onPick(id)
   }
   const [importError, setImportError] = createSignal("")
-  /** A pack file is the row's JSON (`serializePack`): the server decodes it as `Pack` and names what is wrong. */
   const onImportFile = async (f: File) => {
     let body: unknown
     try {
@@ -71,163 +106,18 @@ export const Packs = (props: Pane) => {
     const { id: _, ...rest } = (body && typeof body === "object" ? body : {}) as Record<string, unknown>
     const id = newId("pack")
     try {
-      await savePack({ id, ...rest } as Pack)
+      await savePack({ id, ...rest } as Layer)
       setImportError("")
       props.onPick(id)
     } catch (e) {
       setImportError(e instanceof Error ? e.message : t("packs.invalidFile"))
     }
   }
-  const exportPack = (p: Pack) => {
+  const exportPack = (p: Layer) => {
     const url = URL.createObjectURL(new Blob([serializePack(p)], { type: "application/json" }))
     const a = Object.assign(document.createElement("a"), { href: url, download: `${p.name}.pack.json` })
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  const openModal = (m: ModalEdit) => {
-    setEditing(m)
-    modalDlg.showModal()
-  }
-  const openFrag = (p: Pack, idx: number) => {
-    const cur = idx >= 0 ? p.fragments?.[idx] : undefined
-    openModal({
-      kind: "frag",
-      idx,
-      id: cur?.id ?? `req-${(p.fragments?.length ?? 0) + 1}`,
-      at: cur?.at === "tail" ? "tail" : "head",
-      enabled: cur?.enabled !== false,
-      text: cur?.text ?? "",
-    })
-  }
-  const openEntry = (p: Pack, idx: number) => {
-    const cur = idx >= 0 ? p.entries?.[idx] : undefined
-    openModal({ kind: "entry", idx, id: cur?.id ?? "", text: cur?.text ?? "" })
-  }
-  const openLex = (p: Pack, idx: number) => {
-    const cur = idx >= 0 ? p.lexicon?.[idx] : undefined
-    openModal({ kind: "lex", idx, pattern: cur?.pattern ?? "", hint: cur?.hint ?? "" })
-  }
-  const openTheater = (p: Pack, idx: number) => {
-    const cur = idx >= 0 ? p.theaters?.[idx] : undefined
-    openModal({
-      kind: "theater",
-      idx,
-      id: cur?.id ?? newId("th"),
-      label: cur?.label ?? "",
-      on: !!cur?.on,
-      text: cur?.text ?? "",
-    })
-  }
-  const openSnip = (p: Pack, idx: number) => {
-    const cur = idx >= 0 ? p.snippets?.[idx] : undefined
-    openModal({ kind: "snip", idx, draft: cur ? draftOfSnippet(cur) : emptyDraft(true) })
-  }
-
-  const commitModal = () => {
-    const p = pack()
-    const e = editing()
-    if (!p || !e) return
-    if (e.kind === "frag") {
-      const text = e.text.trim()
-      if (!text) return
-      const item: Fragment = {
-        id: e.id,
-        ...(e.at === "tail" ? { at: "tail" } : {}),
-        ...(e.enabled ? {} : { enabled: false }),
-        text,
-      }
-      const cur = [...(p.fragments ?? [])]
-      if (e.idx >= 0) cur[e.idx] = item
-      else cur.push(item)
-      void savePack({ ...p, fragments: cur })
-    } else if (e.kind === "entry") {
-      const text = e.text.trim()
-      if (!text) return
-      const id = e.id.trim() || hook(text).slice(0, 16) || `entry-${(p.entries?.length ?? 0) + 1}`
-      const item: PackEntry = { id, text }
-      const cur = [...(p.entries ?? [])]
-      if (e.idx >= 0) cur[e.idx] = item
-      else cur.push(item)
-      void savePack({ ...p, entries: cur })
-    } else if (e.kind === "lex") {
-      const pattern = e.pattern.trim()
-      if (!pattern) return
-      const hint = e.hint.trim()
-      const item: Entry = hint ? { pattern, hint } : { pattern }
-      const cur = [...(p.lexicon ?? [])]
-      if (e.idx >= 0) cur[e.idx] = item
-      else cur.push(item)
-      void savePack({ ...p, lexicon: cur })
-    } else if (e.kind === "theater") {
-      const label = e.label.trim()
-      const text = e.text.trim()
-      if (!label || !text) return
-      const item: Theater = {
-        id: e.id,
-        label,
-        ...(e.on ? { on: true } : {}),
-        text,
-      }
-      const cur = [...(p.theaters ?? [])]
-      if (e.idx >= 0) cur[e.idx] = item
-      else cur.push(item)
-      void savePack({ ...p, theaters: cur })
-    } else if (e.kind === "snip") {
-      const item = snippetOf(e.draft)
-      if (!item) return
-      const cur = [...(p.snippets ?? [])]
-      if (e.idx >= 0) cur[e.idx] = item
-      else cur.push(item)
-      void savePack({ ...p, snippets: cur })
-    }
-    modalDlg.close()
-  }
-
-  const deleteFromModal = () => {
-    const p = pack()
-    const e = editing()
-    if (!p || !e || e.idx < 0) return
-    if (e.kind === "frag") {
-      const next = (p.fragments ?? []).filter((_, i) => i !== e.idx)
-      const { fragments: _, ...rest } = p
-      void savePack(next.length ? { ...rest, fragments: next } : rest)
-    } else if (e.kind === "entry") {
-      const next = (p.entries ?? []).filter((_, i) => i !== e.idx)
-      const { entries: _, ...rest } = p
-      void savePack(next.length ? { ...rest, entries: next } : rest)
-    } else if (e.kind === "lex") {
-      const next = (p.lexicon ?? []).filter((_, i) => i !== e.idx)
-      const { lexicon: _, ...rest } = p
-      void savePack(next.length ? { ...rest, lexicon: next } : rest)
-    } else if (e.kind === "theater") {
-      const next = (p.theaters ?? []).filter((_, i) => i !== e.idx)
-      const { theaters: _, ...rest } = p
-      void savePack(next.length ? { ...rest, theaters: next } : rest)
-    } else if (e.kind === "snip") {
-      const next = (p.snippets ?? []).filter((_, i) => i !== e.idx)
-      const { snippets: _, ...rest } = p
-      void savePack(next.length ? { ...rest, snippets: next } : rest)
-    }
-    modalDlg.close()
-  }
-
-  const modalTitle = () => {
-    const e = editing()
-    if (!e) return ""
-    const isEdit = e.idx >= 0
-    switch (e.kind) {
-      case "frag":
-        return isEdit ? t("packs.editRequirement") : t("writing.addRequirement")
-      case "entry":
-        return isEdit ? t("packs.editEntry") : t("packs.addEntry")
-      case "lex":
-        return isEdit ? t("packs.editLexicon") : t("writing.addEntry")
-      case "theater":
-        return isEdit ? t("packs.editTheater") : t("packs.addTheater")
-      case "snip":
-        return isEdit ? t("writing.editSnippet") : t("writing.newSnippet")
-    }
   }
 
   return (
@@ -240,11 +130,15 @@ export const Packs = (props: Pane) => {
                 type="button"
                 class="p-row"
                 aria-selected={x().id === pack()?.id ? "true" : "false"}
-                onClick={() => (setDrawer(null), props.onPick(x().id))}
+                onClick={() => props.onPick(x().id)}
               >
                 <span class="p-name">{x().name}</span>
-                <For each={onCards(x().id)}>{(c) => <span class="tag">{c}</span>}</For>
-                <span class="tag mono">{packCount(x())}</span>
+                <Show when={x().id === "harness"}>
+                  <span class="tag">{t("writing.builtin")}</span>
+                </Show>
+                <Show when={!isReservedPack(x().id)}>
+                  <For each={onCards(x().id)}>{(c) => <span class="tag">{c}</span>}</For>
+                </Show>
               </button>
             )}
           </For>
@@ -270,603 +164,787 @@ export const Packs = (props: Pane) => {
           <Show when={importError()}>{(m) => <span class="tag warn">{m()}</span>}</Show>
         </div>
       </aside>
-      <section class="detail-card" aria-label={t("settings.packs")}>
+      <section class="detail-card pack-detail-card" aria-label={t("settings.packs")}>
         <Show when={pack()} fallback={<div class="empty">{t("packs.noPacks")}</div>}>
           {(p) => {
             const holes = () => packHoles(p())
-            const frags = () => p().fragments ?? []
-            const entries = () => p().entries ?? []
-            const lex = () => p().lexicon ?? []
-            const theaters = () => p().theaters ?? []
-            const snips = () => p().snippets ?? []
             return (
               <>
-                <header class="detail-header">
+                <header class="detail-header pack-detail-header">
                   <ToList onBack={props.onBack} />
-                  <Name
-                    value={p().name}
-                    label={t("packs.packName")}
-                    onCommit={(name) => void savePack({ ...p(), name })}
-                  />
-                  <For each={onCards(p().id)}>{(c) => <span class="tag">{c}</span>}</For>
-                  <span class="spacer" />
-                  <button type="button" class="btn sm ghost" onClick={() => exportPack(p())}>
-                    <Export /> <span>{t("common.export")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="icon sm"
-                    aria-label={t("packs.deletePack")}
-                    onClick={() => ask(t("packs.confirmDelete", { name: p().name }), () => void removePack(p().id))}
-                  >
-                    <Trash />
-                  </button>
-                </header>
-                <div class="detail-scroll scroller">
-                  {/* Auto-derived proper-noun defaults (`Pack.names`) */}
-                  <Show when={holes().length > 0}>
-                    <div class="pack-mod">
-                      <div class="block-title">
-                        <h3>{t("packs.names")}</h3>
-                        <span class="tag mono">{holes().length}</span>
-                      </div>
-                      <div class="name-chips">
-                        <For each={holes()} keyed={(k) => k}>
-                          {(k) => (
-                            <label class="name-chip">
-                              <span class="hole-key mono">{`{{${k()}}}`}</span>
-                              <input
-                                value={p().names?.[k()] ?? ""}
-                                placeholder={t("packs.defaultValue")}
-                                aria-label={k()}
-                                onChange={(e) => void savePack(withPackName(p(), k(), e.currentTarget.value))}
-                              />
-                            </label>
-                          )}
-                        </For>
-                      </div>
-                    </div>
-                  </Show>
-
-                  {/* 1. 文风与要求 */}
-                  <div class="pack-mod">
-                    <div class="block-title">
-                      <h3>{t("writing.tabProse")}</h3>
-                      <span class="tag mono">{frags().length}</span>
-                      <div class="right">
-                        <button type="button" class="btn sm" onClick={() => openFrag(p(), -1)}>
-                          <Plus /> <span>{t("writing.addRequirement")}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <Show when={frags().length > 0}>
-                      <div class="pack-rows">
-                        <For each={frags()} keyed={false}>
-                          {(f, i) => (
-                            <div
-                              class="pack-row"
-                              data-off={f().enabled === false ? "true" : "false"}
-                              onClick={() => openFrag(p(), i)}
-                            >
-                              <span class="tag">{f().at === "tail" ? t("writing.atTail") : t("writing.atHead")}</span>
-                              <span class="row-text">{f().text}</span>
-                              <span onClick={(e) => e.stopPropagation()}>
-                                <Switch
-                                  on={f().enabled !== false}
-                                  label={f().id}
-                                  onFlip={() => {
-                                    const cur = [...frags()]
-                                    const now = cur[i]!
-                                    cur[i] = { ...now, enabled: now.enabled === false ? undefined : false }
-                                    void savePack({ ...p(), fragments: cur })
-                                  }}
-                                />
-                              </span>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
-
-                  {/* 2. 线索词条 */}
-                  <div class="pack-mod">
-                    <div class="block-title">
-                      <h3>{t("packs.entries")}</h3>
-                      <span class="tag mono">{entries().length}</span>
-                      <div class="right">
-                        <Show when={entries().length > 0}>
-                          <button type="button" class="btn sm ghost" onClick={() => (setDq(""), setDrawer("entries"))}>
-                            <span>{t("packs.manage")}</span> <Next />
-                          </button>
-                        </Show>
-                        <button type="button" class="btn sm" onClick={() => openEntry(p(), -1)}>
-                          <Plus /> <span>{t("packs.addEntry")}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <Show when={entries().length > 0}>
-                      <div class="item-pills">
-                        <For each={entries()} keyed={false}>
-                          {(e, i) => (
-                            <button type="button" class="item-pill" onClick={() => openEntry(p(), i)}>
-                              <span>{e().id}</span>
-                            </button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
-
-                  {/* 3. 润色禁词 */}
-                  <div class="pack-mod">
-                    <div class="block-title">
-                      <h3>{t("packs.lexicon")}</h3>
-                      <span class="tag mono">{lex().length}</span>
-                      <div class="right">
-                        <Show when={lex().length > 0}>
-                          <button type="button" class="btn sm ghost" onClick={() => (setDq(""), setDrawer("lexicon"))}>
-                            <span>{t("packs.manage")}</span> <Next />
-                          </button>
-                        </Show>
-                        <button type="button" class="btn sm" onClick={() => openLex(p(), -1)}>
-                          <Plus /> <span>{t("writing.addEntry")}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <Show when={lex().length > 0}>
-                      <div class="item-pills">
-                        <For each={lex()} keyed={false}>
-                          {(x, i) => (
-                            <button type="button" class="item-pill" onClick={() => openLex(p(), i)}>
-                              <span>{x().pattern}</span>
-                              <Show when={x().hint}>{(h) => <span class="preview">{`→ ${h()}`}</span>}</Show>
-                            </button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
-
-                  {/* 4. 小剧场 */}
-                  <div class="pack-mod">
-                    <div class="block-title">
-                      <h3>{t("writing.kindTheater")}</h3>
-                      <span class="tag mono">{theaters().length}</span>
-                      <div class="right">
-                        <Show when={theaters().length > 0}>
-                          <button type="button" class="btn sm ghost" onClick={() => (setDq(""), setDrawer("theaters"))}>
-                            <span>{t("packs.manage")}</span> <Next />
-                          </button>
-                        </Show>
-                        <button type="button" class="btn sm" onClick={() => openTheater(p(), -1)}>
-                          <Plus /> <span>{t("packs.addTheater")}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <Show when={theaters().length > 0}>
-                      <div class="item-pills">
-                        <For each={theaters()} keyed={false}>
-                          {(th, i) => (
-                            <button type="button" class="item-pill" onClick={() => openTheater(p(), i)}>
-                              <Show when={th().on}>
-                                <span class="dot-on" />
-                              </Show>
-                              <span>{th().label ?? th().id}</span>
-                            </button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
-
-                  {/* 5. 快捷输入 */}
-                  <div class="pack-mod">
-                    <div class="block-title">
-                      <h3>{t("writing.tabInputs")}</h3>
-                      <span class="tag mono">{snips().length}</span>
-                      <div class="right">
-                        <button type="button" class="btn sm" onClick={() => openSnip(p(), -1)}>
-                          <Plus /> <span>{t("writing.addSnippet")}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <Show when={snips().length > 0}>
-                      <div class="item-pills">
-                        <For each={snips()} keyed={false}>
-                          {(s, i) => (
-                            <button type="button" class="item-pill" onClick={() => openSnip(p(), i)}>
-                              <span>{s().name}</span>
-                            </button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
-                </div>
-
-                {/* Slide-over drawer for bulk browsing / searching entries, lexicon, or theaters */}
-                <Drawer
-                  open={drawer() !== null}
-                  label={
-                    drawer() === "entries"
-                      ? t("packs.entries")
-                      : drawer() === "theaters"
-                        ? t("writing.kindTheater")
-                        : t("packs.lexicon")
-                  }
-                  onClose={() => setDrawer(null)}
-                >
-                  <Show when={drawer()}>
-                    {(kind) => (
+                  <Show
+                    when={!isReservedPack(p().id)}
+                    fallback={
                       <>
-                        <div class="drawer-head">
-                          <h3>
-                            {kind() === "entries"
-                              ? t("packs.entries")
-                              : kind() === "theaters"
-                                ? t("writing.kindTheater")
-                                : t("packs.lexicon")}
-                          </h3>
-                          <span class="spacer" />
-                          <button
-                            type="button"
-                            class="btn sm"
-                            onClick={() =>
-                              kind() === "entries"
-                                ? openEntry(p(), -1)
-                                : kind() === "theaters"
-                                  ? openTheater(p(), -1)
-                                  : openLex(p(), -1)
-                            }
-                          >
-                            <Plus />{" "}
-                            <span>
-                              {kind() === "entries"
-                                ? t("packs.addEntry")
-                                : kind() === "theaters"
-                                  ? t("packs.addTheater")
-                                  : t("writing.addEntry")}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            class="icon sm"
-                            aria-label={t("common.close")}
-                            onClick={() => setDrawer(null)}
-                          >
-                            <Close />
-                          </button>
-                        </div>
-                        <div class="drawer-search">
-                          <div class="input-box sm">
-                            <Clue aria-hidden="true" />
-                            <input
-                              type="search"
-                              placeholder={t("writing.searchEntries")}
-                              aria-label={t("writing.searchEntriesLabel")}
-                              value={dq()}
-                              onInput={(e) => setDq(e.currentTarget.value)}
-                            />
-                          </div>
-                        </div>
-                        <div class="drawer-body scroller">
-                          <Show when={kind() === "entries"}>
-                            <For
-                              each={entries()
-                                .map((e, i) => ({ e, i }))
-                                .filter(
-                                  ({ e }) => !dq().trim() || e.id.includes(dq().trim()) || e.text.includes(dq().trim()),
-                                )}
-                              keyed={(x) => x.i}
-                            >
-                              {(x) => (
-                                <button type="button" class="pack-drawer-row" onClick={() => openEntry(p(), x().i)}>
-                                  <span class="d-name">{x().e.id}</span>
-                                  <span class="d-preview">{hook(x().e.text)}</span>
-                                </button>
-                              )}
-                            </For>
-                          </Show>
-                          <Show when={kind() === "lexicon"}>
-                            <For
-                              each={lex()
-                                .map((e, i) => ({ e, i }))
-                                .filter(
-                                  ({ e }) =>
-                                    !dq().trim() ||
-                                    e.pattern.includes(dq().trim()) ||
-                                    (e.hint ?? "").includes(dq().trim()),
-                                )}
-                              keyed={(x) => x.i}
-                            >
-                              {(x) => (
-                                <button type="button" class="pack-drawer-row" onClick={() => openLex(p(), x().i)}>
-                                  <span class="d-name">{x().e.pattern}</span>
-                                  <span class="d-preview">{x().e.hint ?? ""}</span>
-                                </button>
-                              )}
-                            </For>
-                          </Show>
-                          <Show when={kind() === "theaters"}>
-                            <For
-                              each={theaters()
-                                .map((th, i) => ({ th, i }))
-                                .filter(
-                                  ({ th }) =>
-                                    !dq().trim() ||
-                                    (th.label ?? th.id).includes(dq().trim()) ||
-                                    (th.text ?? "").includes(dq().trim()),
-                                )}
-                              keyed={(x) => x.i}
-                            >
-                              {(x) => (
-                                <button type="button" class="pack-drawer-row" onClick={() => openTheater(p(), x().i)}>
-                                  <span class="d-name">{x().th.label ?? x().th.id}</span>
-                                  <span class="d-preview">{x().th.text ?? ""}</span>
-                                  <Show when={x().th.on}>
-                                    <span class="tag">{t("writing.alwaysOn")}</span>
-                                  </Show>
-                                </button>
-                              )}
-                            </For>
-                          </Show>
-                        </div>
+                        <h2>{p().name}</h2>
+                        <Show when={p().id === "harness"}>
+                          <span class="tag">{t("writing.builtin")}</span>
+                        </Show>
                       </>
-                    )}
+                    }
+                  >
+                    <Name
+                      value={p().name}
+                      label={t("packs.packName")}
+                      onCommit={(name) => void savePack({ ...p(), name })}
+                    />
+                    <For each={onCards(p().id)}>{(c) => <span class="tag">{c}</span>}</For>
                   </Show>
-                </Drawer>
+                  <span class="spacer" />
+                  <nav class="wtabs" role="tablist" aria-label={t("writing.sections")}>
+                    <For each={PACK_TABS} keyed={(row) => row[0]}>
+                      {(row) => (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={tab() === row()[0] ? "true" : "false"}
+                          onClick={() => setTab(row()[0])}
+                        >
+                          {t(row()[1])}
+                        </button>
+                      )}
+                    </For>
+                  </nav>
+                  <Show when={!isReservedPack(p().id)}>
+                    <button type="button" class="btn sm ghost" onClick={() => exportPack(p())}>
+                      <Export /> <span>{t("common.export")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="icon sm"
+                      aria-label={t("packs.deletePack")}
+                      onClick={() => ask(t("packs.confirmDelete", { name: p().name }), () => void removePack(p().id))}
+                    >
+                      <Trash />
+                    </button>
+                  </Show>
+                </header>
+
+                <Show when={holes().length > 0}>
+                  <div class="wmount">
+                    <div class="wmount-row">
+                      <span class="wmount-label">{t("packs.names")}</span>
+                      <For each={holes()} keyed={(k) => k}>
+                        {(k) => (
+                          <label class="name-chip">
+                            <span class="hole-key mono">{`{{${k()}}}`}</span>
+                            <input
+                              value={p().names?.[k()] ?? ""}
+                              placeholder={t("packs.defaultValue")}
+                              aria-label={k()}
+                              onChange={(e) => void savePack(withPackName(p(), k(), e.currentTarget.value))}
+                              onKeyDown={leaveInput}
+                            />
+                          </label>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
+
+                <div class="pack-tab-body">
+                  <Show when={tab() === "prose"}>
+                    <ProseTab pack={p()} onSave={savePack} />
+                  </Show>
+                  <Show when={tab() === "entries"}>
+                    <EntriesTab pack={p()} onSave={savePack} />
+                  </Show>
+                  <Show when={tab() === "lexicon"}>
+                    <LexiconTab pack={p()} onSave={savePack} />
+                  </Show>
+                  <Show when={tab() === "products"}>
+                    <ProductsTab pack={p()} onSave={savePack} />
+                  </Show>
+                  <Show when={tab() === "inputs"}>
+                    <InputsTab pack={p()} onSave={savePack} />
+                  </Show>
+                  <Show when={tab() === "asks"}>
+                    <AsksTab pack={p()} onSave={savePack} />
+                  </Show>
+                </div>
               </>
             )
           }}
         </Show>
       </section>
+    </>
+  )
+}
 
-      <Modal title={modalTitle()} dialog={(el) => (modalDlg = el)} onClose={() => setEditing(null)}>
-        <Show when={editing()}>
-          {(e) => (
-            <>
-              <div class="modal-body">
-                <Show when={e().kind === "frag" && e()}>
-                  {(f) => (
-                    <>
-                      <div class="mfield">
-                        <span>{t("writing.position")}</span>
-                        <div class="at-toggle" role="group" aria-label={t("writing.position")}>
-                          <button
-                            type="button"
-                            aria-pressed={
-                              (f() as Extract<ModalEdit, { kind: "frag" }>).at === "tail" ? "true" : "false"
-                            }
-                            onClick={() => setEditing({ ...(f() as Extract<ModalEdit, { kind: "frag" }>), at: "tail" })}
-                          >
-                            {t("writing.atTail")}
-                          </button>
-                          <button
-                            type="button"
-                            aria-pressed={
-                              (f() as Extract<ModalEdit, { kind: "frag" }>).at === "head" ? "true" : "false"
-                            }
-                            onClick={() => setEditing({ ...(f() as Extract<ModalEdit, { kind: "frag" }>), at: "head" })}
-                          >
-                            {t("writing.atHead")}
-                          </button>
-                        </div>
-                      </div>
-                      <label class="mfield">
-                        <span>{t("writing.requirement")}</span>
-                        <div class="field-well">
-                          <textarea
-                            rows="5"
-                            value={(f() as Extract<ModalEdit, { kind: "frag" }>).text}
-                            onInput={(ev) =>
-                              setEditing({
-                                ...(f() as Extract<ModalEdit, { kind: "frag" }>),
-                                text: ev.currentTarget.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </label>
-                    </>
-                  )}
-                </Show>
+// ───────── 1. 文风与要求 (`Layer.fragments`) ─────────
+const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+  const frags = () => props.pack.fragments ?? []
+  const [draft, setDraft] = createSignal<string | null>(null)
+  const commitDraft = () => {
+    const d = draft()
+    if (d === null) return
+    setDraft(null)
+    if (d.trim()) void props.onSave(addFragment(props.pack, newId("req"), d, "tail"))
+  }
+  const updateFrag = (idx: number, patch: Partial<Fragment>) => {
+    const cur = [...frags()]
+    const now = cur[idx]
+    if (!now) return
+    cur[idx] = { ...now, ...patch }
+    void props.onSave({ ...props.pack, fragments: cur })
+  }
+  return (
+    <section class="wpanel" role="tabpanel" aria-label={t("writing.tabProse")}>
+      <div class="prose-card grow">
+        <div class="block-title">
+          <h3>{t("writing.tabProse")}</h3>
+          <span class="tag mono">{frags().length}</span>
+          <div class="right">
+            <button type="button" class="btn sm" disabled={draft() !== null} onClick={() => setDraft("")}>
+              <Plus /> <span>{t("writing.addRequirement")}</span>
+            </button>
+          </div>
+        </div>
+        <div class="frag-list scroller fade">
+          <Show when={draft() !== null}>
+            <div
+              class="frag-row"
+              onFocusOut={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commitDraft()
+              }}
+            >
+              <div class="frag-bar">
+                <div class="at-toggle" role="group" aria-label={t("writing.position")}>
+                  <button type="button" aria-pressed="true" tabindex="-1">
+                    {t("writing.atTail")}
+                  </button>
+                  <button type="button" aria-pressed="false" disabled>
+                    {t("writing.atHead")}
+                  </button>
+                </div>
+                <span class="spacer" />
+                <button type="button" class="icon sm" aria-label={t("writing.discard")} onClick={() => setDraft(null)}>
+                  <Close />
+                </button>
+              </div>
+              <div class="field-well">
+                <textarea
+                  aria-label={t("writing.requirement")}
+                  placeholder={t("writing.globalPlaceholder")}
+                  value={draft() ?? ""}
+                  ref={(el) => requestAnimationFrame(() => el.focus())}
+                  onInput={(e) => setDraft(e.currentTarget.value)}
+                  onKeyDown={leaveArea}
+                />
+              </div>
+            </div>
+          </Show>
+          <For each={frags()} keyed={false}>
+            {(f, i) => (
+              <div class="frag-row" data-off={f().enabled === false ? "true" : "false"}>
+                <div class="frag-bar">
+                  <div class="at-toggle" role="group" aria-label={t("writing.position")}>
+                    <button
+                      type="button"
+                      aria-pressed={atOf(f()) === "tail" ? "true" : "false"}
+                      onClick={() => void props.onSave(setFragmentAt(props.pack, i, "tail"))}
+                    >
+                      {t("writing.atTail")}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={atOf(f()) === "head" ? "true" : "false"}
+                      onClick={() => void props.onSave(setFragmentAt(props.pack, i, "head"))}
+                    >
+                      {t("writing.atHead")}
+                    </button>
+                  </div>
+                  <Show when={atOf(f()) === "head"}>
+                    <select
+                      class="field sm mono"
+                      aria-label={t("packs.slot")}
+                      value={SLOTS.includes(f().id) ? f().id : ""}
+                      onChange={(e) => {
+                        const val = e.currentTarget.value || newId("req")
+                        updateFrag(i, { id: val })
+                      }}
+                    >
+                      <option value="">{t("packs.slotCustom")}</option>
+                      <For each={SLOTS} keyed={(s) => s}>
+                        {(s) => <option value={s()}>{s()}</option>}
+                      </For>
+                    </select>
+                    <select
+                      class="field sm"
+                      aria-label={t("packs.mode")}
+                      value={f().mode ?? "override"}
+                      onChange={(e) => {
+                        const val = e.currentTarget.value as "override" | "yield" | "both"
+                        const { mode: _, ...rest } = f()
+                        const cur = [...frags()]
+                        cur[i] = val === "override" ? rest : { ...rest, mode: val }
+                        void props.onSave({ ...props.pack, fragments: cur })
+                      }}
+                    >
+                      <option value="override">{t("packs.modeOverride")}</option>
+                      <option value="yield">{t("packs.modeYield")}</option>
+                      <option value="both">{t("packs.modeBoth")}</option>
+                    </select>
+                  </Show>
+                  <span class="spacer" />
+                  <span class="tag mono">{t("common.chars", { n: (f().text ?? "").length })}</span>
+                  <Switch
+                    on={f().enabled !== false}
+                    label={f().id}
+                    onFlip={() => updateFrag(i, { enabled: f().enabled === false ? undefined : false })}
+                  />
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.removeRequirement")}
+                    onClick={() => void props.onSave(removeFragment(props.pack, i))}
+                  >
+                    <Close />
+                  </button>
+                </div>
+                <div class="field-well">
+                  <textarea
+                    aria-label={t("writing.requirement")}
+                    placeholder={t("writing.emptyRemoves")}
+                    value={f().text ?? ""}
+                    onChange={(e) => void props.onSave(setFragmentText(props.pack, i, e.currentTarget.value))}
+                    onKeyDown={leaveArea}
+                  />
+                </div>
+              </div>
+            )}
+          </For>
+          <Show when={!frags().length && draft() === null}>
+            <p class="none">{t("writing.noGlobal")}</p>
+          </Show>
+        </div>
+      </div>
+    </section>
+  )
+}
 
-                <Show when={e().kind === "entry" && e()}>
-                  {(en) => (
-                    <>
-                      <label class="mfield">
-                        <span>{t("writing.name")}</span>
-                        <input
-                          class="field"
-                          value={(en() as Extract<ModalEdit, { kind: "entry" }>).id}
-                          onInput={(ev) =>
-                            setEditing({
-                              ...(en() as Extract<ModalEdit, { kind: "entry" }>),
-                              id: ev.currentTarget.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label class="mfield">
-                        <span>{t("packs.content")}</span>
-                        <div class="field-well">
-                          <textarea
-                            rows="6"
-                            value={(en() as Extract<ModalEdit, { kind: "entry" }>).text}
-                            onInput={(ev) =>
-                              setEditing({
-                                ...(en() as Extract<ModalEdit, { kind: "entry" }>),
-                                text: ev.currentTarget.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </label>
-                    </>
-                  )}
-                </Show>
+// ───────── 2. 线索词条 (`Layer.entries`) ─────────
+const EntriesTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+  const entries = () => props.pack.entries ?? []
+  const [q, setQ] = createSignal("")
+  const [searching, setSearching] = createSignal(false)
+  const [draft, setDraft] = createSignal<{ id: string; text: string } | null>(null)
+  const shown = () => {
+    const s = q().trim()
+    return entries()
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => !s || e.id.includes(s) || e.text.includes(s))
+  }
+  const setEntries = (next: PackEntry[]) => {
+    const { entries: _, ...rest } = props.pack
+    void props.onSave(next.length ? { ...rest, entries: next } : rest)
+  }
+  const commitDraft = () => {
+    const d = draft()
+    if (!d) return
+    setDraft(null)
+    const text = d.text.trim()
+    if (!text) return
+    const id = d.id.trim() || hook(text).slice(0, 16) || `entry-${entries().length + 1}`
+    setEntries([{ id, text }, ...entries()])
+  }
+  const updateEntry = (idx: number, patch: Partial<PackEntry>) => {
+    const cur = [...entries()]
+    const now = cur[idx]
+    if (!now) return
+    const text = (patch.text ?? now.text).trim()
+    if (!text) return setEntries(cur.filter((_, j) => j !== idx))
+    const id = (patch.id ?? now.id).trim() || hook(text).slice(0, 16) || now.id
+    cur[idx] = { id, text }
+    setEntries(cur)
+  }
+  return (
+    <section class="wpanel" role="tabpanel" aria-label={t("packs.entries")}>
+      <div class="prose-card grow">
+        <div class="block-title lex-title">
+          <h3>{t("packs.entries")}</h3>
+          <span class="tag mono">{entries().length}</span>
+          <label class="inline-search" data-open={searching() || !!q() ? "true" : "false"}>
+            <Clue aria-hidden="true" />
+            <input
+              type="search"
+              placeholder={t("writing.searchEntries")}
+              aria-label={t("writing.searchEntriesLabel")}
+              value={q()}
+              onFocus={() => setSearching(true)}
+              onBlur={() => setSearching(false)}
+              onInput={(e) => setQ(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return
+                e.preventDefault()
+                setQ("")
+                e.currentTarget.blur()
+              }}
+            />
+          </label>
+          <div class="right">
+            <button
+              type="button"
+              class="btn sm"
+              disabled={draft() !== null}
+              onClick={() => setDraft({ id: "", text: "" })}
+            >
+              <Plus /> <span>{t("packs.addEntry")}</span>
+            </button>
+          </div>
+        </div>
+        <div class="frag-list scroller fade">
+          <Show when={draft()}>
+            {(d) => (
+              <div
+                class="frag-row"
+                onFocusOut={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commitDraft()
+                }}
+              >
+                <div class="frag-bar">
+                  <input
+                    class="field sm mono"
+                    placeholder={t("writing.name")}
+                    aria-label={t("writing.name")}
+                    value={d().id}
+                    ref={(el) => requestAnimationFrame(() => el.focus())}
+                    onInput={(e) => setDraft({ ...d(), id: e.currentTarget.value })}
+                    onKeyDown={leaveInput}
+                  />
+                  <span class="spacer" />
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.discard")}
+                    onClick={() => setDraft(null)}
+                  >
+                    <Close />
+                  </button>
+                </div>
+                <div class="field-well">
+                  <textarea
+                    aria-label={t("packs.content")}
+                    placeholder={t("packs.content")}
+                    value={d().text}
+                    onInput={(e) => setDraft({ ...d(), text: e.currentTarget.value })}
+                    onKeyDown={leaveArea}
+                  />
+                </div>
+              </div>
+            )}
+          </Show>
+          <For each={shown()} keyed={(x) => x.i}>
+            {(x) => (
+              <div class="frag-row">
+                <div class="frag-bar">
+                  <input
+                    class="field sm mono"
+                    aria-label={t("writing.name")}
+                    value={x().e.id}
+                    onChange={(e) => updateEntry(x().i, { id: e.currentTarget.value })}
+                    onKeyDown={leaveInput}
+                  />
+                  <span class="tag">{hook(x().e.text)}</span>
+                  <span class="spacer" />
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.deleteEntry")}
+                    onClick={() => setEntries(entries().filter((_, j) => j !== x().i))}
+                  >
+                    <Close />
+                  </button>
+                </div>
+                <div class="field-well">
+                  <textarea
+                    aria-label={t("packs.content")}
+                    value={x().e.text}
+                    onChange={(e) => updateEntry(x().i, { text: e.currentTarget.value })}
+                    onKeyDown={leaveArea}
+                  />
+                </div>
+              </div>
+            )}
+          </For>
+          <Show when={!entries().length && !draft()}>
+            <p class="none">{t("packs.noEntries")}</p>
+          </Show>
+          <Show when={q().trim() && !shown().length}>
+            <p class="none">{t("writing.noEntries")}</p>
+          </Show>
+        </div>
+      </div>
+    </section>
+  )
+}
 
-                <Show when={e().kind === "lex" && e()}>
-                  {(lx) => (
-                    <>
-                      <label class="mfield">
-                        <span>{t("writing.pattern")}</span>
-                        <input
-                          class="field"
-                          value={(lx() as Extract<ModalEdit, { kind: "lex" }>).pattern}
-                          onInput={(ev) =>
-                            setEditing({
-                              ...(lx() as Extract<ModalEdit, { kind: "lex" }>),
-                              pattern: ev.currentTarget.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label class="mfield">
-                        <span>{t("writing.hint")}</span>
-                        <input
-                          class="field"
-                          value={(lx() as Extract<ModalEdit, { kind: "lex" }>).hint}
-                          onInput={(ev) =>
-                            setEditing({
-                              ...(lx() as Extract<ModalEdit, { kind: "lex" }>),
-                              hint: ev.currentTarget.value,
-                            })
-                          }
-                        />
-                      </label>
-                    </>
-                  )}
-                </Show>
+// ───────── 3. 润色禁词 (`Layer.lexicon` + `Layer.switches.polish`) ─────────
+const cleanLex = (e: { pattern: string; hint?: string }): Entry =>
+  e.hint?.trim() ? { pattern: e.pattern.trim(), hint: e.hint.trim() } : { pattern: e.pattern.trim() }
 
-                <Show when={e().kind === "theater" && e()}>
-                  {(th) => (
-                    <>
-                      <label class="mfield">
-                        <span>{t("writing.name")}</span>
-                        <input
-                          class="field"
-                          value={(th() as Extract<ModalEdit, { kind: "theater" }>).label}
-                          onInput={(ev) =>
-                            setEditing({
-                              ...(th() as Extract<ModalEdit, { kind: "theater" }>),
-                              label: ev.currentTarget.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <div class="mfield">
-                        <span>{t("packs.trigger")}</span>
-                        <div class="at-toggle" role="group" aria-label={t("packs.trigger")}>
-                          <button
-                            type="button"
-                            aria-pressed={!(th() as Extract<ModalEdit, { kind: "theater" }>).on ? "true" : "false"}
-                            onClick={() =>
-                              setEditing({ ...(th() as Extract<ModalEdit, { kind: "theater" }>), on: false })
-                            }
-                          >
-                            {t("packs.onDemand")}
-                          </button>
-                          <button
-                            type="button"
-                            aria-pressed={(th() as Extract<ModalEdit, { kind: "theater" }>).on ? "true" : "false"}
-                            onClick={() =>
-                              setEditing({ ...(th() as Extract<ModalEdit, { kind: "theater" }>), on: true })
-                            }
-                          >
-                            {t("packs.everyTurn")}
-                          </button>
-                        </div>
-                      </div>
-                      <label class="mfield">
-                        <span>{t("packs.prompt")}</span>
-                        <div class="field-well">
-                          <textarea
-                            rows="6"
-                            value={(th() as Extract<ModalEdit, { kind: "theater" }>).text}
-                            onInput={(ev) =>
-                              setEditing({
-                                ...(th() as Extract<ModalEdit, { kind: "theater" }>),
-                                text: ev.currentTarget.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </label>
-                    </>
-                  )}
-                </Show>
+const LexiconTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+  const lex = (): readonly Entry[] => props.pack.lexicon ?? []
+  const on = () => props.pack.switches?.polish !== false
+  const setLex = (edit: (entries: readonly Entry[]) => readonly Entry[]) => {
+    const next = edit(lex())
+    const { lexicon: _, ...rest } = props.pack
+    void props.onSave(next.length ? { ...rest, lexicon: [...next] } : rest)
+  }
+  const flipPolish = () => {
+    const cur = props.pack.switches ?? {}
+    const { polish: _, ...restSw } = cur
+    const nextSw = on() ? { ...restSw, polish: false } : restSw
+    const { switches: _s, ...restPack } = props.pack
+    void props.onSave(Object.keys(nextSw).length ? { ...restPack, switches: nextSw } : restPack)
+  }
+  const edit = (i: number, patch: Partial<Entry>) =>
+    setLex((entries) => entries.map((e, j) => (j === i ? cleanLex({ ...e, ...patch }) : e)).filter((e) => e.pattern))
+  const remove = (i: number) => setLex((entries) => entries.filter((_, j) => j !== i))
 
-                <Show when={e().kind === "snip" && e()}>
-                  {(sn) => {
-                    const s = () => (sn() as Extract<ModalEdit, { kind: "snip" }>).draft
-                    const patchSnip = (f: Partial<InsertDraft>) =>
-                      setEditing({
-                        ...(sn() as Extract<ModalEdit, { kind: "snip" }>),
-                        draft: { ...s(), ...f },
-                      })
-                    return (
-                      <>
-                        <label class="mfield">
-                          <span>{t("writing.name")}</span>
-                          <input
-                            class="field"
-                            value={s().label}
-                            onInput={(ev) => patchSnip({ label: ev.currentTarget.value })}
-                          />
-                        </label>
-                        <label class="mfield">
-                          <span>{t("writing.description")}</span>
-                          <input
-                            class="field"
-                            value={s().hint}
-                            onInput={(ev) => patchSnip({ hint: ev.currentTarget.value })}
-                          />
-                        </label>
-                        <div class="mfield">
-                          <span>{t("writing.channel")}</span>
-                          <div class="at-toggle" role="group" aria-label={t("writing.channelLabel")}>
-                            <button
-                              type="button"
-                              aria-pressed={!s().note ? "true" : "false"}
-                              onClick={() => patchSnip({ note: false })}
-                            >
-                              {t("writing.inStory")}
-                            </button>
-                            <button
-                              type="button"
-                              aria-pressed={s().note ? "true" : "false"}
-                              onClick={() => patchSnip({ note: true })}
-                            >
-                              {t("writing.toNarrator")}
-                            </button>
-                          </div>
-                        </div>
-                        <label class="mfield">
-                          <span>{t("writing.insertText")}</span>
-                          <input
-                            class="field"
-                            value={s().text}
-                            onInput={(ev) => patchSnip({ text: ev.currentTarget.value })}
-                          />
-                        </label>
-                      </>
-                    )
+  const [q, setQ] = createSignal("")
+  const [searching, setSearching] = createSignal(false)
+  const shown = () => {
+    const s = q().trim()
+    return lex()
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => !s || e.pattern.includes(s) || (e.hint ?? "").includes(s))
+  }
+  const [draft, setDraft] = createSignal<{ pattern: string; hint: string } | null>(null)
+  const commitDraft = () => {
+    const d = draft()
+    if (!d) return
+    setDraft(null)
+    if (d.pattern.trim()) setLex((entries) => [cleanLex(d), ...entries])
+  }
+  let file!: HTMLInputElement
+  const [notice, setNotice] = createSignal<string | null>(null)
+  const onFile = async (f: File) => {
+    const r = parseLexicon(await f.text())
+    if ("error" in r) return setNotice(r.error)
+    setLex((entries) => {
+      const merged = mergeLexicon(entries, r.entries)
+      setNotice(t("writing.importN", { n: merged.length - entries.length }))
+      return merged
+    })
+  }
+  const exportFile = () => {
+    const url = URL.createObjectURL(new Blob([serializeLexicon(lex())], { type: "application/json" }))
+    const a = Object.assign(document.createElement("a"), { href: url, download: FILE })
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  return (
+    <section class="wpanel" role="tabpanel" aria-label={t("packs.lexicon")}>
+      <div class="block-title lex-title">
+        <h3>{t("writing.lexicon")}</h3>
+        <span class="tag mono">{t("common.entries", { n: lex().length })}</span>
+        <label class="inline-search" data-open={searching() || !!q() ? "true" : "false"}>
+          <Clue aria-hidden="true" />
+          <input
+            type="search"
+            placeholder={t("writing.searchEntries")}
+            aria-label={t("writing.searchEntriesLabel")}
+            value={q()}
+            onFocus={() => setSearching(true)}
+            onBlur={() => setSearching(false)}
+            onInput={(e) => setQ(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return
+              e.preventDefault()
+              setQ("")
+              e.currentTarget.blur()
+            }}
+          />
+        </label>
+        <div class="right">
+          <Show when={notice()}>{(n) => <span class="tag">{n()}</span>}</Show>
+          <button type="button" class="btn sm ghost" onClick={() => file.click()}>
+            <Import /> <span>{t("writing.import")}</span>
+          </button>
+          <button type="button" class="btn sm ghost" disabled={!lex().length} onClick={exportFile}>
+            <Export /> <span>{t("common.export")}</span>
+          </button>
+          <button
+            type="button"
+            class="btn sm"
+            disabled={!!draft()}
+            onClick={() => (setNotice(null), setDraft({ pattern: "", hint: "" }))}
+          >
+            <Plus /> <span>{t("writing.addEntry")}</span>
+          </button>
+          <label class="polish-switch">
+            <span>{t("writing.polish")}</span>
+            <Switch on={on()} label={t("writing.polish")} onFlip={flipPolish} />
+          </label>
+        </div>
+      </div>
+      <input
+        type="file"
+        accept=".json,application/json"
+        hidden
+        ref={(el) => (file = el)}
+        onChange={(e) => {
+          const f = e.currentTarget.files?.[0]
+          e.currentTarget.value = ""
+          if (f) void onFile(f)
+        }}
+      />
+      <Show
+        when={lex().length || draft()}
+        fallback={
+          <div class="lex-empty">
+            <div class="empty-card">
+              <p>{t("writing.lexiconEmpty")}</p>
+              <button type="button" class="btn" onClick={() => file.click()}>
+                <Import /> <span>{t("writing.importFile")}</span>
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <div class="lex-wrap" data-off={on() ? "false" : "true"}>
+          <div class="lex-head">
+            <span>{t("writing.patternHead")}</span>
+            <span>{t("writing.hint")}</span>
+            <span />
+          </div>
+          <div class="lex-list scroller fade">
+            <Show when={draft()}>
+              {(d) => (
+                <div
+                  class="lex-row"
+                  onFocusOut={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commitDraft()
                   }}
+                >
+                  <input
+                    class="field"
+                    placeholder={t("writing.patternPlaceholder")}
+                    aria-label={t("writing.pattern")}
+                    value={d().pattern}
+                    ref={(el) => requestAnimationFrame(() => el.focus())}
+                    onInput={(e) => setDraft({ ...d(), pattern: e.currentTarget.value })}
+                    onKeyDown={leaveInput}
+                  />
+                  <input
+                    class="field"
+                    placeholder={t("writing.hintPlaceholder")}
+                    aria-label={t("writing.hint")}
+                    value={d().hint}
+                    onInput={(e) => setDraft({ ...d(), hint: e.currentTarget.value })}
+                    onKeyDown={leaveInput}
+                  />
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.discard")}
+                    onClick={() => setDraft(null)}
+                  >
+                    <Close />
+                  </button>
+                </div>
+              )}
+            </Show>
+            <For each={shown()} keyed={(x) => x.i}>
+              {(x) => (
+                <div class="lex-row">
+                  <input
+                    class="field"
+                    aria-label={t("writing.pattern")}
+                    value={x().e.pattern}
+                    onChange={(e) => edit(x().i, { pattern: e.currentTarget.value })}
+                    onKeyDown={leaveInput}
+                  />
+                  <input
+                    class="field"
+                    placeholder={t("writing.hintPlaceholder")}
+                    aria-label={t("writing.hint")}
+                    value={x().e.hint ?? ""}
+                    onChange={(e) => edit(x().i, { hint: e.currentTarget.value })}
+                    onKeyDown={leaveInput}
+                  />
+                  <button
+                    type="button"
+                    class="icon sm"
+                    aria-label={t("writing.deleteEntry")}
+                    onClick={() => remove(x().i)}
+                  >
+                    <Close />
+                  </button>
+                </div>
+              )}
+            </For>
+            <Show when={q().trim() && !shown().length}>
+              <p class="none">{t("writing.noEntries")}</p>
+            </Show>
+          </div>
+        </div>
+      </Show>
+    </section>
+  )
+}
+
+// ───────── 4. 记录与小剧场 (`Layer.products`) ─────────
+interface ProductDraft {
+  id: string
+  isNew: boolean
+  label: string
+  on: boolean
+  text: string
+}
+const ProductsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+  const products = () => props.pack.products ?? []
+  const [editing, setEditing] = createSignal<ProductDraft | null>(null)
+  let dlg!: HTMLDialogElement
+
+  const openNew = () => {
+    setEditing({ id: newId("th"), isNew: true, label: "", on: false, text: "" })
+    dlg.showModal()
+  }
+  const openEdit = (p: { id: string; label?: string; on?: boolean; text?: string }) => {
+    setEditing({
+      id: p.id,
+      isNew: false,
+      label: p.label ?? p.id,
+      on: !!p.on,
+      text: p.text ?? "",
+    })
+    dlg.showModal()
+  }
+  const save = () => {
+    const d = editing()
+    if (!d || !d.label.trim() || !d.text.trim()) return
+    const next = withProductPatch(props.pack.products, {
+      id: d.id,
+      label: d.label.trim(),
+      text: d.text.trim(),
+      ...(d.id !== "notes" ? { on: d.on } : {}),
+    })
+    void props.onSave({ ...props.pack, products: next })
+    dlg.close()
+  }
+  const remove = () => {
+    const d = editing()
+    if (!d) return
+    const def = props.pack.id === "harness" ? DEFAULT_PRODUCTS.get(d.id) : undefined
+    if (def) {
+      const next = withProductPatch(props.pack.products, def)
+      void props.onSave({ ...props.pack, products: next })
+    } else {
+      const next = withoutProductPatch(props.pack.products, d.id)
+      const { products: _, ...rest } = props.pack
+      void props.onSave(next.length ? { ...rest, products: next } : rest)
+    }
+    dlg.close()
+  }
+  const isBuiltinHarness = (id: string) => props.pack.id === "harness" && DEFAULT_PRODUCTS.has(id)
+
+  return (
+    <section class="wpanel" role="tabpanel" aria-label={t("packs.tabProducts")}>
+      <div class="prose-card grow">
+        <div class="block-title">
+          <h3>{t("packs.tabProducts")}</h3>
+          <span class="tag mono">{products().length}</span>
+          <div class="right">
+            <button type="button" class="btn sm" onClick={openNew}>
+              <Plus /> <span>{t("packs.addTheater")}</span>
+            </button>
+          </div>
+        </div>
+        <div class="frag-list scroller fade">
+          <For each={products()} keyed={(p) => p.id}>
+            {(p) => (
+              <div class="pack-row" onClick={() => openEdit(p())}>
+                <span class="d-name">{p().label ?? p().id}</span>
+                <span class="tag mono">{p().id}</span>
+                <span class="row-text">{p().text ?? ""}</span>
+                <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      on={!!p().on}
+                      label={p().label ?? p().id}
+                      onFlip={() => {
+                        const next = withProductPatch(props.pack.products, { id: p().id, on: !p().on })
+                        void props.onSave({ ...props.pack, products: next })
+                      }}
+                    />
+                  </span>
                 </Show>
               </div>
+            )}
+          </For>
+          <Show when={!products().length}>
+            <p class="none">{t("packs.noProducts")}</p>
+          </Show>
+        </div>
+      </div>
+
+      <Modal
+        title={editing()?.isNew ? t("packs.addTheater") : t("packs.editTheater")}
+        dialog={(el) => (dlg = el)}
+        onClose={() => setEditing(null)}
+      >
+        <Show when={editing()}>
+          {(d) => (
+            <>
+              <div class="modal-body">
+                <label class="mfield">
+                  <span>{t("writing.name")}</span>
+                  <input
+                    class="field"
+                    value={d().label}
+                    onInput={(e) => setEditing({ ...d(), label: e.currentTarget.value })}
+                  />
+                </label>
+                <Show when={d().id !== "notes"}>
+                  <div class="mfield">
+                    <span>{t("packs.trigger")}</span>
+                    <div class="at-toggle" role="group" aria-label={t("packs.trigger")}>
+                      <button
+                        type="button"
+                        aria-pressed={!d().on ? "true" : "false"}
+                        onClick={() => setEditing({ ...d(), on: false })}
+                      >
+                        {t("packs.onDemand")}
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={d().on ? "true" : "false"}
+                        onClick={() => setEditing({ ...d(), on: true })}
+                      >
+                        {t("packs.everyTurn")}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+                <label class="mfield">
+                  <span>{t("packs.prompt")}</span>
+                  <div class="field-well">
+                    <textarea
+                      rows="6"
+                      value={d().text}
+                      onInput={(e) => setEditing({ ...d(), text: e.currentTarget.value })}
+                    />
+                  </div>
+                </label>
+              </div>
               <div class="modal-foot">
-                <Show when={e().idx >= 0}>
-                  <button type="button" class="btn sm ghost danger" onClick={deleteFromModal}>
-                    {t("common.delete")}
+                <Show when={!d().isNew}>
+                  <button type="button" class="btn sm ghost danger" onClick={remove}>
+                    {isBuiltinHarness(d().id) ? t("packs.restoreDefault") : t("common.delete")}
                   </button>
                   <span class="spacer" />
                 </Show>
-                <button type="button" class="btn sm ghost" onClick={() => modalDlg.close()}>
+                <button type="button" class="btn sm ghost" onClick={() => dlg.close()}>
                   {t("common.cancel")}
                 </button>
-                <button type="button" class="btn sm primary" onClick={commitModal}>
+                <button
+                  type="button"
+                  class="btn sm primary"
+                  disabled={!d().label.trim() || !d().text.trim()}
+                  onClick={save}
+                >
                   {t("common.save")}
                 </button>
               </div>
@@ -874,6 +952,346 @@ export const Packs = (props: Pane) => {
           )}
         </Show>
       </Modal>
-    </>
+    </section>
+  )
+}
+
+// ───────── 5. 快捷输入 (`Layer.format` & `Layer.snippets`) ─────────
+const placed = <T,>(l: readonly T[], x: T, at: number): T[] =>
+  at < 0 ? [x, ...l] : l.map((y, i) => (i === at ? x : y))
+interface InputEditing {
+  snippet: boolean
+  at: number
+  draft: InsertDraft
+}
+const InputsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+  const keys = () => props.pack.format ?? []
+  const snips = () => props.pack.snippets ?? []
+  const setKeys = (edit: (list: readonly Format[]) => readonly Format[]) => {
+    const next = edit(keys())
+    const { format: _, ...rest } = props.pack
+    void props.onSave(next.length ? { ...rest, format: [...next] } : rest)
+  }
+  const setSnips = (edit: (list: readonly Snippet[]) => readonly Snippet[]) => {
+    const next = edit(snips())
+    const { snippets: _, ...rest } = props.pack
+    void props.onSave(next.length ? { ...rest, snippets: [...next] } : rest)
+  }
+  const [editing, setEditing] = createSignal<InputEditing | null>(null)
+  let dlg!: HTMLDialogElement
+  const open = (e: InputEditing) => (setEditing(e), dlg.showModal())
+  const patch = (f: Partial<InsertDraft>) => setEditing((e) => (e ? { ...e, draft: { ...e.draft, ...f } } : e))
+  const made = () => {
+    const e = editing()
+    return e ? (e.snippet ? snippetOf(e.draft) : formatOf(e.draft)) : undefined
+  }
+  const save = () => {
+    const e = editing()
+    const v = made()
+    if (!e || !v) return
+    if (e.snippet) setSnips((list) => placed(list, v as Snippet, e.at))
+    else setKeys((list) => placed(list, v as Format, e.at))
+    dlg.close()
+  }
+  const remove = () => {
+    const e = editing()
+    if (!e || e.at < 0) return
+    if (e.snippet) setSnips((list) => list.filter((_, i) => i !== e.at))
+    else setKeys((list) => list.filter((_, i) => i !== e.at))
+    dlg.close()
+  }
+  return (
+    <section class="wpanel" role="tabpanel" aria-label={t("writing.tabInputs")}>
+      <div class="input-card">
+        <div class="block-title">
+          <h3>{t("writing.formatKeys")}</h3>
+          <span class="tag mono">{t("writing.keysN", { n: keys().length })}</span>
+          <div class="right">
+            <button
+              type="button"
+              class="btn sm"
+              onClick={() => open({ snippet: false, at: -1, draft: emptyDraft(false) })}
+            >
+              <Plus /> <span>{t("writing.addKey")}</span>
+            </button>
+          </div>
+        </div>
+        <div class="fmt-chips">
+          <For each={keys()} keyed={false}>
+            {(k, i) => (
+              <button
+                type="button"
+                class="fmt-btn"
+                title={caretOf(k())}
+                onClick={() => open({ snippet: false, at: i, draft: draftOfFormat(k()) })}
+              >
+                <span class="glyph">{k().label}</span>
+                <span class="mode">{k().after !== undefined ? t("writing.caretMiddle") : t("writing.caretEnd")}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+      <div class="input-card grow">
+        <div class="block-title">
+          <h3>{t("writing.snippets")}</h3>
+          <span class="tag mono">{t("common.entries", { n: snips().length })}</span>
+          <div class="right">
+            <button
+              type="button"
+              class="btn sm"
+              onClick={() => open({ snippet: true, at: -1, draft: emptyDraft(true) })}
+            >
+              <Plus /> <span>{t("writing.addSnippet")}</span>
+            </button>
+          </div>
+        </div>
+        <div class="snip-list scroller fade">
+          <For each={snips()} keyed={false}>
+            {(s, i) => (
+              <button
+                type="button"
+                class="snip-row"
+                onClick={() => open({ snippet: true, at: i, draft: draftOfSnippet(s()) })}
+              >
+                <span class="snip-cell sname">{s().name}</span>
+                <span class="snip-cell stext mono">{caretOf(s()) || "—"}</span>
+                <span class="snip-cell shint">
+                  <span>{s().hint}</span>
+                  <span class="tag">{s().note ? t("writing.toNarrator") : t("writing.inStory")}</span>
+                </span>
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+      <Modal
+        title={
+          editing()?.at === -1
+            ? editing()?.snippet
+              ? t("writing.newSnippet")
+              : t("writing.newKey")
+            : editing()?.snippet
+              ? t("writing.editSnippet")
+              : t("writing.editKey")
+        }
+        narrow
+        dialog={(el) => (dlg = el)}
+        onClose={() => setEditing(null)}
+      >
+        <Show when={editing()}>
+          {(e) => (
+            <>
+              <div class="modal-body">
+                <label class="mfield">
+                  <span>{e().snippet ? t("writing.name") : t("writing.displayName")}</span>
+                  <input
+                    class="field"
+                    placeholder={e().snippet ? t("writing.menuName") : t("writing.blankShowsGlyph")}
+                    value={e().draft.label}
+                    onInput={(ev) => patch({ label: ev.currentTarget.value })}
+                  />
+                </label>
+                <Show when={e().snippet}>
+                  <label class="mfield">
+                    <span>{t("writing.description")}</span>
+                    <input
+                      class="field"
+                      placeholder={t("writing.descriptionPlaceholder")}
+                      value={e().draft.hint}
+                      onInput={(ev) => patch({ hint: ev.currentTarget.value })}
+                    />
+                  </label>
+                  <div class="mfield">
+                    <span>{t("writing.channel")}</span>
+                    <div class="at-toggle" role="group" aria-label={t("writing.channelLabel")}>
+                      <button
+                        type="button"
+                        aria-pressed={!e().draft.note ? "true" : "false"}
+                        onClick={() => patch({ note: false })}
+                      >
+                        {t("writing.inStory")}
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={e().draft.note ? "true" : "false"}
+                        onClick={() => patch({ note: true })}
+                      >
+                        {t("writing.toNarrator")}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+                <div class="mfield">
+                  <span>{t("writing.caret")}</span>
+                  <div class="at-toggle" role="group" aria-label={t("writing.caretLabel")}>
+                    <button
+                      type="button"
+                      aria-pressed={e().draft.between ? "true" : "false"}
+                      onClick={() => patch({ between: true })}
+                    >
+                      {t("writing.caretInside")}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!e().draft.between ? "true" : "false"}
+                      onClick={() => patch({ between: false })}
+                    >
+                      {t("writing.caretAfter")}
+                    </button>
+                  </div>
+                </div>
+                <div class="mpair">
+                  <label class="mfield">
+                    <span>{e().draft.between ? t("writing.beforeCaret") : t("writing.insertText")}</span>
+                    <input
+                      class="field mono"
+                      placeholder={e().draft.between ? t("writing.exampleOpenQuote") : t("writing.exampleEllipsis")}
+                      value={e().draft.text}
+                      onInput={(ev) => patch({ text: ev.currentTarget.value })}
+                    />
+                  </label>
+                  <Show when={e().draft.between}>
+                    <label class="mfield">
+                      <span>{t("writing.afterCaret")}</span>
+                      <input
+                        class="field mono"
+                        placeholder={t("writing.exampleCloseQuote")}
+                        value={e().draft.after}
+                        onInput={(ev) => patch({ after: ev.currentTarget.value })}
+                      />
+                    </label>
+                  </Show>
+                </div>
+              </div>
+              <div class="modal-foot">
+                <Show when={e().at >= 0}>
+                  <button type="button" class="btn sm ghost danger" onClick={remove}>
+                    {t("common.delete")}
+                  </button>
+                </Show>
+                <span class="spacer" />
+                <button type="button" class="btn sm ghost" onClick={() => dlg.close()}>
+                  {t("common.cancel")}
+                </button>
+                <button type="button" class="btn sm primary" disabled={!made()} onClick={save}>
+                  {t("common.save")}
+                </button>
+              </div>
+            </>
+          )}
+        </Show>
+      </Modal>
+    </section>
+  )
+}
+
+// ───────── 6. 问法 (`Layer.asks`: stage instructions & switch sentences) ─────────
+const AsksTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+  const ownMap = () => new Map((props.pack.asks ?? []).map((a) => [a.id, a.text]))
+  const isHarness = () => props.pack.id === "harness"
+
+  const setAsk = (id: string, raw: string) => {
+    const text = raw.trim()
+    const def = DEFAULT_ASKS.get(id) ?? ""
+    const cur = (props.pack.asks ?? []).filter((a) => a.id !== id)
+    let next: Ask[]
+    if (isHarness()) {
+      next = [...cur, { id, text: text || def }]
+    } else {
+      next = text && text !== def ? [...cur, { id, text }] : cur
+    }
+    const { asks: _, ...rest } = props.pack
+    void props.onSave(next.length ? { ...rest, asks: next } : rest)
+  }
+
+  const isModified = (id: string) => {
+    const own = ownMap().get(id)
+    const def = DEFAULT_ASKS.get(id) ?? ""
+    return own !== undefined && own !== def
+  }
+
+  const switchAsks = () =>
+    SWITCHES.flatMap((s) =>
+      s.values.map(([val, labelKey]) => ({
+        id: `switch.${s.key}.${String(val)}`,
+        label: `${t(s.label)} · ${t(labelKey)}`,
+      })),
+    )
+
+  return (
+    <section class="wpanel" role="tabpanel" aria-label={t("packs.tabAsks")}>
+      <div class="prose-card grow">
+        <div class="frag-list scroller fade">
+          <div class="block-title">
+            <h3>{t("packs.stageAsks")}</h3>
+          </div>
+          <For each={stageAskLabels()} keyed={(row) => row[0]}>
+            {(row) => {
+              const id = () => row()[0]
+              const def = () => DEFAULT_ASKS.get(id()) ?? ""
+              const val = () => (isHarness() ? (ownMap().get(id()) ?? def()) : (ownMap().get(id()) ?? ""))
+              return (
+                <div class="frag-row">
+                  <div class="frag-bar">
+                    <span class="d-name">{row()[1]}</span>
+                    <span class="tag mono">{id()}</span>
+                    <span class="spacer" />
+                    <Show when={isModified(id())}>
+                      <button type="button" class="btn xs ghost" onClick={() => setAsk(id(), "")}>
+                        {t("packs.restoreDefault")}
+                      </button>
+                    </Show>
+                  </div>
+                  <div class="field-well">
+                    <textarea
+                      aria-label={row()[1]}
+                      placeholder={def()}
+                      value={val()}
+                      onChange={(e) => setAsk(id(), e.currentTarget.value)}
+                      onKeyDown={leaveArea}
+                    />
+                  </div>
+                </div>
+              )
+            }}
+          </For>
+
+          <div class="block-title">
+            <h3>{t("packs.switchSentences")}</h3>
+          </div>
+          <For each={switchAsks()} keyed={(row) => row.id}>
+            {(row) => {
+              const id = () => row().id
+              const def = () => DEFAULT_ASKS.get(id()) ?? ""
+              const val = () => (isHarness() ? (ownMap().get(id()) ?? def()) : (ownMap().get(id()) ?? ""))
+              return (
+                <div class="frag-row">
+                  <div class="frag-bar">
+                    <span class="d-name">{row().label}</span>
+                    <span class="tag mono">{id()}</span>
+                    <span class="spacer" />
+                    <Show when={isModified(id())}>
+                      <button type="button" class="btn xs ghost" onClick={() => setAsk(id(), "")}>
+                        {t("packs.restoreDefault")}
+                      </button>
+                    </Show>
+                  </div>
+                  <div class="field-well">
+                    <textarea
+                      aria-label={row().label}
+                      placeholder={def()}
+                      value={val()}
+                      onChange={(e) => setAsk(id(), e.currentTarget.value)}
+                      onKeyDown={leaveArea}
+                    />
+                  </div>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </div>
+    </section>
   )
 }

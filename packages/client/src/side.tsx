@@ -16,7 +16,18 @@ import { openManager, openPicker, openTagManager } from "./dialogs.tsx"
 import { Archive, Clue, Close, Next, Prev, Settings, Shade, Snippets, Tag, Translate, User, Write } from "./icons.tsx"
 import { openSettings } from "./settings.tsx"
 import { browse, close, open, openStory, showCard, toHome } from "./pages.ts"
-import { admits, facetCounts, facetsWanted, isFacet, MAX_TAGS, parse, plain, retag, spare } from "./query.ts"
+import {
+  admits,
+  facetCounts,
+  facetsWanted,
+  isFacet,
+  MAX_TAGS,
+  parse,
+  plain,
+  spare,
+  tagsOfLocals,
+  withTags,
+} from "./query.ts"
 import {
   arranged,
   busyElsewhere,
@@ -29,10 +40,21 @@ import {
   pieces,
   turnLabel,
 } from "./stories.ts"
-import { cards, focus, layer, page, personas, player, registry, stories, type StoryRow } from "./store.ts"
+import {
+  card as cardAtom,
+  cards,
+  focus,
+  layer,
+  locals,
+  page,
+  personas,
+  registry,
+  stories,
+  type StoryRow,
+} from "./store.ts"
 import { chosen } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
-import { fetchStories, putPlayer, searchStories } from "./wire.ts"
+import { fetchStories, putLocal, searchStories } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
 import { flip as flipLocale, locale, t } from "./i18n.ts"
 
@@ -99,22 +121,27 @@ export const Sidebar = (props: {
   const rows = () => lib()?.stories ?? []
   const card = createMemo(() => shelf().find((c) => c.id === at()))
   // who the player is here (the open story's persona, else the card's default), and the writing in force: a change rewrites the cached prefix, no new story
-  const me = read(player)
+  const allLocals = read(locals)
+  const view = read(cardAtom)
   const people = read(personas)
   const persona = () =>
-    people().find((p) => p.id === personaOn(lib(), me()?.persona, at(), pg()))?.name ?? t("side.cardDefault")
-  const writing = createMemo(
-    () =>
-      chosen(me()?.writing, !!me()?.forCard[at() ?? ""]?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard"),
-  )
+    people().find((p) => p.id === personaOn(lib(), allLocals(), at(), pg()))?.name ?? t("side.cardDefault")
+  const writing = createMemo(() => {
+    const cid = at()
+    const v = cid && view()?.id === cid ? view() : undefined
+    const loc = v?.local ?? (cid ? allLocals()[cid] : undefined)
+    const sw = v ? v.layer.switches.value : loc?.switches
+    return chosen(sw, !!loc?.fragments?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard")
+  })
   // the player's filing words on this card: wrapping chips under the head (click a word to filter the shelf by `#word`,
-  // × to remove, + to open the popover); each change is one PUT /player over the last acknowledged layer (query.ts `retag`)
-  const words = createMemo(() => me()?.tags?.[at() ?? ""] ?? [])
+  // × to remove, + to open the popover); each change is one PUT /cards/<id>/local over the last acknowledged local row (query.ts `withTags`)
+  const allTags = createMemo(() => tagsOfLocals(allLocals()))
+  const words = createMemo(() => allTags()[at() ?? ""] ?? [])
   const [tq, setTq] = createSignal("")
-  const offered = createMemo(() => spare(me()?.tags, at() ?? "", tq()))
+  const offered = createMemo(() => spare(allTags(), at() ?? "", tq()))
   const tagsOf = (f: (ws: readonly string[]) => readonly string[]) => {
     const c = at()
-    if (me() && c !== null) void putPlayer((p) => retag(p, c, f))
+    if (c !== null) void putLocal(c, (l) => withTags(l, f))
   }
   const attach = (w: string) => tagsOf((ws) => [...ws, w])
   let tagBox: HTMLInputElement | undefined
@@ -143,7 +170,7 @@ export const Sidebar = (props: {
     setPicked([w])
     toShelf()
   }
-  const wordsOn = (id: string) => me()?.tags?.[id] ?? []
+  const wordsOn = (id: string) => allTags()[id] ?? []
   const terms = createMemo(() => parse(cq()))
   const marked = createMemo(() => plain(terms()))
   const shown = createMemo(() => shelf().filter((c) => admits(c, terms(), wordsOn(c.id), picked())))
@@ -417,7 +444,7 @@ export const Sidebar = (props: {
               <button
                 type="button"
                 class={{ chip: true, add: true, empty: !words().length }}
-                disabled={!me() || at() === null}
+                disabled={at() === null}
                 aria-label={t("side.addTag")}
                 popovertarget={tagPop()}
               >
@@ -490,14 +517,14 @@ export const Sidebar = (props: {
               </div>
             </div>
             <div class="workspace-tools">
-              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openPicker)}>
+              <button type="button" class="row" disabled={at() === null} onClick={() => leaveFor(openPicker)}>
                 <span class="lbl">
                   <User aria-hidden="true" />
                   <span>{t("common.persona")}</span>
                 </span>
                 <span class="val">{persona()}</span>
               </button>
-              <button type="button" class="row" disabled={!me()} onClick={() => leaveFor(openWriting)}>
+              <button type="button" class="row" disabled={at() === null} onClick={() => leaveFor(openWriting)}>
                 <span class="lbl">
                   <Write aria-hidden="true" />
                   <span>{t("side.writing")}</span>

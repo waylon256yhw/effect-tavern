@@ -18,7 +18,7 @@ import { Packs } from "./packs.tsx"
 import { Providers } from "./providers.tsx"
 import { close, open } from "./pages.ts"
 import * as Atom from "./atom.ts"
-import { cards, hats, personas, player, providers, registry, routing, type Pair } from "./store.ts"
+import { cards, hats, locals, personas, providers, registry, routing, type Pair } from "./store.ts"
 import { type Key, t } from "./i18n.ts"
 import { deleteHat, deletePersona, putHat, putPersona, putRouting, refreshActiveCard } from "./wire.ts"
 
@@ -378,14 +378,14 @@ const SlotEditor = (props: {
 // ───────── 玩家人设 ─────────
 const Personas = (props: Pane) => {
   const people = read(personas)
-  const me = read(player)
+  const allLocals = read(locals)
   const known = read(cards)
   const persona = () => people().find((p) => p.id === props.picked) ?? people()[0]
-  /** Player.persona read backwards: each persona's cards by title (the id when the card is not listed). */
+  /** Local.persona read backwards: each persona's cards by title (the id when the card is not listed). */
   const picks = createMemo(() => {
     const by = new Map<string, string[]>()
-    for (const [c, p] of Object.entries(me()?.persona ?? {}))
-      by.set(p, [...(by.get(p) ?? []), known().find((x) => x.id === c)?.title ?? c])
+    for (const [c, l] of Object.entries(allLocals()))
+      if (l.persona) by.set(l.persona, [...(by.get(l.persona) ?? []), known().find((x) => x.id === c)?.title ?? c])
     return by
   })
   const onCards = (id: string) => picks().get(id) ?? []

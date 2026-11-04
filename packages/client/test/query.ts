@@ -1,8 +1,8 @@
 // query.ts: the shelf's search terms (plain, `#tag`, `#facet`, `-` negation, AND across terms) over GET /cards rows
-// and the player's words (Player.tags), the plain words the rows mark, and the tag edits (retag, spare; renameTag,
-// dropTag, tagCounts for the tag manager) (stories.ts `pieces` over several words). Under Bun the locale is zh-CN.
+// and the player's words (`Local.tags`), the plain words the rows mark, and the tag edits (retag, spare, withTags;
+// renameTag, dropTag, tagCounts for the tag manager) (stories.ts `pieces` over several words). Under Bun the locale is zh-CN.
 import assert from "node:assert/strict"
-import type { Player } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Local } from "@effect-tavern/runtime/src/layer.ts"
 import {
   admits,
   dropTag,
@@ -16,6 +16,9 @@ import {
   retag,
   spare,
   tagCounts,
+  tagsOfLocals,
+  withTags,
+  type TagsMap,
 } from "../src/query.ts"
 import type { ShelfCard } from "../src/store.ts"
 import { pieces } from "../src/stories.ts"
@@ -98,14 +101,27 @@ for (const d of [zh, en])
   for (const [k, w] of Object.entries(d.card))
     if (/^(facet|mode|specState)/.test(k)) assert.doesNotMatch(w, /\s/, `${k}: ${w}`)
 
-// the tag edits: trimmed, deduped, an empty list drops the card's key, an empty map the field
-const me: Player = { global: [], forCard: {}, tags: { wuxia: ["武侠"] } }
-assert.deepEqual(retag(me, "wuxia", (ws) => [...ws, " 对峙 ", "武侠", ""]).tags, { wuxia: ["武侠", "对峙"] })
-assert.deepEqual(retag(me, "banxing", (ws) => [...ws, "日常"]).tags, { wuxia: ["武侠"], banxing: ["日常"] })
-assert.equal(retag(me, "wuxia", () => []).tags, undefined)
+// the tag edits on `Local` and `TagsMap`: trimmed, deduped, an empty list drops the card's key
+const loc0: Local = { id: "local", name: "local", card: "wuxia", tags: ["武侠"] }
+assert.deepEqual(withTags(loc0, (ws) => [...ws, " 对峙 ", "武侠", ""]).tags, ["武侠", "对峙"])
+assert.equal(withTags(loc0, () => []).tags, undefined)
+assert.equal(withTags(loc0, () => ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]).tags?.length, MAX_TAGS)
+assert.deepEqual(tagsOfLocals({ wuxia: loc0, banxing: { id: "local", name: "local", card: "banxing" } }), {
+  wuxia: ["武侠"],
+})
+
+const me: TagsMap = { wuxia: ["武侠"] }
+assert.deepEqual(
+  retag(me, "wuxia", (ws) => [...ws, " 对峙 ", "武侠", ""]),
+  { wuxia: ["武侠", "对峙"] },
+)
+assert.deepEqual(
+  retag(me, "banxing", (ws) => [...ws, "日常"]),
+  { wuxia: ["武侠"], banxing: ["日常"] },
+)
 assert.equal(
-  retag(me, "wuxia", () => ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]).tags?.wuxia?.length,
-  MAX_TAGS,
+  retag(me, "wuxia", () => []),
+  undefined,
 )
 // what one tap attaches: the player's words elsewhere, not on this card, filtered by the field
 const all = { wuxia: ["武侠", "对峙"], banxing: ["日常", "武侠"], yandao: ["Noir"] }
@@ -113,22 +129,18 @@ assert.deepEqual(spare(all, "banxing", ""), ["对峙", "Noir"])
 assert.deepEqual(spare(all, "banxing", "no"), ["Noir"]) // folded substring
 assert.deepEqual(spare(undefined, "banxing", ""), [])
 assert.deepEqual(spare({ wuxia: ["1", "2", "3", "4", "5", "6", "7", "8"], banxing: ["9"] }, "wuxia", ""), [])
-// the tag manager's ops over every card: rename merges into a word already on, drop empties keys and then the field
-const lib: Player = {
-  global: [],
-  forCard: {},
-  tags: { wuxia: ["武侠", "对峙"], banxing: ["对峙", "日常"], yandao: ["日常"] },
-}
-assert.deepEqual(renameTag(lib, "对峙", " 冲突 ").tags, {
+// the tag manager's ops over every card: rename merges into a word already on, drop empties keys
+const lib: TagsMap = { wuxia: ["武侠", "对峙"], banxing: ["对峙", "日常"], yandao: ["日常"] }
+assert.deepEqual(renameTag(lib, "对峙", " 冲突 "), {
   wuxia: ["武侠", "冲突"],
   banxing: ["冲突", "日常"],
   yandao: ["日常"],
 })
-assert.deepEqual(renameTag(lib, "对峙", "日常").tags, { wuxia: ["武侠", "日常"], banxing: ["日常"], yandao: ["日常"] })
-assert.equal(renameTag(lib, "对峙", "  "), lib) // an empty name changes nothing
-assert.deepEqual(dropTag(lib, "日常").tags, { wuxia: ["武侠", "对峙"], banxing: ["对峙"] })
-assert.equal(dropTag(dropTag(dropTag(lib, "日常"), "对峙"), "武侠").tags, undefined)
-assert.deepEqual(tagCounts(lib.tags)[0], ["对峙", 2]) // most cards first
+assert.deepEqual(renameTag(lib, "对峙", "日常"), { wuxia: ["武侠", "日常"], banxing: ["日常"], yandao: ["日常"] })
+assert.deepEqual(renameTag(lib, "对峙", "  "), lib) // an empty name changes nothing
+assert.deepEqual(dropTag(lib, "日常"), { wuxia: ["武侠", "对峙"], banxing: ["对峙"] })
+assert.equal(dropTag(dropTag(dropTag(lib, "日常"), "对峙"), "武侠"), undefined)
+assert.deepEqual(tagCounts(lib)[0], ["对峙", 2]) // most cards first
 assert.deepEqual(tagCounts({ a: ["b"], c: ["a"] }), [
   ["a", 1],
   ["b", 1],

@@ -57,7 +57,7 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
   return {
     /** The player's line (and note) as a new turn under head; revising, beside the revised one under the same parent. */
     act: (rawText: string, rawNote: string): void => {
-      const dict = registry.get(card)?.names
+      const dict = registry.get(card)?.layer?.names
       const text = fillKnown(rawText, dict)
       const note = fillKnown(rawNote, dict)
       if (registry.get(revising)) {
@@ -94,7 +94,7 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
     },
     /** The revised line sent with the prose kept: a sibling whose record is redone over the same prose. */
     keep: (rawText: string, rawNote: string): void => {
-      const dict = registry.get(card)?.names
+      const dict = registry.get(card)?.layer?.names
       const { n, input } = revised(fillKnown(rawText, dict), fillKnown(rawNote, dict))
       start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
     },

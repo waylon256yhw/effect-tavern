@@ -11,7 +11,8 @@
 // stream); `GET /turn` picks up the turn in flight on a story the client lands on (204 when there is none).
 import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
-import type { Hat, Pack, Player } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
+import type { Layer, Local } from "@effect-tavern/runtime/src/layer.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
@@ -22,12 +23,12 @@ import {
   card,
   cards,
   hats,
+  locals,
   log,
   names,
   packs,
   type Persona,
   personas,
-  player,
   providers,
   registry,
   routing,
@@ -66,13 +67,19 @@ let cardRead = 0 // a newer card read supersedes an older refresh, even on the s
 export const fetchCard = async (current: () => boolean = () => true): Promise<void> => {
   const request = ++cardRead
   const view = await got<CardView>(call(`${base}/card`))
-  if (request === cardRead && current()) registry.set(card, view)
+  if (request === cardRead && current()) {
+    registry.set(card, view)
+    if (view.local) registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
+  }
 }
 /** A card's page by id, no story needed: where an empty library lands. */
 export const fetchCardOf = async (id: string, current: () => boolean = () => true): Promise<void> => {
   const request = ++cardRead
   const view = await got<CardView>(call(`${base}/cards/${encodeURIComponent(id)}`))
-  if (request === cardRead && current()) registry.set(card, view)
+  if (request === cardRead && current()) {
+    registry.set(card, view)
+    if (view.local) registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
+  }
 }
 export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(call(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
@@ -89,7 +96,7 @@ export const fetchCalls = async (): Promise<void> => {
 const keep = (l: Listing): void => registry.update(stories, (prev) => (prev ? { ...l, current: prev.current } : l))
 export const fetchStories = async (): Promise<void> => keep(await got(call(`${base}/stories`)))
 export const fetchPersonas = async (): Promise<void> => registry.set(personas, await got(call(`${base}/personas`)))
-/** Re-reads the active tab's card view after a write that changes it: packs, mounts, names, theaters, persona,
+/** Re-reads the active tab's card view after a write that changes it: packs, mounts, names, products, persona,
  *  snippets, format keys. A tab switched meanwhile keeps the read from landing on the wrong card. */
 export const refreshActiveCard = async (): Promise<void> => {
   const cur = activeOf(registry.get(tabs))
@@ -98,7 +105,16 @@ export const refreshActiveCard = async (): Promise<void> => {
   const own = registry.get(stories)?.stories.find((s) => s.id === cur.story)?.card === cur.card
   await (own ? fetchCard(valid) : fetchCardOf(cur.card, valid))
 }
-export const fetchPlayer = async (): Promise<void> => registry.set(player, await got(call(`${base}/player`)))
+export const fetchLocal = async (cardId: string): Promise<Local> => {
+  const l = await got<Local>(call(`${base}/cards/${encodeURIComponent(cardId)}/local`))
+  registry.update(locals, (m) => ({ ...m, [cardId]: l }))
+  return l
+}
+export const fetchLocals = async (): Promise<void> => {
+  const cs = registry.get(cards)
+  if (!Array.isArray(cs)) return
+  await Promise.all(cs.map((c) => fetchLocal(c.id)))
+}
 
 export type Listing = { current: number | null; stories: readonly StoryRow[] }
 const listing = (res: Promise<Response>) => got(res) as Promise<Listing>
@@ -130,17 +146,25 @@ export const putPersona = async ({ id, ...body }: Persona): Promise<void> =>
   registry.set(personas, await got(call(at(id), { method: "PUT", body: JSON.stringify(body) })))
 export const deletePersona = async (id: string): Promise<void> => {
   registry.set(personas, await got(call(at(id), { method: "DELETE" })))
-  await Promise.all([fetchPlayer(), fetchStories()]) // the pick on any card or story it held is gone with it
+  await Promise.all([fetchLocals(), fetchStories()]) // the pick on any card or story it held is gone with it
 }
-let playerWrite: Promise<void> = Promise.resolve()
-/** Apply each edit to the last acknowledged document, including edits queued in the same blur/click sequence. */
-export const putPlayer = (edit: (p: Player) => Player): Promise<void> =>
-  (playerWrite = playerWrite
+let localWrite: Promise<void> = Promise.resolve()
+/** Apply each edit to the last acknowledged local row for `cardId`, including edits queued in the same blur/click sequence. */
+export const putLocal = (cardId: string, edit: (l: Local) => Local): Promise<void> =>
+  (localWrite = localWrite
     .catch(() => {})
     .then(async () => {
-      const p = registry.get(player)
-      if (!p) return
-      registry.set(player, await got(call(`${base}/player`, { method: "PUT", body: JSON.stringify(edit(p)) })))
+      const cur = registry.get(locals)[cardId] ??
+        (registry.get(card)?.id === cardId ? registry.get(card)?.local : undefined) ?? {
+          id: "local",
+          name: cardId,
+          card: cardId,
+        }
+      const saved = await got<Local>(
+        call(`${base}/cards/${encodeURIComponent(cardId)}/local`, { method: "PUT", body: JSON.stringify(edit(cur)) }),
+      )
+      registry.update(locals, (m) => ({ ...m, [cardId]: saved }))
+      registry.update(card, (v) => (v?.id === cardId ? { ...v, local: saved } : v))
     }))
 
 // The settings (/providers, /secrets, /routing, /hats): each write answers the list it changed, which replaces the
@@ -197,16 +221,24 @@ export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
 export const deleteHat = async (id: string): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
 export const fetchPacks = async (): Promise<void> => registry.set(packs, await got(call(`${base}/packs`)))
-export const putPack = async ({ id, ...body }: Pack): Promise<void> =>
+export const putPack = async ({ id, ...body }: Layer): Promise<void> =>
   registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, json("PUT", body))))
 export const deletePack = async (id: string): Promise<void> => {
   registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, { method: "DELETE" })))
-  await fetchPlayer() // the mount on any card it held is gone with it
+  await fetchLocals() // the mount on any card it held is gone with it
 }
 /** What the settings page reads when it opens (pages.ts): every list it draws, the cards and the model names its
  *  menus name things by. */
 export const fetchSettings = (): Promise<unknown> =>
-  Promise.all([fetchProviders(), fetchSecrets(), fetchRouting(), fetchHats(), fetchPacks(), fetchCards(), fetchNames()])
+  Promise.all([
+    fetchProviders(),
+    fetchSecrets(),
+    fetchRouting(),
+    fetchHats(),
+    fetchPacks(),
+    fetchCards().then(fetchLocals),
+    fetchNames(),
+  ])
 
 /** Sends one action; returns what closes its stream (the turn goes on on the server). */
 export const send = (action: Action): (() => void) =>
