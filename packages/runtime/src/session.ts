@@ -221,9 +221,14 @@ const Check = (open: readonly string[], rules: readonly string[]) => {
       : Schema.Struct(violated)
 }
 
-/** An ask's wording: the player's, then the card's, then the session's own. */
-export const wordingOf = (player: Player, card: Card, id: string) =>
-  [...(player.asks ?? []), ...(card.asks ?? []), ...asks].find((f) => f.id === id)!.text!
+/** An ask's wording: the player's, then the card's, then the session's own. A question cannot be skipped, so with `names`
+ *  the chain yields: the first that expands whole, and the session's own has no holes. */
+export const wordingOf = (player: Player, card: Card, id: string, names?: Names) => {
+  const chain = [...(player.asks ?? []), ...(card.asks ?? []), ...asks].flatMap((f) =>
+    f.id === id ? (f.text ?? []) : [],
+  )
+  return (names ? chain.flatMap((t) => expand(t, names) ?? []) : chain)[0]!
+}
 /** A product's question: `product.<id>` from the player or the card, else the product's own text. */
 export const questionOf = (player: Player, card: Card, pr: Product) =>
   [...(player.asks ?? []), ...(card.asks ?? [])].find((f) => f.id === `product.${pr.id}`)?.text ?? pr.text
@@ -297,6 +302,13 @@ export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []
   const names = namesOf(card, player, packs, persona)
   const products = resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, packs))
   const mine = [...(player.snippets ?? []), ...packs.flatMap((p) => p.snippets ?? [])]
+  // the asks overriding the harness's words: down each id's chain to the first that expands, the ones under it never go out
+  const worded = new Set<string>()
+  const overrides = [...(player.asks ?? []), ...(card.asks ?? [])].flatMap((x) => {
+    if (!x.text || x.id.startsWith("product.") || worded.has(x.id)) return []
+    if (expand(x.text, names) !== undefined) worded.add(x.id)
+    return [x.text]
+  })
   // every text that goes out, or that a client fills and sends: what a player may be asked to name
   const out = [
     ...frame(withPersona(player, card.id, persona), card, packs).flatMap((x) =>
@@ -306,7 +318,10 @@ export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []
     ...card.greetings.map((g) => g.text),
     ...card.lore.flatMap((e) => e.layers),
     ...packs.flatMap((p) => (p.entries ?? []).map((e) => e.text)),
+    ...card.guard,
+    ...(card.rules.readouts ?? []).flatMap((q) => [q.text, ...q.options.map((o) => o.text)]),
     ...products.map((p) => questionOf(player, card, p)),
+    ...overrides,
     ...mine.flatMap((s) => [s.text, s.after ?? ""]),
   ]
   return {
@@ -420,7 +435,7 @@ export const makeSession = ({
   let policy: Policy | undefined // one read for a synchronous snapshot; never retained across requests
   const policyOf = () => (typeof P === "function" ? P() : P)
 
-  const wording = (id: string) => wordingOf(player, card, id)
+  const wording = (id: string) => wordingOf(player, card, id, namesNow())
   /** The player's toggle over the 小剧场 over the card's. Resolved per read: a pack edit touches no session. */
   const products = () =>
     resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, inForce()), player.products)
@@ -613,6 +628,8 @@ export const makeSession = ({
       const path = chain(parent)
       const here = derived.at(path)
       const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: here.text(d) }))
+      // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
+      const guard = card.guard.flatMap((g) => expand(g, namesNow()) ?? [])
       const s0 = here.state
       const g0 = here.gated()
       const seen = deliveredOn(path)
@@ -717,7 +734,7 @@ export const makeSession = ({
                   stage: "direct",
                   question: wording("direct"),
                   ledger: here.ledger(),
-                  rules: card.guard,
+                  rules: guard,
                   open: told(open),
                   events: gateEvents,
                 }),
@@ -806,13 +823,13 @@ export const makeSession = ({
       let { reply, blocks: written } = from === "check" ? { reply: base!.reply, blocks: {} } : yield* narrate()
       let fired: Disclosure[] = []
       let violated: string[] = []
-      if (!cut && (card.guard.length > 0 || open.length > 0)) {
+      if (!cut && (guard.length > 0 || open.length > 0)) {
         const check = (text: string) =>
           obj(
             emit,
             "check",
-            Check(openIds, card.guard),
-            ask(s1, input, { stage: "check", rules: card.guard, open: told(open), must: brief.must, prose: text }),
+            Check(openIds, guard),
+            ask(s1, input, { stage: "check", rules: guard, open: told(open), must: brief.must, prose: text }),
           ).pipe(
             Effect.map((c) => {
               const r = c as { fired?: readonly string[]; violated?: readonly string[] }
@@ -877,14 +894,15 @@ export const makeSession = ({
       const asked = products().filter(
         (p) => p.stage !== "narrate" && p.on && (!p.when || holds(p.when, s1)) && question(p) !== undefined,
       )
-      const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1) : undefined
+      const N = namesNow()
+      const qs = card.rules.readouts?.length ? rpg.readoutSchema(s1, N) : undefined
       const rec = yield* record(
         emit,
         asked,
         path,
         s1,
         { input, reply },
-        qs ? { schema: qs, lines: rpg.questions(s1) } : undefined,
+        qs ? { schema: qs, lines: rpg.questions(s1, N) } : undefined,
       )
       const answers = (rec.answers ?? {}) as Answers
       rpg.settleReadouts(s1, answers) // validate now, not on the first replay

@@ -98,18 +98,18 @@ const player: Player = {
   names: { [card.id]: { given: "玩家给的" } },
 }
 const picks: string[][] = []
+const canned = {
+  notes: "N",
+  kept: "K",
+  options: ["A", "B", "C", "D"],
+  people: [],
+  scene: { place: "P", present: [] },
+}
 const prose = { text: "said {{char}}" }
 const scripted = fake((o) => {
   const doc = readStage(o)
   if (doc.phase === "lookup") return { text: JSON.stringify({ read: picks.shift() ?? [] }) }
   if (doc.phase === "narrate") return prose
-  const canned = {
-    notes: "N",
-    kept: "K",
-    options: ["A", "B", "C", "D"],
-    people: [],
-    scene: { place: "P", present: [] },
-  }
   return defaultAnswer(doc, canned)
 })
 const session = () =>
@@ -243,6 +243,70 @@ assert.ok(!has(doc(third, "narrate"), "HELD"))
   assert.ok(has(doc(es, "narrate"), "WINDOW."))
 }
 
+// Guard lines, per line: expanded for check and its enum, an unfilled one skipped; none left, no check at all.
+{
+  const violating = fake((o) => {
+    const d = readStage(o)
+    if (d.phase === "check") return { text: JSON.stringify({ violated: d.rules.slice(0, 1) }) }
+    return d.phase === "narrate" ? prose : defaultAnswer(d, canned)
+  })
+  const guarded: Card = { ...card, lore: [], guard: ["RULE {{char}}", "RULE-NO {{missing}}"] }
+  const G = makeSession({ card: guarded, player: plain, model: () => violating })
+  const es = await collect(G.act(null, { text: "hi" }))
+  assert.ok(has(doc(es, "check"), "Rule: RULE 依瑞丝"))
+  assert.ok(!has(doc(es, "check"), "RULE-NO"))
+  assert.deepEqual(nodeOf(es).turn.violated, ["RULE 依瑞丝"])
+  const none = makeSession({
+    card: { ...guarded, guard: ["RULE-NO {{missing}}"] },
+    player: plain,
+    model: () => violating,
+  })
+  assert.equal(doc(await collect(none.act(null, { text: "hi" })), "check").length, 0)
+}
+
+// Readouts, per readout: the question and its options expanded, a hole unfilled in either and it is not asked this turn.
+{
+  const opt = (text: string) => [{ id: "a", text, do: [] }]
+  const R = makeSession({
+    card: {
+      ...chat,
+      names: { char: "依瑞丝" },
+      rules: {
+        ...chat.rules,
+        readouts: [
+          { id: "r", text: "READ {{char}}", options: opt("OPT {{char}}") },
+          { id: "no", text: "READ-NO {{missing}}", options: opt("x") },
+          { id: "optno", text: "READ-OPT", options: opt("{{missing}}") },
+        ],
+      },
+    },
+    player: plain,
+    model: () => scripted,
+  })
+  const es = await collect(R.act(null, { text: "hi" }))
+  assert.ok(has(doc(es, "record"), "r: READ 依瑞丝 [a: OPT 依瑞丝]"))
+  assert.ok(!has(doc(es, "record"), "READ-"))
+  assert.deepEqual(nodeOf(es).turn.answers, { r: "a" })
+}
+
+// Asks: a question cannot be skipped, so the chain yields, player → card → the harness's own.
+{
+  const lore = [{ id: "l", layers: ["L."], unlock: { all: [] }, offer: { any: [] } }]
+  const lookup = async (cardAsks: Card["asks"], names?: Player["names"]) => {
+    const A = makeSession({
+      card: { ...chat, lore, ...(cardAsks && { asks: cardAsks }) },
+      player: { ...plain, asks: [{ id: "lookup", text: "PLAYER {{char}}" }], ...(names && { names }) },
+      model: () => scripted,
+    })
+    return doc(await collect(A.act(null, { text: "hi" })), "lookup").join("\n")
+  }
+  const cardAsk = [{ id: "lookup", text: "CARD ASK" }]
+  assert.ok((await lookup(cardAsk)).includes("CARD ASK"))
+  const harness = await lookup(undefined)
+  assert.ok(harness.includes("Most lines need none") && !harness.includes("PLAYER"))
+  assert.ok((await lookup(cardAsk, { [chat.id]: { char: "依瑞丝" } })).includes("PLAYER 依瑞丝"))
+}
+
 // ───────── What a client reads: names and the holes nothing fills, derived from the text ─────────
 {
   const view = (c: Card, p: Player, packs: Pack[] = [], who?: typeof persona) => cardView(c, p, packs, who)
@@ -276,6 +340,19 @@ assert.ok(!has(doc(third, "narrate"), "HELD"))
     names: { [shelf.id]: { b: "B" } },
   }
   assert.deepEqual(view(shelf, mine).holes, ["c", "d", "e", "f"])
+  // guard lines, readouts and the asks; a card's ask under a player's that expands never goes out, under one that does not it may
+  const worded = (asks: Player["asks"]) =>
+    view(
+      {
+        ...chat,
+        guard: ["{{m}}"],
+        rules: { ...chat.rules, readouts: [{ id: "r", text: "{{n}}", options: [{ id: "a", text: "{{o}}", do: [] }] }] },
+        asks: [{ id: "lookup", text: "{{q}}" }],
+      },
+      { ...bare, asks: asks ?? [] },
+    ).holes
+  assert.deepEqual(worded([{ id: "lookup", text: "{{p}}" }]), ["m", "n", "o", "p", "q"])
+  assert.deepEqual(worded([{ id: "lookup", text: "plain" }]), ["m", "n", "o"])
   // the persona's own text is scanned; its name fills `user`
   assert.deepEqual(
     view({ ...chat, frame: [], fiction: [], products: [] }, bare, [], { name: "N", text: "{{z}} {{user}}" }).holes,
