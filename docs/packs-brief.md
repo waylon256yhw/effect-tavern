@@ -110,3 +110,60 @@ export const Theater = Schema.Struct({
 - 锁：撞 `notes` / `options` / 一张 `{ key }` 表的小剧场被丢弃，session 照常打开。
 - `cardView.products` 含包与玩家的小剧场、带 `text`，`on` 不含玩家开关。
 - 包的 `products` 键：无真实包存在，不迁移；解码时多余键按 Schema 现有行为处理，测试里确认一行旧 JSON 仍能解码。
+
+## 八、代称表（names）：`{{user}}` / `{{char}}` 与生态小剧场的兼容（2026-11-04 晚）
+
+社区小剧场提示词几乎全带 `{{char}}` / `{{user}}`，群像卡还需要 `{{char1}}` / `{{char2}}`，难念的西幻专名需要 `{{char_place}}` 之类的代称。三方（用户、Gemini、本文）定下的形态：**一张专有名词字典，单遍纯替换，不是模板语言**。生态的 `{{setvar::…}}` / `{{random::…}}` / `{{time}}` 这类带参数、有副作用的脚本宏不做；片段互引、`Pack.entries` 作为可引用名、输出侧展开、别名都不做。
+
+### 1. 概念与命名
+
+- **代称（names）**：`Record<string, string>`，键是纯标识符，值是一个名字（人名、地名、作品名）。字段叫 `names`，不叫 `vars` / `macros`：它装的是专有名词，不是变量；"宏"留作生态词。GLOSSARY 加 **代称** 条，README 的 `{{char}}` 那句与 docs/card-reading.md "harness 里没有它的工作"一句改成"是一个声明的洞"。
+- **洞（hole）**：文本里的 `{{key}}`。`user` / `char` 是两个约定键名，不是引擎特例。
+- **三层声明**：`Card.names?`（作者默认，伴星写 `{ char: "依瑞丝" }`）、`Pack.names?`（包带的默认，诡秘包写 `{ char_place: "贝克兰德" }`）、`Player.names?: Record<cardId, Record<string, string>>`（玩家按卡指定或覆盖，同 persona / packs / tags 的模式）。
+- **合并序**：`{ user: "玩家", ...card.names, ...挂载的包按序, ...player.names[card] }`，最后若有生效的人设则 `user = persona.name`（玩家覆盖卡的默认，与 persona 槽位一致）。
+
+### 2. 纯函数（runtime，一个新文件 `names.ts`，导出给客户端共用）
+
+```ts
+export const HOLE = /\{\{\s*([A-Za-z_]\w*)\s*\}\}/g
+/** 填洞：全部填上回文本；有一个洞没值就回 undefined（这条不出门）。单遍，不递归。 */
+export const expand = (text: string, names: Readonly<Record<string, string>>): string | undefined
+/** 文本里的洞名集合，去重，按出现顺序。 */
+export const holes = (text: string): string[]
+```
+
+**值的锁**：解码 `names` 时值必须是一行且不含 `{{`（Schema filter）。递归与"值里写模板"由此在定义上不存在。
+
+### 3. 展开点：按条目，进组装之前，history 不碰
+
+Gemini 核过 request.ts：`toP` 只套在 `Msg` 上，小剧场块指令（`blocks.asks`）、投递的 `told` / `must` / `may`、record 的 `asks` 全走 `sys(...)` 拼接，所以**不在 `toP` 做**，也不能在拼好的消息级丢弃（会把同一条 system 里正常的 `inner` 一起丢掉、或留下没有列表的悬空指令）。按条目展开，洞未填的那一条跳过：
+
+| 条目 | 在哪展开 |
+|---|---|
+| frame / fiction 的 fragment、tail、hat 的 `Said` | 进 `head()` / 尾区 / hat 之前，对 `text` 逐条；未填则该条不发 |
+| 产物问法 `question(p)`（record 的 `asks`、小剧场的 `blocks.asks`） | `asked` / `penned` 过滤时：`expand` 为 `undefined` 的产物本轮不问、不写块 |
+| lore 与包词条的 hook（`index`）和层文本（`told` / `must` / `may`、`derived.ts` `textIn` 出口） | 进索引与投递时；未填的条目不进索引（不可被 lookup 挑中），已投递的旧节点回放同 §二 的空串规则 |
+| 开场 `greet` | 落根节点时展开后存（节点是转录稿，存展开后的文字）；**洞未填则拒绝开局**，错误里带洞名 |
+| `demand` | 洞未填则拒绝索取，错误里带洞名 |
+| 玩家输入、history | **不展开**。输入由客户端在发送前用同一函数填（存进历史的是名字） |
+| lexicon | 不展开（扫正文，不出门） |
+
+`names` 每次请求与包一起读（`inForce` 同一处），`persona` 回调从只回 `text` 改为回 `{ name, text }`（server library.ts 把 `persona.name` 一起带出）。
+
+### 4. 给客户端的两样（cardView）
+
+- `names`：合并后的表（含 `user`）。客户端 snippet 插入输入框、发送前填输入，都用它。
+- `holes`：当前卡 + 挂载的包 + 玩家层所有会出门的文本里扫出的洞名，减去已填的，按出现顺序。客户端据此长输入框、在小剧场 / 片段上标"需填写 `{{x}}`"。洞的集合从文本派生，不另建声明表。
+
+### 5. 卡的 lint（lint.ts 两条）
+
+- `unfilled-name`：卡文本（frame、fiction、greetings、lore、asks、products）里出现 `{{key}}` 而 `card.names` 没有它（`user` 除外）：作者该给默认。
+- `unsupported-macro`：`{{…::…}}` 或其它非纯标识符的 `{{…}}`。
+
+### 6. 测试
+
+每个展开点各一条（frame、tail、hat、record ask、小剧场块、lore hook 与层、包词条、开场）；未填洞时那一条被跳过而邻条照发；开局与索取被拒且报洞名；history 里的字面 `{{char}}` 原样回传；合并序（人设名压卡的 `user`，玩家压包压卡）；值的锁（多行、含 `{{` 的值解码失败）；`holes` 的派生；两条 lint。server：`/cards/<id>` 回 `names` 与 `holes`；`PUT /player` 存 `names`。
+
+### 7. 不在这个 PR
+
+客户端（输入框、标记、snippet 展开）；`x18n` 式的"英文丢洞"检查不适用（没有第二语言）。
