@@ -6,8 +6,7 @@ import type { State as Paths } from "../src/cond.ts"
 import { gateOf, makeDerived } from "../src/derived.ts"
 import type { Turn as TurnOf } from "../src/journal.ts"
 import { makeLore } from "../src/lore.ts"
-import { resolve } from "../src/product.ts"
-import { defaultProducts } from "../src/session.ts"
+import { resolve } from "../src/layer.ts"
 import { full } from "./cards/index.ts"
 
 type Turn = TurnOf<Beat>
@@ -21,7 +20,7 @@ const derivedOf = (card: Card, policy = { budget: 0, keep: 2, block: 2 }) =>
         card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) })),
       ),
     lore: card.lore,
-    products: () => resolve(defaultProducts("act"), card.products),
+    products: () => resolve(card, {}).products,
     policy: () => policy,
   })
 let next = 0

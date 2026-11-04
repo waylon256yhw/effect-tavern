@@ -47,7 +47,7 @@ export const makeDerived = ({
   policy,
 }: {
   rpg: Rpg
-  L: () => Lore<Paths, readonly string[]> // the card's entries and the mounted packs', read per request
+  L: () => Lore<Paths, readonly string[]> // the card's entries and the player layer's, read per request
   lore: readonly LoreEntry[] // the card's own: the entries with a Cond floor (a pack's entry has none)
   products: () => readonly Product[] // the player toggles them mid-session
   policy: () => Policy // the routing can move the narrate window mid-session

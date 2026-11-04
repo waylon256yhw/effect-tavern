@@ -7,6 +7,7 @@ import { fake, fakeText, type Model } from "@effect-tavern/provider"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import { facets } from "@effect-tavern/runtime/src/session.ts"
+import { harness } from "@effect-tavern/runtime/src/layer.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
 import { Effect, Fiber, Stream } from "effect"
@@ -33,10 +34,10 @@ const canned = { notes: "N1", options: ["A", "B", "C", "D"], people: [], scene: 
 /** A library over `data` with chat and `other` on its shelf (no table cards unless the test writes some). */
 const other: Card = { ...chat, id: "other", title: "别处" }
 const over = (data: Data, m: () => Model = model) =>
-  library({ data, cards: shelf([chat, other], data), player, model: m })
+  library({ data, cards: shelf([chat, other], data), base: player.base, model: m })
 
 // The library holds no open story and binds no card: a session per story, on the card its row names, opened on first
-// use and kept. A player write reaches every open session. The listing is every card's, each row naming its card and
+// use and kept. The player's rows are read per request, so a write reaches every open session. The listing is every card's, each row naming its card and
 // whether a turn is in flight; a card's own is a filter. A batch delete with a card takes that card's own among the
 // ids, their sessions with them.
 {
@@ -47,11 +48,8 @@ const over = (data: Data, m: () => Model = model) =>
   assert.throws(() => solo.stories.create("nowhere"), /no card nowhere/)
   assert.equal(solo.session(a), solo.session(a))
   assert.notEqual(solo.session(a), solo.session(b))
-  solo.setPlayer({ ...solo.player, persona: { [chat.id]: "monk" } })
-  assert.deepEqual(
-    [solo.session(a).player.persona, solo.session(b).player.persona],
-    [{ [chat.id]: "monk" }, { [chat.id]: "monk" }],
-  )
+  solo.locals.write({ ...solo.locals.read(chat.id), names: { char: "写入" } })
+  assert.deepEqual([solo.session(a).layer.names["char"], solo.session(b).layer.names["char"]], ["写入", "写入"])
   solo.stories.del(b)
   assert.throws(() => solo.session(b), /no story/)
   assert.throws(() => solo.stories.del(b), /no story/)
@@ -171,11 +169,11 @@ const over = (data: Data, m: () => Model = model) =>
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), true)
   // its name is `user`: the story's own pick on the story's view, with no story the card's default
   assert.deepEqual(
-    [lib.view(chat.id, r).names.user, lib.view(chat.id, p).names.user, lib.view(chat.id).names.user],
+    [lib.view(chat.id, r).layer.names.user, lib.view(chat.id, p).layer.names.user, lib.view(chat.id).layer.names.user],
     ["行脚僧", "玩家", "玩家"],
   )
-  lib.setPlayer({ ...lib.player, persona: { [chat.id]: "monk" } })
-  assert.equal(lib.view(chat.id).names.user, "行脚僧")
+  lib.locals.write({ ...lib.locals.read(chat.id), persona: "monk" })
+  assert.equal(lib.view(chat.id).layer.names.user, "行脚僧")
   const s = lib.stories.create(chat.id)
   assert.deepEqual(
     [p, q, s].map((id) => lib.stories.list().find((x) => x.id === id)!.persona),
@@ -183,67 +181,94 @@ const over = (data: Data, m: () => Model = model) =>
   )
   lib.stories.persona(s, null) // a pick on one story leaves its card's default and its siblings alone
   assert.deepEqual(
-    [lib.player.persona, lib.stories.list().find((x) => x.id === q)!.persona],
-    [{ [chat.id]: "monk" }, null],
+    [lib.locals.read(chat.id).persona, lib.stories.list().find((x) => x.id === q)!.persona],
+    ["monk", null],
   )
 }
 
 // A persona deleted is gone from every card and story it was picked on; the others' picks stay, and an empty map is
 // no map.
 {
-  const lib = over(open(":memory:"))
+  const data = open(":memory:")
+  const lib = over(data)
   lib.personas.put({ id: "monk", name: "行脚僧", text: "你是路过的行脚僧。" })
-  lib.setPlayer({ ...lib.player, persona: { [chat.id]: "monk", other: "monk", third: "nun" } })
+  for (const [card, persona] of [
+    [chat.id, "monk"],
+    ["other", "monk"],
+    ["third", "nun"],
+  ] as const)
+    lib.locals.write({ ...lib.locals.read(card), persona })
   const [a, b] = [lib.stories.create(chat.id), lib.stories.create(chat.id)]
   lib.stories.persona(b, "nun")
   lib.personas.del("monk")
-  assert.deepEqual([lib.personas.list(), lib.player.persona], [[], { third: "nun" }])
+  const picks = () => [chat.id, "other", "third"].map((c) => lib.locals.read(c).persona)
+  assert.deepEqual([lib.personas.list(), picks()], [[], [undefined, undefined, "nun"]])
   assert.deepEqual(
     [a, b].map((id) => lib.stories.list().find((x) => x.id === id)!.persona),
     [null, "nun"],
   )
   lib.personas.del("nun")
-  assert.equal(lib.player.persona, undefined)
-  // A pack the same way: off every card it hung on, the others' mounts and order kept, an empty map unset; a card's view
+  assert.deepEqual(picks(), [undefined, undefined, undefined])
+  // A pack the same way: off every card it hung on, the others' mounts and order kept, no empty list left; a card's view
   // shows the mounted pack's quick inputs before the defaults, and an open session reads the row on its next request.
   lib.packs.put({ id: "k", name: "K", snippets: [{ name: "kq", text: "Q" }] })
   lib.packs.put({ id: "l", name: "L" })
-  lib.setPlayer({ ...lib.player, packs: { [chat.id]: ["l", "k"], other: ["k"] } })
-  assert.equal(
-    lib.view(chat.id).snippets.some((x) => x.name === "kq"),
-    true,
-  )
-  assert.equal(
-    lib.session(a).snippets.some((x) => x.name === "kq"),
-    true,
-  )
+  lib.locals.write({ ...lib.locals.read(chat.id), mounts: ["l", "k", "gone"] })
+  lib.locals.write({ ...lib.locals.read("other"), mounts: ["k"] })
+  const quick = (ss: readonly { name: string }[]) => ss.some((x) => x.name === "kq")
+  assert.equal(quick(lib.view(chat.id).layer.snippets), true)
+  assert.equal(quick(lib.session(a).layer.snippets), true)
+  assert.deepEqual(lib.view(chat.id).mounts, [
+    { id: "l", name: "L" },
+    { id: "k", name: "K" },
+  ]) // by name, in mount order, a missing id skipped
+  assert.deepEqual(lib.view(chat.id).local.mounts, ["l", "k", "gone"]) // the row as it stands
   // Its 小剧场 too, and they name the block in an export; the session reads the row like the view.
-  lib.packs.put({ id: "k", name: "K", theaters: [{ id: "town", label: "T", text: "gossip", on: false }] })
+  lib.packs.put({ id: "k", name: "K", products: [{ id: "town", label: "T", text: "gossip", on: false }] })
   const town = (ps: readonly { id: string; label?: string | undefined }[]) => ps.find((x) => x.id === "town")?.label
-  assert.equal(town(lib.view(chat.id).products), "T")
-  assert.equal(town(lib.session(a).products), "T")
+  assert.equal(town(lib.view(chat.id).layer.products), "T")
+  assert.equal(town(lib.session(a).layer.products), "T")
   assert.equal(town(lib.stories.export(a)!.products), "T")
   lib.packs.del("k")
-  assert.deepEqual(lib.player.packs, { [chat.id]: ["l"] })
-  assert.equal(town(lib.view(chat.id).products), undefined)
-  assert.equal(
-    lib.view(chat.id).snippets.some((x) => x.name === "kq"),
-    false,
-  )
-  assert.equal(
-    lib.session(a).snippets.some((x) => x.name === "kq"),
-    false,
-  )
+  assert.deepEqual([lib.locals.read(chat.id).mounts, lib.locals.read("other").mounts], [["l", "gone"], undefined])
+  assert.equal(town(lib.view(chat.id).layer.products), undefined)
+  assert.equal(quick(lib.view(chat.id).layer.snippets), false)
+  assert.equal(quick(lib.session(a).layer.snippets), false)
   lib.packs.del("l")
-  assert.equal(lib.player.packs, undefined)
-  assert.deepEqual(lib.packs.list(), [])
+  const rest = lib.packs.list()
+  assert.deepEqual(
+    rest.map((r) => r.id),
+    ["harness", "base"],
+  )
+  // the ranks are not rows to delete, and their names are not a pack's to take
+  assert.throws(() => lib.packs.del("harness"), /cannot be deleted/)
+  assert.throws(() => lib.packs.del("base"), /cannot be deleted/)
+  assert.throws(() => lib.packs.put({ id: "local", name: "x" }), /reserved/)
+  assert.throws(() => lib.packs.put({ id: "card", name: "x" }), /reserved/)
+  // the base given stands until one is stored; a stored one wins, and takes the session with it
+  assert.deepEqual(rest[1], player.base)
+  lib.packs.put({ id: "base", name: "mine", fragments: [{ id: "x", text: "STORED" }] })
+  assert.equal(lib.session(a).layer.frame[0]!.text, "STORED")
+  // the harness row: the whole row back stores nothing, one change stores that, and it is in the session
+  lib.packs.put(rest[0]!)
+  const stored = () => data.packs.list().find((p) => p.id === "harness")
+  assert.equal(stored(), undefined)
+  lib.packs.put({
+    ...rest[0]!,
+    asks: rest[0]!.asks!.map((x) => (x.id === "lookup" ? { ...x, text: "MINE" } : x)),
+  })
+  assert.deepEqual(stored(), { id: "harness", name: "内置", asks: [{ id: "lookup", text: "MINE" }] })
+  assert.equal(lib.session(a).layer.asks["lookup"]!.text, "MINE")
+  assert.equal(lib.packs.list()[0]!.asks!.find((x) => x.id === "lookup")!.text, "MINE")
+  lib.packs.put(harness("act"))
+  assert.equal(stored(), undefined)
 }
 
 // The vault: a value goes in once and comes back only as a hint (first six, last four; none of a short key), except on
 // the one reveal. A write with a value and no type reads the type off the key: an OAuth token is a bearer, anything else
 // a key; a rename without a value keeps the type it had.
 {
-  const lib = library({ data: open(":memory:"), cards: chats, player })
+  const lib = library({ data: open(":memory:"), cards: chats, base: player.base })
   const VALUE = "sk-test-0123456789abcdef"
   const made = lib.secrets.add({ name: "Relay key", type: "api_key", value: VALUE })
   assert.deepEqual(made, { id: made.id, name: "Relay key", type: "api_key", hint: "sk-tes****cdef" })
@@ -283,7 +308,7 @@ const over = (data: Data, m: () => Model = model) =>
     secret: "k",
     models: [{ id: "m", contextTokens: 16000 }, { id: "n" }],
   }
-  const lib = library({ data, cards: chats, player, model })
+  const lib = library({ data, cards: chats, base: player.base, model })
   const on = (m: Model) => (m === env ? "env" : (m.model as { modelId: string }).modelId)
   const pair = (model: string) => ({ provider: "relay", model })
   assert.equal(on(lib.model("narrate")), "env")
@@ -326,9 +351,9 @@ const over = (data: Data, m: () => Model = model) =>
   data.providers.list = list
   data.stories.list = stories
   lib.routing.write({ default: pair("m"), stages: { lookup: pair("n") } })
-  const pinned = library({ data, cards: chats, player, model, pinned: true })
+  const pinned = library({ data, cards: chats, base: player.base, model, pinned: true })
   assert.deepEqual([on(pinned.model("lookup")), pinned.policy().budget], ["env", 8000])
-  assert.throws(() => library({ data: open(":memory:"), cards: chats, player }).model("narrate"), NoModel)
+  assert.throws(() => library({ data: open(":memory:"), cards: chats, base: player.base }).model("narrate"), NoModel)
 
   lib.providers.put({ ...relay, enabled: false })
   assert.throws(() => lib.model("narrate"), /provider "Relay": disabled/)
@@ -380,7 +405,7 @@ const over = (data: Data, m: () => Model = model) =>
   dead.close()
   const host = createServer((_, res) => res.end(JSON.stringify({ data: [{ id: "o" }, { id: "m" }] }))).listen(0)
   const hostUrl = at(host)
-  const lib = library({ data: open(":memory:"), cards: chats, player, model })
+  const lib = library({ data: open(":memory:"), cards: chats, base: player.base, model })
   const made = lib.secrets.add({ name: "Relay key", type: "api_key", value: VALUE })
   const relay = {
     id: "relay",
@@ -460,7 +485,7 @@ const over = (data: Data, m: () => Model = model) =>
     secret: "k",
     models: [],
   })
-  const lib = library({ data, cards: chats, player, model })
+  const lib = library({ data, cards: chats, base: player.base, model })
   try {
     assert.deepEqual(await lib.providers.models("a"), [{ id: "claude-haiku-5-5" }])
     const [listed] = await lib.providers.test("a")
@@ -494,7 +519,12 @@ const over = (data: Data, m: () => Model = model) =>
   new DatabaseSync(file)
     .prepare("insert into card (id, title, json, updated) values (?, ?, '{}', 0), (?, ?, '{}', 0)")
     .run(chat.id, "dup", "broken", "坏的")
-  const lib = library({ data, cards: shelf([chat, { ...chat, id: "bare", title: undefined }], data), player, model })
+  const lib = library({
+    data,
+    cards: shelf([chat, { ...chat, id: "bare", title: undefined }], data),
+    base: player.base,
+    model,
+  })
   try {
     // a card's summary and facets ride on its row (the client's shelf shows them and its `#状态`-style words match
     // on them, query.ts `admits`): a YAML card's read off it, a table card's as `put` stored them; an older row none

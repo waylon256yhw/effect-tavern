@@ -116,20 +116,25 @@ const model = () => scripted
 // Scripted prose is a few tokens a turn, so a budget of 0 folds as early as `keep` and `block` allow: two turns kept,
 // the boundary a block of two behind them.
 const policy = { budget: 0, keep: 2, block: 2 }
-const S = makeSession({ card: full, player, model, policy }) // the self-check RPG card
+const S = makeSession({ card: full, rows: () => player, model, policy }) // the self-check RPG card
 assert.equal(S.meta.input, "act") // the default channel the client opens on: undeclared is act
-const N = makeSession({ card: { ...full, input: "note" }, player, model })
+const N = makeSession({ card: { ...full, input: "note" }, rows: () => player, model })
 assert.equal(N.meta.input, "note")
 assert.deepEqual(
-  N.snippets.map((s) => s.name),
+  N.layer.snippets.map((s) => s.name),
   ["继续", "推进剧情", "时间流逝", "详细描写"],
 ) // author mode: no thought mark, no channel switch
 // its stripped copy: no actions, no lore, no guard; it takes a prefill, so a cut prose is continued (the `cut` turn)
-const C = makeSession({ card: chat, player, model: () => ({ ...scripted, prefill: true }) })
+const C = makeSession({ card: chat, rows: () => player, model: () => ({ ...scripted, prefill: true }) })
 // every product off and no readouts: a turn is narrate alone, record has nothing to ask and makes no call
 const Q = makeSession({
   card: chat,
-  player: { ...player, products: { notes: false, options: false, scene: false, people: false } },
+  rows: () => ({
+    base: {
+      ...player.base!,
+      products: ["notes", "options", "scene", "people"].map((id) => ({ id, on: false })),
+    },
+  }),
   model,
 })
 const events: Event[] = []
@@ -247,7 +252,7 @@ const program = Effect.gen(function* () {
   assert.equal(S.node(t3.id).state.bond, 8)
   assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5), prompts("narrate").at(-2)!.slice(0, 5))
   assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5).map(msgText), [
-    player.global[0]!.text!,
+    player.base!.fragments![0]!.text!,
     full.frame[0]!.text!,
     full.frame[1]!.text!,
     full.frame[2]!.text!,
@@ -532,7 +537,7 @@ const program = Effect.gen(function* () {
   } as const
   const E = makeSession({
     card: { ...full, lore: [...full.lore, echo], asks: [{ id: "product.notes", text: "ASK#notes" }] },
-    player,
+    rows: () => player,
     model,
   })
   narrations.push("fire")
@@ -542,7 +547,7 @@ const program = Effect.gen(function* () {
   assert.ok(/Notes are the record/.test(str(prompts("record").at(-2)!)))
 
   // ───────── The lookup picks from the node's readable (the floor and the fold rule are test/derived.ts) ─────────
-  const V = makeSession({ card: full, player, model, policy })
+  const V = makeSession({ card: full, rows: () => player, model, policy })
   const untold = (id: number) => V.node(id).readable.map((r) => r.id)
   const v0 = yield* go(V.act(null, { text: "about li" }))
   assert.deepEqual([v0.read, untold(v0.id)], [[{ id: "li", layer: 1 }], []])
@@ -563,7 +568,7 @@ const program = Effect.gen(function* () {
   // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
   let light = 0
   const lookup = fake((o) => (light++, script(o)))
-  const B = makeSession({ card: full, player, model: (p) => (p === "lookup" ? lookup : scripted) })
+  const B = makeSession({ card: full, rows: () => player, model: (p) => (p === "lookup" ? lookup : scripted) })
   const before = made().length
   yield* go(B.act(null, { text: "about li" }))
   const phases = made()
@@ -575,7 +580,12 @@ const program = Effect.gen(function* () {
   // ───────── The connection's hat, resolved per request by id; a tail-placed player fragment ─────────
   const H = makeSession({
     card: full,
-    player: { ...player, global: [...player.global, { id: "taste", text: "TASTE-TAIL", at: "tail" }] },
+    rows: () => ({
+      base: {
+        ...player.base!,
+        fragments: [...player.base!.fragments!, { id: "taste", text: "TASTE-TAIL", at: "tail" }],
+      },
+    }),
     model: () => ({ ...scripted, hat: "h" }),
     hat: (id) => (id === "h" ? { id, name: "h", narrate: { tail: [{ role: "user", text: "HAT-TAIL" }] } } : undefined),
   })
@@ -586,9 +596,10 @@ const program = Effect.gen(function* () {
   // ───────── Polish: code finds lexicon hits in the final prose, one call rewrites those sentences only ─────────
   // The chat card has no guard and nothing open, so the turn goes narrate → polish → record. The script rewrites the
   // sentence that "went" white and echoes the other: the first is spliced in, the echo stands, record reads the result.
+  let polishing = player
   const P = makeSession({
     card: { ...chat, lexicon: [{ pattern: "knuckles*white", hint: "stock image" }] },
-    player,
+    rows: () => polishing,
     model,
   })
   i = calls().length
@@ -604,12 +615,12 @@ const program = Effect.gen(function* () {
       !/went white/.test(str(prompts("record").at(-1)!)),
   )
   // The player's toggle off: no call, the prose stands.
-  P.setPlayer({ ...player, writing: { ...player.writing, polish: false } })
+  polishing = { base: { ...player.base!, switches: { ...player.base!.switches, polish: false } } }
   i = calls().length
   narrations.push("slop")
   const p2 = yield* go(P.act(p1.id, { text: "hello" }))
   assert.deepEqual([since(i), /went white/.test(prose(p2))], [["narrate", "record"], true])
-  P.setPlayer(player)
+  polishing = player
   // The player's own prose (an edit) is never rewritten, hits or not.
   i = calls().length
   const p3 = yield* go(P.edit(p1.id, { text: prose(p2) }))
@@ -641,7 +652,7 @@ const program = Effect.gen(function* () {
   }
   const A = makeSession({
     card: { ...full, products: [...(full.products ?? []), diary] },
-    player: { ...player, products: { ...player.products, inner: true } },
+    rows: () => ({ base: { ...player.base!, products: [...player.base!.products!, { id: "inner", on: true }] } }),
     model,
   })
   /** The deltas of one action: prose text and product text by id. */
@@ -737,7 +748,7 @@ const program = Effect.gen(function* () {
         actions: [{ id: "strike", text: "strike", when: { path: "hp", op: "gt" as const, value: 0 }, roll: 0.5 }],
       },
     },
-    player,
+    rows: () => player,
     model: () =>
       fake((o) =>
         readStage(o).phase === "decide"
@@ -771,7 +782,7 @@ const program = Effect.gen(function* () {
       ...opts.card,
       rules: { fields: [], actions: [{ id: "jump", text: "jump", roll: { judge: "difficulty" } }] },
     },
-    player,
+    rows: () => player,
     model: () =>
       fake((o) => (readStage(o).phase === "decide" ? { text: JSON.stringify({ next: "jump", chance }) } : script(o))),
   })

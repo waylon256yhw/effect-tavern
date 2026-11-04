@@ -1,6 +1,6 @@
 // The library (src/data.ts) in memory: a story's store is log.ts's Store, written change by change and read back as
 // the same log, with head and next kept so a dropped id never returns; deleting a story takes its nodes with it; the
-// player row round-trips its JSON.
+// local rows round-trip their JSON; the old player row migrates once.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
@@ -305,15 +305,118 @@ assert.equal(data.routing.read(), undefined)
 const routing = { default: { provider: "p", model: "m" }, stages: { lookup: { provider: "p", model: "n" } } }
 data.routing.write(routing)
 assert.deepEqual(data.routing.read(), routing)
-assert.equal(data.player.read(), undefined)
-data.player.write({ writing: { pov: "second" }, global: [], forCard: {}, persona: { wuxia: "friend" } })
-assert.deepEqual(data.player.read(), {
-  writing: { pov: "second" },
-  global: [],
-  forCard: {},
-  persona: { wuxia: "friend" },
-})
+assert.equal(data.locals.get("wuxia"), undefined)
+const here = { id: "local", name: "wuxia", card: "wuxia", persona: "friend", mounts: ["k"] }
+data.locals.put(here)
+assert.deepEqual(data.locals.get("wuxia"), here)
+assert.deepEqual(data.locals.list(), [here])
 data.close()
+
+// The player row of a library from before layer.ts (docs/packs-brief.md §九 §4): once, on open, into the base and a local
+// row per card, a pack's `theaters` into its product patches; then the table is gone and a second open changes nothing.
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-player-"))
+  const file = join(dir, "tavern.db")
+  const old = new DatabaseSync(file)
+  const player = {
+    writing: { pov: "second", echo: true, polish: false, lexicon: [{ pattern: "x", hint: "h" }] },
+    global: [
+      { id: "language", text: "L" }, // no mode: a global fragment yielded
+      { id: "style", text: "S", mode: "override", when: { all: [] }, role: "user" },
+    ],
+    forCard: { wuxia: [{ id: "voice", text: "V" }], other: [] },
+    persona: { wuxia: "monk" },
+    packs: { wuxia: ["kit", "gone"] },
+    names: { wuxia: { char: "C" } },
+    tags: { yandao: ["t"] },
+    asks: [{ id: "lookup", text: "ASK" }, { id: "slotless" }],
+    products: { options: true, inner: false },
+    theaters: [{ id: "town", label: "T", text: "gossip", on: true }],
+    snippets: [{ name: "q", text: "Q" }],
+    format: [{ label: "k", text: "K" }],
+  }
+  old.exec(`create table player (id integer primary key check (id = 1), json text not null);
+    create table pack (id text primary key, name text not null, json text not null);`)
+  old.prepare("insert into player (id, json) values (1, ?)").run(JSON.stringify(player))
+  old
+    .prepare("insert into pack (id, name, json) values (?, ?, ?)")
+    .run(
+      "kit",
+      "Kit",
+      JSON.stringify({ theaters: [{ id: "town", text: "pack" }], snippets: [{ name: "p", text: "P" }] }),
+    )
+  old
+    .prepare("insert into pack (id, name, json) values (?, ?, ?)")
+    .run("older", "Older", JSON.stringify({ products: { options: false } })) // before §七: a map that did nothing
+  old.close()
+  const toggles = [
+    { id: "options", on: true },
+    { id: "inner", on: false },
+  ]
+  const check = (d: ReturnType<typeof open>) => {
+    assert.deepEqual(
+      d.packs
+        .list()
+        .map((p) => p.id)
+        .sort(),
+      ["base", "kit", "older"],
+    )
+    const [base, kit, older] = ["base", "kit", "older"].map((id) => d.packs.list().find((p) => p.id === id)!)
+    assert.deepEqual(base, {
+      id: "base",
+      name: "全局基底",
+      fragments: [
+        { id: "language", text: "L", mode: "yield" }, // the old default written down
+        { id: "style", text: "S", mode: "override" }, // no Cond and no role below the card
+      ],
+      switches: { pov: "second", echo: true, polish: false },
+      asks: [{ id: "lookup", text: "ASK" }],
+      products: [{ id: "town", label: "T", text: "gossip", on: true }, ...toggles],
+      lexicon: [{ pattern: "x", hint: "h" }],
+      snippets: [{ name: "q", text: "Q" }],
+      format: [{ label: "k", text: "K" }],
+    })
+    assert.deepEqual(kit, {
+      id: "kit",
+      name: "Kit",
+      products: [{ id: "town", text: "pack" }],
+      snippets: [{ name: "p", text: "P" }],
+    })
+    assert.deepEqual(older, { id: "older", name: "Older" })
+    assert.deepEqual(d.locals.get("wuxia"), {
+      id: "local",
+      name: "wuxia",
+      card: "wuxia",
+      fragments: [{ id: "voice", text: "V" }],
+      products: toggles,
+      names: { char: "C" },
+      mounts: ["kit", "gone"],
+      persona: "monk",
+    })
+    assert.deepEqual(d.locals.get("yandao"), {
+      id: "local",
+      name: "yandao",
+      card: "yandao",
+      products: toggles,
+      tags: ["t"],
+    })
+    assert.deepEqual(d.locals.get("other"), { id: "local", name: "other", card: "other", products: toggles })
+  }
+  const first = open(file)
+  check(first)
+  first.packs.put({ id: "kit", name: "Kit" }) // an edit after the migration must survive the next open
+  first.close()
+  const probe = new DatabaseSync(file)
+  assert.equal(probe.prepare("select 1 from sqlite_master where name = 'player'").get(), undefined)
+  probe.close()
+  const second = open(file)
+  assert.deepEqual(
+    second.packs.list().find((p) => p.id === "kit"),
+    { id: "kit", name: "Kit" },
+  )
+  second.close()
+  rmSync(dir, { recursive: true, force: true })
+}
 
 // The lock: one process per library file. A lock naming a live process (here our parent) is not ours: open diverts to
 // a fresh library at <dir>/<pid>/; a lock naming a dead process is taken over, and on exit the lock goes.

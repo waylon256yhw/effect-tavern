@@ -8,7 +8,7 @@ import { shelf, tavern } from "../src/tavern.ts"
 
 // empty install: the key is the vault's one secret, its provider has Haiku and Sonnet, Haiku is the default
 const empty = open(":memory:")
-const fresh = tavern({ data: empty, cards: shelf([chat], empty), player, seed: { key: "sk-ant-api-x" } })
+const fresh = tavern({ data: empty, cards: shelf([chat], empty), base: player.base, seed: { key: "sk-ant-api-x" } })
 assert.deepEqual(
   fresh.data.secrets.list().map((s) => [s.id, s.type, s.value]),
   [["anthropic", "api_key", "sk-ant-api-x"]],
@@ -24,7 +24,7 @@ assert.deepEqual(fresh.lib.stories.list(), []) // and no story made for it
 const data = open(":memory:")
 const own = { id: "mine", name: "Mine", enabled: true, defaultFormat: "anthropic" as const, endpoints: {}, models: [] }
 data.providers.put(own)
-tavern({ data, cards: shelf([chat], data), player, seed: { key: "sk-ant-api-x" } })
+tavern({ data, cards: shelf([chat], data), base: player.base, seed: { key: "sk-ant-api-x" } })
 assert.deepEqual([data.providers.list(), data.secrets.list(), data.routing.read()], [[own], [], undefined])
 
 // the environment binds no card: dev.ts reads CARDS (a directory), never CARD

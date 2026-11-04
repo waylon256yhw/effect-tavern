@@ -1,19 +1,12 @@
-// Tests for src/fragment.ts (+ history over Turn[]): §8's `assemble` re-done over layers + Turn[] + stage.
+// Tests for src/fragment.ts `head` (+ history over Turn[]), over the frame layer.ts resolves: §8's `assemble` re-done over layers + Turn[] + stage.
 // Head = player layer → card frame → fiction (the card's character, cast or world); audience per stage comes from the layer, not from a per-fragment field.
 // Dropped from Fragment: keys, trigger, depth, scan, before/after anchors, order. Kept: when, enabled/options.
 import assert from "node:assert/strict"
-import {
-  decodeFragments as frags,
-  frame,
-  head,
-  writing,
-  type Fragment,
-  type Msg,
-  type Player,
-  type Writing,
-} from "../src/fragment.ts"
+import { decodeFragments as frags, head, type Fragment, type Msg } from "../src/fragment.ts"
 import { ledger, narratorHistory } from "../src/history.ts"
 import type { Turn } from "../src/journal.ts"
+import { resolve, type Rows } from "../src/layer.ts"
+import { chat } from "./cards/index.ts"
 
 interface Card {
   id: string
@@ -38,35 +31,43 @@ const turn = (text: string, prose: string, notes: string[]): T => ({
 })
 
 const assemble = (
-  player: Player,
+  rows: Rows,
   card: Card,
   path: readonly T[],
   stage: Stage,
   input: string,
   { state = {} as Record<string, unknown>, options = {} as Record<string, boolean> } = {},
 ): Msg[] => {
-  const layers = stage === "narrate" ? [...frame(player, card), ...card.character] : frame(player, card) // audience = layer
+  const R = resolve({ ...chat, id: card.id, frame: card.frame, fiction: [] }, rows)
+  const layers = stage === "narrate" ? [...R.frame, ...card.character] : R.frame // audience = layer
   const history = stage === "narrate" ? narratorHistory(path, () => "") : ledger(path, () => [])
   return [...head(layers, { state, options }), ...history, { role: "user", text: input }]
 }
 
 // ───────── Checks ─────────
-const player: Player = {
-  global: frags([
+// the base's fragments yield to the card's slot; the local row's override it, per slot. `when` is the card's alone (the
+// lock strips it from a player's row), so the state-dependent fragment below is the card's.
+const base = (mode?: "yield") => ({
+  id: "base",
+  name: "base",
+  fragments: frags([
     { id: "language", text: "Write in Chinese." },
-    { id: "length", text: "Two paragraphs." },
+    { id: "length", text: "Two paragraphs.", ...(mode && { mode }) },
     { id: "persona", text: "Player: a quiet traveller." },
-    { id: "mood", text: "Keep it gentle today.", when: { path: "player.tired", is: true } },
   ]),
-  forCard: {
-    wuxia: frags([
-      { id: "length", text: "Long, four paragraphs." }, // default for per-card: override
-      { id: "persona", text: "Player: a sword student." },
-      { id: "tone", text: "Warm underneath.", mode: "both" }, // coexists with the card's tone
-      { id: "setting", text: "Any era is fine.", mode: "yield" }, // the card's setting wins
-    ]),
-  },
+})
+const local = {
+  id: "local",
+  name: "local",
+  card: "wuxia",
+  fragments: frags([
+    { id: "length", text: "Long, four paragraphs." }, // default: override
+    { id: "persona", text: "Player: a sword student." },
+    { id: "tone", text: "Warm underneath.", mode: "both" }, // coexists with the card's tone
+    { id: "setting", text: "Any era is fine.", mode: "yield" }, // the card's setting wins
+  ]),
 }
+const player: Rows = { base: base("yield"), local }
 const card: Card = {
   id: "wuxia",
   frame: frags([
@@ -74,6 +75,7 @@ const card: Card = {
     { id: "length", text: "One paragraph." },
     { id: "tone", text: "Terse." },
     { id: "cot", text: "Think before you write." },
+    { id: "mood", text: "Keep it gentle today.", when: { path: "player.tired", is: true } },
   ]),
   character: frags([
     { id: "a", text: "A: wandering swordsman." },
@@ -86,11 +88,12 @@ const texts = (m: Msg[]) => m.map((x) => x.text)
 const s0 = { player: { tired: false }, a: { trust: 10 } }
 
 // Three relations, chosen per slot by the player: override (length), both (tone), yield (setting); untouched slots fill.
+// A slot takes its place where it first stands: the base's yielding "length" never stood, so the local one comes later.
 let v = assemble(player, card, path, "narrate", "go", { state: s0 })
 assert.deepEqual(texts(v).slice(0, 8), [
   "Write in Chinese.",
-  "Long, four paragraphs.",
   "Player: a sword student.",
+  "Long, four paragraphs.",
   "Warm underneath.", // player zone
   "Late Ming, no firearms.",
   "Terse.",
@@ -98,8 +101,8 @@ assert.deepEqual(texts(v).slice(0, 8), [
   "A: wandering swordsman.",
 ])
 for (const gone of ["One paragraph.", "Two paragraphs.", "Any era is fine."]) assert.ok(!texts(v).includes(gone))
-// No per-card settings: global entries yield by default, so they fill only the slots the card left empty.
-v = assemble(player, other, [], "narrate", "go", { state: s0 })
+// No local row: the base's yielding slot fills only where the card left it empty.
+v = assemble({ base: base("yield") }, other, [], "narrate", "go", { state: s0 })
 assert.deepEqual(texts(v), [
   "Write in Chinese.",
   "Two paragraphs.",
@@ -107,12 +110,9 @@ assert.deepEqual(texts(v), [
   "Space station.",
   "go",
 ])
-// The player flips the default: global overrides everywhere, so the card's "One paragraph." loses to "Two paragraphs."
-v = assemble({ ...player, forCard: {}, defaults: { global: "override" } }, card, [], "narrate", "go", { state: s0 })
+// A fragment with no mode overrides: the card's "One paragraph." loses to "Two paragraphs."
+v = assemble({ base: base() }, card, [], "narrate", "go", { state: s0 })
 assert.ok(texts(v).includes("Two paragraphs.") && !texts(v).includes("One paragraph."))
-// Default is a setting, not a rule: per-card entries can be made to yield wholesale.
-v = assemble({ ...player, defaults: { forCard: "yield" } }, card, [], "narrate", "go", { state: s0 })
-assert.ok(texts(v).includes("One paragraph.") && !texts(v).includes("Long, four paragraphs."))
 
 // Audience by layer: the director sees player + frame, never the character; its history has no prose.
 v = assemble(player, card, path, "direct", "go", { state: s0 })
@@ -125,12 +125,11 @@ assert.ok(texts(v).includes("PROSE#0"))
 const a = assemble(player, card, path, "narrate", "go", { state: s0 })
 const b = assemble(player, card, path, "narrate", "go", { state: { player: { tired: true }, a: { trust: 80 } } })
 assert.ok(!texts(a).includes("Keep it gentle today.") && !texts(a).includes("A trusts the player."))
-assert.deepEqual(texts(b).slice(0, 5), [
-  "Write in Chinese.",
-  "Long, four paragraphs.",
-  "Player: a sword student.",
-  "Keep it gentle today.", // global `when` fragment, in its own place in the player zone
-  "Warm underneath.",
+assert.deepEqual(texts(b).slice(4, 8), [
+  "Late Ming, no firearms.",
+  "Terse.",
+  "Think before you write.",
+  "Keep it gentle today.", // the card's `when` fragment, in its own place in the card zone
 ])
 assert.deepEqual(texts(b).slice(-5, -2), ["A: wandering swordsman.", "A trusts the player.", "hello"]) // character zone, then history
 assert.equal(b.length, a.length + 2)
@@ -146,32 +145,6 @@ assert.ok(
     undefined as never,
   ),
 )
-
-// Writing switches: pov, echo and agency compile into one `pov` slot (so a card that fills `pov` itself, 盐道, takes the
-// whole group), verbosity into its own; a global free-text fragment on the same slot wins; "none" drops echo and agency.
-const w: Writing = { pov: "second", echo: false, agency: "strict", verbosity: "concise" }
-assert.deepEqual(
-  writing(w).map((f) => f.id),
-  ["pov", "verbosity"],
-)
-assert.ok(
-  /「你」/.test(writing(w)[0]!.text!) && /不要转述/.test(writing(w)[0]!.text!) && /只承接/.test(writing(w)[0]!.text!),
-)
-assert.deepEqual(
-  writing({ pov: "none", echo: true, agency: "free" }).map((f) => f.text!.includes("转述")),
-  [false],
-)
-assert.deepEqual(writing({}), [])
-const switched: Player = { writing: w, global: frags([{ id: "language", text: "Write in Chinese." }]), forCard: {} }
-v = assemble(switched, other, [], "narrate", "go", { state: s0 })
-assert.deepEqual(texts(v).slice(0, 2), [writing(w)[0]!.text!, writing(w)[1]!.text!]) // compiled slots lead the player zone
-const povCard: Card = { ...other, frame: frags([{ id: "pov", text: "全知第三人称。" }]) }
-v = assemble(switched, povCard, [], "narrate", "go", { state: s0 })
-assert.ok(texts(v).includes("全知第三人称。") && !texts(v).some((t) => /只承接/.test(t))) // the card's pov takes echo and agency with it
-v = assemble({ ...switched, global: frags([{ id: "pov", text: "My own pov." }]) }, other, [], "narrate", "go", {
-  state: s0,
-})
-assert.ok(texts(v).includes("My own pov.") && !texts(v).some((t) => /「你」/.test(t))) // free text on the slot wins
 
 console.log(texts(b).join("\n"))
 console.log("ok")

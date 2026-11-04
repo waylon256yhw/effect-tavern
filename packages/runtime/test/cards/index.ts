@@ -3,7 +3,7 @@
 // YAML file in this directory (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`.
 import { readFileSync } from "node:fs"
 import { decodeCard, type Card } from "../../src/card.ts"
-import { decodeFragments as frags, type Player } from "../../src/fragment.ts"
+import type { Rows } from "../../src/layer.ts"
 
 // a compiled binary (server `bun run compile`) embeds this directory as cards/ beside its entry
 const dir = new URL(import.meta.url.includes("$bunfs") ? "cards/" : "./", import.meta.url)
@@ -11,16 +11,15 @@ const dir = new URL(import.meta.url.includes("$bunfs") ? "cards/" : "./", import
 export const readCard = (path: string | URL): Card => decodeCard(Bun.YAML.parse(readFileSync(path, "utf8")))
 
 // The test player: language only, options on (the card declares nothing about options).
-export const plain: Player = {
-  global: frags([{ id: "language", text: "使用自然、舒展的现代中文写作。" }]),
-  forCard: {},
-  products: { options: true },
+const language = { id: "language", text: "使用自然、舒展的现代中文写作。", mode: "yield" as const }
+export const plain: Rows = {
+  base: { id: "base", name: "base", fragments: [language], products: [{ id: "options", on: true }] },
 }
 
-// The player layer: language, and the writing switches every player sets once (fragment.ts `Writing`): the player is 你,
+// The player's rows: language, and the writing switches every player sets once (fragment.ts `Writing`): the player is 你,
 // the narrator restates their line before the reaction and writes nothing they did not give. Without the last, Haiku
 // wrote the player's answer to the confession for them (docs/provider-reading.md §10). A card with no player in the
-// fiction (yandao) fills the `pov` slot itself and the compiled one yields to it (fragment.ts defaults). `options` is
+// fiction (yandao) fills the `pov` slot itself and the compiled one yields to it (layer.ts). `options` is
 // this player's toggle: the dev and live sessions run with it, a card declares nothing about it. The lexicon is a sample
 // pack for the polish stage (src/polish.ts), a dozen stock phrases of Chinese web fiction; the runtime's own is empty.
 export const lexicon = [
@@ -37,11 +36,8 @@ export const lexicon = [
   { pattern: "仿佛*静止", hint: "陈词比喻" },
   { pattern: "不是*而是", hint: "先否定再肯定的八股句式" },
 ]
-export const player: Player = {
-  writing: { pov: "second", echo: true, agency: "strict", lexicon },
-  global: plain.global,
-  forCard: {},
-  products: { options: true },
+export const player: Rows = {
+  base: { ...plain.base!, switches: { pov: "second", echo: true, agency: "strict" }, lexicon },
 }
 
 export const cardNames = ["wuxia", "yandao", "banxing", "ri"]

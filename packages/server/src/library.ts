@@ -1,19 +1,19 @@
 // The library behind the wire: every card's stories and the player's personas. A story is a session over its rows in
-// data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player
-// layer the library stores (it wins over the harness default given), and the turn in flight beside it (turn.ts): a
+// data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player's
+// rows the library stores (runtime layer.ts; the base given stands until one is stored), and the turn in flight beside it (turn.ts): a
 // turn is the story's, it runs to its end whoever listens, one at a time per story and with no lock across stories.
 // A persona is the player's, a sibling of the card, not a step of a story: a story's row names the one in force on it
-// (`story.persona`, none: the card's own), and the library reads its text into the per-card persona slot on every
+// (`story.persona`, none: the card's own), and the library hands it to `resolve` on every
 // request (the card's default overridden by the slot rules, nothing else in the card touched), so an edit of the
 // persona is in force from the next request and a change of pick is one head rewrite, no new story. A pick on one story
-// leaves the card's other stories alone. `Player.persona[card]` is the card's default: a new story starts on it, copied
+// leaves the card's other stories alone. `local.persona` is the card's default: a new story starts on it, copied
 // at creation. Deleting a persona drops it from every story and every card default (no silent fallback). The
 // library holds no "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens
 // that story's session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
-// the install's: the player layer (a write reaches every open session), personas, hats, providers and routing. A hat is the player's too, named by a
+// the install's: the player's rows, personas, hats, providers and routing. A hat is the player's too, named by a
 // connection (`Model.hat`) and read from the table on every request the same way: an edit is in force from the
-// next request, and a deleted hat leaves the connection bare (the id resolves to nothing). A writing pack the same way:
-// a row `Player.packs[card]` mounts, read on every request; deleting it takes it off every card it hung on.
+// next request, and a deleted hat leaves the connection bare (the id resolves to nothing). The player's rows the same way:
+// read on every request (`rowsOf`), so a session holds none of them; deleting a pack takes it off every card it hung on.
 // The model each stage runs on is the routing row's (provider, model) pair, the stage's own or the default, resolved
 // from the tables on every call the same way: a routing or provider edit is in force from the next request. A pair
 // that does not resolve (provider gone, disabled, no key, no endpoint) fails that request naming the provider. A stage
@@ -36,7 +36,7 @@ import {
   type Trace,
 } from "@effect-tavern/provider"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
-import { decodePlayer, mounted, type Player } from "@effect-tavern/runtime/src/fragment.ts"
+import { empty, overlaid, overlayOf, type Layer, type Local, type Rows } from "@effect-tavern/runtime/src/layer.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import {
@@ -83,16 +83,18 @@ export interface Cards {
   get(id: string): Card
 }
 
+/** The rows of the `pack` table that are ranks, not packs. */
+const RESERVED = ["harness", "base"]
 export const library = ({
   data,
   cards,
-  player,
+  base: given,
   model: env,
   pinned = false,
 }: {
   data: Data
   cards: Cards
-  player: Player
+  base?: Layer // the base row until one is stored
   model?: (phase: Phase) => Model
   pinned?: boolean
 }) => {
@@ -205,18 +207,30 @@ export const library = ({
     }
     return [...byUrl.values()]
   }
-  const players = {
-    read: () => {
-      const p = data.player.read()
-      return p === undefined ? undefined : decodePlayer(p)
-    },
-    write: data.player.write,
-  }
-  /** The persona in force on story `id`, its row read per request (a pick is live from the next one). */
-  const persona = (id: Id) => () => personaOf(data.stories.get(id)?.persona)
   const personaOf = (pid: string | null | undefined) =>
     pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
+  const baseOf = (rows: readonly Layer[]): Layer =>
+    rows.find((p) => p.id === "base") ?? given ?? { id: "base", name: "全局基底" }
+  /** The player's rows on a card, as `resolve` takes them: read on every request, a session keeps none. */
+  const rowsOf = (card: string, persona: Rows["persona"]): Rows => {
+    const rows = data.packs.list()
+    return {
+      harness: rows.find((p) => p.id === "harness"),
+      base: baseOf(rows),
+      packs: rows.filter((p) => !RESERVED.includes(p.id)),
+      local: data.locals.get(card),
+      persona,
+    }
+  }
+  const localOf = (card: string): Local => data.locals.get(card) ?? { id: "local", name: card, card }
+  /** Every card's local row through `edit`; written only where it changed. */
+  const pruneLocals = (edit: (l: Local) => Local) => {
+    for (const l of data.locals.list()) {
+      const next = edit(l)
+      if (next !== l) data.locals.put(next)
+    }
+  }
   // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
   const sessions = new Map<Id, { session: Session; turn: Turn }>()
   const row = (id: Id) => data.stories.get(id)
@@ -231,13 +245,10 @@ export const library = ({
     const store = data.store<Logged>(id)
     const session = makeSession({
       card,
-      player,
+      rows: () => rowsOf(card.id, personaOf(row(id)?.persona)),
       model,
       store,
-      players,
-      persona: persona(id),
       hat,
-      packs: data.packs.list,
       policy,
     })
     const opened = { session, turn: makeTurn(session, (node, calls) => data.calls(id).add(node, calls)) }
@@ -245,12 +256,6 @@ export const library = ({
     return opened
   }
   const session = (id: Id): Session => open(id).session
-  /** The player layer is the install's, one for every story: a write reaches every open session. */
-  const setPlayer = (p: Player) => {
-    data.player.write(p)
-    for (const s of sessions.values()) s.session.setPlayer(p)
-  }
-  const layer = () => players.read() ?? player
   return {
     /** The model a stage runs on and the fold policy, as every session reads them on its next request. */
     model,
@@ -261,10 +266,11 @@ export const library = ({
     exists,
     /** The card a story is of. */
     cardOf: (id: Id): string | undefined => row(id)?.card,
-    get player(): Player {
-      return layer()
+    /** The player on a card, whole; written whole, in force from the next request. Never a missing row to the wire. */
+    locals: {
+      read: localOf,
+      write: (l: Local) => data.locals.put(l),
     },
-    setPlayer,
     calls: (id: Id) => data.calls(id),
     stories: {
       /** A row: its card, the player's title or none (the client prints "New story"), the star, the turns and the last
@@ -282,7 +288,7 @@ export const library = ({
       /** A new, empty story of `card`, on the card's default persona; throws when there is no such card. */
       create: (card: string): Id => {
         const id = cards.get(card).id
-        return data.stories.create(id, layer().persona?.[id] ?? null)
+        return data.stories.create(id, data.locals.get(id)?.persona ?? null)
       },
       /** Refused (throws) while a turn runs on the story: its writes would land on nothing. */
       del: (id: Id) => {
@@ -306,39 +312,65 @@ export const library = ({
         const story = data.stories.list(undefined, id)[0]
         if (!story) return undefined
         const found = cards.list().find((c) => c.id === story.card)
-        const p = layer()
         return {
           card: found ?? { id: story.card, title: story.card },
           story,
           snapshot: data.store<Logged>(id).read()!,
-          products: found ? cardView(cards.get(story.card), p, mounted(p, story.card, data.packs.list())).products : [],
+          products: found ? cardView(cards.get(story.card), rowsOf(story.card, undefined)).layer.products : [],
         }
       },
     },
-    /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player layer in force and the
-     *  story's persona, with no story the card's default; throws on no card. */
+    /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player's rows and the story's
+     *  persona, with no story the card's default: the local row as it stands, the mounted packs by name, and the one
+     *  merge. A client merges nothing. Throws on no card. */
     view: (card: string, story?: Id) => {
-      const p = layer()
-      const picked = personaOf(story === undefined ? p.persona?.[card] : row(story)?.persona)
-      const { meta, ...rest } = cardView(cards.get(card), p, mounted(p, card, data.packs.list()), picked)
-      return { ...meta, ...rest }
+      const c = cards.get(card)
+      const local = localOf(card)
+      const picked = personaOf(story === undefined ? local.persona : row(story)?.persona)
+      const rows = rowsOf(card, picked)
+      const { meta, ...rest } = cardView(c, rows)
+      const mounts = [...new Set(local.mounts)].flatMap((id) => {
+        const p = rows.packs!.find((x) => x.id === id)
+        return p ? [{ id: p.id, name: p.name }] : []
+      })
+      return { ...meta, ...rest, local, mounts }
     },
     hats: data.hats,
     packs: {
-      ...data.packs,
-      /** Gone from the table, and off every card it was mounted on. */
-      del: (id: string) => {
-        data.packs.del(id)
-        const p = layer()
-        if (Object.values(p.packs ?? {}).some((ids) => ids.includes(id))) {
-          const rest = Object.fromEntries(
-            Object.entries(p.packs!).flatMap(([card, ids]) => {
-              const kept = ids.filter((x) => x !== id)
-              return kept.length ? [[card, kept]] : []
-            }),
-          )
-          setPlayer({ ...p, packs: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key
+      /** `[harness, base, ...packs]`, one row template: the harness row whole, the code's defaults under its overlay. */
+      list: (): Layer[] => {
+        const rows = data.packs.list()
+        return [
+          overlaid(
+            "act",
+            rows.find((p) => p.id === "harness"),
+          ),
+          baseOf(rows),
+          ...rows.filter((p) => !RESERVED.includes(p.id)),
+        ]
+      },
+      /** The harness keeps only what differs from the code's defaults, nothing at all when nothing does: a left-out item is
+       *  its default again. A pack's id may not be a rank's name: `from` says which row an item came from. */
+      put: (r: Layer) => {
+        if (r.id === "harness") {
+          const o = overlayOf("act", r)
+          if (empty(o)) data.packs.del("harness")
+          else data.packs.put(o)
+          return
         }
+        if (r.id === "card" || r.id === "local") throw new Error(`${r.id}: a reserved id`)
+        data.packs.put(r)
+      },
+      /** Gone from the table, and off every card it was mounted on. The harness and the base are not rows to delete. */
+      del: (id: string) => {
+        if (id === "harness" || id === "base") throw new Error(`${id}: cannot be deleted`)
+        data.packs.del(id)
+        pruneLocals((l) => {
+          if (!l.mounts?.includes(id)) return l
+          const { mounts, ...rest } = l
+          const kept = mounts.filter((x) => x !== id)
+          return kept.length ? { ...rest, mounts: kept } : rest
+        })
       },
     },
     /** The vault as the wire lists it: never a value (that is `value`, one key on request). A provider naming a deleted secret has no key. */
@@ -438,11 +470,11 @@ export const library = ({
       del: (id: string) => {
         data.personas.del(id)
         data.stories.dropPersona(id)
-        const p = layer()
-        if (p.persona && Object.values(p.persona).includes(id)) {
-          const rest = Object.fromEntries(Object.entries(p.persona).filter(([, v]) => v !== id))
-          setPlayer({ ...p, persona: Object.keys(rest).length ? rest : undefined }) // an empty map leaves the JSON like any unset key
-        }
+        pruneLocals((l) => {
+          if (l.persona !== id) return l
+          const { persona: _, ...rest } = l
+          return rest
+        })
       },
     },
   }

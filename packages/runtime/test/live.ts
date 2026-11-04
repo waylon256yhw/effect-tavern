@@ -89,7 +89,7 @@ const traces: Trace[] = []
 const { card, turns } = await script()
 // effort low: narrate thinks, so the reply carries reasoning parts
 const model = bind({ ...conn, effort: "low" }, { onTrace: (t) => traces.push(t), traceBody: true })
-const S = makeSession({ card, player, model: () => model })
+const S = makeSession({ card, rows: () => player, model: () => model })
 const thinkingSent = (t: Trace | undefined) => {
   const body = t?.body ? (JSON.parse(t.body) as { messages?: Array<{ content?: Array<{ type: string }> }> }) : undefined
   return body?.messages?.flatMap((m) => m.content ?? []).filter((c) => c.type === "thinking").length ?? 0
