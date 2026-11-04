@@ -1,7 +1,7 @@
 // The sidebar (#117, docs/sidebar-brief-1.md): the install's navigation, cards → stories, and nothing of one story's
 // (that is the reader's strip, shell.tsx). Two layers, one shown at a time, sliding sideways: the shelf (every card,
 // with a search; a card's row has a dot while a turn runs on any of its stories) and the workspace (one card: its
-// head, which opens its page; the player's filing words on it (`Player.tags`, #133) as wrapping chips right under the
+// head, which opens its page; the player's filing words on it (`Local.tags`, #133) as wrapping chips right under the
 // head (click a word to filter the shelf by `#word`, × to remove, + to add or open the tag manager); two rows under it,
 // the persona in force (the open story's when it is of this card, else the card's default) and the writing in force on this card; a search; its stories, starred first then newest, the open one on a tint, a dot on one
 // with a turn in flight; "新建故事" at the foot, which opens the card's page and makes no story: a story begins at
@@ -52,7 +52,7 @@ import {
   stories,
   type StoryRow,
 } from "./store.ts"
-import { chosen } from "./switches.ts"
+import { chosen, takenBy } from "./switches.ts"
 import { flip, theme } from "./theme.ts"
 import { fetchStories, putLocal, searchStories } from "./wire.ts"
 import { openWriting } from "./writing.tsx"
@@ -130,7 +130,16 @@ export const Sidebar = (props: {
     const cid = at()
     const v = cid && view()?.id === cid ? view() : undefined
     const loc = v?.local ?? (cid ? allLocals()[cid] : undefined)
-    const sw = v ? v.layer.switches.value : loc?.switches
+    let sw = v ? v.layer.switches.value : loc?.switches
+    if (v && sw) {
+      // a slot free text holds (the card's, or a fragment) compiles no switch: its values are not in force
+      const { pov, echo, agency, verbosity, ...rest } = sw
+      sw = {
+        ...rest,
+        ...(takenBy("pov", v.layer) === null && { pov, echo, agency }),
+        ...(takenBy("verbosity", v.layer) === null && { verbosity }),
+      }
+    }
     return chosen(sw, !!loc?.fragments?.some((f) => f.text?.trim()))[0] ?? t("switches.followCard")
   })
   // the player's filing words on this card: wrapping chips under the head (click a word to filter the shelf by `#word`,

@@ -8,8 +8,9 @@
 // its name last into `names.user`). The later wins by id, for every kind. The one exception is a fragment's
 // `mode: "yield"`: when a lower rank has filled the slot it does not stand. An overlay's fragment sits below the card, so
 // its `mode` is read against the card, and absent it yields; `override` beats the card's slot. A compiled switch always
-// yields (a card that writes the player's place itself takes the group), to a card or free text; switches themselves
-// merge by key down the ranks, so the local row's `pov` beats the overlay's and one slot compiles from the merge.
+// yields to the card and to free text at its own or a higher rank; free text that itself says `yield` defers to a lower
+// rank's compiled switch like to any filled slot. Switches themselves merge by key down the ranks, so the local row's
+// `pov` beats the overlay's and one slot compiles from the merge.
 //
 // The locks are all here and never throw for a player's row (a throw would kill a card at session open for what a pack
 // happens to declare): what they refuse lands in `dropped`, for a client to draw. Only the card's own bad product throws.
@@ -372,7 +373,8 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   )
 
   // ───────── the frame: the player zone in first-written order, then what is left of the card's ─────────
-  const theirs = new Set(card.frame.map((f) => f.id))
+  // A card's slot with no text is left for the player to fill (fragment.ts): it holds nothing.
+  const theirs = new Set(card.frame.flatMap((f) => (f.text && f.enabled !== false ? [f.id] : [])))
   const slots = new Map<string, Item<Fragment>>()
   let value: Writing = {}
   const switched = (from: From, row: Partial<Layer>) => {
@@ -409,7 +411,9 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
       .map((f) => ({ ...f, from: "card" })),
   ]
   const filled = fill(zone, names)
-  const holder = (id: string) => zone.find((f) => f.id === id)?.from ?? null
+  // who holds a head slot: a tail directive is not a slot; an empty or disabled entry, or one with an unfilled hole, holds nothing
+  const holder = (id: string) =>
+    filled.find((f) => f.id === id && f.at !== "tail" && f.text && f.enabled !== false)?.from ?? null
 
   // ───────── products: whole in the code's defaults and on the card, on a player's row by rank ─────────
   const stock = new Map<string, Partial<Product> & { id: string; from: From }>(
@@ -417,11 +421,13 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   )
   /** A toggle on an id this card does not declare says nothing about this card (an overlay's `people` on a card without it). */
   const toggleOnly = (p: { id: string }) => Object.keys(p).every((k) => k === "id" || k === "on")
-  /** A player row's patch: label, text and on over an id that exists; a new id is a 小剧场, dropped without text. */
+  /** A player row's patch: label, text and on over an id that exists; a new id is a 小剧场, dropped without text. The
+   *  author of the question that stands is `from`: a toggle or a label changes nothing the card wrote (`shown` strips
+   *  a card's text by it). */
   const patched = (from: From, p: ProductPatch) => {
     const { id, ...patch } = p as { id: string; label?: string; text?: string; on?: boolean }
     const was = stock.get(id)
-    if (was) stock.set(id, { ...was, ...patch, from })
+    if (was) stock.set(id, { ...was, ...patch, from: patch.text === undefined ? was.from : from })
     else if (toggleOnly(p)) return
     else if (patch.text === undefined) dropped.push({ from, kind: "product", id, why: "a new product needs text" })
     else stock.set(id, { id, ...patch, text: patch.text, shape: { kind: "text" }, stage: "narrate", from })
@@ -453,7 +459,15 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   })
 
   // ───────── entries, the quick inputs, the format keys, the lexicon ─────────
-  const written = up.flatMap(({ from, row }) => (row.entries ?? []).map((e) => ({ ...e, id: `${from}/${e.id}`, from })))
+  // `/` joins row and entry: an entry id holding one would alias another row's entry, so it is refused (the server refuses
+  // a pack id with one)
+  const written = up.flatMap(({ from, row }) =>
+    (row.entries ?? []).flatMap((e) => {
+      if (!e.id.includes("/")) return [{ ...e, id: `${from}/${e.id}`, from }]
+      dropped.push({ from, kind: "entry", id: e.id, why: "an entry id has no /" })
+      return []
+    }),
+  )
   const entries = fill([...new Map(written.map((e) => [e.id, e])).values()], names)
   /** Keyed, the highest rank first and its copy standing: what a menu shows. */
   const menu = <T>(pick: (r: Partial<Layer>) => readonly T[] | undefined, key: (x: T) => string) => {
@@ -525,7 +539,6 @@ export const shown = (r: Resolved) => {
     frame: r.frame.map(bare),
     tail: r.tail.map(bare),
     products: r.products.map(bare),
-    lexicon: r.lexicon.filter((e) => e.from !== "card"),
     asks: Object.fromEntries(Object.entries(r.asks).map(([id, a]) => [id, bare(a)])),
     switches: {
       ...r.switches,

@@ -101,7 +101,7 @@ assert.deepEqual([turnLabel({ ...hits.get(3)!, turn: 0 }), turnLabel(hits.get(3)
 // The workspace's persona row: the open story's own when it is of the card, else the card's default.
 {
   const lib = { current: 2, stories: [row(1, { persona: "monk" }), row(2), row(3, { card: "other", persona: "nun" })] }
-  const defaults = { wuxia: "friend", other: "monk" }
+  const defaults = { wuxia: { persona: "friend" }, other: { persona: "monk" } }
   assert.equal(personaOn(lib, defaults, "wuxia", "reader"), undefined) // story 2 is open, on the card's own
   assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia", "reader"), "monk")
   // the card's page: the tab keeps story 1 for Escape, but the row is the card's default

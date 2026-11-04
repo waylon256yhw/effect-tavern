@@ -55,7 +55,7 @@ export const isFacet = (w: string): boolean => {
 /** A card's `#` words: the player's words on it, then its facets in the locale in force (none on a row without facets). */
 const labels = (c: ShelfCard, words: readonly string[]): string[] => [...words, ...facetWords(c)]
 
-/** Whether a card holds every term and every picked chip; `words` are the player's on it (`Player.tags[c.id]`). */
+/** Whether a card holds every term and every picked chip; `words` are the player's on it (`locals[c.id].tags`). */
 export const admits = (
   c: ShelfCard,
   terms: readonly Term[],

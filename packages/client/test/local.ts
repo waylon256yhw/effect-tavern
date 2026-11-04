@@ -1,8 +1,8 @@
 // Non-optimistic edits queue transformations, not documents computed before a preceding blur has saved.
 import assert from "node:assert/strict"
-import type { Local } from "@effect-tavern/runtime/src/layer.ts"
-import { locals, registry } from "../src/store.ts"
-import { putLocal } from "../src/wire.ts"
+import type { Layer, Local } from "@effect-tavern/runtime/src/layer.ts"
+import { locals, packs, registry } from "../src/store.ts"
+import { putLocal, putPack } from "../src/wire.ts"
 import { setFragmentAt, setFragmentText } from "../src/requirements.ts"
 
 const initial: Local = { id: "local", name: "local", card: "wuxia", fragments: [{ id: "voice", text: "old" }] }
@@ -55,4 +55,23 @@ assert.equal(requests[3]!.body.fragments![0]!.text, "new")
 requests[3]!.reply(Response.json(requests[3]!.body))
 await following
 assert.equal(registry.get(locals).wuxia?.persona, "me")
-console.log("player ok")
+
+// putPack: the same chain over the `packs` atom (the body goes without its id; the list comes back)
+const pack: Layer = { id: "p1", name: "P", fragments: [{ id: "voice", text: "old" }] }
+registry.set(packs, [pack])
+sent = requested()
+const packText = putPack("p1", (p) => setFragmentText(p, 0, "new"))
+const packAt = putPack("p1", (p) => setFragmentAt(p, 0, "tail"))
+await sent
+assert.equal(requests.length, 5)
+assert.equal(requests[4]!.body.id, undefined)
+sent = requested()
+requests[4]!.reply(Response.json([{ ...requests[4]!.body, id: "p1" }]))
+await packText
+await sent
+assert.equal(requests[5]!.body.fragments![0]!.text, "new")
+assert.equal(requests[5]!.body.fragments![0]!.at, "tail")
+requests[5]!.reply(Response.json([{ ...requests[5]!.body, id: "p1" }]))
+await packAt
+assert.equal(registry.get(packs)[0]!.fragments![0]!.at, "tail")
+console.log("local ok")

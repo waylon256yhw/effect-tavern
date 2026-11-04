@@ -234,6 +234,19 @@ const packs = [packB, packA]
     [named.tail.map((f) => [f.text, f.from]), named.frame.find((f) => f.id === "pov")?.text],
     [[["LOCAL-TAIL", "local"]], "CARD-POV"],
   )
+  // nor does a tail directive hold the slot: with the card's pov gone the head slot is free
+  const onlyTail = resolve(chat, { harness: row("harness", { fragments: [{ id: "pov", text: "T", at: "tail" }] }) })
+  assert.deepEqual([onlyTail.switches.taken.pov, onlyTail.frame.some((f) => f.id === "pov")], [null, false])
+  // a card's slot with no text is left for the player: nobody holds it until a switch compiles there, and `taken` says so
+  assert.equal(resolve({ ...chat, frame: [...chat.frame, { id: "pov" }] }, {}).switches.taken.pov, null)
+  const emptySlot = resolve(
+    { ...chat, frame: [...chat.frame, { id: "pov" }] },
+    { local: here({ switches: { pov: "third" } }) },
+  )
+  assert.deepEqual(
+    [emptySlot.switches.taken.pov, emptySlot.frame.filter((f) => f.id === "pov").map((f) => f.compiled)],
+    ["local", [true]],
+  )
 }
 
 // ───────── Yield: a lower rank has filled the slot, it does not stand ─────────
@@ -450,13 +463,19 @@ const packs = [packB, packA]
       ["X", "NEW", true, "harness", was.shape, was.stage, was.fold, was.feed],
     )
   }
-  // no text keeps the question; the later rank's `on` wins over the pack's
+  // no text keeps the question and its author; the later rank's `on` wins over the pack's
   const onOff = resolve(chat, {
     harness: row("harness", { products: [{ id: "inner", on: false }] }),
     packs: [row("p", { products: [{ id: "inner", on: true, label: "P" }] })],
     local: here({ mounts: ["p"], products: [{ id: "inner", on: false }] }),
   }).products.find((p) => p.id === "inner")!
-  assert.deepEqual([onOff.on, onOff.label, onOff.from, onOff.text], [false, "P", "local", P({}, "inner")!.text])
+  assert.deepEqual([onOff.on, onOff.label, onOff.from, onOff.text], [false, "P", "harness", P({}, "inner")!.text])
+  // so a card's product toggled on the local row is still the card's, and `shown` still strips its text
+  const cardsOwn = { ...chat, products: [{ id: "scene", text: "CARD-Q", shape: { kind: "text" as const } }] }
+  const toggledCard = shown(
+    resolve(cardsOwn, { local: here({ products: [{ id: "scene", on: false }] }) }),
+  ).products.find((p) => p.id === "scene")!
+  assert.deepEqual([toggledCard.from, toggledCard.on, "text" in toggledCard], ["card", false, false])
   // a card's whole patch: a table's shape stays under a pack's text
   const people = {
     id: "people",
@@ -483,6 +502,19 @@ const packs = [packB, packA]
   assert.deepEqual(
     [under.label, under.on, under.text, under.shape, under.stage, under.from],
     ["L", false, "Who.", people.shape, undefined, "card"],
+  )
+  // an entry id holding `/` would alias another row's entry: dropped, the sibling indexed
+  const slashed = resolve(chat, {
+    harness: row("harness", {
+      entries: [
+        { id: "a/b", text: "X" },
+        { id: "c", text: "Y" },
+      ],
+    }),
+  })
+  assert.deepEqual(
+    [slashed.entries.map((e) => e.id), slashed.dropped],
+    [["harness/c"], [{ from: "harness", kind: "entry", id: "a/b", why: "an entry id has no /" }]],
   )
   // A new id: narrate, text, on by default, nothing else. Without text it is dropped, into the ledger.
   const town = P(
@@ -731,7 +763,7 @@ const packs = [packB, packA]
     ],
     asks: [{ id: "lookup", text: "ASK-SECRET" }],
     products: [{ id: "scene", text: "PRODUCT-SECRET", shape: { kind: "text" } }],
-    lexicon: [{ pattern: "LEXICON-SECRET" }],
+    lexicon: [{ pattern: "LEXICON-SHOWN" }], // a ban is a prompt, to a player too: it goes whole
   }
   const R = shown(resolve(c, { harness: row("harness", { fragments: [{ id: "mine", text: "MINE" }] }) }))
   const wire = JSON.stringify(R)
@@ -746,7 +778,7 @@ const packs = [packB, packA]
   assert.equal(R.products.find((p) => p.id === "scene")!.from, "card")
   assert.ok("text" in R.products.find((p) => p.id === "notes")!) // the harness's question is the player's to read
   assert.ok(wire.includes("MINE"))
-  assert.deepEqual(resolve(c, {}).lexicon, [{ pattern: "LEXICON-SECRET", from: "card" }]) // polish still scans it
+  assert.deepEqual(R.lexicon, [{ pattern: "LEXICON-SHOWN", from: "card" }])
   // cardView carries it, with the card's own projection beside it
   const v = cardView(c, {})
   assert.deepEqual(Object.keys(v).sort(), ["fiction", "greetings", "layer", "meta", "rules"])

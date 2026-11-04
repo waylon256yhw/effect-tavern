@@ -459,7 +459,7 @@ const Personas = (props: Pane) => {
                     placeholder={t("settings.personaPlaceholder")}
                     aria-label={t("settings.personaText")}
                     value={x().text}
-                    onChange={(e) => void putPersona({ ...x(), text: e.currentTarget.value })}
+                    onChange={(e) => void putPersona({ ...x(), text: e.currentTarget.value }).then(refreshActiveCard)}
                   />
                 </div>
               </div>

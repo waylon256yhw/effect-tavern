@@ -60,7 +60,7 @@ export const sentence = (
   return sentences?.[id] ?? defaults.get(id) ?? ""
 }
 /** Which frame slot a switch compiles into (`pov` holds pov, echo, agency; `verbosity` holds verbosity). */
-export const slotOfSwitch = (key: SwitchKey): "pov" | "verbosity" => (key === "verbosity" ? "verbosity" : "pov")
+const slotOfSwitch = (key: SwitchKey): "pov" | "verbosity" => (key === "verbosity" ? "verbosity" : "pov")
 /** Who took over the switch's slot with free text (card or a fragment that is not `compiled: true`), or null when the
  *  switches remain in control. */
 export const takenBy = (

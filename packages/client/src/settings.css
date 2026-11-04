@@ -1180,15 +1180,6 @@
   font-weight: 550;
   font-size: var(--text-footnote);
 }
-.pack-mod {
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  border-radius: var(--radius-card);
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 var(--hairline) var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
 .name-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1225,11 +1216,6 @@
 .name-chip input::placeholder {
   color: var(--ink-3);
 }
-.pack-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 .pack-row {
   display: flex;
   align-items: center;
@@ -1252,77 +1238,6 @@
   min-width: 0;
   font-size: var(--text-footnote);
   color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.item-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.item-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 11px;
-  border-radius: var(--radius);
-  background: var(--alpha-1);
-  color: var(--ink);
-  font-size: var(--text-footnote);
-  max-width: 17rem;
-  transition: background var(--dur-2) var(--ease);
-}
-.item-pill:hover {
-  background: var(--alpha-2);
-}
-.item-pill > span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.item-pill .preview {
-  color: var(--ink-3);
-  font-size: var(--text-caption);
-}
-.item-pill .dot-on {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ok);
-}
-.pack-drawer-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 38px;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  background: var(--alpha-1);
-  color: var(--ink);
-  text-align: left;
-  transition: background var(--dur-2) var(--ease);
-}
-.pack-drawer-row:hover {
-  background: var(--alpha-2);
-}
-.pack-drawer-row .d-name {
-  flex: none;
-  max-width: 9rem;
-  font-weight: 550;
-  font-size: var(--text-footnote);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.pack-drawer-row .d-preview {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--text-caption);
-  color: var(--ink-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

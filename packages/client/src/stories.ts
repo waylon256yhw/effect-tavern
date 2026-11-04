@@ -36,7 +36,7 @@ export const latestOf = (rows: readonly StoryRow[]): StoryRow | undefined =>
 /** Whether a card has a turn in flight on any of its stories (the dot on its shelf row, and beside the back button
  *  for every other card). */
 /** The open story when it is of `card` and the stage is not the card's page (the workspace's persona row then reads
- *  and writes it), else none: the row is the card's default (`Player.persona[card]`). On the card's page the tab keeps
+ *  and writes it), else none: the row is the card's default (`Local.persona`). On the card's page the tab keeps
  *  its story only for Escape (pages.ts `showCard`): what is picked there is for the story Begin makes. */
 export const openOn = (
   lib: { current: number | null; stories: readonly StoryRow[] } | null,
@@ -47,14 +47,13 @@ export const openOn = (
 /** The persona id the workspace's row shows: the open story's own, else the card's default; none = the card's own. */
 export const personaOn = (
   lib: { current: number | null; stories: readonly StoryRow[] } | null,
-  defaults: Readonly<Record<string, string | { persona?: string }>> | undefined,
+  defaults: Readonly<Record<string, { persona?: string }>> | undefined,
   card: string | null,
   page: Page,
 ): string | undefined => {
   const s = openOn(lib, card, page)
   if (s) return s.persona ?? undefined
-  const d = defaults?.[card ?? ""]
-  return typeof d === "string" ? d : d?.persona
+  return defaults?.[card ?? ""]?.persona
 }
 export const busyOn = (rows: readonly StoryRow[], card: string): boolean =>
   rows.some((s) => s.card === card && s.busy !== null)

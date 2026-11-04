@@ -38,6 +38,11 @@ const PACK_TABS: [PackTab, Key][] = [
 const CODE_HARNESS = harness("act")
 const DEFAULT_ASKS = new Map((CODE_HARNESS.asks ?? []).map((a) => [a.id, a.text]))
 const DEFAULT_PRODUCTS = new Map((CODE_HARNESS.products ?? []).map((p) => [p.id, p]))
+const DEFAULT_SNIPPETS = new Map((CODE_HARNESS.snippets ?? []).map((s) => [s.name, s]))
+const DEFAULT_FORMAT = new Map((CODE_HARNESS.format ?? []).map((f) => [f.label, f]))
+/** Whether a harness-row item is its code default (the overlay stores only what differs; `overlaid` merges over the default). */
+const isDefault = (item: unknown, def: unknown) => JSON.stringify(item) === JSON.stringify(def)
+type Save = (edit: (p: Layer) => Layer) => Promise<void>
 
 const stageAskLabels = (): [string, string][] => [
   ["lookup", t("settings.stageLookup")],
@@ -82,8 +87,8 @@ export const Packs = (props: Pane) => {
   })
   const onCards = (id: string) => mounts().get(id) ?? []
 
-  const savePack = async (next: Layer) => {
-    await putPack(next)
+  const savePack = async (id: string, edit: (p: Layer) => Layer) => {
+    await putPack(id, edit)
     await refreshActiveCard()
   }
   const removePack = async (id: string) => {
@@ -92,7 +97,7 @@ export const Packs = (props: Pane) => {
   }
   const create = async () => {
     const id = newId("pack")
-    await savePack({ id, name: t("packs.newPack") })
+    await savePack(id, () => ({ id, name: t("packs.newPack") }))
     props.onPick(id)
   }
   const [importError, setImportError] = createSignal("")
@@ -106,7 +111,7 @@ export const Packs = (props: Pane) => {
     const { id: _, ...rest } = (body && typeof body === "object" ? body : {}) as Record<string, unknown>
     const id = newId("pack")
     try {
-      await savePack({ id, ...rest } as Layer)
+      await savePack(id, () => ({ id, ...rest }) as Layer)
       setImportError("")
       props.onPick(id)
     } catch (e) {
@@ -168,6 +173,7 @@ export const Packs = (props: Pane) => {
         <Show when={pack()} fallback={<div class="empty">{t("packs.noPacks")}</div>}>
           {(p) => {
             const holes = () => packHoles(p())
+            const save: Save = (edit) => savePack(p().id, edit)
             return (
               <>
                 <header class="detail-header pack-detail-header">
@@ -186,7 +192,7 @@ export const Packs = (props: Pane) => {
                     <Name
                       value={p().name}
                       label={t("packs.packName")}
-                      onCommit={(name) => void savePack({ ...p(), name })}
+                      onCommit={(name) => void savePack(p().id, (x) => ({ ...x, name }))}
                     />
                     <For each={onCards(p().id)}>{(c) => <span class="tag">{c}</span>}</For>
                   </Show>
@@ -232,7 +238,11 @@ export const Packs = (props: Pane) => {
                               value={p().names?.[k()] ?? ""}
                               placeholder={t("packs.defaultValue")}
                               aria-label={k()}
-                              onChange={(e) => void savePack(withPackName(p(), k(), e.currentTarget.value))}
+                              onChange={(e) => {
+                                const key = k()
+                                const val = e.currentTarget.value
+                                void savePack(p().id, (x) => withPackName(x, key, val))
+                              }}
                               onKeyDown={leaveInput}
                             />
                           </label>
@@ -244,22 +254,22 @@ export const Packs = (props: Pane) => {
 
                 <div class="pack-tab-body">
                   <Show when={tab() === "prose"}>
-                    <ProseTab pack={p()} onSave={savePack} />
+                    <ProseTab pack={p()} onSave={save} />
                   </Show>
                   <Show when={tab() === "entries"}>
-                    <EntriesTab pack={p()} onSave={savePack} />
+                    <EntriesTab pack={p()} onSave={save} />
                   </Show>
                   <Show when={tab() === "lexicon"}>
-                    <LexiconTab pack={p()} onSave={savePack} />
+                    <LexiconTab pack={p()} onSave={save} />
                   </Show>
                   <Show when={tab() === "products"}>
-                    <ProductsTab pack={p()} onSave={savePack} />
+                    <ProductsTab pack={p()} onSave={save} />
                   </Show>
                   <Show when={tab() === "inputs"}>
-                    <InputsTab pack={p()} onSave={savePack} />
+                    <InputsTab pack={p()} onSave={save} />
                   </Show>
                   <Show when={tab() === "asks"}>
-                    <AsksTab pack={p()} onSave={savePack} />
+                    <AsksTab pack={p()} onSave={save} />
                   </Show>
                 </div>
               </>
@@ -272,7 +282,7 @@ export const Packs = (props: Pane) => {
 }
 
 // ───────── 1. 文风与要求 (`Layer.fragments`) ─────────
-const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+const ProseTab = (props: { pack: Layer; onSave: Save }) => {
   const frags = () => props.pack.fragments ?? []
   const noMode = () => (props.pack.id === "harness" ? "yield" : "override") // what a fragment with no `mode` does (layer.ts)
   const [draft, setDraft] = createSignal<string | null>(null)
@@ -280,15 +290,16 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
     const d = draft()
     if (d === null) return
     setDraft(null)
-    if (d.trim()) void props.onSave(addFragment(props.pack, newId("req"), d, "tail"))
+    if (d.trim()) void props.onSave((p) => addFragment(p, newId("req"), d, "tail"))
   }
-  const updateFrag = (idx: number, patch: Partial<Fragment>) => {
-    const cur = [...frags()]
-    const now = cur[idx]
-    if (!now) return
-    cur[idx] = { ...now, ...patch }
-    void props.onSave({ ...props.pack, fragments: cur })
-  }
+  const updateFrag = (idx: number, patch: Partial<Fragment>) =>
+    void props.onSave((p) => {
+      const cur = [...(p.fragments ?? [])]
+      const now = cur[idx]
+      if (!now) return p
+      cur[idx] = { ...now, ...patch }
+      return { ...p, fragments: cur }
+    })
   return (
     <section class="wpanel" role="tabpanel" aria-label={t("writing.tabProse")}>
       <div class="prose-card grow">
@@ -326,7 +337,9 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
               <div class="field-well">
                 <textarea
                   aria-label={t("writing.requirement")}
-                  placeholder={t("writing.globalPlaceholder")}
+                  placeholder={
+                    props.pack.id === "harness" ? t("writing.harnessPlaceholder") : t("writing.globalPlaceholder")
+                  }
                   value={draft() ?? ""}
                   ref={(el) => requestAnimationFrame(() => el.focus())}
                   onInput={(e) => setDraft(e.currentTarget.value)}
@@ -343,14 +356,14 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
                     <button
                       type="button"
                       aria-pressed={atOf(f()) === "tail" ? "true" : "false"}
-                      onClick={() => void props.onSave(setFragmentAt(props.pack, i, "tail"))}
+                      onClick={() => void props.onSave((p) => setFragmentAt(p, i, "tail"))}
                     >
                       {t("writing.atTail")}
                     </button>
                     <button
                       type="button"
                       aria-pressed={atOf(f()) === "head" ? "true" : "false"}
-                      onClick={() => void props.onSave(setFragmentAt(props.pack, i, "head"))}
+                      onClick={() => void props.onSave((p) => setFragmentAt(p, i, "head"))}
                     >
                       {t("writing.atHead")}
                     </button>
@@ -376,10 +389,7 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
                       value={f().mode ?? noMode()}
                       onChange={(e) => {
                         const val = e.currentTarget.value as "override" | "yield" | "both"
-                        const { mode: _, ...rest } = f()
-                        const cur = [...frags()]
-                        cur[i] = val === noMode() ? rest : { ...rest, mode: val }
-                        void props.onSave({ ...props.pack, fragments: cur })
+                        updateFrag(i, { mode: val === noMode() ? undefined : val })
                       }}
                     >
                       <option value="override">{t("packs.modeOverride")}</option>
@@ -398,7 +408,7 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
                     type="button"
                     class="icon sm"
                     aria-label={t("writing.removeRequirement")}
-                    onClick={() => void props.onSave(removeFragment(props.pack, i))}
+                    onClick={() => void props.onSave((p) => removeFragment(p, i))}
                   >
                     <Close />
                   </button>
@@ -408,7 +418,10 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
                     aria-label={t("writing.requirement")}
                     placeholder={t("writing.emptyRemoves")}
                     value={f().text ?? ""}
-                    onChange={(e) => void props.onSave(setFragmentText(props.pack, i, e.currentTarget.value))}
+                    onChange={(e) => {
+                      const text = e.currentTarget.value
+                      void props.onSave((p) => setFragmentText(p, i, text))
+                    }}
                     onKeyDown={leaveArea}
                   />
                 </div>
@@ -416,7 +429,7 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
             )}
           </For>
           <Show when={!frags().length && draft() === null}>
-            <p class="none">{t("writing.noGlobal")}</p>
+            <p class="none">{props.pack.id === "harness" ? t("writing.noHarness") : t("writing.noGlobal")}</p>
           </Show>
         </div>
       </div>
@@ -425,7 +438,7 @@ const ProseTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }
 }
 
 // ───────── 2. 线索词条 (`Layer.entries`) ─────────
-const EntriesTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+const EntriesTab = (props: { pack: Layer; onSave: Save }) => {
   const entries = () => props.pack.entries ?? []
   const [q, setQ] = createSignal("")
   const [searching, setSearching] = createSignal(false)
@@ -436,29 +449,31 @@ const EntriesTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void>
       .map((e, i) => ({ e, i }))
       .filter(({ e }) => !s || e.id.includes(s) || e.text.includes(s))
   }
-  const setEntries = (next: PackEntry[]) => {
-    const { entries: _, ...rest } = props.pack
-    void props.onSave(next.length ? { ...rest, entries: next } : rest)
-  }
+  const setEntries = (edit: (list: readonly PackEntry[]) => PackEntry[]) =>
+    void props.onSave((p) => {
+      const next = edit(p.entries ?? [])
+      const { entries: _, ...rest } = p
+      return next.length ? { ...rest, entries: next } : rest
+    })
   const commitDraft = () => {
     const d = draft()
     if (!d) return
     setDraft(null)
     const text = d.text.trim()
     if (!text) return
-    const id = d.id.trim() || hook(text).slice(0, 16) || `entry-${entries().length + 1}`
-    setEntries([{ id, text }, ...entries()])
+    setEntries((list) => [{ id: d.id.trim() || hook(text).slice(0, 16) || `entry-${list.length + 1}`, text }, ...list])
   }
-  const updateEntry = (idx: number, patch: Partial<PackEntry>) => {
-    const cur = [...entries()]
-    const now = cur[idx]
-    if (!now) return
-    const text = (patch.text ?? now.text).trim()
-    if (!text) return setEntries(cur.filter((_, j) => j !== idx))
-    const id = (patch.id ?? now.id).trim() || hook(text).slice(0, 16) || now.id
-    cur[idx] = { id, text }
-    setEntries(cur)
-  }
+  const updateEntry = (idx: number, patch: Partial<PackEntry>) =>
+    setEntries((list) => {
+      const cur = [...list]
+      const now = cur[idx]
+      if (!now) return cur
+      const text = (patch.text ?? now.text).trim()
+      if (!text) return cur.filter((_, j) => j !== idx)
+      const id = (patch.id ?? now.id).trim() || hook(text).slice(0, 16) || now.id
+      cur[idx] = { id, text }
+      return cur
+    })
   return (
     <section class="wpanel" role="tabpanel" aria-label={t("packs.entries")}>
       <div class="prose-card grow">
@@ -552,7 +567,10 @@ const EntriesTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void>
                     type="button"
                     class="icon sm"
                     aria-label={t("writing.deleteEntry")}
-                    onClick={() => setEntries(entries().filter((_, j) => j !== x().i))}
+                    onClick={() => {
+                      const i = x().i
+                      setEntries((list) => list.filter((_, j) => j !== i))
+                    }}
                   >
                     <Close />
                   </button>
@@ -584,21 +602,22 @@ const EntriesTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void>
 const cleanLex = (e: { pattern: string; hint?: string }): Entry =>
   e.hint?.trim() ? { pattern: e.pattern.trim(), hint: e.hint.trim() } : { pattern: e.pattern.trim() }
 
-const LexiconTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+const LexiconTab = (props: { pack: Layer; onSave: Save }) => {
   const lex = (): readonly Entry[] => props.pack.lexicon ?? []
   const on = () => props.pack.switches?.polish !== false
-  const setLex = (edit: (entries: readonly Entry[]) => readonly Entry[]) => {
-    const next = edit(lex())
-    const { lexicon: _, ...rest } = props.pack
-    void props.onSave(next.length ? { ...rest, lexicon: [...next] } : rest)
-  }
-  const flipPolish = () => {
-    const cur = props.pack.switches ?? {}
-    const { polish: _, ...restSw } = cur
-    const nextSw = on() ? { ...restSw, polish: false } : restSw
-    const { switches: _s, ...restPack } = props.pack
-    void props.onSave(Object.keys(nextSw).length ? { ...restPack, switches: nextSw } : restPack)
-  }
+  const setLex = (edit: (entries: readonly Entry[]) => readonly Entry[]) =>
+    void props.onSave((p) => {
+      const next = edit(p.lexicon ?? [])
+      const { lexicon: _, ...rest } = p
+      return next.length ? { ...rest, lexicon: [...next] } : rest
+    })
+  const flipPolish = () =>
+    void props.onSave((p) => {
+      const { polish, ...restSw } = p.switches ?? {}
+      const nextSw = polish !== false ? { ...restSw, polish: false } : restSw
+      const { switches: _s, ...restPack } = p
+      return Object.keys(nextSw).length ? { ...restPack, switches: nextSw } : restPack
+    })
   const edit = (i: number, patch: Partial<Entry>) =>
     setLex((entries) => entries.map((e, j) => (j === i ? cleanLex({ ...e, ...patch }) : e)).filter((e) => e.pattern))
   const remove = (i: number) => setLex((entries) => entries.filter((_, j) => j !== i))
@@ -794,7 +813,7 @@ interface ProductDraft {
   on: boolean
   text: string
 }
-const ProductsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
   const products = () => props.pack.products ?? []
   const [editing, setEditing] = createSignal<ProductDraft | null>(null)
   let dlg!: HTMLDialogElement
@@ -816,30 +835,39 @@ const ProductsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void
   const save = () => {
     const d = editing()
     if (!d || !d.label.trim() || !d.text.trim()) return
-    const next = withProductPatch(props.pack.products, {
+    const item = {
       id: d.id,
       label: d.label.trim(),
       text: d.text.trim(),
       ...(d.id !== "notes" ? { on: d.on } : {}),
-    })
-    void props.onSave({ ...props.pack, products: next })
+    }
+    void props.onSave((p) => ({ ...p, products: withProductPatch(p.products, item) }))
     dlg.close()
   }
   const remove = () => {
     const d = editing()
     if (!d) return
-    const def = props.pack.id === "harness" ? DEFAULT_PRODUCTS.get(d.id) : undefined
-    if (def) {
-      const next = withProductPatch(props.pack.products, def)
-      void props.onSave({ ...props.pack, products: next })
-    } else {
-      const next = withoutProductPatch(props.pack.products, d.id)
-      const { products: _, ...rest } = props.pack
-      void props.onSave(next.length ? { ...rest, products: next } : rest)
-    }
+    const def = defaultOf(d.id)
+    void props.onSave((p) => {
+      if (def) return { ...p, products: withProductPatch(p.products, def) }
+      const next = withoutProductPatch(p.products, d.id)
+      const { products: _, ...rest } = p
+      return next.length ? { ...rest, products: next } : rest
+    })
     dlg.close()
   }
-  const isBuiltinHarness = (id: string) => props.pack.id === "harness" && DEFAULT_PRODUCTS.has(id)
+  const defaultOf = (id: string) => (props.pack.id === "harness" ? DEFAULT_PRODUCTS.get(id) : undefined)
+  /** Delete, or 恢复默认 on a built-in that differs from its default; an unmodified built-in offers neither. */
+  const removable = (id: string) => {
+    const def = defaultOf(id)
+    return (
+      !def ||
+      !isDefault(
+        products().find((p) => p.id === id),
+        def,
+      )
+    )
+  }
 
   return (
     <section class="wpanel" role="tabpanel" aria-label={t("packs.tabProducts")}>
@@ -866,8 +894,8 @@ const ProductsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void
                       on={!!p().on}
                       label={p().label ?? p().id}
                       onFlip={() => {
-                        const next = withProductPatch(props.pack.products, { id: p().id, on: !p().on })
-                        void props.onSave({ ...props.pack, products: next })
+                        const flip = { id: p().id, on: !p().on }
+                        void props.onSave((x) => ({ ...x, products: withProductPatch(x.products, flip) }))
                       }}
                     />
                   </span>
@@ -931,9 +959,9 @@ const ProductsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void
                 </label>
               </div>
               <div class="modal-foot">
-                <Show when={!d().isNew}>
+                <Show when={!d().isNew && removable(d().id)}>
                   <button type="button" class="btn sm ghost danger" onClick={remove}>
-                    {isBuiltinHarness(d().id) ? t("packs.restoreDefault") : t("common.delete")}
+                    {defaultOf(d().id) ? t("packs.restoreDefault") : t("common.delete")}
                   </button>
                   <span class="spacer" />
                 </Show>
@@ -965,18 +993,32 @@ interface InputEditing {
   at: number
   draft: InsertDraft
 }
-const InputsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+const InputsTab = (props: { pack: Layer; onSave: Save }) => {
   const keys = () => props.pack.format ?? []
   const snips = () => props.pack.snippets ?? []
-  const setKeys = (edit: (list: readonly Format[]) => readonly Format[]) => {
-    const next = edit(keys())
-    const { format: _, ...rest } = props.pack
-    void props.onSave(next.length ? { ...rest, format: [...next] } : rest)
-  }
-  const setSnips = (edit: (list: readonly Snippet[]) => readonly Snippet[]) => {
-    const next = edit(snips())
-    const { snippets: _, ...rest } = props.pack
-    void props.onSave(next.length ? { ...rest, snippets: [...next] } : rest)
+  const setKeys = (edit: (list: readonly Format[]) => readonly Format[]) =>
+    void props.onSave((p) => {
+      const next = edit(p.format ?? [])
+      const { format: _, ...rest } = p
+      return next.length ? { ...rest, format: [...next] } : rest
+    })
+  const setSnips = (edit: (list: readonly Snippet[]) => readonly Snippet[]) =>
+    void props.onSave((p) => {
+      const next = edit(p.snippets ?? [])
+      const { snippets: _, ...rest } = p
+      return next.length ? { ...rest, snippets: [...next] } : rest
+    })
+  /** On the harness row, the code default under the item being edited (by its key: a snippet's name, a key's label). */
+  const defaultOf = (e: InputEditing) =>
+    props.pack.id !== "harness" || e.at < 0
+      ? undefined
+      : e.snippet
+        ? DEFAULT_SNIPPETS.get(snips()[e.at]?.name ?? "")
+        : DEFAULT_FORMAT.get(keys()[e.at]?.label ?? "")
+  /** Delete, or 恢复默认 on a built-in that differs from its default; an unmodified built-in offers neither. */
+  const removable = (e: InputEditing) => {
+    const def = defaultOf(e)
+    return !def || !isDefault(e.snippet ? snips()[e.at] : keys()[e.at], def)
   }
   const [editing, setEditing] = createSignal<InputEditing | null>(null)
   let dlg!: HTMLDialogElement
@@ -997,8 +1039,9 @@ const InputsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> 
   const remove = () => {
     const e = editing()
     if (!e || e.at < 0) return
-    if (e.snippet) setSnips((list) => list.filter((_, i) => i !== e.at))
-    else setKeys((list) => list.filter((_, i) => i !== e.at))
+    const def = defaultOf(e) // a built-in has no "gone": absent in the overlay is back to default, so write the default
+    if (e.snippet) setSnips((list) => (def ? placed(list, def as Snippet, e.at) : list.filter((_, i) => i !== e.at)))
+    else setKeys((list) => (def ? placed(list, def as Format, e.at) : list.filter((_, i) => i !== e.at)))
     dlg.close()
   }
   return (
@@ -1090,6 +1133,7 @@ const InputsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> 
                     class="field"
                     placeholder={e().snippet ? t("writing.menuName") : t("writing.blankShowsGlyph")}
                     value={e().draft.label}
+                    disabled={!!defaultOf(e())}
                     onInput={(ev) => patch({ label: ev.currentTarget.value })}
                   />
                 </label>
@@ -1166,9 +1210,9 @@ const InputsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> 
                 </div>
               </div>
               <div class="modal-foot">
-                <Show when={e().at >= 0}>
+                <Show when={e().at >= 0 && removable(e())}>
                   <button type="button" class="btn sm ghost danger" onClick={remove}>
-                    {t("common.delete")}
+                    {defaultOf(e()) ? t("packs.restoreDefault") : t("common.delete")}
                   </button>
                 </Show>
                 <span class="spacer" />
@@ -1188,22 +1232,25 @@ const InputsTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> 
 }
 
 // ───────── 6. 问法 (`Layer.asks`: stage instructions & switch sentences) ─────────
-const AsksTab = (props: { pack: Layer; onSave: (next: Layer) => Promise<void> }) => {
+const AsksTab = (props: { pack: Layer; onSave: Save }) => {
   const ownMap = () => new Map((props.pack.asks ?? []).map((a) => [a.id, a.text]))
   const isHarness = () => props.pack.id === "harness"
 
   const setAsk = (id: string, raw: string) => {
     const text = raw.trim()
     const def = DEFAULT_ASKS.get(id) ?? ""
-    const cur = (props.pack.asks ?? []).filter((a) => a.id !== id)
-    let next: Ask[]
-    if (isHarness()) {
-      next = [...cur, { id, text: text || def }]
-    } else {
-      next = text && text !== def ? [...cur, { id, text }] : cur
-    }
-    const { asks: _, ...rest } = props.pack
-    void props.onSave(next.length ? { ...rest, asks: next } : rest)
+    const builtin = isHarness()
+    void props.onSave((p) => {
+      const cur = (p.asks ?? []).filter((a) => a.id !== id)
+      let next: Ask[]
+      if (builtin) {
+        next = [...cur, { id, text: text || def }]
+      } else {
+        next = text && text !== def ? [...cur, { id, text }] : cur
+      }
+      const { asks: _, ...rest } = p
+      return next.length ? { ...rest, asks: next } : rest
+    })
   }
 
   const isModified = (id: string) => {

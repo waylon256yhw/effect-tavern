@@ -80,7 +80,7 @@ const run = async (inspect: boolean) => {
       ],
     )
 
-    assert.ok(!JSON.stringify(about).includes("CARD-BAN")) // a card's lexicon entry does not leave the server at all
+    assert.ok(JSON.stringify(about).includes("CARD-BAN")) // a card's lexicon entry goes whole: a ban is a prompt, to a player too
     // what the card page reads: the player's row, its mounts by name, the one merge, a card's items without their text
     assert.deepEqual([about["local"], about["mounts"]], [{ id: "local", name: chat.id, card: chat.id }, []])
     const merged = about["layer"] as { frame: { from: string; text?: string }[]; names: unknown }

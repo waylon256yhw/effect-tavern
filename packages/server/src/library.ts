@@ -351,6 +351,7 @@ export const library = ({
           return
         }
         if (r.id === "card" || r.id === "local" || r.id === "base") throw new Error(`${r.id}: a reserved id`)
+        if (r.id.includes("/")) throw new Error(`${r.id}: a pack id has no / (it prefixes the pack's entry ids)`)
         data.packs.put(r)
       },
       /** Gone from the table, and off every card it was mounted on. The harness is not a row to delete. */

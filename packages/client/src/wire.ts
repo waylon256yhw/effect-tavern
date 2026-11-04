@@ -1,5 +1,5 @@
 // The seam to packages/server: `GET /card`, `GET /nodes` (nodes and head) and the library (`/stories`, `/personas`,
-// `/player`) are the snapshot, `POST /` is one action whose events come back as SSE. A story call (open, new, delete)
+// `/cards/<id>/local`) are the snapshot, `POST /` is one action whose events come back as SSE. A story call (open, new, delete)
 // answers the listing with the story to be on (`current`, none on an empty library): the client names it on every
 // request after, and pages.ts lands on it (nodes, calls, the draft and the pin gone; a delete that leaves the open
 // story open only replaces the listing). A new story is of a card (`POST /stories {card}`); a card's page is readable
@@ -69,7 +69,7 @@ export const fetchCard = async (current: () => boolean = () => true): Promise<vo
   const view = await got<CardView>(call(`${base}/card`))
   if (request === cardRead && current()) {
     registry.set(card, view)
-    if (view.local) registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
+    registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
   }
 }
 /** A card's page by id, no story needed: where an empty library lands. */
@@ -78,7 +78,7 @@ export const fetchCardOf = async (id: string, current: () => boolean = () => tru
   const view = await got<CardView>(call(`${base}/cards/${encodeURIComponent(id)}`))
   if (request === cardRead && current()) {
     registry.set(card, view)
-    if (view.local) registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
+    registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
   }
 }
 export const dropNodes = async (id: number): Promise<void> => {
@@ -221,8 +221,16 @@ export const putHat = async ({ id, ...body }: Hat): Promise<void> =>
 export const deleteHat = async (id: string): Promise<void> =>
   registry.set(hats, await got(call(`${base}/hats/${enc(id)}`, { method: "DELETE" })))
 export const fetchPacks = async (): Promise<void> => registry.set(packs, await got(call(`${base}/packs`)))
-export const putPack = async ({ id, ...body }: Layer): Promise<void> =>
-  registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, json("PUT", body))))
+let packWrite: Promise<void> = Promise.resolve()
+/** Apply each edit to the last acknowledged row for `id` (the `packs` atom; a row it lacks starts bare), serially, as
+ *  `putLocal` does: two edits in one blur/click sequence never overwrite each other. */
+export const putPack = (id: string, edit: (p: Layer) => Layer): Promise<void> =>
+  (packWrite = packWrite
+    .catch(() => {})
+    .then(async () => {
+      const { id: _, ...body } = edit(registry.get(packs).find((p) => p.id === id) ?? { id, name: id })
+      registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, json("PUT", body))))
+    }))
 export const deletePack = async (id: string): Promise<void> => {
   registry.set(packs, await got(call(`${base}/packs/${enc(id)}`, { method: "DELETE" })))
   await fetchLocals() // the mount on any card it held is gone with it

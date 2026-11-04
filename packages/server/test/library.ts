@@ -245,6 +245,7 @@ const over = (data: Data, m: () => Model = model) =>
   assert.throws(() => lib.packs.put({ id: "local", name: "x" }), /reserved/)
   assert.throws(() => lib.packs.put({ id: "card", name: "x" }), /reserved/)
   assert.throws(() => lib.packs.put({ id: "base", name: "x" }), /reserved/)
+  assert.throws(() => lib.packs.put({ id: "a/b", name: "x" }), /no \//) // it would alias another pack's entries
   // the overlay given stands until one is stored; a stored one wins, and takes the session with it
   assert.deepEqual(rest[0]!.fragments, player.harness!.fragments)
   assert.ok(lib.session(a).layer.frame.some((f) => f.text === player.harness!.fragments![0]!.text))

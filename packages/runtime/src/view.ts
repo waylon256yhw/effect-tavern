@@ -9,7 +9,7 @@ import { holds, reads, type Cond } from "./cond.ts"
 import { head, type Fragment } from "./fragment.ts"
 import { resolve, type Rows } from "./layer.ts"
 import { hook, makeLore } from "./lore.ts"
-import { fill } from "./names.ts"
+import { expand, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
 import { floorAt } from "./derived.ts"
 import { tokens } from "./tokens.ts"
@@ -80,14 +80,21 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const floors = new Map(
     card.lore.map((e) => [e.id, Math.max(...[rpg.initial, opened.s, s].map((x) => floorAt(e.unlock, x)))]),
   )
-  const L = makeLore<Record<string, unknown>, readonly string[]>(
-    card.lore.map((e) => ({
+  // the index as the session builds it (session.ts `current`): the card's entries expanded, one with an unfilled hole left
+  // out, then the player layer's entries, one layer each and always unlocked
+  const own = card.lore.flatMap((e) => {
+    const layers = e.layers.map((l) => expand(l, R.names))
+    return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
+  })
+  const L = makeLore<Record<string, unknown>, readonly string[]>([
+    ...own.map((e) => ({
       id: e.id,
       layers: e.layers,
       unlock: () => floors.get(e.id)!,
-      offer: (x, ev) => holds(e.offer, x, ev),
+      offer: (x: Record<string, unknown>, ev: readonly string[]) => holds(e.offer, x, ev),
     })),
-  )
+    ...R.entries.map((e) => ({ id: e.id, layers: [e.text], unlock: () => 1 })),
+  ])
   const gated = {
     ...s,
     lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id) }])),
@@ -97,22 +104,29 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     .filter((e) => readable.includes(e.id))
     .map((e) => `${e.id}=${e.hook}`)
   const windows = new Map(L.offers(gated, [], opened.events).map((d) => [d.id, d.layer]))
-  const lore = card.lore.map((e) => {
-    const at = L.current(
-      L.entries.find((x) => x.id === e.id)!,
-      gated,
-      [],
-    )
-    const w = windows.get(e.id)
-    return `${e.id}  layer ${at}/${e.layers.length}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}`
-  })
+  const lore = [
+    ...own.map((e) => {
+      const at = L.current(
+        L.entries.find((x) => x.id === e.id)!,
+        gated,
+        [],
+      )
+      const w = windows.get(e.id)
+      return `${e.id}  layer ${at}/${e.layers.length}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}`
+    }),
+    ...R.entries.map((e) => `${e.id}  (${e.from})  in the index\n    ${hook(e.text)}`),
+  ]
 
   // ───────── record ─────────
   const asks = R.products // a 小剧场 is narrate's, not this record document's
     .filter((p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, s)))
     .map((p) => `${p.id}: ${p.text}`)
-  const qs = rpg.questions(s)
+  const qs = rpg.questions(s, R.names)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
+  // the narrate products on: one `<id>: <question>` line each after the prose directive (session.ts `penned`)
+  const penned = R.products
+    .filter((p) => p.stage === "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, s)))
+    .map((p) => `${p.id}: ${p.text}`)
 
   // ───────── the document ─────────
   const ask: Ask =
@@ -129,6 +143,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
             outcome: [],
             must: [],
             may: [],
+            blocks: { question: R.asks["narrate.blocks"]!.text, asks: penned },
           }
   const doc = request(
     {
@@ -142,7 +157,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const total = tokens(doc.map(textOf).join("\n"))
 
   // ───────── bands ↔ readouts ─────────
-  const bands = rpg.asked(s).map((q) => {
+  const bands = rpg.asked(s, R.names).map((q) => {
     const moved = [...new Set(q.options.flatMap((x) => x.do.flatMap((e) => ("path" in e ? [e.path] : []))))]
     const active = card.fiction.filter(
       (f) => f.when && reads(f.when).some((p) => moved.includes(p)) && head([f], { state: s }).length,
@@ -170,6 +185,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
       text: [...asks, ...(questions ?? [])].join("\n"),
     },
     { name: "bands ↔ readouts", tokens: 0, text: bands.join("\n\n") },
+    { name: "narrate blocks", tokens: tokens(penned.join("\n")), text: penned.join("\n") },
   ]
   const text = [
     `${card.id} at ${JSON.stringify(s)}${g ? `, after greeting ${o.greeting}` : ""}`,
@@ -180,7 +196,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     state: s,
     bands: card.fiction.filter((f) => f.when && head([f], { state: s }).length).map((f) => f.id),
     windows: [...windows].map(([id, layer]) => `${id}→${layer}`),
-    asked: rpg.asked(s).map((q) => q.id),
+    asked: rpg.asked(s, R.names).map((q) => q.id),
     sections,
     doc,
     total,

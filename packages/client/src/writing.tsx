@@ -11,7 +11,16 @@ import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Modal, newId, Switch } from "./controls.tsx"
 import { Back, Next, Prev, Snippets as Plus } from "./icons.tsx"
-import { cardNameKeys, orderedPacks, toggleMount, withoutProductPatch, withPackName, withProductPatch } from "./pack.ts"
+import {
+  cardNameKeys,
+  orderedPacks,
+  productEdit,
+  toggleMount,
+  withoutProductPatch,
+  withoutProductText,
+  withPackName,
+  withProductPatch,
+} from "./pack.ts"
 import { extraOf, withExtra } from "./requirements.ts"
 import { openSettings } from "./settings.tsx"
 import { close, open } from "./pages.ts"
@@ -55,7 +64,7 @@ export const WritingPage = () => {
     return allPacks().find((p) => p.id === from)?.name ?? from
   }
 
-  const mountedIds = () => loc()?.mounts ?? view()?.mounts.map((m) => m.id) ?? []
+  const mountedIds = () => loc()?.mounts ?? []
   const chips = () => orderedPacks(allPacks(), mountedIds())
   const nameKeys = () => cardNameKeys(layer()?.holes, layer()?.names)
   const extra = () => extraOf(loc())
@@ -192,6 +201,7 @@ interface ProductEditDraft {
 
 const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => {
   const view = read(card)
+  const allPacks = read(packs)
   const cardId = () => view()?.id ?? ""
   const loc = () => view()?.local
   const layer = () => view()?.layer
@@ -268,29 +278,28 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
     })
     prodDlg.showModal()
   }
+  const shownProduct = (id: string) =>
+    products().find((p) => p.id === id) as { id: string; from: string; label?: string; text?: string } | undefined
   const saveProduct = () => {
     const d = editingProd()
     const cid = cardId()
-    if (!d || !cid || !d.label.trim() || !d.text.trim()) return
-    const nextPage = d.isNew ? Math.floor(theaters().length / THEATER_PAGE_SIZE) : curThPage()
-    void putLocalAndRefresh(cid, (l) => {
-      const next = withProductPatch(l.products, {
-        id: d.id,
-        label: d.label.trim(),
-        text: d.text.trim(),
-        ...(d.isNew ? { on: false } : {}),
-      })
-      return { ...l, products: next }
-    })
-    if (d.isNew) setThPage(nextPage)
+    if (!d || !cid) return
+    const patch = productEdit(d.isNew ? undefined : shownProduct(d.id), d.id, d.label, d.text)
+    if (patch) {
+      const nextPage = d.isNew ? Math.floor(theaters().length / THEATER_PAGE_SIZE) : curThPage()
+      void putLocalAndRefresh(cid, (l) => ({ ...l, products: withProductPatch(l.products, patch) }))
+      if (d.isNew) setThPage(nextPage)
+    }
     prodDlg.close()
   }
+  /** 删除 a theater the player made here (its whole patch); 恢复默认 elsewhere (label and text go, `on` stays). */
   const removeProductPatch = () => {
     const d = editingProd()
     const cid = cardId()
     if (!d || !cid) return
+    const drop = isLocalOnly(d.id) ? withoutProductPatch : withoutProductText
     void putLocalAndRefresh(cid, (l) => {
-      const next = withoutProductPatch(l.products, d.id)
+      const next = drop(l.products, d.id)
       const { products: _, ...rest } = l
       return next.length ? { ...rest, products: next } : rest
     })
@@ -298,10 +307,12 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
   }
   const hasLocalPatch = (id: string) =>
     loc()?.products?.some((x) => x.id === id && (x.text !== undefined || x.label !== undefined)) ?? false
+  // a theater the player made on this card: the local row is its author, its id is one this client minted
+  // (controls.tsx `newId("th")`), and no pack in the library declares it (a pack's theater patched here is still the pack's)
   const isLocalOnly = (id: string) =>
-    products().find((p) => p.id === id)?.from === "local" &&
-    !["notes", "options", "inner"].includes(id) &&
-    !(view()?.mounts ?? []).length
+    shownProduct(id)?.from === "local" &&
+    id.startsWith("th-") &&
+    !allPacks().some((p) => p.products?.some((x) => x.id === id))
 
   const ProductCard = (cprops: { item: ReturnType<typeof products>[number] }) => {
     const p = () => cprops.item
@@ -350,8 +361,8 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
               const disabled = () => !cardId() || moot(s().key, effSw()) || taken() !== null
               return (
                 <fieldset class="sw-card" disabled={disabled()}>
+                  <legend>{t(s().label)}</legend>
                   <div class="sw-head">
-                    <legend>{t(s().label)}</legend>
                     <Show when={taken()}>
                       {(who) => <span class="tag">{t("writing.takenBy", { from: props.fromLabel(who()) })}</span>}
                     </Show>
@@ -496,7 +507,7 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
                 <button
                   type="button"
                   class="btn sm primary"
-                  disabled={!d().label.trim() || !d().text.trim()}
+                  disabled={d().isNew && !d().text.trim()}
                   onClick={saveProduct}
                 >
                   {t("common.save")}

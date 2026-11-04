@@ -1,7 +1,7 @@
 // The dialogs the library needs, mounted once by the shell and opened from anywhere (#117): a story's rename, the
 // delete confirm (one story, or the manager's checked set), the export's two formats, the card's story manager
-// (manager.tsx), the persona picker and the tag manager (#133: every word of `Player.tags` with its card count, an
-// inline rename and a delete, each one PUT /player). The sidebar's rows carry none of these (a row only switches the
+// (manager.tsx), the persona picker and the tag manager (#133: every word of `Local.tags` with its card count, an
+// inline rename and a delete, each one PUT /cards/<id>/local). The sidebar's rows carry none of these (a row only switches the
 // story); the manager's cards and the workspace's persona and tag rows call them. Each opener is a module function like
 // `openSettings`, bound to its dialog when the component mounts; before that it does nothing.
 import { createMemo, createSignal, For, Show } from "solid-js"
@@ -15,7 +15,7 @@ import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
 import { focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
 import { openOn, personaOn } from "./stories.ts"
-import { exportUrl, nameStory, pickStoryPersona, putLocal } from "./wire.ts"
+import { exportUrl, nameStory, pickStoryPersona, putLocal, refreshActiveCard } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const bound = {
@@ -72,12 +72,14 @@ export const StoryDialogs = () => {
     const c = cardId()
     if (c === null) return
     const s = openOn(lib(), c, pg())
-    if (s) return void pickStoryPersona(s.id, id ?? null)
+    if (s) return void pickStoryPersona(s.id, id ?? null).then(refreshActiveCard)
     // the card's page: Begin lands in the open story when it is empty and of this card (card.tsx `fresh`), so that one
     // takes the new default too
     const kept = openOn(lib(), c, "reader")
     if (kept && nodes().nodes.size === 0) void pickStoryPersona(kept.id, id ?? null)
-    void putLocal(c, ({ persona: _p, ...rest }) => (id === undefined ? rest : { ...rest, persona: id }))
+    void putLocal(c, ({ persona: _p, ...rest }) => (id === undefined ? rest : { ...rest, persona: id })).then(
+      refreshActiveCard,
+    )
   }
   // the rename dialog: the confirm's shape with a field; Enter or Save names it, blank clears the name back to
   // "New story", Escape or Cancel keeps it

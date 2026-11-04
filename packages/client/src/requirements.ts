@@ -6,7 +6,7 @@ import type { Fragment } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Layer } from "@effect-tavern/runtime/src/layer.ts"
 
 /** The per-card supplement's slot id: no card frame names it, so it meets nothing and `mode` is moot; `both` says so. */
-export const EXTRA = "extra"
+const EXTRA = "extra"
 export type At = NonNullable<Fragment["at"]>
 
 export const extraOf = (r: Partial<Layer> | undefined): string => r?.fragments?.find((f) => f.id === EXTRA)?.text ?? ""
