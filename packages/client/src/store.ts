@@ -366,6 +366,7 @@ const applyNow = (e: Wire): void => {
     case "delta":
       if (e.part.type === "text-delta") enqueue(e.part.text)
       if (e.part.type === "product-delta") {
+        play.ended = true // a block comes after the prose: nothing more joins the queue, it plays out at the rate
         const { id, text } = e.part
         registry.update(draft, (d) =>
           d ? { ...d, products: { ...d.products, [id]: (d.products?.[id] ?? "") + text } } : d,

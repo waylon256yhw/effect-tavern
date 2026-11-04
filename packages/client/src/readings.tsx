@@ -526,6 +526,8 @@ export const Demand = (props: { node: Node }) => {
  *  demanded), drawn by its shape, with one key that asks for it again (the same id demanded: history.ts replaces it in
  *  place). The key shows the way the row's own keys do (reader.css `.acts`). The draft draws its narrate blocks here
  *  too while they stream (store.ts `Draft.products`): no node yet, so no key. */
+/** A streaming block's edges, as the landed one will have them (journal.ts `split` trims): no height jump when it lands. */
+const trimmed = (v: unknown) => (typeof v === "string" ? v.trim() : v)
 export const Theater = (props: { products: Readonly<Record<string, unknown>>; node?: Node }) => {
   const view = read(card)
   const busy = read(working)
@@ -551,7 +553,7 @@ export const Theater = (props: { products: Readonly<Record<string, unknown>>; no
               )}
             </Show>
           </div>
-          <Shaped shape={p().shape} value={props.products[p().id]} />
+          <Shaped shape={p().shape} value={trimmed(props.products[p().id])} />
         </div>
       )}
     </For>
