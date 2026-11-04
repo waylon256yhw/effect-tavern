@@ -9,6 +9,9 @@
   overflow-y: auto;
   font-size: var(--text-body);
 }
+.wpage :is(h1, h2, h3, h4, p) {
+  margin: 0;
+}
 .wpage .mono {
   font-family: var(--font-mono);
 }
@@ -78,9 +81,11 @@
 }
 .wcard.grow {
   flex: 1;
+  overflow: hidden;
 }
 .wcard.grow .field-well {
   height: 12rem;
+  overflow: hidden;
 }
 .pack-chips {
   display: flex;
@@ -263,31 +268,76 @@
   background: var(--primary);
   color: var(--primary-ink);
 }
-.sw-sentence {
+.sw-card .sw-sentence {
   margin: var(--space-2) 0 0;
   font-size: var(--text-caption);
   color: var(--ink-3);
   line-height: 1.45;
 }
 
-/* the record products: compact cards grouped by kind, with their prompt preview visible underneath */
-.prod-grid {
+/* the record products: compact cards grouped by kind, with theaters paged in a 2×2 grid */
+.prod-body {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.prod-body:hover {
+  scrollbar-color: var(--alpha-2) transparent;
+}
+.prod-group {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.prod-kind-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 20px;
+}
+.prod-kind {
+  margin: 0;
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.prod-grid,
+.theater-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--space-2);
 }
-.prod-kind {
-  grid-column: 1 / -1;
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-footnote);
-  font-weight: 600;
-  color: var(--ink-3);
+.theater-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px;
+  border-radius: var(--radius-pill);
+  background: var(--alpha-1);
+  color: var(--ink-2);
+  font-size: var(--text-caption);
 }
-.prod-kind:first-child {
-  margin-top: 0;
+.theater-pager .mono {
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.theater-pager .icon.sm {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+}
+.theater-pager .icon.sm svg {
+  width: 12px;
+  height: 12px;
 }
 .prod-item {
   box-sizing: border-box;
@@ -376,6 +426,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   box-sizing: border-box;
   padding: var(--space-3);
   border: 0;
@@ -684,17 +735,28 @@
   }
   .wsheet {
     flex: 1;
+    height: 100%;
+    min-height: 0;
     grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     column-gap: var(--space-6);
     padding: var(--space-6);
   }
+  .wcol {
+    height: 100%;
+    overflow: hidden;
+  }
   .wcard.grow .field-well {
     flex: 1;
     height: auto;
+    min-height: 0;
   }
   .sw-grid,
-  .prod-grid {
+  .prod-grid,
+  .theater-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .theater-grid[data-paged="true"] {
+    grid-template-rows: repeat(2, minmax(52px, auto));
   }
 }

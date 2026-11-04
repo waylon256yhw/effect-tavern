@@ -10,7 +10,7 @@ import { unfilled } from "@effect-tavern/runtime/src/names.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Modal, newId, Switch } from "./controls.tsx"
-import { Back, Next, Snippets as Plus } from "./icons.tsx"
+import { Back, Next, Prev, Snippets as Plus } from "./icons.tsx"
 import { cardNameKeys, orderedPacks, toggleMount, withoutProductPatch, withPackName, withProductPatch } from "./pack.ts"
 import { extraOf, withExtra } from "./requirements.ts"
 import { openSettings } from "./settings.tsx"
@@ -219,6 +219,28 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
 
   const products = () => layer()?.products ?? []
   const lit = () => products().filter((p) => p.on).length
+  const worldProducts = () => products().filter((p) => kindOf(p) === "world")
+  const contextProducts = () => products().filter((p) => kindOf(p) === "context")
+  const theaters = () => products().filter((p) => kindOf(p) === "theater")
+
+  const THEATER_PAGE_SIZE = 4
+  const [thPage, setThPage] = createSignal(0)
+  const thPages = () => Math.max(1, Math.ceil(theaters().length / THEATER_PAGE_SIZE))
+  const curThPage = () => Math.min(thPage(), thPages() - 1)
+  const pagedTheaters = () => theaters().slice(curThPage() * THEATER_PAGE_SIZE, (curThPage() + 1) * THEATER_PAGE_SIZE)
+
+  let lastWheelAt = 0
+  const stepTheaterWheel = (e: WheelEvent) => {
+    if (thPages() <= 1) return
+    const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+    if (Math.abs(delta) < 12) return
+    e.preventDefault()
+    const now = Date.now()
+    if (now - lastWheelAt < 220) return
+    lastWheelAt = now
+    const next = delta > 0 ? Math.min(thPages() - 1, curThPage() + 1) : Math.max(0, curThPage() - 1)
+    if (next !== curThPage()) setThPage(next)
+  }
 
   const flipProduct = (prod: { id: string; on: boolean }) => {
     const cid = cardId()
@@ -250,6 +272,7 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
     const d = editingProd()
     const cid = cardId()
     if (!d || !cid || !d.label.trim() || !d.text.trim()) return
+    const nextPage = d.isNew ? Math.floor(theaters().length / THEATER_PAGE_SIZE) : curThPage()
     void putLocalAndRefresh(cid, (l) => {
       const next = withProductPatch(l.products, {
         id: d.id,
@@ -259,6 +282,7 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
       })
       return { ...l, products: next }
     })
+    if (d.isNew) setThPage(nextPage)
     prodDlg.close()
   }
   const removeProductPatch = () => {
@@ -279,41 +303,32 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
     !["notes", "options", "inner"].includes(id) &&
     !(view()?.mounts ?? []).length
 
-  const Group = (gprops: { kind: ReturnType<typeof kindOf>; title: string }) => {
-    const of = () => products().filter((p) => kindOf(p) === gprops.kind)
+  const ProductCard = (cprops: { item: ReturnType<typeof products>[number] }) => {
+    const p = () => cprops.item
+    const textOf = () => (p() as { text?: string }).text
+    const missing = () => unfilled(textOf() ?? "", layer()?.names ?? {})
     return (
-      <Show when={of().length}>
-        <h4 class="prod-kind">{gprops.title}</h4>
-        <For each={of()} keyed={(p) => p.id}>
-          {(p) => {
-            const textOf = () => (p() as { text?: string }).text
-            const missing = () => unfilled(textOf() ?? "", layer()?.names ?? {})
-            return (
-              <div
-                class="prod-item"
-                data-editable="true"
-                onClick={() => openEditProduct({ id: p().id, label: p().label, text: textOf() })}
-              >
-                <div class="prod-top">
-                  <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
-                  <For each={missing()}>{(m) => <span class="tag warn mono">{`{{${m}}}`}</span>}</For>
-                  <span class="tag">{props.fromLabel(p().from)}</span>
-                  <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <Switch
-                        on={!!p().on}
-                        label={p().label ?? p().id}
-                        onFlip={() => flipProduct({ id: p().id, on: !!p().on })}
-                      />
-                    </span>
-                  </Show>
-                </div>
-                <span class="prod-preview">{textOf() ?? t("writing.cardPrompt")}</span>
-              </div>
-            )
-          }}
-        </For>
-      </Show>
+      <div
+        class="prod-item"
+        data-editable="true"
+        onClick={() => openEditProduct({ id: p().id, label: p().label, text: textOf() })}
+      >
+        <div class="prod-top">
+          <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
+          <For each={missing()}>{(m) => <span class="tag warn mono">{`{{${m}}}`}</span>}</For>
+          <span class="tag">{props.fromLabel(p().from)}</span>
+          <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
+            <span onClick={(e) => e.stopPropagation()}>
+              <Switch
+                on={!!p().on}
+                label={p().label ?? p().id}
+                onFlip={() => flipProduct({ id: p().id, on: !!p().on })}
+              />
+            </span>
+          </Show>
+        </div>
+        <span class="prod-preview">{textOf() ?? t("writing.cardPrompt")}</span>
+      </div>
     )
   }
 
@@ -376,10 +391,66 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
             </button>
           </div>
         </div>
-        <div class="prod-grid scroller fade">
-          <Group kind="world" title={t("writing.kindWorld")} />
-          <Group kind="context" title={t("writing.kindContext")} />
-          <Group kind="theater" title={t("writing.kindTheater")} />
+        <div class="prod-body">
+          <Show when={worldProducts().length}>
+            <div class="prod-group">
+              <div class="prod-kind-bar">
+                <h4 class="prod-kind">{t("writing.kindWorld")}</h4>
+              </div>
+              <div class="prod-grid">
+                <For each={worldProducts()} keyed={(p) => p.id}>
+                  {(p) => <ProductCard item={p()} />}
+                </For>
+              </div>
+            </div>
+          </Show>
+          <Show when={contextProducts().length}>
+            <div class="prod-group">
+              <div class="prod-kind-bar">
+                <h4 class="prod-kind">{t("writing.kindContext")}</h4>
+              </div>
+              <div class="prod-grid">
+                <For each={contextProducts()} keyed={(p) => p.id}>
+                  {(p) => <ProductCard item={p()} />}
+                </For>
+              </div>
+            </div>
+          </Show>
+          <Show when={theaters().length}>
+            <div class="prod-group">
+              <div class="prod-kind-bar">
+                <h4 class="prod-kind">{t("writing.kindTheater")}</h4>
+                <Show when={thPages() > 1}>
+                  <div class="theater-pager">
+                    <button
+                      type="button"
+                      class="icon sm"
+                      disabled={curThPage() <= 0}
+                      onClick={() => setThPage(curThPage() - 1)}
+                    >
+                      <Prev />
+                    </button>
+                    <span class="mono">
+                      {curThPage() + 1} / {thPages()}
+                    </span>
+                    <button
+                      type="button"
+                      class="icon sm"
+                      disabled={curThPage() >= thPages() - 1}
+                      onClick={() => setThPage(curThPage() + 1)}
+                    >
+                      <Next />
+                    </button>
+                  </div>
+                </Show>
+              </div>
+              <div class="theater-grid" data-paged={thPages() > 1 ? "true" : "false"} onWheel={stepTheaterWheel}>
+                <For each={pagedTheaters()} keyed={(p) => p.id}>
+                  {(p) => <ProductCard item={p()} />}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
       </div>
 
