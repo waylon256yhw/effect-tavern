@@ -895,14 +895,14 @@
   font-size: var(--text-heading);
   font-weight: 600;
 }
+/* one bounded column, centred, scrolling inside */
 .status-body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(22rem, 26rem));
+  grid-template-columns: minmax(0, 26rem);
   grid-template-rows: minmax(0, 1fr);
   justify-content: center;
-  gap: var(--space-6);
   padding: 0 var(--space-5);
 }
 .status-body > div {
@@ -913,29 +913,7 @@
   flex-direction: column;
   gap: var(--space-5);
 }
-/* a left block with nothing in it (a card without rules, no pin) is not drawn: the right one alone, centred */
-.status-body:not(:has(> .still :is(.pinned, .group))) {
-  grid-template-columns: minmax(0, 26rem);
-}
-.status-body:not(:has(> .still :is(.pinned, .group))) > .still {
-  display: none;
-}
-/* no room for two (2 × 22rem, the gap and the paddings): one column, the left block on top, scrolled as one */
-@container stage (width < 49rem) {
-  .status-body {
-    grid-template-columns: minmax(0, 26rem);
-    grid-template-rows: none;
-    align-content: start;
-    overflow-y: auto;
-    padding-bottom: var(--space-5);
-  }
-  .status-body > div {
-    overflow: visible;
-    padding-bottom: 0;
-  }
-}
-/* Status with no row to show (no rules, or every field off by `when` this turn): no bare head over an empty table;
-   a pin alone still keeps the left block */
+/* Status with no row to show (no rules, or every field off by `when` this turn): no bare head over an empty table */
 .status-page .status:not(:has(.group)) {
   display: none;
 }

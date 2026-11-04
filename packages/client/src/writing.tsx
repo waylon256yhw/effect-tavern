@@ -27,6 +27,7 @@ import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts
 import { addGlobal, atOf, extraOf, removeGlobal, setGlobalAt, setGlobalText, withExtra } from "./requirements.ts"
 import { close, open } from "./pages.ts"
 import { activeOf, card, player, registry, stories, tabs } from "./store.ts"
+import { kindOf } from "./record.ts"
 import { moot, pressing, sentence, SWITCHES, type SwitchKey } from "./switches.ts"
 import { fetchCard, fetchCardOf, putPlayer } from "./wire.ts"
 import { type Key, t } from "./i18n.ts"
@@ -118,6 +119,26 @@ const Switches = () => {
     })
   }
   const lit = () => products().filter((p) => onOf(p)).length
+  /** One of the three kinds (record.ts `kindOf`) under its interface word; a kind the card has none of is not drawn. */
+  const Group = (props: { kind: ReturnType<typeof kindOf>; title: string }) => {
+    const of = () => products().filter((p) => kindOf(p) === props.kind)
+    return (
+      <Show when={of().length}>
+        <h4 class="prod-kind">{props.title}</h4>
+        <For each={of()} keyed={(p) => p.id}>
+          {(p) => (
+            <div class="prod-item">
+              <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
+              <Show when={!BUILTIN_PRODUCTS.has(p().id) && view()?.title}>{(t) => <span class="tag">{t()}</span>}</Show>
+              <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
+                <Switch on={onOf(p())} label={p().label ?? p().id} onFlip={() => flip(p())} />
+              </Show>
+            </div>
+          )}
+        </For>
+      </Show>
+    )
+  }
   return (
     <section class="wpanel" role="tabpanel" aria-label={t("writing.tabSwitches")}>
       <div class="wsec">
@@ -155,8 +176,8 @@ const Switches = () => {
           </For>
         </div>
       </div>
-      {/* the record products: the harness's and the card's, by shown name; notes is the chronicle every fold reads
-          and stays on; the rest are the player's toggles over the declared default */}
+      {/* the record products: the harness's and the card's, by shown name, grouped by kind (world, context, theater);
+          notes is the chronicle every fold reads and stays on; the rest are the player's toggles over the declared default */}
       <div class="wsec grow">
         <div class="block-title">
           <h3>{t("writing.products")}</h3>
@@ -167,19 +188,9 @@ const Switches = () => {
           </div>
         </div>
         <div class="prod-grid scroller fade">
-          <For each={products()} keyed={(p) => p.id}>
-            {(p) => (
-              <div class="prod-item">
-                <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
-                <Show when={!BUILTIN_PRODUCTS.has(p().id) && view()?.title}>
-                  {(t) => <span class="tag">{t()}</span>}
-                </Show>
-                <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
-                  <Switch on={onOf(p())} label={p().label ?? p().id} onFlip={() => flip(p())} />
-                </Show>
-              </div>
-            )}
-          </For>
+          <Group kind="world" title={t("writing.kindWorld")} />
+          <Group kind="context" title={t("writing.kindContext")} />
+          <Group kind="theater" title={t("writing.kindTheater")} />
         </div>
       </div>
     </section>

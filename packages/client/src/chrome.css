@@ -318,8 +318,7 @@
 .badge[data-hit] {
   color: var(--ok);
 }
-.clue,
-.notes {
+.clue {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
@@ -327,16 +326,14 @@
   border-radius: var(--radius);
   background: var(--alpha-1);
 }
-.clue > svg,
-.notes > svg {
+.clue > svg {
   flex: none;
   width: var(--icon-sm);
   height: var(--icon-sm);
   margin-top: 2px;
   color: var(--ink-3);
 }
-.clue p,
-.notes p {
+.clue p {
   flex: 1;
   text-align: left;
 }
@@ -360,6 +357,14 @@
   border-radius: var(--radius);
   background: var(--alpha-1);
   overflow-wrap: anywhere;
+}
+/* a 小剧场 block under its turn's prose: the name, its once-more key at the right (reader.css `.acts`) */
+.theater .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  margin: -4px -5px -4px 0;
 }
 .product .plabel {
   font-size: var(--text-footnote);

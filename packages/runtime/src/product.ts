@@ -128,7 +128,10 @@ export const render = (s: Shape, v: unknown): string => {
 
 /** The items of a list or table folded along a path (`vs` = the value at each node, undefined where it has none), each
  *  with the position and stored index it came from. Merge by key keeps the newest row per key where the key first appeared. */
-const items = (p: Product, vs: readonly unknown[]): Array<{ at: number; i: number; item: unknown }> => {
+const items = (
+  p: Pick<Product, "shape" | "fold">,
+  vs: readonly unknown[],
+): Array<{ at: number; i: number; item: unknown }> => {
   const all = vs.flatMap((v, at) => (v === undefined ? [] : (v as unknown[]).map((item, i) => ({ at, i, item }))))
   const f = p.fold ?? (p.shape.kind === "list" ? "append" : "latest")
   if (f === "append") return all
@@ -136,7 +139,7 @@ const items = (p: Product, vs: readonly unknown[]): Array<{ at: number; i: numbe
   return [...new Map(all.map((x) => [String((x.item as Row)[f.key]), x])).values()]
 }
 /** The current value of each product along a path, by its fold; a product no node has is absent. */
-export const fold = (ps: readonly Product[], history: readonly Readonly<Row>[]): Row =>
+export const fold = (ps: readonly Pick<Product, "id" | "shape" | "fold">[], history: readonly Readonly<Row>[]): Row =>
   Object.fromEntries(
     ps.flatMap((p) => {
       const vs = history.map((h) => h[p.id])

@@ -158,6 +158,7 @@ export const defaultProducts = (input: "act" | "note"): readonly Product[] =>
       // turn's summary one unit (docs/summary-reading.md).
       text: "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing.",
       shape: { kind: "text" },
+      fold: "append",
       feed: true,
     },
     {
@@ -269,6 +270,9 @@ export const cardView = (card: Card, player: Player) => {
       label: p.label,
       shape: p.shape,
       on: p.on,
+      fold: p.fold,
+      feed: p.feed,
+      recall: p.recall,
     })),
     // the fiction's modules without their text: id, shown name, and the state condition that makes one a variant
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),

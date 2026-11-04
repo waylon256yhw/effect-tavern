@@ -7,7 +7,7 @@ import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format, Hat, Player, Snippet } from "@effect-tavern/runtime/src/fragment.ts"
-import type { Shape } from "@effect-tavern/runtime/src/product.ts"
+import type { Product } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Event, Facets, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
@@ -49,8 +49,9 @@ export interface CardView {
   fiction: readonly { id: string; label?: string; when?: Cond }[] // the fiction's modules without their text
   rules: Rules
   /** The record products as declared (card over harness): the shown name, the shape the inspector draws by, and the
-   *  default state the player's toggle (`Player.products`) overrides on the Writing page. */
-  products: readonly { id: string; label?: string; shape: Shape; on: boolean }[]
+   *  default state the player's toggle (`Player.products`) overrides on the Writing page; `fold` / `feed` / `recall`
+   *  say which of the three kinds it is (record.ts `kindOf`). */
+  products: readonly (Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall"> & { on: boolean })[]
   snippets: readonly Snippet[]
   format: readonly Format[]
 }

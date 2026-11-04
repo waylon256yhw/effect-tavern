@@ -258,6 +258,7 @@ const en: Dict = {
     urlOf: "{name} URL",
   },
   readings: {
+    again: "Once more",
     aside: "Aside",
     none: "none",
     pin: "Pin",
@@ -435,6 +436,9 @@ const en: Dict = {
     allCards: "All cards",
     allFollowCard: "All follow the card",
     alwaysOn: "Always on",
+    kindContext: "Summary",
+    kindTheater: "Aside",
+    kindWorld: "State",
     atHead: "Head",
     atTail: "End of every turn",
     beforeCaret: "Before the caret",

@@ -1,10 +1,11 @@
 // One screen: the reading line as sections, the draft growing at its end, a composer at the bottom. A turn's actions
 // sit under what they act on (#101): a row under the player's bubble (revise, copy), a row under the prose (the
-// Record pill, which opens a full-page sheet of that turn's readings, src/record.ts projecting them, 小剧场 at its
-// foot; the version count; Swipe / Reword / Edit); the last section carries the Options container, whose rows fill
+// Record pill, drawn when the turn has a ledger and opening a full-page sheet of it, src/record.ts projecting it; the
+// 小剧场 menu; the version count; Swipe / Reword / Edit), the turn's 小剧场 between its prose and that row; the last
+// section carries the Options container, whose rows fill
 // the composer and never send. The frame around it is the shell's (shell.tsx, #117): the sidebar of cards and
 // stories with the persona and writing rows, the reader's keys (Timeline, Inspector, 读数), and under 72rem the
-// phone's drawer and sheets. The pages (home, card, Timeline, Settings, Writing, 读数: Status, this turn's Record, 小剧场;
+// phone's drawer and sheets. The pages (home, card, Timeline, Settings, Writing, 读数: the pin, Status, the world products;
 // Inspect) fill the stage card over the reader, which stays mounted under them so
 // a turn in flight keeps streaming. Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the
 // canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet menu a popover anchored to its button:
@@ -25,7 +26,7 @@ import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { RecordSheet, Rewrite, SiblingKind, StatusPage } from "./readings.tsx"
+import { Demand, RecordSheet, Rewrite, SiblingKind, StatusPage, Theater } from "./readings.tsx"
 import { lineOf, versions } from "./record.ts"
 import { Shell } from "./shell.tsx"
 import { shrinkwrap } from "./shrinkwrap.ts"
@@ -492,11 +493,13 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
       <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={done} />
       </Show>
-      {/* the turn's row (#101): the Record pill, the version count, "stopped"; then, at the right end, this turn's
+      <Theater node={props.node} />
+      {/* the turn's row (#101): the Record pill (a ledger to open), 小剧场, the version count, "stopped"; then, at the right end, this turn's
           actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it
           is over the section, a touch screen always (reader.css) */}
       <footer class="actions">
         <RecordSheet node={props.node} n={props.n} />
+        <Demand node={props.node} />
         <Show when={siblings().length > 1}>
           <span class="siblings">
             <button

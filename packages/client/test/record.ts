@@ -1,6 +1,6 @@
-// The Record projection: changed fields by shape (enum → steps, two-bounded int → meter, the rest → value), checks,
-// clues with pinnability from `readable`, the pin's fate, notes; an unchanged root yields nothing. Then the turn
-// heading under a field path or a product key.
+// The ledger projection: changed fields by shape (enum → steps, two-bounded int → meter, the rest → value), checks,
+// clues with pinnability from `readable`, the pin's fate, world products' values this turn; an unchanged root yields
+// nothing. A product's kind off its declarations. Then the turn heading under a field path or a product key.
 import assert from "node:assert/strict"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
@@ -9,6 +9,7 @@ import {
   fieldChanged,
   fields,
   heading,
+  kindOf,
   lineOf,
   marked,
   parentOf,
@@ -53,8 +54,7 @@ assert.deepEqual(els, [
   { kind: "check", check: { action: "strike", chance: 0.6, roll: 0.7, hit: false } },
   { kind: "clue", id: "li", text: "a clue", pinnable: true },
   { kind: "pin", id: "li", hook: "a hook", told: false }, // pinned, never fired: the row is where it can be pinned again; named by the parent's hook
-  { kind: "notes", text: "a fact" },
-])
+]) // notes is context: not in the ledger
 assert.deepEqual(
   record(
     rules,
@@ -66,26 +66,47 @@ assert.deepEqual(
   ),
   [{ kind: "pin", id: "li", hook: "li", told: true }], // no parent to name it: the id
 )
-// Products: every declared one on the node but notes (its own kind) and options (the Options container), by shown
-// name, in the card's order; one not on the node (off, or not yet demanded) draws nothing
+// Kinds: read back (feed or recall) and replaced or merged by key → world; read back and appended → context; never
+// read back → theater. The fold default is product.ts's: append for a list, latest otherwise.
+const people = {
+  id: "people",
+  shape: { kind: "table", columns: [{ key: "name", type: "text" }] },
+  fold: { key: "name" },
+  feed: true,
+} as const
+assert.equal(kindOf({ shape: { kind: "record", keys: [] }, feed: true }), "world") // latest by default
+assert.equal(kindOf(people), "world")
+assert.equal(kindOf({ shape: { kind: "list" }, recall: true, fold: "latest" }), "world")
+assert.equal(kindOf({ shape: { kind: "text" }, fold: "append", feed: true }), "context") // notes
+assert.equal(kindOf({ shape: { kind: "list" }, recall: true }), "context") // append by default
+assert.equal(kindOf({ shape: { kind: "text" } }), "theater") // inner
+assert.equal(kindOf({ shape: { kind: "table", columns: [] }, fold: { key: "x" } }), "theater") // a table nobody reads back
+// Products: only the world ones on the node, by shown name, in the card's order; notes (context), inner (theater) and
+// options leave the ledger; one not on the node (off, or not yet demanded) draws nothing
 const declared = [
-  { id: "notes", label: "事件摘要", shape: { kind: "text" } },
+  { id: "notes", label: "事件摘要", shape: { kind: "text" }, fold: "append", feed: true },
   { id: "options", shape: { kind: "list" } },
   { id: "inner", label: "人物心声", shape: { kind: "text" } },
-  { id: "scene", shape: { kind: "record", keys: [{ key: "place", type: "text" }] } },
+  { id: "scene", shape: { kind: "record", keys: [{ key: "place", type: "text" }] }, feed: true },
+  people,
 ] as const
 assert.deepEqual(
   record(
     rules,
     node(
       { hp: 40, foe: 30, mood: "low" },
-      { turn: { input: {}, fired: [], products: { notes: "n", options: ["o"], scene: { place: "亭" } } } },
+      {
+        turn: {
+          input: {},
+          fired: [],
+          products: { notes: "n", options: ["o"], inner: "i", scene: { place: "亭" }, people: [] },
+        },
+      },
     ),
     undefined,
     declared,
   ),
   [
-    { kind: "notes", text: "n" },
     {
       kind: "product",
       id: "scene",
@@ -177,7 +198,18 @@ assert.equal(fieldChanged(undefined, a, g), false)
 assert.equal(marked(rules, a, g), true) // a field
 assert.equal(marked(undefined, a, g), false) // no rules, no dot
 assert.equal(marked(rules, s, g), false)
-assert.equal(marked(rules, node(s.state, { turn: { input: {}, fired: [], products: { notes: ["n"] } } }), g), false) // notes alone
+assert.equal(
+  marked(rules, node(s.state, { turn: { input: {}, fired: [], products: { notes: "n", inner: "i" } } }), g, declared),
+  false,
+) // notes and 小剧场 alone: no ledger, no pill
+assert.equal(
+  marked(rules, node(s.state, { turn: { input: {}, fired: [], products: { people: [] } } }), g, declared),
+  false,
+) // an empty table is no new row: not in the ledger, no pill
+assert.equal(
+  marked(rules, node(s.state, { turn: { input: {}, fired: [], products: { people: [{ name: "李" }] } } }), g, declared),
+  true,
+)
 assert.equal(marked(rules, node(s.state, { checks: [{ action: "x", chance: 1, roll: 0, hit: true }] }), g), true)
 assert.equal(marked(rules, node(s.state, { delivered: [{ id: "li", layer: 1, text: "c" }] }), g), true)
 assert.equal(marked(rules, node(s.state, { turn: { input: { pin: "li" }, fired: [], products: {} } }), g), true)
@@ -194,10 +226,7 @@ for (const x of [a, s, scened]) {
     fieldChanged(rules, x, g),
     record(rules, x, g).some((el) => "path" in el),
   )
-  assert.equal(
-    marked(rules, x, g, declared),
-    record(rules, x, g, declared).some((el) => el.kind !== "notes"),
-  )
+  assert.equal(marked(rules, x, g, declared), record(rules, x, g, declared).length > 0)
 }
 // the input line and its channel
 assert.deepEqual([g, a, o, b].map(lineOf), ["", "go", "slower", "go"])

@@ -257,6 +257,7 @@ const zh = {
     urlOf: "{name} 地址",
   },
   readings: {
+    again: "再来一次",
     aside: "小剧场",
     none: "无",
     pin: "固定",
@@ -433,6 +434,9 @@ const zh = {
     allCards: "所有卡片",
     allFollowCard: "全部跟随卡片",
     alwaysOn: "常开",
+    kindContext: "摘要",
+    kindTheater: "小剧场",
+    kindWorld: "状态",
     atHead: "开头",
     atTail: "每轮末尾",
     beforeCaret: "光标前",
