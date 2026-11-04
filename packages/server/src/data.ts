@@ -420,12 +420,12 @@ export const open = (asked: string) => {
         tx(() => {
           for (const id of c.dropped ?? []) q("delete from node where story = ? and id = ?").run(story, id)
           if (c.node)
-            q("insert or replace into node (story, id, parent, json) values (?, ?, ?, ?)").run(
-              story,
-              c.node.id,
-              c.node.parent,
-              JSON.stringify(c.node),
-            )
+            // an update in place, never `or replace`: SQLite's REPLACE deletes the row first, which cascades to `call`
+            // and wipes the trace of a node that `demand` or `edit` only amended
+            q(
+              `insert into node (story, id, parent, json) values (?, ?, ?, ?)
+                 on conflict (story, id) do update set parent = excluded.parent, json = excluded.json`,
+            ).run(story, c.node.id, c.node.parent, JSON.stringify(c.node))
           q("update story set head = ?, next = ?, updated = ? where id = ?").run(log.head, log.next, Date.now(), story)
         }),
     }),

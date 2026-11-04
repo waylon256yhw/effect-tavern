@@ -38,7 +38,8 @@ assert.throws(() => data.store<N>(99).read(), /no story 99/)
 const trace = data.calls(story)
 trace.add(0, [{ phase: "narrate" }, { phase: "record" }])
 trace.add(2, [{ phase: "lookup" }])
-trace.add(0, [{ phase: "record" }]) // an amend appends
+back.commit(L.amend(back.log, 0, { text: "r'" })) // an amend updates the node in place (never cascades to its calls)
+trace.add(0, [{ phase: "record" }]) // and appends its own call
 assert.deepEqual(trace.list(), {
   0: [{ phase: "narrate" }, { phase: "record" }, { phase: "record" }],
   2: [{ phase: "lookup" }],

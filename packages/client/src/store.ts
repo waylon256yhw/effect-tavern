@@ -370,7 +370,7 @@ const applyNow = (e: Wire): void => {
       const amended = e.node !== undefined && registry.get(log).nodes.has(e.node.id)
       registry.update(log, (l) => L.apply(l, e))
       const id = e.node?.id
-      if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made]))
+      if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made.splice(0)]))
       if (id !== undefined || !registry.get(draft)) {
         settle(!amended) // an amend leaves a typed revision alone
         running(null)

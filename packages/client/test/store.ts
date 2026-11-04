@@ -76,4 +76,14 @@ while (registry.get(draft) && registry.get(draft)!.prev !== "slow words" && n++ 
 assert.deepEqual([registry.get(draft)!.prev, registry.get(stage)], ["slow words", "narrate"])
 while (registry.get(draft) !== null && n++ < 400) tick()
 assert.deepEqual([registry.get(draft), registry.get(calls).get(4)?.length, registry.get(log).head], [null, 1, 4])
+// An amend (a demand) appends only its own call to the node's trace; earlier turns' calls do not leak into it.
+apply({ kind: "call", phase: "record", msgs: [], out: { inner: "i" }, usage: {}, ms: 1 } as any)
+apply({ kind: "change", node: node(4, 3, "second"), head: 4 })
+assert.deepEqual(
+  registry
+    .get(calls)
+    .get(4)
+    ?.map((c) => c.phase),
+  ["narrate", "record"],
+)
 console.log("ok")

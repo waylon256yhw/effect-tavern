@@ -24,7 +24,7 @@
   user-select: none;
   cursor: col-resize;
 }
-.stage {
+.canvas > .stage {
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1178,14 +1178,14 @@ dialog.drawer[open]::backdrop {
     box-shadow: var(--shadow-pop);
   }
   /* the stage stands clear of the sidebar; folded, it moves to the edge */
-  .stage {
+  .canvas > .stage {
     margin-left: var(--side-w);
     transition: margin-left var(--dur-3) var(--ease);
   }
-  .canvas[data-resizing] .stage {
+  .canvas[data-resizing] > .stage {
     transition: none;
   }
-  .canvas[data-folded="true"] .stage {
+  .canvas[data-folded="true"] > .stage {
     margin-left: 8px;
   }
   .resizer {
