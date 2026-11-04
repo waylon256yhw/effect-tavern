@@ -375,6 +375,28 @@ const run = async (inspect: boolean) => {
     assert.equal((await headOf("worn")).includes("HAT-TAIL"), inspect)
     assert.deepEqual(await (await hat()).json(), [])
     assert.equal((await headOf("gone")).includes("HAT-TAIL"), false)
+
+    // A pack is a library row `Player.packs[card]` mounts: put and mounted, its fragment is in the next head; a bad body
+    // is a 400; deleted, gone from the list and from /player, and from the head.
+    const pack = (v?: unknown) =>
+      fetch(`${base}/packs/kit`, {
+        method: v === undefined ? "DELETE" : "PUT",
+        body: v === undefined ? undefined : JSON.stringify(v),
+      })
+    const kit = { name: "文风", fragments: [{ id: "style", text: "PACK-STYLE" }] }
+    assert.deepEqual(await (await pack(kit)).json(), [{ id: "kit", ...kit }])
+    assert.equal((await pack({ name: 1 })).status, 400)
+    assert.equal((await pack({ name: "x", entries: [{ id: "a", layers: [] }] })).status, 400)
+    assert.deepEqual(await (await fetch(`${base}/packs`)).json(), [{ id: "kit", ...kit }])
+    const layer = (await (await fetch(`${base}/player`)).json()) as Record<string, unknown>
+    await fetch(`${base}/player`, { method: "PUT", body: JSON.stringify({ ...layer, packs: { [chat.id]: ["kit"] } }) })
+    assert.deepEqual(((await (await fetch(`${base}/player`)).json()) as { packs: unknown }).packs, {
+      [chat.id]: ["kit"],
+    })
+    assert.equal((await headOf("packed")).includes("PACK-STYLE"), inspect)
+    assert.deepEqual(await (await pack()).json(), [])
+    assert.equal(((await (await fetch(`${base}/player`)).json()) as { packs?: unknown }).packs, undefined)
+    assert.equal((await headOf("unpacked")).includes("PACK-STYLE"), false)
   } finally {
     server.close()
   }

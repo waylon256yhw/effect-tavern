@@ -1,6 +1,6 @@
 // §8 / §18: Fragment = text + position + condition. The head zone = player layer → card frame → fiction.
 // Frame ids are slots; how a player's slot meets the card's same slot is the player's per-fragment setting.
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { Cond, holds, type State } from "./cond.ts"
 import { Entry } from "./polish.ts"
 
@@ -122,6 +122,7 @@ export const Player = Schema.Struct({
   global: Schema.Array(Fragment),
   forCard: Schema.Record(Schema.String, Schema.Array(Fragment)),
   persona: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)), // card id → the persona (a library id) the player is on that card; none = the card's own
+  packs: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))), // card id → the packs (library ids) mounted on that card, in mount order
   tags: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))), // card id → the player's filing words on that card (#133); the harness never reads, generates or translates them
   defaults: Schema.optionalKey(
     Schema.Struct({ global: Schema.optionalKey(ModeSchema), forCard: Schema.optionalKey(ModeSchema) }),
@@ -147,17 +148,40 @@ export const Hat = Schema.Struct({
   review: Schema.optionalKey(Schema.Struct({ head: Said_ })),
 })
 export type Hat = typeof Hat.Type
+// A pack (GLOSSARY enhancer): a named set of player-layer things, a library row of the player's (`/packs`) that
+// `Player.packs` mounts per card. The opposite of a hat: merged by id, each item on its own, no role and no order, so it
+// never touches the request's shape. It never touches the card's Cond or state either: no `when` on a fragment, an entry
+// is one layer with no unlock or window. Decoding drops `when` and `role`, so a pack cannot carry them.
+export const PackEntry = Schema.Struct({ id: Schema.String, text: Schema.String }) // one layer; its first sentence is the hook (lore.ts `hook`)
+export type PackEntry = typeof PackEntry.Type
+export const Pack = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  fragments: Schema.optionalKey(Schema.Array(Fragment.mapFields(Struct.omit(["when", "role"])))), // the id is the slot, `at` head or tail
+  entries: Schema.optionalKey(Schema.Array(PackEntry)),
+  lexicon: Schema.optionalKey(Schema.Array(Entry)),
+  products: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
+  snippets: Schema.optionalKey(Schema.Array(Snippet)),
+})
+export type Pack = typeof Pack.Type
+/** The packs mounted on a card, in mount order; an id the library no longer has is skipped. */
+export const mounted = (player: Player, card: string, library: readonly Pack[]): Pack[] =>
+  [...new Set(player.packs?.[card])].flatMap((id) => library.find((p) => p.id === id) ?? [])
 export interface FrameSource {
   id: string
   frame: readonly Fragment[]
 }
 
-/** Player zone then card frame, slot conflicts resolved by the player's `mode` (defaults: global yields, per-card overrides). */
-export const frame = (player: Player, card: FrameSource): Fragment[] => {
-  // Within the player's own layer, per-card replaces global on the same slot; the player wrote both.
+/** Player zone then card frame, slot conflicts resolved by the player's `mode` (defaults: global yields, per-card
+ *  overrides; a mounted pack is this card's decision, so it defaults like per-card). */
+export const frame = (player: Player, card: FrameSource, packs: readonly Pack[] = []): Fragment[] => {
+  // Within the player's own layer, later replaces earlier on the same slot: global, the packs in mount order, per-card.
+  // A pack's item switched off is not there: it blanks neither the global slot under it nor the card's.
   const mine = new Map<string, { f: Fragment; mode: Mode }>()
   for (const f of [...writing(player.writing), ...player.global])
     mine.set(f.id, { f, mode: f.mode ?? player.defaults?.global ?? "yield" })
+  for (const f of packs.flatMap((p) => p.fragments ?? []))
+    if (f.enabled !== false) mine.set(f.id, { f, mode: f.mode ?? player.defaults?.forCard ?? "override" })
   for (const f of player.forCard[card.id] ?? [])
     mine.set(f.id, { f, mode: f.mode ?? player.defaults?.forCard ?? "override" })
   const theirs = new Map(card.frame.map((f) => [f.id, f]))

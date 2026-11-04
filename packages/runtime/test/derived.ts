@@ -16,9 +16,10 @@ type Turn = TurnOf<Beat>
 const derivedOf = (card: Card, policy = { budget: 0, keep: 2, block: 2 }) =>
   makeDerived({
     rpg: makeCard(card.rules),
-    L: makeLore<Paths, readonly string[]>(
-      card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) })),
-    ),
+    L: () =>
+      makeLore<Paths, readonly string[]>(
+        card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) })),
+      ),
     lore: card.lore,
     products: () => resolve(defaultProducts("act"), card.products),
     policy: () => policy,

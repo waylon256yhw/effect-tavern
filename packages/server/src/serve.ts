@@ -1,7 +1,7 @@
 // The wire adapter at the session's seam: one process, a session per story, no logic of its own. A request names its
 // story in `x-tavern-story` (the client's `stories.current`); a story route (/card, /nodes, /calls, /turn, /stop,
 // POST /, DELETE /nodes/<id>) without the header, or with one naming no story, is a 404. The rest (/stories, /cards,
-// /player, /personas, /hats, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
+// /player, /personas, /hats, /packs, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
 // one turn at a time (turn.ts): an action on a story whose turn is in flight, a synchronous one too (greet, checkout,
 // setField, a node dropped), is a 409 {error, code: "busy"}, and so is deleting the story (the batch delete skips it);
 // stories run side by side, with no lock across them.
@@ -40,6 +40,10 @@
 //                 is the story's (`persona` on its row); `Player.persona[card]` is the card's default a new story takes.
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
+//   GET  /packs   the player's writing packs; PUT /packs/<id> {name, fragments?, entries?, lexicon?, products?, snippets?}
+//                 writes one (decoded as `Pack`, in force from the next request on a card that mounts it), DELETE
+//                 /packs/<id> removes it and takes it off every card (the client re-reads /player). Both answer the
+//                 list. Mounting is `packs` on PUT /player.
 //   GET  /secrets the key vault as {id, name, type, hint}: a value never leaves the server. POST /secrets
 //                 {name, type?, value} adds one and answers it the same way; PUT /secrets/<id> {name, type?, value?} renames,
 //                 retypes or rekeys it in place; DELETE /secrets/<id> removes it (a provider naming it then has no key). Both answer the list.
@@ -76,7 +80,7 @@
 // `inspect` keeps the request messages on `call` events (the stream and /calls); they carry the card's fragment
 // bodies, so a player client gets phase, answer and usage only.
 import { Provider, Secret } from "@effect-tavern/provider"
-import { decodePlayer, Hat } from "@effect-tavern/runtime/src/fragment.ts"
+import { decodePlayer, Hat, Pack } from "@effect-tavern/runtime/src/fragment.ts"
 import { decodeAction, type Event } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
@@ -111,6 +115,7 @@ const failure = (c: Cause.Cause<unknown>): { message: string; code?: string } =>
 // The body besides Action and Player, decoded here like them.
 const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
+const PackBody = Schema.decodeUnknownSync(Pack.mapFields(Struct.omit(["id"])))
 const ProviderBody = Schema.decodeUnknownSync(Provider.mapFields(Struct.omit(["id"])))
 const SecretBody = Schema.decodeUnknownSync(
   Schema.Struct({ name: Secret.fields.name, type: Schema.optionalKey(Secret.fields.type), value: Secret.fields.value }),
@@ -222,6 +227,16 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         if (req.method === "PUT") lib.hats.put({ id, ...(await read(HatBody)) })
         else lib.hats.del(id)
         return lib.hats.list()
+      })
+    }
+    if (req.method === "GET" && req.url === "/packs") return json(200, lib.packs.list())
+    const packAt = /^\/packs\/([^/]+)$/.exec(req.url ?? "")
+    if (packAt && (req.method === "PUT" || req.method === "DELETE")) {
+      const id = decodeURIComponent(packAt[1]!)
+      return reply(async () => {
+        if (req.method === "PUT") lib.packs.put({ id, ...(await read(PackBody)) })
+        else lib.packs.del(id)
+        return lib.packs.list()
       })
     }
     if (req.method === "GET" && req.url === "/secrets") return json(200, lib.secrets.list())

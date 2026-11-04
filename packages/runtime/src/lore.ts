@@ -56,7 +56,9 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
       visible(s, ds)
         .filter((e) => e.offer?.(s, ctx) && current(e, s, ds) < e.layers.length)
         .map((e) => ({ id: e.id, layer: current(e, s, ds) + 1, text: e.layers[current(e, s, ds)] })),
-    text: (d: Disclosure) => byId.get(d.id)!.layers[d.layer - 1],
+    /** A disclosure's text; "" for an entry no longer here (a pack unmounted or deleted, a card's lore cut): old nodes
+     *  still replay. Nothing keeps a copy of what was told. */
+    text: (d: Disclosure) => byId.get(d.id)?.layers[d.layer - 1] ?? "",
     /** Derived per-entry state for `offer` to read as `lore.<id>.since` / `.shown`: turns since the entry last reached the
      *  narrator on this path (0 = this turn, Infinity = never) and how many turns it did. `perTurn` is the path's
      *  deliveries turn by turn, the current turn last. The ecosystem's sticky / cooldown / once-only event chains are
