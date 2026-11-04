@@ -113,7 +113,7 @@ export const kindOf = (p: Pick<Declared, "shape" | "fold" | "feed" | "recall">):
 
 /** A value this turn: present, and not an empty list or table (`[]` is "no item this turn"); a text or record counts
  *  by presence. */
-const fresh = (v: unknown) => v !== undefined && !(Array.isArray(v) && v.length === 0)
+export const fresh = (v: unknown) => v !== undefined && !(Array.isArray(v) && v.length === 0)
 
 /** A turn's ledger: what it changed (field rows, checks, clues delivered, the pin) and the world products' new values or
  *  rows. The model's chronicle (context) and the player's 小剧场 (theater) are not in it. */

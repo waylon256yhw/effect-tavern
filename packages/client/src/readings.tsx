@@ -9,10 +9,22 @@ import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Back, Change, Close, Clue, Die, Edit, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
 import { close } from "./pages.ts"
-import { heading, kindOf, marked, parentOf, record, status, whens, type Declared, type Element } from "./record.ts"
+import {
+  fresh,
+  heading,
+  kindOf,
+  marked,
+  parentOf,
+  record,
+  status,
+  whens,
+  type Declared,
+  type Element,
+} from "./record.ts"
 import {
   card,
   type CardView,
+  demanded,
   dismiss,
   draft,
   editing,
@@ -487,25 +499,27 @@ export const Rewrite = (props: {
 /** 小剧场 in a turn's row, beside the Record pill: a menu of the theater products the node can still be asked for (the
  *  `demand` action: one record call over the node's scene, the answer kept on the node, no turn), named by the card;
  *  nothing to ask for, no button. Not a sibling action (the demand runs no narrate). A failed demand has no draft to
- *  carry its ghost: the reason shows beside the button that asked, until the next action. */
+ *  carry its ghost: the reason shows after the menu in the row of the node that asked (store.ts `demanded`, set by the
+ *  menu and by a theater block's dice alike), until the next action clears it. */
 export const Demand = (props: { node: Node }) => {
   const view = read(card)
   const busy = read(working)
-  const d = read(draft)
   const failed = read(error)
-  const [asked, setAsked] = createSignal(false)
+  const asked = read(demanded)
   const demands = () => demandable(view()?.products ?? [], props.node)
   return (
-    <Show when={demands().length}>
-      <Show when={asked() && !d() && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
-      <Menu
-        action={t("readings.aside")}
-        label={t("readings.aside")}
-        value={undefined}
-        options={busy() ? [] : demands()}
-        onPick={(id) => (dismiss(), setAsked(true), turn.demand(props.node.id, id))}
-      />
-    </Show>
+    <>
+      <Show when={demands().length}>
+        <Menu
+          action={t("readings.aside")}
+          label={t("readings.aside")}
+          value={undefined}
+          options={busy() ? [] : demands()}
+          onPick={(id) => (dismiss(), turn.demand(props.node.id, id))}
+        />
+      </Show>
+      <Show when={asked() === props.node.id && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
+    </>
   )
 }
 
@@ -622,7 +636,7 @@ const Pinned = () => {
 }
 
 /** The world products' values now: each folded along the reading line by its own fold (runtime product.ts `fold`),
- *  drawn by its shape, in the card's order; one no node has yet is absent. */
+ *  drawn by its shape, in the card's order; one no node has yet, or whose rows are still none, is absent (`fresh`). */
 const World = () => {
   const view = read(card)
   const line = read(path)
@@ -633,7 +647,7 @@ const World = () => {
         ws,
         line().map((n) => n.turn.products),
       )
-      return ws.filter((p) => p.id in v).map((p) => ({ p, value: v[p.id] }))
+      return ws.filter((p) => fresh(v[p.id])).map((p) => ({ p, value: v[p.id] }))
     },
     { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
   )
