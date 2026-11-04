@@ -1,4 +1,4 @@
-// The player layer through its interface (docs/packs-brief.md §九): `resolve(card, {})` byte for byte what the code sent
+// The player layer through its interface (docs/packs-brief.md §九, §十): `resolve(card, {})` byte for byte what the code sent
 // before layer.ts existed, the author order, yield and the switches' takeover, the persona last, the locks landing in
 // `dropped` with the session still opening, the entries' prefix, the holes' four treatments, `on` and `from`, the overlay
 // storing only its difference. Then a session over a scripted model: what a row does to the documents, per request. The
@@ -10,7 +10,6 @@ import { readFileSync, writeFileSync } from "node:fs"
 import type { Card } from "../src/card.ts"
 import { prose as proseOf } from "../src/journal.ts"
 import {
-  decodeHarness,
   decodeLayer,
   decodeLocal,
   empty,
@@ -116,41 +115,47 @@ const packB = row("B", {
   snippets: [{ name: "q", text: "B" }],
   format: [{ label: "k", text: "B" }],
 })
-const base = row("base", {
+const overlay = row("harness", {
   fragments: [
-    { id: "style", text: "BASE" },
+    { id: "style", text: "OVER" },
     { id: "own", text: "OWN" },
   ],
-  asks: [{ id: "lookup", text: "ASK-BASE" }],
-  names: { a: "BASE", b: "BASE", c: "BASE", d: "BASE" },
+  asks: [{ id: "lookup", text: "ASK-OVER" }],
+  names: { a: "OVER", b: "OVER", c: "OVER", d: "OVER", e: "OVER" },
   snippets: [
-    { name: "q", text: "BASE" },
+    { name: "q", text: "OVER" },
     { name: "only", text: "ONLY" },
   ],
-  format: [{ label: "k", text: "BASE" }],
-  lexicon: [{ pattern: "p", hint: "BASE" }],
+  format: [{ label: "k", text: "OVER" }],
+  lexicon: [{ pattern: "p", hint: "OVER" }],
 })
 const packs = [packB, packA]
 {
   const texts = (r: Rows) => resolve(card, r).frame.map((f) => [f.id, f.text, f.from])
   // the card's alone
   assert.deepEqual(texts({}), [["style", "CARD", "card"]])
-  // the base over the card; a pack not mounted is not there
-  assert.deepEqual(texts({ base, packs }), [
-    ["style", "BASE", "base"],
-    ["own", "OWN", "base"],
+  // the overlay under the card, its fragment yielding by default; a pack not mounted is not there
+  assert.deepEqual(texts({ harness: overlay, packs }), [
+    ["own", "OWN", "harness"],
+    ["style", "CARD", "card"],
   ])
   // packs in mount order, whatever the library's order; a missing id skipped, a repeated one once
-  const mounted = { base, packs, local: here({ mounts: ["A", "gone", "B", "A"] }) }
+  const mounted = { harness: overlay, packs, local: here({ mounts: ["A", "gone", "B", "A"] }) }
   assert.deepEqual(texts(mounted), [
+    ["own", "OWN", "harness"],
     ["style", "B", "B"],
-    ["own", "OWN", "base"],
     ["voice", "VOICE-A", "A"],
   ])
-  assert.deepEqual(texts({ base, packs, local: here({ mounts: ["B", "A"] }) })[0], ["style", "A", "A"])
+  assert.deepEqual(
+    texts({ harness: overlay, packs, local: here({ mounts: ["B", "A"] }) }).find((f) => f[0] === "style"),
+    ["style", "A", "A"],
+  )
   // local over all of them
-  const top = { base, packs, local: here({ mounts: ["A", "B"], fragments: [{ id: "style", text: "L" }] }) }
-  assert.deepEqual(texts(top)[0], ["style", "L", "local"])
+  const top = { harness: overlay, packs, local: here({ mounts: ["A", "B"], fragments: [{ id: "style", text: "L" }] }) }
+  assert.deepEqual(
+    texts(top).find((f) => f[0] === "style"),
+    ["style", "L", "local"],
+  )
 
   // the other kinds the same
   const R = resolve(card, {
@@ -162,7 +167,7 @@ const packs = [packB, packA]
       format: [{ label: "k", text: "L" }],
     }),
   })
-  assert.deepEqual(R.names, { user: "C", a: "BASE", b: "A", c: "B", d: "L" })
+  assert.deepEqual(R.names, { user: "C", a: "C", b: "A", c: "B", d: "L", e: "OVER" }) // the overlay under the card
   assert.deepEqual([R.asks["lookup"]!.text, R.asks["lookup"]!.from], ["ASK-B", "B"])
   assert.equal(R.asks["polish"]!.from, "harness")
   // a menu by name: the highest rank's copy, the highest first, the harness's last
@@ -170,7 +175,7 @@ const packs = [packB, packA]
     R.snippets.slice(0, 2).map((s) => [s.name, s.text, s.from]),
     [
       ["q", "L", "local"],
-      ["only", "ONLY", "base"],
+      ["only", "ONLY", "harness"],
     ],
   )
   assert.equal(R.snippets.at(-1)!.from, "harness")
@@ -181,13 +186,13 @@ const packs = [packB, packA]
   // a lexicon entry has no id: every rank's stands, the highest first, so the polish hints read in that order
   assert.deepEqual(
     R.lexicon.map((e) => e.hint),
-    ["A", "BASE", "CARD"],
+    ["A", "CARD", "OVER"],
   )
   // the note channel takes the channel switch and the thought mark out of the menu, a row's as well
   const note = resolve(
     { ...card, input: "note" },
     {
-      base: row("base", {
+      harness: row("harness", {
         snippets: [
           { name: "t", text: "⦅" },
           { name: "n", text: "N" },
@@ -206,7 +211,7 @@ const packs = [packB, packA]
         { id: "x", text: "X" },
       ],
     },
-    { base: row("base", { fragments: [{ id: "style", text: "B", mode: "both" }] }) },
+    { harness: row("harness", { fragments: [{ id: "style", text: "B", mode: "both" }] }) },
   )
   assert.deepEqual(
     both.frame.map((f) => f.text),
@@ -214,7 +219,7 @@ const packs = [packB, packA]
   )
   // at: tail goes to the tail; a text-less slot stands and says nothing
   const tailed = resolve(chat, {
-    base: row("base", {
+    harness: row("harness", {
       fragments: [{ id: "t", text: "T", at: "tail" }, { id: "s" }],
     }),
   })
@@ -223,30 +228,42 @@ const packs = [packB, packA]
 
 // ───────── Yield: a lower rank has filled the slot, it does not stand ─────────
 {
-  const f = (id: string, text: string, mode?: "yield") => ({ id, text, ...(mode && { mode }) })
+  const f = (id: string, text: string, mode?: "yield" | "override") => ({ id, text, ...(mode && { mode }) })
   const of = (r: Rows) => resolve(card, r).frame.map((x) => x.text)
-  assert.deepEqual(of({ base: row("base", { fragments: [f("style", "Y", "yield")] }) }), ["CARD"]) // to the card
-  assert.deepEqual(of({ base: row("base", { fragments: [f("v", "Y", "yield")] }) }), ["Y", "CARD"]) // nothing under it
+  assert.deepEqual(of({ harness: row("harness", { fragments: [f("style", "Y", "yield")] }) }), ["CARD"]) // to the card
+  assert.deepEqual(of({ harness: row("harness", { fragments: [f("v", "Y", "yield")] }) }), ["Y", "CARD"]) // nothing under it
+  // the overlay against the card: no mode yields, `override` beats the card's slot
+  assert.deepEqual(of({ harness: row("harness", { fragments: [f("style", "O")] }) }), ["CARD"])
+  assert.deepEqual(of({ harness: row("harness", { fragments: [f("style", "O", "override")] }) }), ["O"])
+  // a pack and the local row over an overriding overlay, by id
   assert.deepEqual(
     of({
-      base: row("base", { fragments: [f("v", "BASE")] }),
-      local: here({ fragments: [f("v", "L", "yield")] }),
+      harness: row("harness", { fragments: [f("style", "O", "override")] }),
+      packs: [row("p", { fragments: [f("style", "P")] })],
+      local: here({ mounts: ["p"] }),
     }),
-    ["BASE", "CARD"], // to the base, a rank above the card
+    ["P"],
   )
   assert.deepEqual(
     of({
-      base: row("base", { fragments: [f("style", "Y", "yield")] }),
+      harness: row("harness", { fragments: [f("v", "BASE")] }),
+      local: here({ fragments: [f("v", "L", "yield")] }),
+    }),
+    ["BASE", "CARD"], // to the overlay, whose slot the card left empty
+  )
+  assert.deepEqual(
+    of({
+      harness: row("harness", { fragments: [f("style", "Y", "yield")] }),
       local: here({ fragments: [f("style", "L")] }),
     }),
     ["L"], // a yield that did not stand does not stop the rank above it
   )
   // an item switched off is not there: it blanks neither the slot under it nor the card's
   const off = { id: "style", text: "OFF", enabled: false }
-  assert.deepEqual(of({ base: row("base", { fragments: [off] }) }), ["CARD"])
+  assert.deepEqual(of({ harness: row("harness", { fragments: [off] }) }), ["CARD"])
   assert.deepEqual(
     of({
-      base: row("base", { fragments: [f("v", "BASE")] }),
+      harness: row("harness", { fragments: [f("v", "BASE")] }),
       local: here({ fragments: [{ ...f("v", "x"), enabled: false }] }),
     }),
     ["BASE", "CARD"],
@@ -258,34 +275,38 @@ const packs = [packB, packA]
   const say = harness("act").asks!
   const line = (id: string) => say.find((a) => a.id === id)!.text
   const sw = { pov: "second", echo: false, agency: "strict", verbosity: "concise" } as const
-  const R = resolve(chat, { base: row("base", { switches: sw, fragments: [{ id: "language", text: "L" }] }) })
+  const R = resolve(chat, { harness: row("harness", { switches: sw, fragments: [{ id: "language", text: "L" }] }) })
   // pov, echo and agency are one slot, verbosity its own, before the row's own fragments
   assert.deepEqual(
     R.frame.slice(0, 3).map((f) => [f.id, f.compiled, f.from]),
     [
-      ["pov", true, "base"],
-      ["verbosity", true, "base"],
-      ["language", undefined, "base"],
+      ["pov", true, "harness"],
+      ["verbosity", true, "harness"],
+      ["language", undefined, "harness"],
     ],
   )
   assert.equal(R.frame[0]!.text, line("switch.pov.second") + line("switch.echo.false") + line("switch.agency.strict"))
-  assert.deepEqual(R.switches.taken, { pov: "base", verbosity: "base" })
+  assert.deepEqual(R.switches.taken, { pov: "harness", verbosity: "harness" })
   assert.deepEqual(R.switches.value, sw)
   assert.equal(R.switches.sentences["switch.pov.none"], line("switch.pov.none"))
   // no player in the fiction: echo and agency drop with it
   assert.equal(
-    resolve(chat, { base: row("base", { switches: { pov: "none", echo: true, agency: "free" } }) }).frame[0]!.text,
+    resolve(chat, { harness: row("harness", { switches: { pov: "none", echo: true, agency: "free" } }) }).frame[0]!
+      .text,
     line("switch.pov.none"),
   )
   // a later row's switch wins key by key: one slot compiled from the merge, the later row's name on it
   const merged = resolve(chat, {
-    base: row("base", { switches: { pov: "second", agency: "strict" } }),
+    harness: row("harness", { switches: { pov: "second", agency: "strict" } }),
     local: here({ switches: { pov: "third" } }),
   })
   assert.equal(merged.frame[0]!.text, line("switch.pov.third") + line("switch.agency.strict"))
   assert.deepEqual([merged.frame[0]!.from, merged.switches.value.agency], ["local", "strict"])
   // a card that writes the slot takes the group: the compiled one yields, the taker named and not compiled
-  const carded = resolve({ ...chat, frame: [{ id: "pov", text: "全知" }] }, { base: row("base", { switches: sw }) })
+  const carded = resolve(
+    { ...chat, frame: [{ id: "pov", text: "全知" }] },
+    { harness: row("harness", { switches: sw }) },
+  )
   assert.deepEqual(
     carded.frame.map((f) => [f.id, f.text === "全知"]),
     [
@@ -301,36 +322,44 @@ const packs = [packB, packA]
     return [pov.text, pov.compiled, x.switches.taken.pov]
   }
   const text = { id: "pov", text: "FREE" }
-  assert.deepEqual(free({ base: row("base", { switches: sw, fragments: [text] }) }), ["FREE", undefined, "base"])
-  assert.deepEqual(free({ base: row("base", { switches: sw, fragments: [{ ...text, mode: "yield" }] }) }), [
+  assert.deepEqual(free({ harness: row("harness", { switches: sw, fragments: [text] }) }), [
     "FREE",
     undefined,
-    "base",
+    "harness",
   ])
-  assert.deepEqual(free({ base: row("base", { fragments: [text] }), local: here({ switches: sw }) }), [
+  assert.deepEqual(free({ harness: row("harness", { switches: sw, fragments: [{ ...text, mode: "yield" }] }) }), [
     "FREE",
     undefined,
-    "base",
+    "harness",
+  ])
+  assert.deepEqual(free({ harness: row("harness", { fragments: [text] }), local: here({ switches: sw }) }), [
+    "FREE",
+    undefined,
+    "harness",
   ])
   // a yielding text above a compiled slot: the lower rank filled it
   assert.equal(
-    free({ base: row("base", { switches: sw }), local: here({ fragments: [{ ...text, mode: "yield" }] }) })[1],
+    free({ harness: row("harness", { switches: sw }), local: here({ fragments: [{ ...text, mode: "yield" }] }) })[1],
     true,
   )
   // an overlay's sentence is what compiles; a hole it cannot fill falls back to the code's
   const edit = (t: string) => row("harness", { asks: [{ id: "switch.pov.second", text: t }] })
-  const on = { base: row("base", { switches: { pov: "second" } }) }
-  const edited = resolve(chat, { ...on, harness: edit("MINE") })
+  const on = { switches: { pov: "second" } } as const
+  const edited = resolve(chat, { harness: { ...edit("MINE"), ...on } })
   assert.deepEqual(
     [edited.frame[0]!.text, edited.switches.sentences["switch.pov.second"], edited.asks["switch.pov.second"]!.from],
     ["MINE", "MINE", "harness"],
   )
-  assert.equal(resolve(chat, { ...on, harness: edit("{{x}}") }).frame[0]!.text, line("switch.pov.second"))
-  // the overlay's own switches are the lowest rank's: under the base key by key, yielding to the card like any
+  assert.equal(resolve(chat, { harness: { ...edit("{{x}}"), ...on } }).frame[0]!.text, line("switch.pov.second"))
+  // the overlay's own switches are the lowest rank's: under a pack key by key, yielding to the card like any
   const low = row("harness", { switches: { pov: "second", verbosity: "concise" } })
-  const lowest = resolve(chat, { harness: low, base: row("base", { switches: { pov: "third" } }) })
+  const lowest = resolve(chat, {
+    harness: low,
+    packs: [row("p", { switches: { pov: "third" } })],
+    local: here({ mounts: ["p"] }),
+  })
   assert.equal(lowest.frame.find((f) => f.id === "pov")!.text, line("switch.pov.third"))
-  assert.deepEqual(lowest.switches.taken, { pov: "base", verbosity: "harness" })
+  assert.deepEqual(lowest.switches.taken, { pov: "p", verbosity: "harness" })
 }
 
 // ───────── The persona: its text the end of the local row, its name the last word on `user` ─────────
@@ -367,21 +396,20 @@ const packs = [packB, packA]
 
 // ───────── The locks: at the boundary, and again in resolve; `dropped`, never a throw ─────────
 {
-  // when and role: gone below the harness and the card, at decode and over a row that skipped it
+  // when and role: gone from every stored row, the overlay's too, at decode and over a row that skipped it
   const f = { id: "x", text: "T", role: "user", when: { all: [] } }
   assert.deepEqual(decodeLayer({ id: "d", name: "D", fragments: [f] }).fragments, [{ id: "x", text: "T" }])
   assert.deepEqual(decodeLocal({ id: "l", name: "L", card: "c", fragments: [f] }).fragments, [{ id: "x", text: "T" }])
-  assert.deepEqual(decodeHarness({ id: "harness", name: "H", fragments: [f] }).fragments, [f])
-  const direct = resolve(chat, { base: row("base", { fragments: [f as never] }) }).frame[0]!
+  const direct = resolve(chat, { harness: row("harness", { fragments: [f as never] }) }).frame[0]!
   assert.deepEqual([direct.when, direct.role], [undefined, undefined])
   // names at the boundary, and in resolve
   for (const bad of ["两\n行", "两\r行", "含 {{x}} 洞", "{{"])
     assert.throws(() => decodeLayer({ id: "d", name: "D", names: { k: bad } }))
-  const named = resolve(chat, { base: row("base", { names: { k: "两\n行", ok: "好" } }) })
+  const named = resolve(chat, { harness: row("harness", { names: { k: "两\n行", ok: "好" } }) })
   assert.deepEqual(named.names, { user: "玩家", ok: "好" })
   assert.deepEqual(
     named.dropped.map((d) => [d.from, d.kind, d.id]),
-    [["base", "name", "k"]],
+    [["harness", "name", "k"]],
   )
 
   // A product patch by rank: label, text and on, on ANY existing id; its shape, stage, fold and feed stay.
@@ -390,7 +418,7 @@ const packs = [packB, packA]
     const was = P({}, id)!
     const got = P(
       {
-        base: row("base", {
+        harness: row("harness", {
           products: [
             {
               id,
@@ -409,12 +437,12 @@ const packs = [packB, packA]
     )!
     assert.deepEqual(
       [got.label, got.text, got.on, got.from, got.shape, got.stage, got.fold, got.feed],
-      ["X", "NEW", true, "base", was.shape, was.stage, was.fold, was.feed],
+      ["X", "NEW", true, "harness", was.shape, was.stage, was.fold, was.feed],
     )
   }
   // no text keeps the question; the later rank's `on` wins over the pack's
   const onOff = resolve(chat, {
-    base: row("base", { products: [{ id: "inner", on: false }] }),
+    harness: row("harness", { products: [{ id: "inner", on: false }] }),
     packs: [row("p", { products: [{ id: "inner", on: true, label: "P" }] })],
     local: here({ mounts: ["p"], products: [{ id: "inner", on: false }] }),
   }).products.find((p) => p.id === "inner")!
@@ -429,12 +457,22 @@ const packs = [packB, packA]
     when: { path: "n", op: "gt" as const, value: 0 },
   }
   const tabled = { ...chat, products: [people] }
-  const onTable = resolve(tabled, { base: row("base", { products: [{ id: "people", text: "MINE" }] }) }).products.at(
-    -1,
-  )!
+  const onTable = resolve(tabled, {
+    packs: [row("p", { products: [{ id: "people", text: "MINE" }] })],
+    local: here({ mounts: ["p"] }),
+  }).products.at(-1)!
   assert.deepEqual(
     [onTable.text, onTable.shape, onTable.fold, onTable.when, onTable.from],
-    ["MINE", people.shape, people.fold, people.when, "base"],
+    ["MINE", people.shape, people.fold, people.when, "p"],
+  )
+  // the overlay's patch on the card's id stays a patch under the card: its toggle and label stand where the card is
+  // silent, the card's text, shape and stage stand over it (it never compiles to a narrate text)
+  const under = resolve(tabled, {
+    harness: row("harness", { products: [{ id: "people", label: "L", text: "OVER", on: false }] }),
+  }).products.at(-1)!
+  assert.deepEqual(
+    [under.label, under.on, under.text, under.shape, under.stage, under.from],
+    ["L", false, "Who.", people.shape, undefined, "card"],
   )
   // A new id: narrate, text, on by default, nothing else. Without text it is dropped, into the ledger.
   const town = P(
@@ -465,8 +503,8 @@ const packs = [packB, packA]
     { ...chat, products: [] },
     {
       harness: row("harness", { products: [{ id: "people", on: false }] }),
-      base: row("base", { products: [{ id: "people", on: false }] }),
-      local: here({ products: [{ id: "people", on: true }] }),
+      packs: [row("p", { products: [{ id: "people", on: false }] })],
+      local: here({ mounts: ["p"], products: [{ id: "people", on: true }] }),
     },
   )
   assert.deepEqual([toggled.dropped, toggled.products.some((p) => p.id === "people")], [[], false])
@@ -474,7 +512,7 @@ const packs = [packB, packA]
   assert.equal(
     P(
       {
-        base: row("base", { products: [{ id: "t", text: "a" }] }),
+        harness: row("harness", { products: [{ id: "t", text: "a" }] }),
         local: here({ products: [{ id: "t", on: false }] }),
       },
       "t",
@@ -489,45 +527,82 @@ const packs = [packB, packA]
     /a narrate product is text/,
   )
   const badOverlay = resolve(chat, { harness: row("harness", { products: [{ id: "ghost", label: "G" }] }) })
-  assert.deepEqual(
-    [badOverlay.products.some((p) => p.id === "ghost"), badOverlay.dropped[0]!.id, badOverlay.dropped[0]!.from],
-    [false, "ghost", "harness"],
+  assert.equal(
+    badOverlay.products.some((p) => p.id === "ghost"),
+    false,
   )
-  // an overlay may write a product whole; the card patches over it
-  const whole = { id: "w", text: "W", shape: { kind: "list" as const } }
-  const withWhole = resolve(
-    { ...chat, products: [{ id: "w", label: "C" }] },
-    { harness: row("harness", { products: [whole] }) },
-  ).products.at(-1)!
-  assert.deepEqual([withWhole.shape, withWhole.label, withWhole.from], [whole.shape, "C", "card"])
+  assert.deepEqual(badOverlay.dropped, [
+    { from: "harness", kind: "product", id: "ghost", why: "a new product needs text" },
+  ])
+  // an overlay's new id is a 小剧场 like a pack's, whatever else it wrote; a later row patches it
+  const whole = { id: "w", text: "W", shape: { kind: "list" as const }, stage: "record" as const, feed: true }
+  assert.deepEqual(P({ harness: row("harness", { products: [whole] }) }, "w"), {
+    id: "w",
+    text: "W",
+    shape: { kind: "text" },
+    stage: "narrate",
+    on: true,
+    from: "harness",
+  })
+  assert.equal(
+    P(
+      {
+        harness: row("harness", { products: [whole] }),
+        packs: [row("p", { products: [{ id: "w", text: "P" }] })],
+        local: here({ mounts: ["p"] }),
+      },
+      "w",
+    )!.text,
+    "P",
+  )
+  // an overlay's patch never moves a default's shape, stage, fold or feed
+  const notes = P({}, "notes")!
+  const patched = P(
+    { harness: row("harness", { products: [{ id: "notes", shape: { kind: "list" }, fold: "latest", feed: false }] }) },
+    "notes",
+  )!
+  assert.deepEqual([patched.shape, patched.fold, patched.feed], [notes.shape, notes.fold, notes.feed])
 
   // An ask `product.<id>` is a text patch at its row's rank, not a separate chain.
   const asked = (r: Rows, c: Card = chat) => resolve(c, r).products.find((p) => p.id === "notes")!
   const cardAsks = { ...chat, asks: [{ id: "product.notes", text: "CARD" }] }
   assert.deepEqual([asked({}, cardAsks).text, asked({}, cardAsks).from], ["CARD", "card"])
-  const baseAsks = row("base", { asks: [{ id: "product.notes", text: "BASE" }] })
-  assert.equal(asked({ base: baseAsks }, cardAsks).text, "BASE")
-  assert.equal(resolve(chat, { base: baseAsks }).asks["product.notes"], undefined)
+  const overAsks = row("harness", { asks: [{ id: "product.notes", text: "BASE" }] })
+  assert.equal(asked({ harness: overAsks }).text, "BASE")
+  assert.equal(asked({ harness: overAsks }, cardAsks).text, "CARD") // the overlay under the card's
+  // the overlay's ask at its rank, under the card's product text; a pack's and the local row's over it
+  const cardText = { ...chat, products: [{ id: "notes", text: "CARD-TEXT" }] }
+  const ask = (text: string) => [{ id: "product.notes", text }]
+  assert.equal(asked({ harness: overAsks }, cardText).text, "CARD-TEXT")
+  assert.equal(
+    asked({ packs: [row("p", { asks: ask("PACK") })], local: here({ mounts: ["p"] }) }, cardText).text,
+    "PACK",
+  )
+  assert.equal(asked({ local: here({ asks: ask("LOCAL") }) }, cardText).text, "LOCAL")
+  assert.equal(resolve(chat, { harness: overAsks }).asks["product.notes"], undefined)
   // the same row: its ask over its patch
   assert.equal(
-    asked({ base: row("base", { products: [{ id: "notes", text: "P" }], asks: baseAsks.asks! }) }).text,
+    asked({ harness: row("harness", { products: [{ id: "notes", text: "P" }], asks: overAsks.asks! }) }).text,
     "BASE",
   )
   // on a product this card does not have, nothing
-  assert.deepEqual(resolve(chat, { base: row("base", { asks: [{ id: "product.people", text: "x" }] }) }).dropped, [])
+  assert.deepEqual(
+    resolve(chat, { harness: row("harness", { asks: [{ id: "product.people", text: "x" }] }) }).dropped,
+    [],
+  )
 }
 
 // ───────── Entries: prefixed by their row; one layer ─────────
 {
   const R = resolve(chat, {
-    base: row("base", { entries: [{ id: "x", text: "BASE." }] }),
+    harness: row("harness", { entries: [{ id: "x", text: "OVER." }] }),
     packs: [row("p", { entries: [{ id: "x", text: "P." }] }), row("q", { entries: [{ id: "x", text: "Q." }] })],
     local: here({ mounts: ["p"], entries: [{ id: "x", text: "L." }] }),
   })
   assert.deepEqual(
     R.entries.map((e) => [e.id, e.text, e.from]),
     [
-      ["base/x", "BASE.", "base"],
+      ["harness/x", "OVER.", "harness"],
       ["p/x", "P.", "p"],
       ["local/x", "L.", "local"],
     ],
@@ -537,7 +612,7 @@ const packs = [packB, packA]
 // ───────── The holes, four ways ─────────
 {
   const rows: Rows = {
-    base: row("base", {
+    harness: row("harness", {
       names: { place: "贝克兰德" },
       fragments: [
         { id: "good", text: "F {{place}}" },
@@ -576,7 +651,7 @@ const packs = [packB, packA]
     ["E 贝克兰德."],
   )
   assert.deepEqual(
-    R.snippets.filter((s) => s.from === "base").map((s) => [s.name, s.text, s.after]),
+    R.snippets.filter((s) => /good|bad/.test(s.name)).map((s) => [s.name, s.text, s.after]),
     [["good", "S 贝克兰德", "贝克兰德"]],
   )
   // a product: filled, or marked and keeping its raw text so a refusal can name the hole
@@ -648,13 +723,13 @@ const packs = [packB, packA]
     products: [{ id: "scene", text: "PRODUCT-SECRET", shape: { kind: "text" } }],
     lexicon: [{ pattern: "LEXICON-SECRET" }],
   }
-  const R = shown(resolve(c, { base: row("base", { fragments: [{ id: "mine", text: "MINE" }] }) }))
+  const R = shown(resolve(c, { harness: row("harness", { fragments: [{ id: "mine", text: "MINE" }] }) }))
   const wire = JSON.stringify(R)
   assert.ok(!/SECRET/.test(wire), wire)
   assert.deepEqual(
     R.frame.map((f) => [f.id, f.from, "text" in f]),
     [
-      ["mine", "base", true],
+      ["mine", "harness", true],
       ["style", "card", false],
     ],
   )
@@ -779,7 +854,9 @@ const mount = (...mounts: string[]) => here({ mounts })
   )
   const polish = texts(asked(es, "polish")).join("\n")
   assert.ok(/MINE-HINT; PACK-HINT; CARD-HINT/.test(polish), polish)
-  const off = await collect(session({ base: row("base", { switches: { polish: false } }) }).act(null, { text: "x" }))
+  const off = await collect(
+    session({ harness: row("harness", { switches: { polish: false } }) }).act(null, { text: "x" }),
+  )
   assert.equal(asked(off, "polish"), undefined)
   const unmounted = await collect(
     makeSession({ card: chat, rows: () => ({ packs: [slop] }), model }).act(null, { text: "x" }),
@@ -826,7 +903,7 @@ const mount = (...mounts: string[]) => here({ mounts })
   // a refused row opens: a new id with no text, in the ledger, and the session runs as it would without
   const refused = makeSession({
     card: chat,
-    rows: () => ({ base: row("base", { products: [{ id: "x", label: "X" }] }) }),
+    rows: () => ({ harness: row("harness", { products: [{ id: "x", label: "X" }] }) }),
     model,
   })
   assert.deepEqual(

@@ -34,7 +34,7 @@ const canned = { notes: "N1", options: ["A", "B", "C", "D"], people: [], scene: 
 /** A library over `data` with chat and `other` on its shelf (no table cards unless the test writes some). */
 const other: Card = { ...chat, id: "other", title: "别处" }
 const over = (data: Data, m: () => Model = model) =>
-  library({ data, cards: shelf([chat, other], data), base: player.base, model: m })
+  library({ data, cards: shelf([chat, other], data), overlay: player.harness, model: m })
 
 // The library holds no open story and binds no card: a session per story, on the card its row names, opened on first
 // use and kept. The player's rows are read per request, so a write reaches every open session. The listing is every card's, each row naming its card and
@@ -238,28 +238,32 @@ const over = (data: Data, m: () => Model = model) =>
   const rest = lib.packs.list()
   assert.deepEqual(
     rest.map((r) => r.id),
-    ["harness", "base"],
+    ["harness"],
   )
-  // the ranks are not rows to delete, and their names are not a pack's to take
+  // the harness is not a row to delete, and the names of the ranks are not a pack's to take; a `base` would be folded away
   assert.throws(() => lib.packs.del("harness"), /cannot be deleted/)
-  assert.throws(() => lib.packs.del("base"), /cannot be deleted/)
   assert.throws(() => lib.packs.put({ id: "local", name: "x" }), /reserved/)
   assert.throws(() => lib.packs.put({ id: "card", name: "x" }), /reserved/)
-  // the base given stands until one is stored; a stored one wins, and takes the session with it
-  assert.deepEqual(rest[1], player.base)
-  lib.packs.put({ id: "base", name: "mine", fragments: [{ id: "x", text: "STORED" }] })
-  assert.equal(lib.session(a).layer.frame[0]!.text, "STORED")
+  assert.throws(() => lib.packs.put({ id: "base", name: "x" }), /reserved/)
+  // the overlay given stands until one is stored; a stored one wins, and takes the session with it
+  assert.deepEqual(rest[0]!.fragments, player.harness!.fragments)
+  assert.ok(lib.session(a).layer.frame.some((f) => f.text === player.harness!.fragments![0]!.text))
   // the harness row: the whole row back stores nothing, one change stores that, and it is in the session
-  lib.packs.put(rest[0]!)
+  const bare = library({ data: open(":memory:"), cards: shelf([chat], data) })
+  const code = bare.packs.list()[0]!
+  assert.deepEqual(code.fragments, undefined)
+  bare.packs.put(code)
+  assert.deepEqual(bare.packs.list(), [code])
   const stored = () => data.packs.list().find((p) => p.id === "harness")
   assert.equal(stored(), undefined)
   lib.packs.put({
-    ...rest[0]!,
-    asks: rest[0]!.asks!.map((x) => (x.id === "lookup" ? { ...x, text: "MINE" } : x)),
+    ...harness("act"),
+    asks: harness("act").asks!.map((x) => (x.id === "lookup" ? { ...x, text: "MINE" } : x)),
   })
   assert.deepEqual(stored(), { id: "harness", name: "内置", asks: [{ id: "lookup", text: "MINE" }] })
   assert.equal(lib.session(a).layer.asks["lookup"]!.text, "MINE")
   assert.equal(lib.packs.list()[0]!.asks!.find((x) => x.id === "lookup")!.text, "MINE")
+  assert.equal(lib.packs.list()[0]!.fragments, undefined) // the stored one stands alone: the given is gone from it
   lib.packs.put(harness("act"))
   assert.equal(stored(), undefined)
 }
@@ -268,7 +272,7 @@ const over = (data: Data, m: () => Model = model) =>
 // the one reveal. A write with a value and no type reads the type off the key: an OAuth token is a bearer, anything else
 // a key; a rename without a value keeps the type it had.
 {
-  const lib = library({ data: open(":memory:"), cards: chats, base: player.base })
+  const lib = library({ data: open(":memory:"), cards: chats, overlay: player.harness })
   const VALUE = "sk-test-0123456789abcdef"
   const made = lib.secrets.add({ name: "Relay key", type: "api_key", value: VALUE })
   assert.deepEqual(made, { id: made.id, name: "Relay key", type: "api_key", hint: "sk-tes****cdef" })
@@ -308,7 +312,7 @@ const over = (data: Data, m: () => Model = model) =>
     secret: "k",
     models: [{ id: "m", contextTokens: 16000 }, { id: "n" }],
   }
-  const lib = library({ data, cards: chats, base: player.base, model })
+  const lib = library({ data, cards: chats, overlay: player.harness, model })
   const on = (m: Model) => (m === env ? "env" : (m.model as { modelId: string }).modelId)
   const pair = (model: string) => ({ provider: "relay", model })
   assert.equal(on(lib.model("narrate")), "env")
@@ -351,9 +355,12 @@ const over = (data: Data, m: () => Model = model) =>
   data.providers.list = list
   data.stories.list = stories
   lib.routing.write({ default: pair("m"), stages: { lookup: pair("n") } })
-  const pinned = library({ data, cards: chats, base: player.base, model, pinned: true })
+  const pinned = library({ data, cards: chats, overlay: player.harness, model, pinned: true })
   assert.deepEqual([on(pinned.model("lookup")), pinned.policy().budget], ["env", 8000])
-  assert.throws(() => library({ data: open(":memory:"), cards: chats, base: player.base }).model("narrate"), NoModel)
+  assert.throws(
+    () => library({ data: open(":memory:"), cards: chats, overlay: player.harness }).model("narrate"),
+    NoModel,
+  )
 
   lib.providers.put({ ...relay, enabled: false })
   assert.throws(() => lib.model("narrate"), /provider "Relay": disabled/)
@@ -405,7 +412,7 @@ const over = (data: Data, m: () => Model = model) =>
   dead.close()
   const host = createServer((_, res) => res.end(JSON.stringify({ data: [{ id: "o" }, { id: "m" }] }))).listen(0)
   const hostUrl = at(host)
-  const lib = library({ data: open(":memory:"), cards: chats, base: player.base, model })
+  const lib = library({ data: open(":memory:"), cards: chats, overlay: player.harness, model })
   const made = lib.secrets.add({ name: "Relay key", type: "api_key", value: VALUE })
   const relay = {
     id: "relay",
@@ -485,7 +492,7 @@ const over = (data: Data, m: () => Model = model) =>
     secret: "k",
     models: [],
   })
-  const lib = library({ data, cards: chats, base: player.base, model })
+  const lib = library({ data, cards: chats, overlay: player.harness, model })
   try {
     assert.deepEqual(await lib.providers.models("a"), [{ id: "claude-haiku-5-5" }])
     const [listed] = await lib.providers.test("a")
@@ -522,7 +529,7 @@ const over = (data: Data, m: () => Model = model) =>
   const lib = library({
     data,
     cards: shelf([chat, { ...chat, id: "bare", title: undefined }], data),
-    base: player.base,
+    overlay: player.harness,
     model,
   })
   try {

@@ -1,6 +1,6 @@
 // The library behind the wire: every card's stories and the player's personas. A story is a session over its rows in
 // data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player's
-// rows the library stores (runtime layer.ts; the base given stands until one is stored), and the turn in flight beside it (turn.ts): a
+// rows the library stores (runtime layer.ts; the overlay given stands until one is stored), and the turn in flight beside it (turn.ts): a
 // turn is the story's, it runs to its end whoever listens, one at a time per story and with no lock across stories.
 // A persona is the player's, a sibling of the card, not a step of a story: a story's row names the one in force on it
 // (`story.persona`, none: the card's own), and the library hands it to `resolve` on every
@@ -84,17 +84,17 @@ export interface Cards {
 }
 
 /** The rows of the `pack` table that are ranks, not packs. */
-const RESERVED = ["harness", "base"]
+const RESERVED = ["harness"]
 export const library = ({
   data,
   cards,
-  base: given,
+  overlay: given,
   model: env,
   pinned = false,
 }: {
   data: Data
   cards: Cards
-  base?: Layer // the base row until one is stored
+  overlay?: Layer // the harness overlay until one is stored
   model?: (phase: Phase) => Model
   pinned?: boolean
 }) => {
@@ -210,14 +210,12 @@ export const library = ({
   const personaOf = (pid: string | null | undefined) =>
     pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
-  const baseOf = (rows: readonly Layer[]): Layer =>
-    rows.find((p) => p.id === "base") ?? given ?? { id: "base", name: "全局基底" }
+  const overlayIn = (rows: readonly Layer[]) => rows.find((p) => p.id === "harness") ?? given
   /** The player's rows on a card, as `resolve` takes them: read on every request, a session keeps none. */
   const rowsOf = (card: string, persona: Rows["persona"]): Rows => {
     const rows = data.packs.list()
     return {
-      harness: rows.find((p) => p.id === "harness"),
-      base: baseOf(rows),
+      harness: overlayIn(rows),
       packs: rows.filter((p) => !RESERVED.includes(p.id)),
       local: data.locals.get(card),
       persona,
@@ -337,20 +335,14 @@ export const library = ({
     },
     hats: data.hats,
     packs: {
-      /** `[harness, base, ...packs]`, one row template: the harness row whole, the code's defaults under its overlay. */
+      /** `[harness, ...packs]`, one row template: the harness row whole, the code's defaults under its overlay. */
       list: (): Layer[] => {
         const rows = data.packs.list()
-        return [
-          overlaid(
-            "act",
-            rows.find((p) => p.id === "harness"),
-          ),
-          baseOf(rows),
-          ...rows.filter((p) => !RESERVED.includes(p.id)),
-        ]
+        return [overlaid("act", overlayIn(rows)), ...rows.filter((p) => !RESERVED.includes(p.id))]
       },
       /** The harness keeps only what differs from the code's defaults, nothing at all when nothing does: a left-out item is
-       *  its default again. A pack's id may not be a rank's name: `from` says which row an item came from. */
+       *  its default again. A pack's id may not be a rank's name: `from` says which row an item came from; nor `base`, which
+       *  `open` folds into the overlay (data.ts). */
       put: (r: Layer) => {
         if (r.id === "harness") {
           const o = overlayOf("act", r)
@@ -358,12 +350,12 @@ export const library = ({
           else data.packs.put(o)
           return
         }
-        if (r.id === "card" || r.id === "local") throw new Error(`${r.id}: a reserved id`)
+        if (r.id === "card" || r.id === "local" || r.id === "base") throw new Error(`${r.id}: a reserved id`)
         data.packs.put(r)
       },
-      /** Gone from the table, and off every card it was mounted on. The harness and the base are not rows to delete. */
+      /** Gone from the table, and off every card it was mounted on. The harness is not a row to delete. */
       del: (id: string) => {
-        if (id === "harness" || id === "base") throw new Error(`${id}: cannot be deleted`)
+        if (id === "harness") throw new Error(`${id}: cannot be deleted`)
         data.packs.del(id)
         pruneLocals((l) => {
           if (!l.mounts?.includes(id)) return l

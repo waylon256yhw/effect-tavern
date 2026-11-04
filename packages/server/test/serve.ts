@@ -37,7 +37,7 @@ const chats = shelf([chat], open(":memory:")) // a shelf of one, for the taverns
 const lib = library({
   data: shared,
   cards: shelf([{ ...chat, greetings: [{ text: "G" }], lexicon: [{ pattern: "CARD-BAN" }] }], shared),
-  base: player.base,
+  overlay: player.harness,
   model,
 })
 
@@ -84,7 +84,7 @@ const run = async (inspect: boolean) => {
     // what the card page reads: the player's row, its mounts by name, the one merge, a card's items without their text
     assert.deepEqual([about["local"], about["mounts"]], [{ id: "local", name: chat.id, card: chat.id }, []])
     const merged = about["layer"] as { frame: { from: string; text?: string }[]; names: unknown }
-    assert.ok(merged.frame.some((f) => f.from === "base" && f.text))
+    assert.ok(merged.frame.some((f) => f.from === "harness" && f.text))
     assert.ok(merged.frame.some((f) => f.from === "card") && merged.frame.every((f) => f.from !== "card" || !f.text))
     assert.equal((await fetch(`${base}/player`)).status, 404) // no such route any more
 
@@ -406,7 +406,7 @@ const run = async (inspect: boolean) => {
         body: v === undefined ? undefined : JSON.stringify(v),
       })
     const kit = { name: "文风", fragments: [{ id: "style", text: "PACK-STYLE" }] }
-    const noRanks = (rows: { id: string }[]) => rows.filter((r) => r.id !== "harness" && r.id !== "base")
+    const noRanks = (rows: { id: string }[]) => rows.filter((r) => r.id !== "harness")
     const packsIn = async (r: Response) => noRanks((await r.json()) as { id: string }[])
     assert.deepEqual(
       await packsIn(await pack({ ...kit, fragments: [{ ...kit.fragments[0], role: "user", when: { all: [] } }] })),
@@ -421,7 +421,7 @@ const run = async (inspect: boolean) => {
     }[]
     assert.deepEqual(
       layerRows.map((r) => r.id),
-      ["harness", "base", "kit"],
+      ["harness", "kit"],
     )
     assert.equal(
       layerRows[0]!.asks!.some((a) => a.id === "switch.pov.second"),
@@ -436,25 +436,38 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(await packsIn(await pack()), [])
     assert.equal(((await (await local()).json()) as { mounts?: unknown }).mounts, undefined)
     assert.equal((await headOf("unpacked")).includes("PACK-STYLE"), false)
-    // the harness row: only the difference stored, the rest its default; neither rank can be deleted
+    // the harness row: only the difference stored, the rest its default, through the lock like any row; it cannot be
+    // deleted, and `base` is no one's id now (a DELETE of it is a no-op)
+    const given = { id: "harness", name: "内置", ...player.harness }
     const edited = {
       ...layerRows[0],
       asks: layerRows[0]!.asks!.map((a) => (a.id === "lookup" ? { ...a, text: "OVERLAY" } : a)),
+      products: [
+        { id: "options", on: true, shape: { kind: "table", columns: [] } },
+        { id: "town", text: "gossip", shape: { kind: "list" } },
+      ],
     }
     const after = (await (await pack(edited, "harness")).json()) as typeof layerRows
     assert.equal(after[0]!.asks!.find((a) => a.id === "lookup")!.text, "OVERLAY")
     assert.equal(after[0]!.asks!.length, layerRows[0]!.asks!.length)
     assert.deepEqual(
       shared.packs.list().find((p) => p.id === "harness"),
-      { id: "harness", name: "内置", asks: [{ id: "lookup", text: "OVERLAY" }] },
+      {
+        ...given,
+        asks: [{ id: "lookup", text: "OVERLAY" }],
+        products: [
+          { id: "options", on: true },
+          { id: "town", text: "gossip" },
+        ],
+      },
     )
     await pack(layerRows[0], "harness")
-    assert.equal(
+    assert.deepEqual(
       shared.packs.list().find((p) => p.id === "harness"),
-      undefined,
+      { ...given, products: [{ id: "options", on: true }] },
     )
     assert.equal((await pack(undefined, "harness")).status, 400)
-    assert.equal((await pack(undefined, "base")).status, 400)
+    assert.equal((await pack({ name: "x" }, "base")).status, 400)
     // 代称: the local row keeps the player's table, a bad value is refused at the boundary, /cards/<id> reads it back
     assert.equal((await local({ names: { char: "两\n行" } })).status, 400)
     await local({ names: { char: "依瑞丝" } })
@@ -492,7 +505,7 @@ await run(false)
   const { lib: guarded, handler } = tavern({
     data,
     cards: shelf([{ ...chat, guard: ["R"] }], data),
-    base: player.base,
+    overlay: player.harness,
     model: () => drafts,
   })
   const story = guarded.stories.create(chat.id)
@@ -532,7 +545,7 @@ await run(false)
     const doc = readStage(o)
     return doc.phase === "narrate" ? { text: "hello world ".repeat(5), delay: 20 } : defaultAnswer(doc, canned)
   })
-  const { handler } = tavern({ data, cards: shelf([chat, two], data), base: player.base, model: () => slowly })
+  const { handler } = tavern({ data, cards: shelf([chat, two], data), overlay: player.harness, model: () => slowly })
   const server = createServer(handler).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const on = (id: number, init: RequestInit = {}) => ({ ...init, headers: { "x-tavern-story": String(id) } })
@@ -581,7 +594,7 @@ await run(false)
   const deadUrl = `http://localhost:${(dead.address() as AddressInfo).port}`
   dead.close()
   const server = createServer(
-    tavern({ data: open(":memory:"), cards: chats, base: player.base, model }).handler,
+    tavern({ data: open(":memory:"), cards: chats, overlay: player.harness, model }).handler,
   ).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const call = async (method: string, path: string, v?: unknown) => {
@@ -702,7 +715,7 @@ await run(false)
 // A tavern with no routing and no environment model still answers GET /nodes (the fold reads no model); the first line
 // it is sent fails with the code the client links to Settings → 默认模型 by (issue #61).
 {
-  const t = tavern({ data: open(":memory:"), cards: chats, base: player.base })
+  const t = tavern({ data: open(":memory:"), cards: chats, overlay: player.harness })
   const headers = { "x-tavern-story": String(t.lib.stories.create(chat.id)) }
   const bare = createServer(t.handler).listen(0)
   const base = `http://localhost:${(bare.address() as AddressInfo).port}`

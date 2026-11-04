@@ -1,7 +1,7 @@
 // The install's library: one SQLite file through `node:sqlite` (built into Bun and Node, no dependency), used as a
 // document store: a row is an id and a JSON column, nothing is ever joined. The tables mirror the types. `pack`: the
-// player's rows (runtime layer.ts `Layer`): `harness` (the overlay, only what differs from the code's defaults), `base`,
-// and each writing pack, mounted per card by `local.mounts`. `local`: one row a card, the player on that card (`Local`).
+// player's rows (runtime layer.ts `Layer`): `harness` (the overlay, only what differs from the code's defaults) and each
+// writing pack, mounted per card by `local.mounts`. `local`: one row a card, the player on that card (`Local`).
 // `persona`: named frame fragments, the player's own (who they are in the fiction; a card still gives a
 // default in its frame; a story names the one in force on it, `story.persona`). `hat`: the player's hats (runtime fragment.ts `Hat`), named by a provider's model. `secret`:
 // the key vault (provider providers.ts `Secret`), the only table holding key material; `provider`: the player's model
@@ -16,7 +16,7 @@
 // A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
-// for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
+// for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`), and so does a `base` row (`foldIn`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
 // the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
 // filter: absent, every card's. Ceilings: an FTS5 index over nodes once a
 // library holds hundreds of long stories; sync between two installs (the Android copy is a copy of this file).
@@ -25,6 +25,7 @@ import type { Provider, Secret } from "@effect-tavern/provider/src/providers.ts"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import { locked, type Layer, type Local } from "@effect-tavern/runtime/src/layer.ts"
+import type { ProductPatch } from "@effect-tavern/runtime/src/product.ts"
 import type { Change, Id, Log, Noded, Snapshot, Store } from "@effect-tavern/runtime/src/log.ts"
 import type { Facets } from "@effect-tavern/runtime/src/session.ts"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -67,6 +68,7 @@ const migrations: readonly { table: string; column: string; add: string }[] = [
   { table: "card", column: "facets", add: "alter table card add column facets text" },
 ]
 type Row = Record<string, unknown>
+const set = <V>(k: string, v: V | undefined) => (v === undefined || (Array.isArray(v) && !v.length) ? {} : { [k]: v })
 /** The shape of the `player` row before layer.ts, as far as the one-shot below reads it. */
 interface OldPlayer {
   writing?: Record<string, unknown> & { lexicon?: unknown[] }
@@ -83,18 +85,17 @@ interface OldPlayer {
   snippets?: unknown[]
   format?: unknown[]
 }
-/** The old row as the new rows. Global → the base, per-card maps → a local row per card. What a default mode said is
- *  written on the fragment (the rule now is override; a global fragment yielded). The product toggles go on the base and
- *  on each local row: a toggle was the last word over a pack's 小剧场, and only a rank above the packs still is. */
-const fromPlayer = (p: OldPlayer): { base: Layer; locals: Local[] } => {
+/** The old row as the new rows. Global → the harness overlay, per-card maps → a local row per card. What a default mode
+ *  said is written on the fragment. The product toggles go on the overlay and on each local row: a toggle was the last
+ *  word over a pack's 小剧场, and only a rank above the packs still is. */
+const fromPlayer = (p: OldPlayer): { overlay: Layer; locals: Local[] } => {
   const { lexicon, ...switches } = p.writing ?? {}
   const toggles = Object.entries(p.products ?? {}).map(([id, on]) => ({ id, on }))
   const moded = (fs: readonly { mode?: string }[] | undefined, mode: string | undefined) =>
     fs?.map((f) => ({ ...f, ...((f.mode ?? mode) && { mode: f.mode ?? mode }) }))
-  const set = <V>(k: string, v: V | undefined) => (v === undefined || (Array.isArray(v) && !v.length) ? {} : { [k]: v })
-  const base = locked({
-    id: "base",
-    name: "全局基底",
+  const overlay = locked({
+    id: "harness",
+    name: "内置",
     ...set("fragments", moded(p.global, p.defaults?.global ?? "yield")),
     ...(Object.keys(switches).length && { switches }),
     ...set(
@@ -120,7 +121,47 @@ const fromPlayer = (p: OldPlayer): { base: Layer; locals: Local[] } => {
       ...set("tags", p.tags?.[card]),
     } as Local),
   )
-  return { base, locals }
+  return { overlay, locals }
+}
+/** A row folded into the overlay: each list the overlay's first, the row's copy standing on a shared key (it was the higher
+ *  rank), a product patch merged field by field; the lexicon has no key, so every entry stands. */
+const foldIn = (o: Partial<Layer>, r: Partial<Layer>): Partial<Layer> => {
+  const list = <T>(a: readonly T[] = [], b: readonly T[] = [], key: (x: T) => unknown) => [
+    ...new Map([...a, ...b].map((x) => [key(x), x])).values(),
+  ]
+  const products = new Map<string, ProductPatch>()
+  for (const p of [...(o.products ?? []), ...(r.products ?? [])]) products.set(p.id, { ...products.get(p.id), ...p })
+  const switches = { ...o.switches, ...r.switches }
+  const names = { ...o.names, ...r.names }
+  return {
+    ...set(
+      "fragments",
+      list(o.fragments, r.fragments, (x) => x.id),
+    ),
+    ...(Object.keys(switches).length && { switches }),
+    ...set(
+      "asks",
+      list(o.asks, r.asks, (x) => x.id),
+    ),
+    ...set("products", [...products.values()]),
+    ...set(
+      "entries",
+      list(o.entries, r.entries, (x) => x.id),
+    ),
+    ...set(
+      "lexicon",
+      list(o.lexicon, r.lexicon, (x) => x),
+    ),
+    ...set(
+      "snippets",
+      list(o.snippets, r.snippets, (x) => x.name),
+    ),
+    ...set(
+      "format",
+      list(o.format, r.format, (x) => x.label),
+    ),
+    ...(Object.keys(names).length && { names }),
+  }
 }
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
 /** A node's reply parts of a type that no longer exists (the `aside` part before #76 §二) dropped on read; no migration. */
@@ -247,34 +288,6 @@ export const open = (asked: string) => {
     db.exec("pragma foreign_keys = on")
   }
   const q = (sql: string) => db.prepare(sql)
-  // The player row of a library from before layer.ts, once, and the table with it. A pack row's `theaters` become its
-  // product patches (`Pack` is a `Layer` now); an older `products` map, which turned nothing on, goes.
-  if (q("select 1 from sqlite_master where type = 'table' and name = 'player'").get()) {
-    const old = parse<OldPlayer>(q("select json from player where id = 1").get() as Row | undefined)
-    db.exec("begin")
-    try {
-      for (const r of q("select id, json from pack").all() as Row[]) {
-        const { theaters, products, ...rest } = parse<{ theaters?: unknown[]; products?: unknown }>(r)!
-        const kept = [...(theaters ?? []), ...(Array.isArray(products) ? products : [])]
-        q("update pack set json = ? where id = ?").run(
-          JSON.stringify({ ...rest, ...(kept.length && { products: kept }) }),
-          r["id"] as string,
-        )
-      }
-      if (old) {
-        const { base, locals } = fromPlayer(old)
-        const { id, name, ...rest } = base
-        q("insert or replace into pack (id, name, json) values (?, ?, ?)").run(id, name, JSON.stringify(rest))
-        for (const l of locals)
-          q("insert or replace into local (card, json) values (?, ?)").run(l.card, JSON.stringify(l))
-      }
-      db.exec("drop table player")
-      db.exec("commit")
-    } catch (e) {
-      db.exec("rollback")
-      throw e
-    }
-  }
   const tx = <A>(f: () => A): A => {
     db.exec("begin")
     try {
@@ -286,6 +299,49 @@ export const open = (asked: string) => {
       throw e
     }
   }
+  /** `r` over the stored overlay; no row when nothing is in it. */
+  const intoOverlay = ({ id: _i, name: _n, ...r }: Partial<Layer>) => {
+    const had = parse<Partial<Layer>>(q("select json from pack where id = 'harness'").get() as Row | undefined)
+    const merged = foldIn(had ?? {}, r)
+    if (Object.keys(merged).length)
+      q("insert or replace into pack (id, name, json) values ('harness', '内置', ?)").run(JSON.stringify(merged))
+  }
+  // The player row of a library from before layer.ts, once, and the table with it. A pack row's `theaters` become its
+  // product patches (`Pack` is a `Layer` now); an older `products` map, which turned nothing on, goes.
+  if (q("select 1 from sqlite_master where type = 'table' and name = 'player'").get()) {
+    const old = parse<OldPlayer>(q("select json from player where id = 1").get() as Row | undefined)
+    tx(() => {
+      for (const r of q("select id, json from pack").all() as Row[]) {
+        const { theaters, products, ...rest } = parse<{ theaters?: unknown[]; products?: unknown }>(r)!
+        const kept = [...(theaters ?? []), ...(Array.isArray(products) ? products : [])]
+        q("update pack set json = ? where id = ?").run(
+          JSON.stringify({ ...rest, ...(kept.length && { products: kept }) }),
+          r["id"] as string,
+        )
+      }
+      if (old) {
+        const { overlay, locals } = fromPlayer(old)
+        intoOverlay(overlay)
+        for (const l of locals)
+          q("insert or replace into local (card, json) values (?, ?)").run(l.card, JSON.stringify(l))
+      }
+      db.exec("drop table player")
+    })
+  }
+  // The `base` row, a rank of its own until #69 §十, once, into the overlay. It stood above the card, where a fragment with
+  // no mode overrode; the overlay's default yields, so what it said is written down.
+  const base = parse<Partial<Layer>>(q("select json from pack where id = 'base'").get() as Row | undefined)
+  if (base)
+    tx(() => {
+      intoOverlay({
+        ...base,
+        ...set(
+          "fragments",
+          base.fragments?.map((f) => ({ ...f, mode: f.mode ?? "override" })),
+        ),
+      })
+      q("delete from pack where id = 'base'").run()
+    })
   /** A table of named records: the json column holds the record without its id and name, the row's own columns. */
   const named = <T extends { id: string; name: string }>(table: string) => ({
     list: (): T[] =>

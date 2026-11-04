@@ -11,8 +11,8 @@ import type { ProductPatch } from "@effect-tavern/runtime/src/product.ts"
 export const fillKnown = (text: string, names?: Readonly<Record<string, string>>): string =>
   !names ? text : text.replace(HOLE, (raw, k: string) => (Object.hasOwn(names, k) ? names[k]! : raw))
 
-/** `harness` and `base` are fixed ranks in `GET /packs`, not user-deletable or card-mounted packs. */
-export const isReservedPack = (id: string): boolean => id === "harness" || id === "base"
+/** `harness` is a fixed rank in `GET /packs`, not a user-deletable or card-mounted pack. */
+export const isReservedPack = (id: string): boolean => id === "harness"
 
 /** The proper-noun holes in a row's own texts, plus any keys already in `p.names` (excluding `user`). */
 export const packHoles = (p: Partial<Layer>): string[] => {
@@ -46,7 +46,7 @@ export const cardNameKeys = (
   return [...hs, ...filled]
 }
 
-/** Mountable user packs (`all` excluding `harness` and `base`): mounted first in their mount order, then the rest. */
+/** Mountable user packs (`all` excluding `harness`): mounted first in their mount order, then the rest. */
 export const orderedPacks = (all: readonly Layer[], mountedIds: readonly string[] = []): Layer[] => {
   const pool = all.filter((p) => !isReservedPack(p.id))
   const byId = new Map(pool.map((p) => [p.id, p]))

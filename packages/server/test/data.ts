@@ -312,7 +312,7 @@ assert.deepEqual(data.locals.get("wuxia"), here)
 assert.deepEqual(data.locals.list(), [here])
 data.close()
 
-// The player row of a library from before layer.ts (docs/packs-brief.md §九 §4): once, on open, into the base and a local
+// The player row of a library from before layer.ts (docs/packs-brief.md §九 §4, §十 §3): once, on open, into the overlay and a local
 // row per card, a pack's `theaters` into its product patches; then the table is gone and a second open changes nothing.
 {
   const dir = mkdtempSync(join(tmpdir(), "tavern-player-"))
@@ -359,12 +359,12 @@ data.close()
         .list()
         .map((p) => p.id)
         .sort(),
-      ["base", "kit", "older"],
+      ["harness", "kit", "older"],
     )
-    const [base, kit, older] = ["base", "kit", "older"].map((id) => d.packs.list().find((p) => p.id === id)!)
-    assert.deepEqual(base, {
-      id: "base",
-      name: "全局基底",
+    const [overlay, kit, older] = ["harness", "kit", "older"].map((id) => d.packs.list().find((p) => p.id === id)!)
+    assert.deepEqual(overlay, {
+      id: "harness",
+      name: "内置",
       fragments: [
         { id: "language", text: "L", mode: "yield" }, // the old default written down
         { id: "style", text: "S", mode: "override" }, // no Cond and no role below the card
@@ -415,6 +415,110 @@ data.close()
     { id: "kit", name: "Kit" },
   )
   second.close()
+  rmSync(dir, { recursive: true, force: true })
+}
+
+// The `base` row of a library from before §十: once, on open, into the overlay, then gone. Lists the overlay's first, the
+// base's copy standing on a shared key (it was the higher rank), switches and product patches by key with the base's on
+// top; a base fragment with no mode overrode the card, and says so now. With no overlay stored, it becomes one.
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-base-"))
+  const file = join(dir, "tavern.db")
+  const put = (d: DatabaseSync, id: string, name: string, json: unknown) =>
+    d.prepare("insert into pack (id, name, json) values (?, ?, ?)").run(id, name, JSON.stringify(json))
+  const old = new DatabaseSync(file)
+  old.exec("create table pack (id text primary key, name text not null, json text not null)")
+  put(old, "harness", "内置", {
+    fragments: [
+      { id: "a", text: "OVER-A" },
+      { id: "s", text: "OVER-S" },
+    ],
+    switches: { pov: "second", verbosity: "concise" },
+    asks: [{ id: "lookup", text: "OVER" }],
+    products: [{ id: "notes", label: "OVER", text: "OVER" }],
+    lexicon: [{ pattern: "o" }],
+    snippets: [{ name: "q", text: "OVER" }],
+  })
+  put(old, "base", "全局基底", {
+    fragments: [
+      { id: "s", text: "BASE-S" },
+      { id: "b", text: "BASE-B", mode: "yield" },
+    ],
+    switches: { pov: "third" },
+    asks: [
+      { id: "lookup", text: "BASE" },
+      { id: "direct", text: "BASE-D" },
+    ],
+    products: [
+      { id: "notes", text: "BASE", on: false },
+      { id: "town", text: "gossip" },
+    ],
+    lexicon: [{ pattern: "b" }],
+    entries: [{ id: "e", text: "E." }],
+    format: [{ label: "k", text: "K" }],
+    names: { place: "B" },
+  })
+  put(old, "kit", "Kit", {})
+  old.close()
+  const merged = {
+    id: "harness",
+    name: "内置",
+    fragments: [
+      { id: "a", text: "OVER-A" },
+      { id: "s", text: "BASE-S", mode: "override" },
+      { id: "b", text: "BASE-B", mode: "yield" },
+    ],
+    switches: { pov: "third", verbosity: "concise" },
+    asks: [
+      { id: "lookup", text: "BASE" },
+      { id: "direct", text: "BASE-D" },
+    ],
+    products: [
+      { id: "notes", label: "OVER", text: "BASE", on: false },
+      { id: "town", text: "gossip" },
+    ],
+    entries: [{ id: "e", text: "E." }],
+    lexicon: [{ pattern: "o" }, { pattern: "b" }],
+    snippets: [{ name: "q", text: "OVER" }],
+    format: [{ label: "k", text: "K" }],
+    names: { place: "B" },
+  }
+  const ids = (d: ReturnType<typeof open>) =>
+    d.packs
+      .list()
+      .map((p) => p.id)
+      .sort()
+  const first = open(file)
+  assert.deepEqual(ids(first), ["harness", "kit"])
+  assert.deepEqual(
+    first.packs.list().find((p) => p.id === "harness"),
+    merged,
+  )
+  first.close()
+  const second = open(file)
+  assert.deepEqual(
+    second.packs.list().find((p) => p.id === "harness"),
+    merged,
+  ) // the second open changes nothing
+  second.close()
+
+  const lone = join(dir, "lone.db")
+  const had = new DatabaseSync(lone)
+  had.exec("create table pack (id text primary key, name text not null, json text not null)")
+  put(had, "base", "全局基底", { names: { n: "N" } })
+  had.close()
+  const alone = open(lone)
+  assert.deepEqual(alone.packs.list(), [{ id: "harness", name: "内置", names: { n: "N" } }])
+  alone.close()
+
+  const nil = join(dir, "nil.db")
+  const none = new DatabaseSync(nil)
+  none.exec("create table pack (id text primary key, name text not null, json text not null)")
+  put(none, "base", "全局基底", {})
+  none.close()
+  const blank = open(nil)
+  assert.deepEqual(blank.packs.list(), []) // nothing in it: no row
+  blank.close()
   rmSync(dir, { recursive: true, force: true })
 }
 

@@ -130,8 +130,8 @@ const C = makeSession({ card: chat, rows: () => player, model: () => ({ ...scrip
 const Q = makeSession({
   card: chat,
   rows: () => ({
-    base: {
-      ...player.base!,
+    harness: {
+      ...player.harness!,
       products: ["notes", "options", "scene", "people"].map((id) => ({ id, on: false })),
     },
   }),
@@ -252,7 +252,7 @@ const program = Effect.gen(function* () {
   assert.equal(S.node(t3.id).state.bond, 8)
   assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5), prompts("narrate").at(-2)!.slice(0, 5))
   assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5).map(msgText), [
-    player.base!.fragments![0]!.text!,
+    player.harness!.fragments![0]!.text!,
     full.frame[0]!.text!,
     full.frame[1]!.text!,
     full.frame[2]!.text!,
@@ -581,9 +581,9 @@ const program = Effect.gen(function* () {
   const H = makeSession({
     card: full,
     rows: () => ({
-      base: {
-        ...player.base!,
-        fragments: [...player.base!.fragments!, { id: "taste", text: "TASTE-TAIL", at: "tail" }],
+      harness: {
+        ...player.harness!,
+        fragments: [...player.harness!.fragments!, { id: "taste", text: "TASTE-TAIL", at: "tail" }],
       },
     }),
     model: () => ({ ...scripted, hat: "h" }),
@@ -615,7 +615,7 @@ const program = Effect.gen(function* () {
       !/went white/.test(str(prompts("record").at(-1)!)),
   )
   // The player's toggle off: no call, the prose stands.
-  polishing = { base: { ...player.base!, switches: { ...player.base!.switches, polish: false } } }
+  polishing = { harness: { ...player.harness!, switches: { ...player.harness!.switches, polish: false } } }
   i = calls().length
   narrations.push("slop")
   const p2 = yield* go(P.act(p1.id, { text: "hello" }))
@@ -652,7 +652,9 @@ const program = Effect.gen(function* () {
   }
   const A = makeSession({
     card: { ...full, products: [...(full.products ?? []), diary] },
-    rows: () => ({ base: { ...player.base!, products: [...player.base!.products!, { id: "inner", on: true }] } }),
+    rows: () => ({
+      harness: { ...player.harness!, products: [...player.harness!.products!, { id: "inner", on: true }] },
+    }),
     model,
   })
   /** The deltas of one action: prose text and product text by id. */

@@ -35,9 +35,9 @@ assert.equal(sentence("pov", "second", { "switch.pov.second": "自定义第二�
 // takenBy: null when compiled, `From` when taken over by free text
 assert.equal(
   takenBy("pov", {
-    frame: [{ id: "pov", text: "x", from: "base", compiled: true }],
+    frame: [{ id: "pov", text: "x", from: "harness", compiled: true }],
     tail: [],
-    switches: { taken: { pov: "base", verbosity: null } },
+    switches: { taken: { pov: "harness", verbosity: null } },
   }),
   null,
 )
@@ -108,8 +108,8 @@ assert.equal(withExtra(withExtra(bareLocal, "x"), "").fragments, undefined)
 
 // fragment list helpers on a Layer: new ones go first, text edits keep the fragment's other keys, a cleared text removes it
 const g0: Layer = {
-  id: "base",
-  name: "全局基底",
+  id: "harness",
+  name: "内置",
   fragments: [{ id: "language", text: "L", mode: "override" }],
 }
 const g1 = addFragment(g0, "req-1", " 白描 ", "tail")
@@ -184,12 +184,11 @@ assert.deepEqual(cardNameKeys(["char", "user", "char2"], { user: "玩家", char:
 ])
 
 const pkHarness: Layer = { id: "harness", name: "内置" }
-const pkBase: Layer = { id: "base", name: "全局基底" }
 const pkA: Layer = { id: "a", name: "A" }
 const pkB: Layer = { id: "b", name: "B" }
 const pkC: Layer = { id: "c", name: "C" }
 assert.deepEqual(
-  orderedPacks([pkHarness, pkBase, pkA, pkB, pkC], ["c", "a"]).map((p) => p.id),
+  orderedPacks([pkHarness, pkA, pkB, pkC], ["c", "a"]).map((p) => p.id),
   ["c", "a", "b"],
 )
 const mounted1 = toggleMount(bareLocal, "b")

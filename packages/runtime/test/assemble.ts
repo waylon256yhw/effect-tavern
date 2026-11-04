@@ -45,11 +45,11 @@ const assemble = (
 }
 
 // ───────── Checks ─────────
-// the base's fragments yield to the card's slot; the local row's override it, per slot. `when` is the card's alone (the
+// the overlay's fragments yield to the card's slot; the local row's override it, per slot. `when` is the card's alone (the
 // lock strips it from a player's row), so the state-dependent fragment below is the card's.
-const base = (mode?: "yield") => ({
-  id: "base",
-  name: "base",
+const overlay = (mode?: "override") => ({
+  id: "harness",
+  name: "harness",
   fragments: frags([
     { id: "language", text: "Write in Chinese." },
     { id: "length", text: "Two paragraphs.", ...(mode && { mode }) },
@@ -67,7 +67,7 @@ const local = {
     { id: "setting", text: "Any era is fine.", mode: "yield" }, // the card's setting wins
   ]),
 }
-const player: Rows = { base: base("yield"), local }
+const player: Rows = { harness: overlay(), local }
 const card: Card = {
   id: "wuxia",
   frame: frags([
@@ -88,7 +88,7 @@ const texts = (m: Msg[]) => m.map((x) => x.text)
 const s0 = { player: { tired: false }, a: { trust: 10 } }
 
 // Three relations, chosen per slot by the player: override (length), both (tone), yield (setting); untouched slots fill.
-// A slot takes its place where it first stands: the base's yielding "length" never stood, so the local one comes later.
+// A slot takes its place where it first stands: the overlay's yielding "length" never stood, so the local one comes later.
 let v = assemble(player, card, path, "narrate", "go", { state: s0 })
 assert.deepEqual(texts(v).slice(0, 8), [
   "Write in Chinese.",
@@ -101,8 +101,8 @@ assert.deepEqual(texts(v).slice(0, 8), [
   "A: wandering swordsman.",
 ])
 for (const gone of ["One paragraph.", "Two paragraphs.", "Any era is fine."]) assert.ok(!texts(v).includes(gone))
-// No local row: the base's yielding slot fills only where the card left it empty.
-v = assemble({ base: base("yield") }, other, [], "narrate", "go", { state: s0 })
+// No local row: the overlay's yielding slot fills only where the card left it empty.
+v = assemble({ harness: overlay() }, other, [], "narrate", "go", { state: s0 })
 assert.deepEqual(texts(v), [
   "Write in Chinese.",
   "Two paragraphs.",
@@ -110,8 +110,8 @@ assert.deepEqual(texts(v), [
   "Space station.",
   "go",
 ])
-// A fragment with no mode overrides: the card's "One paragraph." loses to "Two paragraphs."
-v = assemble({ base: base() }, card, [], "narrate", "go", { state: s0 })
+// An overlay's fragment that says override: the card's "One paragraph." loses to "Two paragraphs."
+v = assemble({ harness: overlay("override") }, card, [], "narrate", "go", { state: s0 })
 assert.ok(texts(v).includes("Two paragraphs.") && !texts(v).includes("One paragraph."))
 
 // Audience by layer: the director sees player + frame, never the character; its history has no prose.
