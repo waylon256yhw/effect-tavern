@@ -265,6 +265,11 @@ export type Facets = ReturnType<typeof facets>
 /** What a client draws a card by (server GET /card, GET /cards/<id>): read off the Card and the player layer alone, so
  *  the card page opens before any story of the card exists. Not the card: fragment bodies, guard lines and lore stay on
  *  the server (a ban is a prompt, to a player too). */
+/** The 小剧场 in force on a card, in patch order: the mounted packs' in mount order, then the player's own. */
+const theatersOf = (player: Player, packs: readonly Pack[]) => [
+  ...packs.flatMap((p) => p.theaters ?? []),
+  ...(player.theaters ?? []),
+]
 export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []) => {
   const f = facets(card) // once: the shelf row's facets and the head size are the same reading
   return {
@@ -285,11 +290,12 @@ export const cardView = (card: Card, player: Player, packs: readonly Pack[] = []
     }, // leaves as JSON, which drops undefined
     greetings: card.greetings,
     rules: card.rules,
-    // the record products as the card and the harness declare them, before the player's toggles: how a client draws a
-    // node's products by shape, and the Writing page's toggles (the player's toggle wins over `on`)
-    products: resolve(defaultProducts(card.input ?? "act"), card.products).map((p) => ({
+    // the products as the harness, the card and the 小剧场 declare them, before the player's toggles: how a client draws
+    // a node's products by shape, and the Writing page's toggles and wording (the player's toggle wins over `on`)
+    products: resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, packs)).map((p) => ({
       id: p.id,
       label: p.label,
+      text: p.text,
       shape: p.shape,
       on: p.on,
       fold: p.fold,
@@ -370,13 +376,9 @@ export const makeSession = ({
   const policyOf = () => (typeof P === "function" ? P() : P)
 
   const wording = (id: string) => wordingOf(player, card, id)
-  /** The player's toggle over the mounted packs' over the card's. Resolved per read: a pack edit touches no session. */
+  /** The player's toggle over the 小剧场 over the card's. Resolved per read: a pack edit touches no session. */
   const products = () =>
-    resolve(
-      defaultProducts(card.input ?? "act"),
-      card.products,
-      Object.assign({}, ...inForce().map((p) => p.products), player.products),
-    )
+    resolve(defaultProducts(card.input ?? "act"), card.products, theatersOf(player, inForce()), player.products)
   products() // a card's bad patch fails when the session opens, not on its first turn
   const question = (pr: Product) => questionOf(player, card, pr)
   /** Narrate blocks under the declared product's cap; a block of an undeclared id is kept as written (the Inspector's). */
@@ -890,8 +892,10 @@ export const makeSession = ({
     drop: (id: number): Change => change(held.commit(Log.drop(held.log, id))),
     /** The card's rules as data, for a client that draws state: field bounds and options, action ids. Static per session. */
     rules: card.rules,
-    /** The record products as declared, the card's name and size, its fiction without text (`cardView`). */
-    products: cardView(card, given).products,
+    /** The products as declared, the card's name and size, its fiction without text (`cardView`). */
+    get products() {
+      return cardView(card, player, inForce()).products
+    },
     meta: cardView(card, given).meta,
     fiction: cardView(card, given).fiction,
     get snippets() {

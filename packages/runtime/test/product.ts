@@ -1,6 +1,6 @@
 // Tests for src/product.ts: shapes decode to answer schemas, caps and filters are code, the fold is declared
 // (append / latest / rows merged by a key column) and feed and recall read the same one, recall items get stable ids,
-// and resolve merges defaults ← card patch ← player toggle.
+// and resolve merges defaults ← card patch ← 小剧场 ← player toggle.
 import assert from "node:assert/strict"
 import { Schema } from "effect"
 import {
@@ -99,7 +99,7 @@ assert.equal(entryRef("li"), undefined)
 assert.deepEqual(recallEntries(scene, [{ id: 1, v: { place: "inn", present: [] } }]), []) // no recall declared
 
 // Resolve: defaults ← card patch by id ← player toggle; a new product needs text and shape; recall must fit the shape.
-const r = resolve(defaults, [{ id: "options", on: true }, inventory], { notes: false })
+const r = resolve(defaults, [{ id: "options", on: true }, inventory], [], { notes: false })
 assert.deepEqual(
   r.map((p) => [p.id, p.on]),
   [
@@ -117,5 +117,66 @@ assert.throws(() => resolve(defaults, [{ ...inventory, fold: { key: "weight" } }
 assert.throws(() => resolve(defaults, [{ ...inventory, stage: "narrate" }]), /a narrate product is text/)
 const diary = { id: "diary", text: "d", shape: { kind: "text" as const } }
 assert.equal(resolve(defaults, [diary, { id: "diary", stage: "narrate" }]).at(-1)!.stage, "narrate")
+
+// Theaters: a layer between the card's patches and the toggles, compiled to a narrate text product.
+const stock = decodeProducts([
+  { id: "notes", text: "facts", shape: { kind: "text" }, fold: "append", feed: true },
+  { id: "options", text: "moves", shape: { kind: "list", max: 4 }, on: false },
+  { id: "inner", label: "心声", text: "thoughts", shape: { kind: "text" }, stage: "narrate", on: false },
+])
+const by = (ps: readonly Product[], id: string) => ps.find((p) => p.id === id)
+// a new id: fixed stage and shape, nothing else; a later patch finishes or overrides an earlier one, in order
+assert.deepEqual(by(resolve(stock, [], [{ id: "town", label: "T", text: "gossip" }]), "town"), {
+  id: "town",
+  label: "T",
+  text: "gossip",
+  shape: { kind: "text" },
+  stage: "narrate",
+  on: true,
+})
+assert.equal(
+  by(
+    resolve(
+      stock,
+      [],
+      [
+        { id: "town", text: "pack's", on: false },
+        { id: "town", text: "mine" },
+      ],
+    ),
+    "town",
+  )!.text,
+  "mine",
+)
+// a new id without text is resolve's existing error
+assert.throws(() => resolve(stock, [], [{ id: "town" }]), /needs text and shape/)
+// on `inner`: wording and default change; no text keeps the question; the toggle still has the last word
+const patched = by(resolve(stock, [], [{ id: "inner", text: "mine", on: true }]), "inner")!
+assert.deepEqual([patched.text, patched.on, patched.label, patched.stage], ["mine", true, "心声", "narrate"])
+assert.equal(by(resolve(stock, [], [{ id: "inner", on: true }]), "inner")!.text, "thoughts")
+assert.equal(by(resolve(stock, [], [{ id: "inner", on: true }], { inner: false }), "inner")!.on, false)
+// a card's text theater: the patch lands over its `when` and its cap, and the card's patch came first
+const capped = {
+  id: "diary",
+  text: "d",
+  shape: { kind: "text" as const, max: 9 },
+  when: { path: "n", op: "gt" as const, value: 0 },
+}
+const onDiary = by(resolve(stock, [capped], [{ id: "diary", text: "mine" }]), "diary")!
+assert.deepEqual(
+  [onDiary.text, onDiary.shape, onDiary.when, onDiary.stage],
+  ["mine", capped.shape, capped.when, "narrate"],
+)
+// The lock: on context (`notes`), a list (`options`), a keyed world table or a text the model reads back the patch is
+// dropped whole, not thrown: the entry is what it was without the theater.
+const world = [
+  keyed,
+  { id: "mood", text: "m", shape: { kind: "text" as const }, feed: true }, // a world text
+  { id: "seen", text: "s", shape: { kind: "list" as const } }, // a list theater: never read back, still not text
+]
+const locked = ["notes", "options", "kbag", "mood", "seen"].map((id) => ({ id, label: "X", text: "X", on: true }))
+assert.deepEqual(resolve(stock, world, locked), resolve(stock, world))
+// a card's patch with no shape yet is not text: the theater is dropped and the card's own error stands
+assert.throws(() => resolve(stock, [{ id: "ghost" }], [{ id: "ghost", text: "x" }]), /needs text and shape/)
 
 console.log("ok")
