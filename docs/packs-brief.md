@@ -71,3 +71,42 @@ server：`/packs` 三条路由；`DELETE` 后 `/player` 的 `packs` 里不再有
 - 包里的 `asks`、多层词条、每条词条 / 禁词的开关字段。
 - 包的 lint（`unknown-frame-slot` 对包的 fragment）；等第一个真实包。
 - 投递文本快照到 `Turn`。
+
+## 七、增补（2026-11-04 下午）：包的 `products{}` 换成小剧场声明
+
+原型暴露的问题：`products: Record<string, boolean>` 在离开具体卡的设置页里只能拨 `inner` / `options` 两个固定钮。按 `kindOf` 三分，world 产物的列名绑死在一张卡上，context 只有 `notes`（harness 常开），**只有 theater 能离开卡**。这一节是 #76 §三 第一条（玩家声明的产物）经由 #69 提前落地；§三 的 `view` 词表、tags、随机抽一条仍不做。
+
+### 形状：受限的 `Product` 补丁
+
+```ts
+// fragment.ts，与 Pack 同处
+export const Theater = Schema.Struct({
+  id: Schema.String,
+  label: Schema.optionalKey(Schema.String),
+  text: Schema.optionalKey(Schema.String), // 缺省 = 保留被补丁的那条的问法（改内置 inner 的开关而不改文字）
+  on: Schema.optionalKey(Schema.Boolean), // 挂载时的默认；player.products[id] 仍是最后一道开关
+})
+// Player 加 theaters?: Theater[]（全局，Writing 页编辑）；Pack 的 products 删除，换 theaters?: Theater[]
+```
+
+编译成 `Product` 时固定 `stage: "narrate"`、`shape: { kind: "text" }`，无 `feed` / `recall` / `fold` / `when`。新 id = 新产物（`text` 此时必填，缺失按 `resolve` 现有的"a product needs text and shape"报）。
+
+### 合并：`resolve` 加一层，带一把锁
+
+`resolve(defaults, card, theaters, toggles)`：默认 → 卡的补丁 → **小剧场补丁（挂载的包按序，再玩家自己的）** → 玩家开关。补丁按 id：撞上 `inner` 就是改它的文字与默认开关。
+
+**锁（代码，不是提示词）**：一条小剧场补丁只能落在"不存在的 id"或"已有条目是 text 形状的 theater（`kindOf === "theater" && shape.kind === "text"`）"上。撞上 `notes`（context）、`options`（list 形状）或卡的 world 表（竹林的 `people`，`fold: { key }`）时**丢弃这条补丁**，不抛：抛会让一张挂了包的卡在 session 打开时就死（`products()` 在构造时调一次）。测试断言丢弃，lint 以后再说。
+
+### `cardView.products` 两处补
+
+1. **加上小剧场层**：今天只 `resolve(defaults, card.products)`，玩家与包声明的小剧场前端完全看不见（Writing 页列表、动作行的索取菜单、正文下的块标题都读它）。改成同一条 `resolve` 链，**不含玩家的 `products` 开关**（`on` 仍是声明默认，客户端照旧在上面叠 `player.products`），即 `cardView(card, player, packs)` 已有的签名，里面把包与玩家的 theaters 传进去。
+2. **透传 `text`**：至少 theater 类的条目带 `text`，否则 Writing 页打不开内置「人物心声」的原文来改。整条带也行，`text` 不是秘密（问法不是卡的虚构）。
+
+客户端（不在这个 PR）：改了 `player.theaters` 或挂载后重新 `fetchCard` 一次，同快捷输入那样；Writing 页小剧场组里 `options` 只留右侧开关（list 形状，有自己的容器），text 形状的条目点开改名称与提示词。
+
+### 测试补
+
+- 补丁 `inner` 改文字、默认开关；新 id 成为 narrate 阶段 text 产物，`on: true` 时 narrate 的提问里出现它的块指令，`on: false` 时在 `demandable` 里。
+- 锁：撞 `notes` / `options` / 一张 `{ key }` 表的小剧场被丢弃，session 照常打开。
+- `cardView.products` 含包与玩家的小剧场、带 `text`，`on` 不含玩家开关。
+- 包的 `products` 键：无真实包存在，不迁移；解码时多余键按 Schema 现有行为处理，测试里确认一行旧 JSON 仍能解码。
