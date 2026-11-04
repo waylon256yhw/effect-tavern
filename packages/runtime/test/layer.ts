@@ -224,6 +224,16 @@ const packs = [packB, packA]
     }),
   })
   assert.deepEqual([tailed.tail.map((f) => f.text), tailed.frame.some((f) => f.id === "s")], [["T"], true])
+  // a tail fragment is not a slot: named like the card's head slot it neither yields to it nor knocks it out
+  const slotted = { ...chat, frame: [...chat.frame, { id: "pov", text: "CARD-POV" }] }
+  const named = resolve(slotted, {
+    harness: row("harness", { fragments: [{ id: "pov", text: "TAIL-POV", at: "tail" }] }),
+    local: here({ fragments: [{ id: "pov", text: "LOCAL-TAIL", at: "tail", mode: "override" }] }),
+  })
+  assert.deepEqual(
+    [named.tail.map((f) => [f.text, f.from]), named.frame.find((f) => f.id === "pov")?.text],
+    [[["LOCAL-TAIL", "local"]], "CARD-POV"],
+  )
 }
 
 // ───────── Yield: a lower rank has filled the slot, it does not stand ─────────

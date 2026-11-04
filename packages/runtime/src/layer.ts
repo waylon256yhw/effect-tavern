@@ -384,18 +384,22 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
       slots.set(c.id, { ...c, from, compiled: true })
     }
   }
+  // A tail fragment is a per-turn directive, not a slot (GLOSSARY 尾区): its id meets the other rows' tail ids, never
+  // the card's head slots, so a tail row named `pov` neither yields to the card's pov nor knocks it out.
+  const keyOf = (f: Fragment) => (f.at === "tail" ? `tail:${f.id}` : f.id)
+  const cards = (f: Fragment) => f.at !== "tail" && theirs.has(f.id)
   if (overlay) switched("harness", overlay)
   for (const f of overlay?.fragments ?? []) {
-    if (f.enabled === false || ((f.mode ?? "yield") === "yield" && theirs.has(f.id))) continue
-    slots.set(f.id, { ...f, from: "harness" })
+    if (f.enabled === false || ((f.mode ?? "yield") === "yield" && cards(f))) continue
+    slots.set(keyOf(f), { ...f, from: "harness" })
   }
   for (const { from, row } of mine) {
     switched(from, row)
     for (const f of row.fragments ?? []) {
       if (f.enabled === false) continue // switched off, it is not there: it blanks no slot under it
-      const held = slots.get(f.id)
-      if (f.mode === "yield" && (theirs.has(f.id) || (held && held.from !== from))) continue
-      slots.set(f.id, { ...f, from })
+      const held = slots.get(keyOf(f))
+      if (f.mode === "yield" && (cards(f) || (held && held.from !== from))) continue
+      slots.set(keyOf(f), { ...f, from })
     }
   }
   const zone: Item<Fragment>[] = [
