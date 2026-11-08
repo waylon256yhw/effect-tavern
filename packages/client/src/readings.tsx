@@ -24,6 +24,7 @@ import {
   log,
   path,
   registry,
+  stageNames,
   working,
 } from "./store.ts"
 import { turn } from "./turn.ts"
@@ -176,13 +177,16 @@ export const Settlement = (props: { node: Node }) => {
           <Show when={reason()}>
             {(e) => (
               <p class="detail">
-                {e().message}
-                <Show when={e().code === "no-model"}>
-                  {" "}
-                  <button type="button" class="go" onClick={() => openSettings("routing")}>
-                    {t("app.goDefaultModel")}
-                  </button>
-                </Show>
+                <Show when={e().phase}>{(p) => <span class="phase">{t(stageNames[p()])}</span>}</Show>
+                <span>
+                  {e().message}
+                  <Show when={e().code === "no-model"}>
+                    {" "}
+                    <button type="button" class="go" onClick={() => openSettings("routing")}>
+                      {t("app.goDefaultModel")}
+                    </button>
+                  </Show>
+                </span>
               </p>
             )}
           </Show>
@@ -451,62 +455,41 @@ export const TurnRecord = (props: { node: Node }) => (
   </AsyncView>
 )
 
-/** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn, new prose: the wand
- *  opens a box for a word to the narrator, which rides as that sibling's note; Enter sends, empty or not, and so does
- *  the wand again) and Edit (the prose editable in place, App.tsx `Editor`). Three icons with hints; the box exists
- *  only while the wand is asking, where the row's spacer was. The pieces of the row under each turn's prose (App.tsx
- *  `Section`'s footer, after the Record pill and the version count): the box, then the keys as one `.acts` group,
- *  which the row shows the way the line's bubble shows its own (reader.css). 小剧场 is not one of them (`Demand`). */
+/** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn from narrate, keeping
+ *  this turn's lookup, rolls and director brief) and Edit (the prose editable in place, App.tsx `Editor`). Three icons
+ *  at the end of the row under each turn's prose (App.tsx `Section`'s footer, after the Record pill and the version
+ *  count), shown the way the line's bubble shows its own (reader.css). 小剧场 is not one of them (`Demand`). */
 export const Rewrite = (props: {
   rerun: boolean // the turn has an input to run the narrator from again; an opening has not, only Edit shows
   node: Id
 }) => {
-  const [asking, setAsking] = createSignal(false)
   const busy = read(working)
-  let direction: HTMLInputElement | undefined
-  const reword = () => {
-    const note = direction?.value.trim()
-    setAsking(false)
-    turn.reword(props.node, note || undefined)
-  }
   return (
     <>
-      <Show when={asking() && !busy()} fallback={<span class="spacer" />}>
-        <input
-          class="direction"
-          placeholder={t("readings.rewordPlaceholder")}
-          disabled={busy()}
-          ref={(el) => {
-            direction = el
-            requestAnimationFrame(() => el.focus())
-          }}
-          onKeyDown={(e) => {
-            if (e.isComposing) return
-            if (e.key === "Enter") {
-              e.preventDefault()
-              reword()
-            } else if (e.key === "Escape") setAsking(false)
-          }}
-          onBlur={() => !direction?.value.trim() && setAsking(false)}
-        />
-      </Show>
+      <span class="spacer" />
       <span class="acts" role="toolbar" aria-label={t("readings.turnActions")}>
         <Show when={props.rerun}>
-          <button class="icon" aria-label={t("common.swipe")} disabled={busy()} onClick={() => turn.swipe(props.node)}>
+          <button
+            type="button"
+            class="icon"
+            aria-label={t("common.swipe")}
+            disabled={busy()}
+            onClick={() => turn.swipe(props.node)}
+          >
             <Swipe />
           </button>
           <button
+            type="button"
             class="icon"
             aria-label={t("common.reword")}
-            aria-expanded={asking() ? "true" : "false"}
             disabled={busy()}
-            onPointerDown={(e) => e.preventDefault()}
-            onClick={() => (asking() ? reword() : setAsking(true))}
+            onClick={() => turn.reword(props.node)}
           >
             <Reword />
           </button>
         </Show>
         <button
+          type="button"
           class="icon"
           aria-label={t("common.edit")}
           disabled={busy()}
@@ -543,7 +526,14 @@ export const Demand = (props: { node: Node }) => {
           onPick={(id) => (dismiss(), turn.demand(props.node.id, id))}
         />
       </Show>
-      <Show when={asked() === props.node.id && failed()}>{(f) => <span class="failed">{f().message}</span>}</Show>
+      <Show when={asked() === props.node.id && failed()}>
+        {(f) => (
+          <span class="failed">
+            <Show when={f().phase}>{(p) => <span class="phase">{t(stageNames[p()])}</span>}</Show>
+            {f().message}
+          </span>
+        )}
+      </Show>
     </>
   )
 }

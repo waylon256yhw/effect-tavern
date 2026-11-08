@@ -26,7 +26,7 @@ export interface Draft {
   fresh?: boolean // the line is nowhere else (an act): a client that attaches and sees it fail puts it back in the box
 }
 /** What a subscriber reads: the session's events, and the failure as a last element (the wire's `error` event). */
-export type Out = Event | { kind: "error"; cause: Cause.Cause<unknown> }
+export type Out = Event | { kind: "error"; phase: Phase; cause: Cause.Cause<unknown> }
 export type Call = Extract<Event, { kind: "call" }>
 
 /** The phase an action is in before its first `stage`; a synchronous action (greet, checkout, setField) writes its node
@@ -78,7 +78,7 @@ interface Run {
 
 export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) => void) => {
   let run: Run | undefined
-  let failed: { draft: Draft | null; cause: Cause.Cause<unknown> } | undefined
+  let failed: { phase: Phase; draft: Draft | null; cause: Cause.Cause<unknown> } | undefined
   const subscribe = (r: Run): Stream.Stream<Out> => {
     const q = Effect.runSync(Queue.unbounded<Out, Cause.Done>())
     r.subs.add(q)
@@ -143,8 +143,8 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
           Effect.catchCause((cause) =>
             Effect.sync(() => {
               if (Cause.hasInterruptsOnly(cause)) return
-              if (r.subs.size) for (const q of r.subs) Queue.offerUnsafe(q, { kind: "error", cause })
-              else failed = { draft: r.draft, cause } // nobody heard it: the next attach does
+              if (r.subs.size) for (const q of r.subs) Queue.offerUnsafe(q, { kind: "error", phase: r.phase, cause })
+              else failed = { phase: r.phase, draft: r.draft, cause } // nobody heard it: the next attach does
             }),
           ),
           Effect.ensuring(
@@ -187,7 +187,11 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
       const f = failed
       if (!f) return undefined
       failed = undefined
-      return { phase: null, draft: f.draft, events: Stream.make({ kind: "error", cause: f.cause } as Out) }
+      return {
+        phase: null,
+        draft: f.draft,
+        events: Stream.make({ kind: "error", phase: f.phase, cause: f.cause } as Out),
+      }
     },
   }
 }

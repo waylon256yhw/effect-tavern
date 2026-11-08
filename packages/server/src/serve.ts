@@ -350,7 +350,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       const fiber = Effect.runFork(
         Stream.runForEach(events, (e) =>
           Effect.sync(() => {
-            if (e.kind === "error") send("error", failure(e.cause))
+            if (e.kind === "error") send("error", { ...failure(e.cause), phase: e.phase })
             else if (e.kind !== "call") send(e.kind, shown(e))
           }),
         ).pipe(Effect.ensuring(Effect.sync(() => void (closed || res.end())))),

@@ -97,7 +97,7 @@ const { artifact } = await captureArtifact(
     assert.equal(registry.get(working), false)
     assert.equal(registry.get(composition).text, "") // persisted prose never returns its input to the composer
     assert.equal(registry.get(log).nodes.get(99)!.settlementStatus, "failed")
-    assert.equal(registry.get(error)?.message, "record failed")
+    assert.deepEqual(registry.get(error), { message: "record failed", phase: "record" })
   },
   { scenario: "saved-prose-settlement-failure" },
 )

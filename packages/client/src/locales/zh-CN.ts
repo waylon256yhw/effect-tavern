@@ -266,7 +266,6 @@ const zh = {
     again: "再来一次",
     aside: "小剧场",
     none: "无",
-    rewordPlaceholder: "给重写的一句话…",
     turnActions: "这一轮的动作",
     insert: "新增",
     patch: "更新",

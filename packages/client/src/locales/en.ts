@@ -267,7 +267,6 @@ const en: Dict = {
     again: "Once more",
     aside: "Aside",
     none: "none",
-    rewordPlaceholder: "A word for the rewrite…",
     turnActions: "Actions on this turn",
     insert: "Added",
     patch: "Updated",

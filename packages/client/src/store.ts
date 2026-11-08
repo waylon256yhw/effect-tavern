@@ -18,7 +18,17 @@ import type {
 } from "@effect-tavern/runtime/src/projection.ts"
 import * as Atom from "./atom.ts"
 import { registry } from "./atom.ts"
-import { t } from "./i18n.ts"
+import { type Key, t } from "./i18n.ts"
+
+export const stageNames: Record<Phase, Key> = {
+  lookup: "settings.stageLookup",
+  decide: "settings.stageDecide",
+  direct: "settings.stageDirect",
+  narrate: "settings.stageNarrate",
+  check: "settings.stageCheck",
+  polish: "settings.stagePolish",
+  record: "settings.stageRecord",
+}
 
 export type Id = number
 export interface Draft {
@@ -32,8 +42,8 @@ export interface Draft {
   fresh?: boolean // the line is nowhere else (an act, a revised line): a failed turn puts it back in the composer
 }
 /** A failed turn as the server's `error` event says it: `code` "no-model" (no model to run it on) is the one the ghost
- *  turns into a way into Settings → 默认模型. */
-export type Failure = { message: string; code?: string }
+ *  turns into a way into Settings → 默认模型; `phase` names the stage that was running when the failure happened. */
+export type Failure = { message: string; code?: string; phase?: Phase }
 /** The turn in flight as a client that comes back to the story finds it (server GET /turn): its stage and its draft. */
 export type Attach = { kind: "attach"; phase: Phase | null; draft: Draft | null }
 export type Wire = Event | ({ kind: "error" } & Failure) | Attach
@@ -384,13 +394,18 @@ const applyNow = (e: Wire): void => {
       }
       return
     }
-    case "error":
+    case "error": {
       resetPlay()
-      registry.set(error, { message: e.message, ...(e.code && { code: e.code }) })
+      const phase =
+        e.phase ??
+        registry.get(stage) ??
+        (registry.get(latest)?.node.settlementStatus === "failed" ? "record" : undefined)
+      registry.set(error, { message: e.message, ...(e.code && { code: e.code }), ...(phase && { phase }) })
       registry.set(stage, null)
       running(null)
       withdraw()
       return
+    }
   }
 }
 

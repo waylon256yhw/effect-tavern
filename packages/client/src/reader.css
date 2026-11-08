@@ -379,8 +379,7 @@ section:has(> .editor) > .actions {
 }
 .spoke:is(:hover, :focus-within) .acts,
 .group > summary:is(:hover, :focus-within) .acts,
-main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts,
-.actions:has(> .direction) .acts {
+main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
   opacity: 1;
   translate: 0 0;
 }
@@ -536,54 +535,54 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts,
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-.actions .direction {
-  flex: 1;
-  min-width: 0;
-  height: var(--control);
-  margin-block: calc(-1 * var(--space-1)); /* hangs 4px over the 24px row, so opening it adds nothing under the prose */
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius);
-  background: var(--alpha-1);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-prose); /* never below 16 in an input (iOS zoom) */
-  outline: none;
-}
-.actions .direction::placeholder {
-  color: var(--ink-3);
-}
-.actions .direction:focus {
-  box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
-}
 .end {
   font-size: var(--text-footnote);
   color: var(--ink-3);
 }
-/* a failed turn: Cherry Studio's error card, the accent on its left edge, the message in body size */
-.error {
+/* a failed turn or unresolved settlement: a soft rounded card with a hairline border and stage pill */
+.error,
+.settlement {
   display: flex;
-  gap: var(--space-2);
+  align-items: flex-start;
+  gap: var(--space-2) var(--space-3);
   padding: 10px 14px;
-  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-card);
   background: var(--alpha-1);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
   font-size: var(--text-body);
   line-height: 1.5;
   color: var(--ink-2);
   text-align: left;
 }
-.error > svg {
+:is(.error, .settlement) > svg {
   flex: none;
   width: var(--icon-sm);
   height: var(--icon-sm);
-  margin-top: 2px;
+  align-self: flex-start;
+  margin-top: 3px;
   color: var(--danger);
+}
+.error .body {
+  flex: 1;
+  min-width: 0;
+}
+:is(.error, .settlement, .failed) .phase {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-inline-end: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-2);
+  color: var(--ink);
+  font-size: var(--text-caption);
+  font-weight: 550;
+  line-height: 1.4;
+  vertical-align: 1px;
 }
 .error .icon {
   margin: -6px -8px -6px auto; /* the control's box hangs over the padding: the row stays one line of text tall */
 }
 /* the way out of an error, inline after it (no model: Settings → 默认模型) */
-.error .go {
+:is(.error, .settlement) .go {
   color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -844,25 +843,10 @@ button:focus-visible {
 }
 
 .settlement {
-  display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: 10px 14px;
-  border-left: 3px solid var(--warn);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  background: var(--alpha-1);
-  color: var(--ink-2);
-  font-size: var(--text-body);
-  line-height: 1.5;
-  text-align: left;
 }
 .settlement > svg {
-  flex: none;
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  align-self: flex-start;
-  margin-top: 2px;
   color: var(--warn);
 }
 .settlement .body {
@@ -875,12 +859,6 @@ button:focus-visible {
 .settlement .detail {
   font-size: var(--text-footnote);
   color: var(--danger);
-}
-.settlement .go {
-  color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  white-space: nowrap;
 }
 .settlement .btns {
   display: flex;

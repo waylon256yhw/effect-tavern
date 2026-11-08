@@ -47,6 +47,7 @@ import {
   revising,
   settling,
   stage,
+  stageNames,
   type Draft,
   type Failure,
   type Id,
@@ -356,21 +357,24 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
       </Show>
       <Show when={props.error}>
         {(e) => (
-          <p class="error" role="alert">
+          <div class="error" role="alert">
             <Warning aria-hidden="true" />
-            <span>
-              {e().message}
-              <Show when={e().code === "no-model"}>
-                {" "}
-                <button type="button" class="go" onClick={() => openSettings("routing")}>
-                  {t("app.goDefaultModel")}
-                </button>
-              </Show>
-            </span>
+            <div class="body">
+              <Show when={e().phase}>{(p) => <span class="phase">{t(stageNames[p()])}</span>}</Show>
+              <span>
+                {e().message}
+                <Show when={e().code === "no-model"}>
+                  {" "}
+                  <button type="button" class="go" onClick={() => openSettings("routing")}>
+                    {t("app.goDefaultModel")}
+                  </button>
+                </Show>
+              </span>
+            </div>
             <button type="button" class="icon" aria-label={t("common.dismiss")} onClick={dismiss}>
               <Close />
             </button>
-          </p>
+          </div>
         )}
       </Show>
     </section>
