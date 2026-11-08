@@ -215,6 +215,28 @@ export const makeDerived = ({
       gated: (extra?: readonly Disclosure[], s?: State) => gated(path, extra, s),
       readable: () => candidatesOn(path).filter((e) => e.invoke === "auto"),
       invocable: () => candidatesOn(path),
+      /** Search only the same auto candidates and unseen, unlocked layers that lookup can deliver. */
+      search: (q: string, k: number, exclude: readonly string[] = []): string[] => {
+        // ponytail: whitespace terms and substring counts, no segmentation or vectors; grow to BM25 or an
+        // embedding plugin when real cards need it. Stable sorting keeps index order for ties.
+        const terms = [...new Set(q.trim().toLowerCase().split(/\s+/).filter(Boolean))]
+        if (!terms.length) return []
+        const I = L()
+        const s = gated(path)
+        const seen = deliveredOn(path)
+        const held = deliveredOn(path.slice(foldOf(path)))
+        return candidatesOn(path)
+          .filter((e) => e.invoke === "auto" && !exclude.includes(e.id))
+          .map((e) => {
+            const ds = entryRef(e.id) ? [{ id: e.id, layer: 1 }] : (I.read(s, seen, held, e.id) ?? [])
+            const body = [e.id, e.hook, ...ds.map(text)].join("\n").toLowerCase()
+            return { e, score: terms.filter((term) => body.includes(term)).length }
+          })
+          .filter((hit) => hit.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, k)
+          .map(({ e }) => `${e.id}=${e.hook}`)
+      },
       /** How many leading turns the fold covers. */
       fold: () => foldOf(path),
       summary: () => summaryOf(path),

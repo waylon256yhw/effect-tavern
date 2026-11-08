@@ -42,7 +42,7 @@ const marks = (ms: Message[]) =>
     .filter((i) => i >= 0)
 
 const asks: Record<Ask["stage"], Ask> = {
-  lookup: { stage: "lookup", question: "Which entries?", index: ["li=Li: A's friend.", "people@3#0=Li"] },
+  lookup: { stage: "lookup", ledger: [], question: "Which entries?", index: ["li=Li: A's friend.", "people@3#0=Li"] },
   decide: {
     stage: "decide",
     ledger: [{ role: "system", text: "Ledger:\nhello → -" }],

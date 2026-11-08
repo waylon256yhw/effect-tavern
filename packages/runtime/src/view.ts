@@ -132,7 +132,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   // ───────── the document ─────────
   const ask: Ask =
     stage === "lookup"
-      ? { stage, question: R.asks["lookup"]!.text, index }
+      ? { stage, question: R.asks["lookup"]!.text, index, ledger: [] }
       : stage === "record"
         ? { stage, known: "Known: ", asks, readout: R.asks["record.readout"]!.text, questions, prose: "" }
         : {

@@ -11,7 +11,7 @@
 // (polish.ts `splice`). The verdict on the node is check's, on the prose before polish; a rewrite that drops a clue's
 // wording or brushes a guard rule is the price, and `switches.polish: false` turns the stage off.
 // There is no tool anywhere: lookup is a structured pick over the literal enum of readable ids, actions are the decide
-// stage. The model never drives a loop, so there is no tool definition to gate or to cache (§15.4 items 1–2 dissolve).
+// stage. Code bounds both structured loops; there is no tool definition to gate or to cache (§15.4 items 1–2 dissolve).
 // Truncation: a narrate that finishes with "length" is re-asked once with the partial as a trailing assistant message
 // when the connection declares `prefill`; the turn records the concatenation once. Current Claude rejects the prefix
 // (docs/provider-reading.md §7), so on such connections the partial stands and recovery is still undecided.
@@ -86,7 +86,15 @@ export type Change = Log.Change<Node>
 export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
 
-const Lookup = (ids: readonly string[]) => Schema.Struct({ read: Schema.Array(Schema.Literals(ids)) })
+// ponytail: three steps until a card needs its own cap; then make it a card setting.
+const lookupCap = 3
+// ponytail: keep hooks within 2000 estimated tokens. If ids themselves hit provider enum limits,
+// upgrade catalog's first step to search-only, then enumerate the results.
+const indexBudget = 2000
+const Lookup = (ids: readonly string[], catalog: boolean) => {
+  const fields = { read: Schema.Array(Schema.Literals(ids)), more: Schema.Boolean }
+  return catalog ? Schema.Struct({ ...fields, search: Schema.String }) : Schema.Struct(fields)
+}
 const BriefOf = (open: readonly string[]) =>
   Schema.Struct({
     must: Schema.Array(Schema.Literals(open)),
@@ -450,26 +458,39 @@ export const makeSession = ({
       const idx = untold.map((e) => e.id)
       // A chip-only turn supplies context, not a player line for lookup or action judgement.
       const hasInput = !!(input.text || input.note)
-      const looked =
-        from !== "lookup"
-          ? base!.read
-          : deliver(
-              g0,
-              all,
-              seen,
-              hasInput && idx.length
-                ? (yield* obj(
-                    emit,
-                    "lookup",
-                    Lookup(idx),
-                    ask(s0, input, {
-                      stage: "lookup",
-                      question: wording("lookup"),
-                      index: untold.map((e) => `${e.id}=${e.hook}`),
-                    }),
-                  )).read
-                : [],
-            )
+      let looked = from !== "lookup" ? [...base!.read] : []
+      if (from === "lookup" && hasInput && idx.length) {
+        const index = untold.map((e) => `${e.id}=${e.hook}`)
+        const catalog = tokens(index.join(", ")) > indexBudget
+        const steps: { read: Told[]; found?: string[]; question: string }[] = []
+        const read = new Set<string>()
+        for (let step = 0; step < lookupCap; step++) {
+          const remaining = idx.filter((id) => !read.has(id))
+          if (!remaining.length) break
+          const answer = yield* obj(
+            emit,
+            "lookup",
+            Lookup(remaining, catalog),
+            ask(s0, input, {
+              stage: "lookup",
+              ledger: here.ledger(),
+              question: wording("lookup"),
+              index: catalog ? idx : index,
+              steps,
+            }),
+          )
+          const fresh = answer.read.filter((id) => !read.has(id))
+          for (const id of fresh) read.add(id)
+          looked = deliver(g0, all, seen, [...read])
+          const search = "search" in answer ? answer.search.trim() : ""
+          if (!(answer.more && fresh.length) && !search) break
+          steps.push({
+            read: told(looked),
+            ...(search ? { found: here.search(search, 8, [...invoked, ...read]) } : {}),
+            question: wording("lookup.again"),
+          })
+        }
+      }
       // decide → settle, looping; the k-th decide sees the first k events
       let beats: Beat[] = from !== "lookup" ? [...base!.beats] : []
       let end: Turn["end"] = from !== "lookup" ? base!.end : "end"

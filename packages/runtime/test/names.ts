@@ -102,7 +102,7 @@ const canned = {
 const prose = { text: "said {{char}}" }
 const scripted = fake((o) => {
   const doc = readStage(o)
-  if (doc.phase === "lookup") return { text: JSON.stringify({ read: picks.shift() ?? [] }) }
+  if (doc.phase === "lookup") return { text: JSON.stringify({ more: false, read: picks.shift() ?? [] }) }
   if (doc.phase === "narrate") return prose
   return defaultAnswer(doc, canned)
 })
