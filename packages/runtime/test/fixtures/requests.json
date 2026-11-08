@@ -28,7 +28,7 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: li=李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
+          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
         },
         {
           "role": "system",
@@ -124,10 +124,6 @@
         {
           "role": "user",
           "content": "我看了看四周。⦅小心⦆"
-        },
-        {
-          "role": "system",
-          "content": "李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。半年前他在江南犯下大案遭各派围剿，江湖上都传他已死在裴青舟剑下。"
         },
         {
           "role": "system",
@@ -246,10 +242,6 @@
           "content": "我看了看四周。⦅小心⦆"
         },
         {
-          "role": "system",
-          "content": "李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。半年前他在江南犯下大案遭各派围剿，江湖上都传他已死在裴青舟剑下。"
-        },
-        {
           "role": "assistant",
           "content": "不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。",
           "providerOptions": {
@@ -300,7 +292,7 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: yandao=盐道之争已经半年，镇上人都说县令是外省人不懂盐。"
+          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
         },
         {
           "role": "system",
@@ -356,10 +348,6 @@
         {
           "role": "user",
           "content": "我看了看四周。⦅小心⦆"
-        },
-        {
-          "role": "system",
-          "content": "盐道之争已经半年，镇上人都说县令是外省人不懂盐。"
         },
         {
           "role": "system",
@@ -440,10 +428,6 @@
         {
           "role": "user",
           "content": "我看了看四周。⦅小心⦆"
-        },
-        {
-          "role": "system",
-          "content": "盐道之争已经半年，镇上人都说县令是外省人不懂盐。"
         },
         {
           "role": "assistant",
@@ -616,7 +600,7 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: kokuhaku=理最近有心事：常常绞着胸前的吊坠出神，话到嘴边又咽回去。"
+          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
         },
         {
           "role": "system",
@@ -672,10 +656,6 @@
         {
           "role": "user",
           "content": "我看了看四周。⦅小心⦆"
-        },
-        {
-          "role": "system",
-          "content": "理最近有心事：常常绞着胸前的吊坠出神，话到嘴边又咽回去。"
         },
         {
           "role": "system",
@@ -758,10 +738,6 @@
           "content": "我看了看四周。⦅小心⦆"
         },
         {
-          "role": "system",
-          "content": "理最近有心事：常常绞着胸前的吊坠出神，话到嘴边又咽回去。"
-        },
-        {
           "role": "assistant",
           "content": "不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。",
           "providerOptions": {
@@ -812,7 +788,7 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: li=李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
+          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
         },
         {
           "role": "system",
@@ -908,10 +884,6 @@
         {
           "role": "user",
           "content": "我看了看四周。⦅小心⦆"
-        },
-        {
-          "role": "system",
-          "content": "李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。半年前他在江南犯下大案遭各派围剿，江湖上都传他已死在裴青舟剑下。"
         },
         {
           "role": "system",
@@ -1062,10 +1034,6 @@
           "content": "我看了看四周。⦅小心⦆"
         },
         {
-          "role": "system",
-          "content": "李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。半年前他在江南犯下大案遭各派围剿，江湖上都传他已死在裴青舟剑下。"
-        },
-        {
           "role": "assistant",
           "content": "不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。",
           "providerOptions": {
@@ -1095,11 +1063,7 @@
     "asks": [
       {
         "id": "lookup",
-        "text": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search)."
-      },
-      {
-        "id": "lookup.again",
-        "text": "Given the entries read so far and any search results, pick only what is still missing for the player's line, or nothing if unsure. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search)."
+        "text": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
       },
       {
         "id": "direct",

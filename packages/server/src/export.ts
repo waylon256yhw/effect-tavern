@@ -17,7 +17,7 @@ export interface Exported {
 /** The backup: a format name and version first, so a reader knows what it holds before the tree. */
 export const backup = (x: Exported, at = new Date()) => ({
   format: "effect-tavern/story",
-  version: 2,
+  version: 3,
   exported: at.toISOString(),
   card: x.card,
   story: { id: x.story.id, title: x.story.title, starred: x.story.starred, updated: x.story.updated },

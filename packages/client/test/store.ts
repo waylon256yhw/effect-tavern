@@ -114,3 +114,24 @@ const { artifact } = await captureArtifact(
   { scenario: "saved-prose-settlement-failure" },
 )
 expectNoDiagnostics(artifact)
+
+// Composer reads this branch's authorized player catalog, independently of prior deliveries.
+const { artifact: catalogArtifact } = await captureArtifact(
+  () => {
+    const a = {
+      ...node(100, null, "A"),
+      playerCatalog: [{ id: "pack:p/guide", title: "Guide", hook: "Guide", source: "pack" }],
+    }
+    const b = { ...node(101, null, "B"), playerCatalog: [] }
+    apply({ kind: "change", node: a, head: a.id })
+    assert.equal(registry.get(path).at(-1)!.playerCatalog[0]!.id, "pack:p/guide")
+    apply({ kind: "change", node: b, head: b.id })
+    assert.deepEqual(registry.get(path).at(-1)!.playerCatalog, [])
+    apply({ kind: "change", head: a.id })
+    assert.equal(registry.get(path).at(-1)!.playerCatalog[0]!.id, "pack:p/guide")
+    apply({ kind: "change", node: { ...a, playerCatalog: [] }, head: a.id })
+    assert.deepEqual(registry.get(path).at(-1)!.playerCatalog, [])
+  },
+  { scenario: "branch-local-player-catalog" },
+)
+expectNoDiagnostics(catalogArtifact)

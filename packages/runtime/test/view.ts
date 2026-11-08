@@ -64,7 +64,7 @@ assert.deepEqual(
     .slice(0, -1),
   at("lookup").doc.map(text).slice(0, -1),
 )
-assert.match(sent("lookup").join("\n"), /Index: yandao=盐道之争已经半年/)
+assert.match(sent("lookup").join("\n"), /search_context/)
 const r = at("record")
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))
 for (const line of r.sections[2]!.text.split("\n")) assert.ok(sent("record").join("\n").includes(line), line)

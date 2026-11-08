@@ -561,16 +561,50 @@ const EntriesTab = (props: { pack: Layer; onSave: Save }) => {
                     onChange={(e) => updateEntry(x().i, { id: e.currentTarget.value })}
                     onKeyDown={leaveInput}
                   />
+                  <label class="tag">
+                    <input
+                      type="checkbox"
+                      checked={x().e.access?.model ?? true}
+                      onChange={(e) =>
+                        updateEntry(x().i, {
+                          access: { model: e.currentTarget.checked, player: x().e.access?.player ?? true },
+                        })
+                      }
+                    />
+                    {t("invoke.auto")}
+                  </label>
+                  <label class="tag">
+                    <input
+                      type="checkbox"
+                      checked={x().e.access?.player ?? true}
+                      onChange={(e) =>
+                        updateEntry(x().i, {
+                          access: { player: e.currentTarget.checked, model: x().e.access?.model ?? true },
+                        })
+                      }
+                    />
+                    {t("invoke.manual")}
+                  </label>
                   <select
                     aria-label={t("invoke.mode")}
-                    value={x().e.invoke ?? "auto"}
+                    value={x().e.activation ?? "on_demand"}
                     onChange={(e) =>
-                      updateEntry(x().i, { invoke: e.currentTarget.value as "always" | "auto" | "manual" })
+                      updateEntry(x().i, { activation: e.currentTarget.value as "always" | "on_demand" })
                     }
                   >
+                    <option value="on_demand">{t("invoke.onDemand")}</option>
                     <option value="always">{t("invoke.always")}</option>
-                    <option value="auto">{t("invoke.auto")}</option>
-                    <option value="manual">{t("invoke.manual")}</option>
+                  </select>
+                  <select
+                    aria-label={t("invoke.residency")}
+                    value={x().e.residency ?? "window"}
+                    onChange={(e) =>
+                      updateEntry(x().i, { residency: e.currentTarget.value as "permanent" | "window" | "turn" })
+                    }
+                  >
+                    <option value="permanent">{t("invoke.permanent")}</option>
+                    <option value="window">{t("invoke.window")}</option>
+                    <option value="turn">{t("invoke.turn")}</option>
                   </select>
                   <span class="tag">{hook(x().e.text)}</span>
                   <span class="spacer" />

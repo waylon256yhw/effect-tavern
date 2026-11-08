@@ -284,3 +284,14 @@ export interface DeliverySnapshot {
 - 正文先保存为 `pending`，再开始 record。`retryRecord` 只重跑结算；`skipRecord` 是终态。取消 record 会保存 `failed` 并发完状态与调用轨迹，再结束事件流。attempt、节点版本和父链快照共同阻止过期提交。
 - `Turn.changes` 保存领域变更；`Turn.products` 仅保存 chronicle/theater。节点投影提供 `heading`；`GET /context?node=<id|root>` 按需返回统一状态和展示值。客户端不再折叠世界状态或解释删除墓碑。
 - 本次不隐式转换旧故事：缺少事务字段的旧存档明确拒绝打开；导出格式版本为 2。原文件保留，可另行导出或迁移。检索阶段暂沿现有目录读取已提交变更，资源 revision、交付快照和原生 lookup 在 Step 3 替换。
+
+### Step 3 实施契约
+
+- `context.ts` 统一资源身份、内容摘要、冻结快照、实际请求驻留集合及 `search_context` / `read_context`。卡片与 Pack 条目声明独立的 `access`、`activation`、`residency`；来源由宿主赋值。默认卡片/记忆仅模型可读，Pack 同时允许模型与玩家；默认按需激活、窗口驻留。玩家目录只受解锁和 `access.player` 约束，不与模型驻留或自动激活混用。
+- `memory:<product>/<entityId>` 从已提交完整实体投影生成，改名与局部 patch 不改身份；revision 是内容的稳定 SHA-256。Chronicle 的 keyed table 使用声明的逻辑键，未声明键的不可变列表项使用内容摘要。删除的实体退出活动记忆，原节点的快照仍可查看。
+- `Turn.deliveries` 保存本轮新增交付的冻结文本（历史驻留快照重发不计作重新装入，避免窗口永久续期）；同轮交付过多个版本时全部保留，后续请求选择最新版本。`Turn.opportunities` 冻结本轮 gate 候选，使 reword/check 不再重新解析资源正文。`read` / `fired` 仅表达剧情揭示层级和计数，不承担模型上下文驻留。
+- lookup 和 narrate 均显式装入同一组驻留快照。lookup 还装入完整 `Current`，仅其中确实表示的完整资源 revision 计为驻留；正文和 ledger 中提到实体不算交付。`turn` 快照不进入下一轮，`window` 随选定摘要边界退出，`permanent` 不受窗口边界影响。
+- 原生 lookup 最多 5 次模型请求、每次最多 1,024 输出 tokens、累计 4,096、整体 60 秒。5 次允许 `search → read → search → read → finish`；搜索返回最多 8 条短摘要，每次读取最多 8 个引用，无全量目录枚举或游标。只读预算耗尽时保留已成功读取的快照继续正文，真实调用失败或取消则不创建回合。两种情况均记录原生工具轨迹。
+- `Node.playerCatalog` 与模型目录分离，Composer/Inspector 已切换；Pack 编辑器分别编辑权限、激活及驻留。纯芯片输入保留用户消息边界，编辑仍走 check/record，书架计数与搜索回合编号也计入它。
+- 删除旧的 `invoke` 模式字段、`Lookup` 枚举及 `more/search/Read/Found/lookup.again` 协议、`product@node#index` 记忆引用。旧条目策略在解码边界明确拒绝，不静默改变权限含义；缺少交付快照的旧故事不隐式转换，备份格式升至 **3**。
+- Step 4 仍负责完整的 `TimelineNode` / `TurnDetail` 拆分与 Composer 分类交互；本步不把完整世界状态加入时间线节点。

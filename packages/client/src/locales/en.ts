@@ -552,10 +552,15 @@ const en: Dict = {
     local: "This card",
   },
   invoke: {
-    manual: "Manual",
-    auto: "Auto",
-    always: "Always",
-    mode: "Invocation",
+    manual: "Player invocation",
+    auto: "Model search",
+    always: "Load automatically",
+    mode: "Activation",
+    onDemand: "Load on demand",
+    residency: "Retention",
+    permanent: "Keep loaded",
+    window: "Keep in window",
+    turn: "This turn only",
   },
 }
 export default en

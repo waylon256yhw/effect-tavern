@@ -122,7 +122,7 @@ export const record = (
 ): Element[] => {
   const out: Element[] = fields(rules, node, prev, whens)
   for (const check of node.checks) out.push({ kind: "check", check })
-  for (const d of node.delivered) out.push({ kind: "clue", id: d.id, text: d.text })
+  for (const d of node.delivered) out.push({ kind: "clue", id: d.resourceId, text: d.text })
   for (const c of node.turn.changes) {
     const id = "product" in c ? c.product : c.collection
     const p = products.find((p) => p.id === id)

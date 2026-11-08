@@ -15,10 +15,7 @@ type Turn = TurnOf<Beat>
 const derivedOf = (card: Card, policy = { budget: 0, keep: 2, block: 2 }) =>
   makeDerived({
     rpg: makeCard(card.rules),
-    L: () =>
-      makeLore<Paths, readonly string[]>(
-        card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) })),
-      ),
+    L: () => makeLore<Paths, readonly string[]>(card.lore.map((e) => ({ ...e, ...gateOf(e.id, e.offer) }))),
     lore: card.lore,
     products: () => resolve(card, {}).products,
     policy: () => policy,
@@ -31,6 +28,8 @@ const add = (path: readonly Turn[], t: Partial<Turn> = {}): Turn[] => [
     changes: [],
     settlementStatus: "committed",
     settlementVersion: 0,
+    deliveries: [],
+    opportunities: [],
     id: next++,
     parent: path.at(-1)?.id ?? null,
     input: { text: "wait" },
@@ -82,99 +81,110 @@ const none = { events: [], before: [] }
   assert.deepEqual([counters(c), gate(c).offered], [{ since: 3, shown: 2, floor: 1 }, []])
 }
 
-// ───────── The lock is a predicate over the path: a layer once unlocked stays readable after the state drops ─────────
-// li's second layer unlocks at bond ≥ 8. Two warm readouts reach it; a cold one after takes bond back to 3, and the
-// layer is still readable (so pinnable), then read. Layer 3 never: only a window opens it.
+// Unlock is shared by model resources and player catalog, while permissions are independent.
 {
-  const D = derivedOf(full)
-  const untold = (path: readonly Turn[]) =>
-    D.at(path)
-      .readable()
-      .map((r) => r.id)
-  const v0 = add([], { read: [{ id: "li", layer: 1 }] })
-  assert.deepEqual(untold(v0), [])
-  const v1 = add(add(v0, { answers: { warmth: "warm" } }), { answers: { warmth: "warm" } })
-  assert.deepEqual([D.at(v1).state.bond, untold(v1)], [8, ["li"]])
-  const v2 = add(v1, { answers: { warmth: "cold" } })
-  assert.deepEqual([D.at(v2).state.bond, untold(v2)], [3, ["li"]]) // the instant no longer holds; the lock stays open
-  assert.equal((D.at(v2).gated().lore as Record<string, { floor: number }>).li!.floor, 2)
-  const v3 = add(v2, { read: [{ id: "li", layer: 2 }] })
-  assert.deepEqual(untold(v3), ["li"]) // layer 1 has left the window
-  assert.deepEqual(
-    D.at(v3)
-      .node()
-      .invocable.map((e) => e.id),
-    ["li"],
-  ) // the projection carries the same list
+  const D = derivedOf({ ...full, lore: full.lore.map((e) => ({ ...e, access: { model: true, player: true } })) })
+  const a = add(add([], { answers: { warmth: "warm" } }), { answers: { warmth: "warm" } })
+  const b = add(a, { answers: { warmth: "cold" } })
+  assert.equal(D.at(b).state.bond, 3)
+  assert.equal(D.at(b).gated().lore.li!.floor, 2)
+  assert.ok(
+    D.at(b)
+      .resources()
+      .find((r) => r.resourceId === "card:li")!
+      .text.includes(full.lore[0]!.layers[1]!),
+  )
 }
 
-// ───────── A recall row enters readable only once its node is folded ─────────
-// Budget 0, keep 2, block 2: a path of n turns folds floor((n − 2) / 2) · 2 of them. In the tail a row's prose is still
-// verbatim in the narrator's transcript, and a lookup would tell it again.
+// A tail patch cannot stand in for the entity's complete snapshot. Identity survives rename.
 {
   const D = derivedOf(full)
-  const untold = (path: readonly Turn[]) =>
-    D.at(path)
-      .readable()
-      .map((r) => r.id)
-      .filter((id) => id !== "li")
-  const li = (note: string): Partial<Turn> => ({
-    changes: [{ kind: "insert_entity", collection: "people", entityId: "e_li", data: { name: "Li", note } }],
-  })
-  const r1 = add(add([], { read: [{ id: "li", layer: 1 }] }), li("N1")) // li told first; the row's node at index 1
-  const id1 = `people@${r1[1]!.id}#0`
-  assert.deepEqual([D.at(r1).fold(), untold(r1)], [0, []])
-  const f1 = add(r1)
-  assert.deepEqual([D.at(f1).fold(), untold(f1)], [0, []])
-  const f1b = add(f1)
-  assert.deepEqual([D.at(f1b).fold(), untold(f1b)], [2, [id1]]) // folded past index 1: the row is readable
-  // Two rows with one key are one entry, the newest row, and the fold runs first: with the old row folded and the new
-  // one in the tail, the key is absent, not the old row back.
-  const r2 = add(f1b, li("N2")) // index 4
-  const id2 = `people@${r2[4]!.id}#0`
-  assert.deepEqual(untold(r2), [])
-  assert.deepEqual(untold(add(r2)), [])
-  assert.deepEqual(untold(add(add(r2))), [])
-  const f2 = add(add(add(r2)))
-  assert.deepEqual([D.at(f2).fold(), untold(f2)], [6, [id2]])
-  // Reading the newest row tells the key: the superseded row does not come back as unread.
-  const r3 = add(f2, { read: [{ id: id2, layer: 1 }] })
-  assert.deepEqual(untold(r3), [])
-  // A recall ref reads its text off the path; a ref to a node not on it is a defect.
-  assert.equal(D.at(r3).text({ id: id2, layer: 1 }), "entityId=e_li, name=Li, note=N2")
-  assert.throws(() => D.at(r1).text({ id: id2, layer: 1 }), /is not on the path/)
-}
-
-// Folding unloads context, but never resets story depth, counters or exhausted offers.
-{
-  const entry = { id: "echo", layers: ["ECHO LOWER", "ECHO DEEP"], unlock: { all: [] }, offer: { all: [] } } as const
-  const D = derivedOf({ ...full, lore: [entry] })
   const a = add([], {
-    read: [{ id: "echo", layer: 1 }],
-    fired: [{ id: "echo", layer: 2 }],
-    products: { notes: "remember the event" },
+    changes: [{ kind: "insert_entity", collection: "people", entityId: "e_li", data: { name: "Li", note: "Origin" } }],
   })
-  const b = add(a)
-  assert.deepEqual(D.at(b).readable(), [])
-  const c = add(add(b))
-  assert.equal(D.at(c).fold(), 2)
-  assert.deepEqual(
-    D.at(c)
+  const old = D.at(a)
+    .resources()
+    .find((r) => r.resourceId === "memory:people/e_li")!
+  assert.ok(
+    D.at(a)
       .readable()
-      .map((e) => e.id),
-    ["echo"],
+      .some((r) => r.resourceId === old.resourceId),
   )
-  assert.deepEqual(
-    D.at(c)
-      .node()
-      .invocable.map((e) => e.id),
-    ["echo"],
+  const b = add(a, { deliveries: [old] })
+  assert.ok(
+    !D.at(b)
+      .readable()
+      .some((r) => r.resourceId === old.resourceId),
   )
-  assert.equal((D.at(c).gated().lore as Record<string, { shown: number }>).echo!.shown, 1)
-  const gate = D.at(c).gate({ state: D.at(c).state, ...none })
-  assert.deepEqual(gate.offered, [])
-  assert.ok(D.at(c).summary()!.text.includes("remember the event"))
-  assert.ok(!D.at(c).summary()!.text.includes("ECHO"))
+  const c = add(b, {
+    changes: [
+      {
+        kind: "patch_entity",
+        collection: "people",
+        entityId: "e_li",
+        patch: { name: "Renamed" },
+        prev: { name: "Li", note: "Origin" },
+      },
+    ],
+  })
+  const next = D.at(c)
+    .readable()
+    .find((r) => r.resourceId === old.resourceId)!
+  assert.notEqual(next.revision, old.revision)
+  assert.match(next.text, /Origin/)
+  assert.match(next.text, /Renamed/)
+  const d = add(c, { deliveries: [next] })
+  assert.ok(
+    !D.at(d)
+      .readable()
+      .some((r) => r.resourceId === old.resourceId),
+  )
+  const unloaded = add(add(add(d)))
+  assert.ok(
+    D.at(unloaded)
+      .readable()
+      .some((r) => r.resourceId === old.resourceId),
+  )
+  assert.equal(
+    D.at(b)
+      .resources()
+      .find((r) => r.resourceId === old.resourceId)!.revision,
+    old.revision,
+  )
+  const deleted = add(d, {
+    changes: [
+      { kind: "remove_entity", collection: "people", entityId: "e_li", prev: { name: "Renamed", note: "Origin" } },
+    ],
+  })
+  assert.ok(
+    !D.at(deleted)
+      .resources()
+      .some((r) => r.resourceId === old.resourceId),
+  )
+  const recreated = add(deleted, {
+    changes: [
+      { kind: "insert_entity", collection: "people", entityId: "e_other", data: { name: "Li", note: "Other" } },
+    ],
+  })
+  assert.ok(
+    D.at(recreated)
+      .resources()
+      .some((r) => r.resourceId === "memory:people/e_other"),
+  )
 }
 
-console.log("ok")
+// Full Current injection makes that revision resident without claiming prose contains it.
+{
+  const card = { ...full, products: full.products!.map((p) => (p.id === "people" ? { ...p, feed: true } : p)) }
+  const D = derivedOf(card)
+  const a = add([], {
+    changes: [{ kind: "insert_entity", collection: "people", entityId: "e_li", data: { name: "Li", note: "Origin" } }],
+  })
+  assert.ok(D.at(a).known().current!.includes("Origin"))
+  assert.ok(
+    !D.at(a)
+      .readable()
+      .some((r) => r.resourceId.startsWith("memory:")),
+  )
+}
+console.log("derived ok")

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
-import { fake, fakeText, type FakeCall } from "@effect-tavern/provider"
+import { fake, type FakeCall, type FakeReply } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
+import { contextLookup, freeze, revision, residentOn, type Resource } from "../src/context.ts"
 import type { Card } from "../src/card.ts"
 import { chat } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "./script.ts"
@@ -12,13 +13,13 @@ const lore = (id: string, body = `${id} body`): Card["lore"][number] => ({
   unlock: { all: [] },
   offer: { any: [] },
 })
-const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => unknown) => {
+const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => FakeReply) => {
   let n = 0
   const lookup: FakeCall[] = []
   const calls: Extract<Event, { kind: "call" }>[] = []
   const light = fake((o) => {
     lookup.push(o)
-    return { text: JSON.stringify(answer(o, n++)) }
+    return answer(o, n++)
   })
   const other = fake((o) => defaultAnswer(readStage(o), { notes: "a note" }))
   const S = makeSession({
@@ -41,145 +42,147 @@ const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => unkn
     )
   return { S, g, go, lookup, calls }
 }
-const messages = (o: FakeCall) => o.prompt.map(fakeText)
-const entries = [lore("a", "A points to b."), lore("b", "B points to c."), lore("c"), lore("d")]
+const call = (name: string, input: unknown): FakeReply => ({ text: "", toolCalls: [{ name, input }] })
+const done = { text: "Context ready." }
+const entries = [lore("a", "A points to card:b."), lore("b", "B points to card:c."), lore("c"), lore("d")]
+// Multi-hop follows actual native tool results; no synthesized Read/Found protocol or ID enum.
 {
-  const f = fixture(entries, () => ({ read: ["a", "a"], more: false }))
-  const t = await f.go(f.S.act(f.g.id, { text: "about a" }))
-  assert.equal(f.lookup.length, 1)
-  assert.deepEqual(t.read, [{ id: "a", layer: 1 }])
-  assert.ok(!JSON.stringify(f.lookup[0]!.responseFormat).includes('"search"'))
-}
-{
-  const f = fixture(entries, () => ({ read: [], more: true }))
-  await f.go(f.S.act(f.g.id, { text: "nothing" }))
-  assert.equal(f.lookup.length, 1)
-}
-{
-  const f = fixture(entries, (o) => ({ read: [readStage(o).again ? "b" : "a"], more: !readStage(o).again }))
-  const t = await f.go(f.S.act(f.g.id, { text: "there", note: "look carefully" }))
-  assert.equal(f.lookup.length, 2)
-  const [first, second] = f.calls.filter((c) => c.phase === "lookup")
-  assert.deepEqual(second!.msgs.slice(0, first!.msgs.length), first!.msgs)
-  assert.ok(messages(f.lookup[1]!).includes("Read: a=A points to b."))
+  const f = fixture(entries, (o, n) => {
+    if (n) assert.ok(o.prompt.some((m) => m.role === "tool"))
+    return n === 0
+      ? call("search_context", { query: "A points" })
+      : n === 1
+        ? call("read_context", { refs: ["card:a", "card:a"] })
+        : n === 2
+          ? call("read_context", { refs: ["card:b"] })
+          : done
+  })
+  const t = await f.go(f.S.act(f.g.id, { text: "about a", note: "look carefully" }))
+  assert.equal(f.lookup.length, 4)
   assert.deepEqual(
     t.read.map((d) => d.id),
     ["a", "b"],
   )
-  const schema = JSON.stringify(f.lookup[1]!.responseFormat)
-  assert.ok(!schema.includes('"a"') && schema.includes('"b"'))
-  await f.go(f.S.swipe(t.id))
-  assert.equal(f.lookup.length, 4)
+  assert.deepEqual(
+    t.deliveries.map((d) => d.resourceId),
+    ["card:a", "card:b"],
+  )
+  const trace = f.calls.find((c) => c.phase === "lookup")!.out as { trace: { calls: unknown[] }[] }
+  assert.equal(trace.trace.flatMap((s) => s.calls).length, 3)
+  assert.equal(f.lookup[0]!.responseFormat, undefined)
   const reword = await f.go(f.S.reword(t.id))
   assert.equal(f.lookup.length, 4)
-  assert.deepEqual(reword.read, t.read)
+  assert.deepEqual(reword.deliveries, t.deliveries)
 }
-for (const size of [2, 4]) {
-  const f = fixture(entries.slice(0, size), (_, n) => ({ read: [entries[n]!.id], more: true }))
-  const t = await f.go(f.S.act(f.g.id, { text: "follow" }))
-  assert.equal(f.lookup.length, Math.min(size, 3))
-  assert.equal(t.read.length, Math.min(size, 3))
-  for (let i = 1; i < f.lookup.length; i++) {
-    assert.deepEqual(f.lookup[i]!.prompt.slice(0, f.lookup[i - 1]!.prompt.length), f.lookup[i - 1]!.prompt)
-    assert.deepEqual(
-      messages(f.lookup[i]!).filter((m) => m.startsWith("Read: ")),
-      entries.slice(0, i).map((e) => `Read: ${e.id}=${e.layers[0]}`),
-    )
-  }
-}
+// The journal keeps both versions if lookup reads layer 1 before the gate offers layer 2.
 {
-  const layered = { ...lore("layered"), layers: ["ONE", "TWO"], unlock: [{ all: [] }, { all: [] }] }
-  const f = fixture([layered, ...entries], (_, n) => ({ read: n ? [] : ["layered"], more: false }))
-  const t = await f.go(f.S.act(f.g.id, { text: "read layered" }))
-  await f.go(f.S.act(t.id, { text: "go there" }))
-  const doc = messages(f.lookup[1]!)
-  assert.ok(doc.some((m) => m.includes("read layered → -; read layered; fired -")))
-  assert.ok(doc.findIndex((m) => m.startsWith("Ledger:")) < doc.findIndex((m) => m.includes("Index:")))
-}
-const large = [
-  lore("town", `Town ${"padding ".repeat(1000)}.`),
-  lore("noodle", "Noodles. 福记面馆 西栅街面"),
-  lore("street", "Street. 西栅街面"),
-  { ...lore("layered", "Visible."), layers: ["Visible.", "hiddenkeyword"], unlock: [{ all: [] }, { any: [] }] },
-  { ...lore("manual", "hiddenkeyword"), invoke: "manual" as const },
-  { ...lore("locked", "hiddenkeyword"), unlock: { any: [] } },
-]
-{
-  // A search-only second step appends an empty Read, without repeating the first step's body.
-  const f = fixture(large, (_, n) => ({
-    read: n === 0 ? ["noodle"] : n === 2 ? ["street"] : [],
-    more: n === 0,
-    search: n === 1 ? "西栅街面" : "",
-  }))
-  const t = await f.go(f.S.act(f.g.id, { text: "follow the noodle shop" }))
-  assert.equal(f.lookup.length, 3)
-  assert.deepEqual(f.lookup[2]!.prompt.slice(0, f.lookup[1]!.prompt.length), f.lookup[1]!.prompt)
-  assert.deepEqual(
-    messages(f.lookup[2]!).filter((m) => m.startsWith("Read: ")),
-    ["Read: noodle=Noodles. 福记面馆 西栅街面", "Read: -"],
+  const f = fixture([{ ...lore("layered", "BASE"), layers: ["BASE", "DEEP"], offer: { all: [] } }], (_, n) =>
+    n === 0 ? call("read_context", { refs: ["card:layered"] }) : done,
   )
+  const t = await f.go(f.S.act(f.g.id, { text: "find" }))
   assert.deepEqual(
-    t.read.map((d) => d.id),
-    ["noodle", "street"],
+    t.deliveries.map((d) => d.text),
+    ["BASE", "BASE\n\nDEEP"],
   )
+  assert.equal(t.deliveries[1]!.superseded, t.deliveries[0]!.revision)
+  assert.deepEqual((await f.go(f.S.reword(t.id))).deliveries, t.deliveries)
 }
-for (const query of ["福记面馆 西栅街面", "hiddenkeyword"]) {
-  const f = fixture(large, (o) => ({
-    read: readStage(o).again && query !== "hiddenkeyword" ? ["noodle"] : [],
-    more: false,
-    search: readStage(o).again ? "" : query,
-  }))
-  const t = await f.go(f.S.act(f.g.id, { text: "find it" }))
-  assert.equal(f.lookup.length, 2)
-  const doc = readStage(f.lookup[0]!)
-  assert.equal(doc.catalog, true)
-  assert.ok(doc.index.every(([, hook]) => hook === ""))
-  assert.ok(JSON.stringify(f.lookup[0]!.responseFormat).includes('"search"'))
-  assert.ok(messages(f.lookup[1]!).includes("Read: -"))
-  const found = messages(f.lookup[1]!).find((m) => m.startsWith("Found:"))!
-  assert.equal(found, query === "hiddenkeyword" ? "Found: -" : "Found: noodle=Noodles., street=Street.")
-  assert.deepEqual(
-    t.read.map((d) => d.id),
-    query === "hiddenkeyword" ? [] : ["noodle"],
+// Recoverable permission errors return to the model; forbidden text never reaches a tool response.
+{
+  const f = fixture(
+    [
+      ...entries,
+      { ...lore("locked", "LOCKED BODY"), unlock: { any: [] } },
+      { ...lore("private", "PLAYER ONLY"), access: { model: false, player: true } },
+    ],
+    (_, n) =>
+      n === 0
+        ? call("read_context", { refs: ["card:locked", "card:a"] })
+        : n === 1
+          ? call("read_context", { refs: ["card:private"] })
+          : n === 2
+            ? call("read_context", { refs: ["card:a"] })
+            : done,
   )
+  const t = await f.go(f.S.act(f.g.id, { text: "find" }))
+  assert.deepEqual(t.read, [{ id: "a", layer: 1 }])
+  assert.ok(JSON.stringify(f.lookup[1]!.prompt).includes("unavailable_resource"))
+  assert.ok(!JSON.stringify(f.lookup).includes("LOCKED BODY"))
+  assert.ok(!JSON.stringify(f.lookup).includes("PLAYER ONLY"))
 }
+// Even huge catalogs never enumerate IDs in the initial request or tool schema.
 {
-  const f = fixture(large, (o) => ({ read: [], more: false, search: readStage(o).again ? "" : "福记面馆" }))
-  const held = await f.go(f.S.act(f.g.id, { text: "", invoke: ["noodle"] }))
-  assert.equal(f.lookup.length, 0)
-  await f.go(f.S.act(held.id, { text: "find it" }))
-  assert.ok(messages(f.lookup[1]!).includes("Found: -"))
-}
-{
-  const f = fixture(large, (o) => ({ read: [], more: true, search: readStage(o).again ? "" : "西栅街面" }))
-  await f.go(f.S.act(f.g.id, { text: "find it", invoke: ["noodle"] }))
-  assert.ok(messages(f.lookup[1]!).includes("Found: street=Street."))
-}
-{
-  const f = fixture(large, () => ({ read: [], more: true, search: "missing" }))
-  await f.go(f.S.act(f.g.id, { text: "search again" }))
-  assert.equal(f.lookup.length, 3) // search-only progress is bounded too
-}
-{
-  const f = fixture(large, () => ({ read: [], more: true, search: "   " }))
-  await f.go(f.S.act(f.g.id, { text: "nothing" }))
-  assert.equal(f.lookup.length, 1)
-}
-{
-  const matches = Array.from({ length: 10 }, (_, i) => lore(`match${i}`, "Shared hook."))
-  const f = fixture([...large, ...matches], (o) => ({
-    read: [],
-    more: false,
-    search: readStage(o).again ? "" : "shared",
-  }))
+  const large = Array.from({ length: 2000 }, (_, i) => lore(`entry${i}`, `Shared hook ${i}.`))
+  const f = fixture(large, (_, n) => (n === 0 ? call("search_context", { query: "shared" }) : done))
   await f.go(f.S.act(f.g.id, { text: "find" }))
-  assert.ok(
-    messages(f.lookup[1]!).includes(
-      `Found: ${matches
-        .slice(0, 8)
-        .map((e) => `${e.id}=Shared hook.`)
-        .join(", ")}`,
-    ),
+  assert.ok(JSON.stringify(f.lookup[0]).length < 16000)
+  assert.ok(!JSON.stringify(f.lookup[0]).includes("entry1999"))
+  const out = JSON.stringify(f.lookup[1]!.prompt)
+  assert.ok(out.includes("card:entry7") && !out.includes("card:entry8"))
+}
+// Infinite search is bounded; successfully read context still reaches the narrator at the cap.
+{
+  const f = fixture(entries, () => call("read_context", { refs: ["card:a"] }))
+  const t = await f.go(f.S.act(f.g.id, { text: "find" }))
+  assert.equal(f.lookup.length, 5)
+  assert.equal(t.deliveries.length, 1)
+  assert.equal((f.calls.find((c) => c.phase === "lookup")!.out as { status: string }).status, "budget_exhausted")
+}
+// Failed lookup leaves no journal deliveries or node; a later attempt can read the same revision.
+{
+  const f = fixture(entries, (_, n) => {
+    if (n === 1) throw new Error("lookup transport failed")
+    return n === 0 || n === 2 ? call("read_context", { refs: ["card:a"] }) : done
+  })
+  await assert.rejects(f.go(f.S.act(f.g.id, { text: "find" })), /lookup transport failed/)
+  assert.equal(f.S.log.nodes.size, 1)
+  const retried = await f.go(f.S.act(f.g.id, { text: "find" }))
+  assert.equal(retried.deliveries[0]!.resourceId, "card:a")
+}
+const r = (id: string, text: string, patch: Partial<Resource> = {}): Resource => ({
+  resourceId: id,
+  title: text.split(".")[0]!,
+  text,
+  revision: revision(text),
+  source: "memory",
+  access: { model: true, player: false },
+  activation: "on_demand",
+  residency: "window",
+  disclosures: [],
+  ...patch,
+})
+const tc = { toolCallId: "test", signal: new AbortController().signal }
+// The old version actually in the request is superseded, not mistaken for the current one.
+{
+  const old = r("memory:people/e_li", "李鹤 青城弃徒 警惕")
+  const next = r(old.resourceId, "李鹤 青城弃徒 盟友")
+  const lookup = contextLookup([next, r("memory:place/p1", "福记面馆 西栅街面")], [freeze(old)])
+  assert.equal(lookup.search("李鹤 盟友")[0]!.supersedes, old.revision)
+  const got = await lookup.tools.read_context.execute({ refs: [old.resourceId] }, tc)
+  assert.equal(got.ok, true)
+  assert.equal(lookup.delivered[0]!.superseded, old.revision)
+  assert.match(lookup.delivered[0]!.text, /青城弃徒/)
+  assert.equal(lookup.search("李鹤").length, 0)
+  assert.equal(lookup.search("福记面馆 西栅街面").length, 1)
+  await lookup.tools.read_context.execute({ refs: [old.resourceId] }, tc)
+  assert.equal(lookup.delivered.length, 1)
+}
+// Residency depends on the request's injected snapshots, not just logical identity or history.
+{
+  const snapshots = [
+    r("card:permanent", "P", { residency: "permanent" }),
+    r("card:window", "W"),
+    r("card:turn", "T", { residency: "turn" }),
+  ]
+  const path = [{ deliveries: snapshots.map((s) => freeze(s)) }, { deliveries: [] }]
+  assert.deepEqual(
+    residentOn(path, 0).map((r) => r.text),
+    ["P", "W"],
   )
+  assert.deepEqual(
+    residentOn(path, 1).map((r) => r.text),
+    ["P"],
+  )
+  assert.equal(contextLookup(snapshots, []).readable().length, 3)
 }
 console.log("lookup ok")

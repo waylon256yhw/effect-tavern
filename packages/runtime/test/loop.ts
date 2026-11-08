@@ -9,7 +9,7 @@ import type { Turn } from "../src/session.ts"
 import { prose, split, splitter } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, lookupAnswer, readStage } from "./script.ts"
 
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside" | "asides" | "lt"> = []
@@ -26,15 +26,7 @@ function script(o: FakeCall): FakeReply {
   let delay: number | undefined
   switch (phase) {
     case "lookup":
-      // Index entries are `id=hook` (a lore entry's first sentence, a recall row's key); the script reads "about <id>" or
-      // "about <hook>".
-      out = JSON.stringify({
-        more: false,
-        read: doc.index
-          .filter((e) => e.some((k) => want.toLowerCase().includes(`about ${k.toLowerCase()}`)))
-          .map(([id]) => id),
-      })
-      break
+      return lookupAnswer(o, /about (.+)/i.exec(want)?.[1])
     case "decide": {
       const k = doc.soFar.filter((e) => /strike/.test(e)).length
       out = JSON.stringify({ next: /strike/.test(want) && k < 2 ? "strike" : "end", again: true }) // the script's "strike B" means twice
@@ -190,13 +182,12 @@ const program = Effect.gen(function* () {
   )
 
   let i = calls().length
-  const hook = full.lore[0]!.layers[0]!.split(/(?<=\.)\s|(?<=。)/)[0]!
   const t1 = yield* go(S.act(null, { text: "ask about li" }))
   // the lookup's index names every entry by its hook, a lore entry's first sentence included
-  assert.ok(str(prompts("lookup")[0]!).includes(`Index: li=${hook}`))
+  assert.ok(!str(prompts("lookup")[0]!).includes("Index:"))
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t1.read, [{ id: "li", layer: 1 }])
-  assert.deepEqual(S.node(t1.id).delivered, [{ id: "li", layer: 1, text: full.lore[0]!.layers[0] }])
+  assert.equal(S.node(t1.id).delivered[0]!.text, full.lore[0]!.layers[0])
   assert.ok(str(lastNarr()).includes(full.lore[0]!.layers[0]!) && !str(lastNarr()).includes(full.lore[0]!.layers[1]!))
   // Readout: asked at record, answered by enum, no number anywhere the prose stages can see.
   assert.deepEqual(t1.answers, { warmth: "flat" })
@@ -222,8 +213,8 @@ const program = Effect.gen(function* () {
   warmths.push("warm")
   const t2 = yield* go(S.act(t1.id, { text: "strike B", note: "NOTE#2" }))
   assert.deepEqual([t2.answers, S.node(t2.id).state.bond], [{ warmth: "warm" }, 4])
-  assert.deepEqual(since(i), ["decide", "decide", "decide", "direct", "narrate", "check", "record"])
-  assert.deepEqual(S.node(t2.id).invocable, []) // the row's node is in the tail
+  assert.deepEqual(since(i), ["lookup", "decide", "decide", "decide", "direct", "narrate", "check", "record"])
+  assert.deepEqual(S.node(t2.id).playerCatalog, []) // the row's node is in the tail
   assert.deepEqual(t2.read, [])
   assert.ok(/^Current: scene=place: P#2; present: name=B, mood=calm$/m.test(str(lastNarr())))
   assert.ok(
@@ -266,7 +257,7 @@ const program = Effect.gen(function* () {
     full.frame[2]!.text!,
     full.fiction[0]!.text!,
   ]) // player zone → frame → fiction
-  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"])
+  assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
   // Cache breakpoints: the head's last message and the last history message (t2's reply, what next turn resends
   // verbatim) carry markers; this turn's input and tail do not.
@@ -323,7 +314,7 @@ const program = Effect.gen(function* () {
   // At four turns on the path the first block (t1, t2) folds, and t1's people row enters the lookup's Index.
   assert.ok(S.node(t5.id).events.includes("warmth:close") && /warmth:close/.test(str(prompts("decide").at(-1)!)))
   assert.deepEqual(since(i), ["lookup", "decide", "direct", "narrate", "check", "record"])
-  assert.equal(str(prompts("lookup").at(-1)!).match(/^Index: (.*)$/m)![1], `li=${hook}, people@${t1.id}#0=Li`)
+  assert.ok(!str(prompts("lookup").at(-1)!).includes("Index:"))
   assert.deepEqual(t6.brief.may, ["li"])
   assert.ok(str(lastNarr()).includes(`MAY reveal: ${full.lore[0]!.layers[2]}`))
   assert.equal(S.node(t6.id).state.bond, 16)
@@ -344,8 +335,12 @@ const program = Effect.gen(function* () {
   i = calls().length
   const t7 = yield* go(S.act(t6.id, { text: "speak about Li" }))
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
-  assert.deepEqual(t7.read, [{ id: `people@${t1.id}#0`, layer: 1 }])
-  assert.match(S.node(t7.id).delivered[0]!.text, /^entityId=e_\w+, name=Li, note=N#2$/)
+  assert.deepEqual(t7.read, [
+    { id: "li", layer: 1 },
+    { id: "li", layer: 2 },
+  ])
+  assert.ok(!t7.deliveries.some((d) => d.source === "memory")) // t3 delivered this revision, still in the window
+  assert.match(str(lastNarr()), /entityId=e_\w+, name=Li, note=N#2/)
   assert.ok(str(lastNarr()).includes("Summary:") && str(lastNarr()).includes(prose(t3)))
   // The ledger folds at the same boundary: decide gets the narrator's own Summary, then lines for the tail turns only.
   const line = (p: readonly Message[], head: string) => p.map(msgText).find((t) => t.startsWith(head))
@@ -360,7 +355,7 @@ const program = Effect.gen(function* () {
   )
   yield* go(S.act(t7.id, { text: "wait more" }))
   const v8 = str(lastNarr())
-  assert.ok(v8.includes("name=Li, note=N#2")) // the row t7 was told, in the tail as text
+  assert.ok(!v8.includes("name=Li, note=N#2")) // the snapshot on t3 has left the window
   assert.ok(!v8.includes(prose(t3)) && v8.includes(prose(t6)))
   // The view is a function of (path, policy), not of what other branches have cached: a sibling of t7 re-renders the
   // shorter path and still folds only the first block, even though a longer fold was just built for t8.
@@ -397,7 +392,7 @@ const program = Effect.gen(function* () {
   ])
   assert.ok(str(lastNarr()).includes(`MAY reveal: ${full.lore[0]!.layers[2]!}`))
   assert.ok(full.lore[0]!.layers.slice(0, 2).every((l) => str(lastNarr()).includes(l)))
-  assert.deepEqual(S.node(t9.id).invocable, []) // nothing under the window is left unread
+  assert.deepEqual(S.node(t9.id).playerCatalog, []) // nothing under the window is left unread
   assert.deepEqual(readStage({ prompt: prompts("check").at(-1)! } as unknown as FakeCall).open, ["li"]) // li opened once
   assert.ok(str(lastNarr()).includes(full.fiction[2]!.text!) && str(lastNarr()).includes("G"))
   // A reword reads t9's read back with the window's layers already in it: delivered once, not twice.
@@ -466,28 +461,10 @@ const program = Effect.gen(function* () {
   assert.equal(S.setField(t3.id, [{ path: "bond", set: 20 }]).node!.state.bond, 20)
   assert.deepEqual([S.node(t3.id).state.bond, S.node(t6.id).state.bond, calls().length], [20, 28, i])
 
-  // Player auto invocation uses read, with no forced reveal or correction.
+  // Card lore is model-only by default; it never leaks into the player's menu.
   const p0 = S.greet({ text: "G", do: [{ path: "bond", set: 8 }] }).node!
-  assert.deepEqual(S.node(p0.id).invocable, [{ id: "li", hook, invoke: "auto" }])
-  i = calls().length
-  const t10 = yield* go(S.act(p0.id, { text: "wait", invoke: ["li"] }))
-  assert.deepEqual(since(i), ["decide", "narrate", "check", "record"])
-  assert.ok(!str(lastNarr()).includes("MUST reveal:"))
-  assert.deepEqual(
-    [t10.brief.must, t10.fired, t10.read, S.node(t10.id).invocable],
-    [
-      [],
-      [],
-      [
-        { id: "li", layer: 1 },
-        { id: "li", layer: 2 },
-      ],
-      [],
-    ],
-  )
-  const ex = yield* Effect.exit(go(S.act(t10.id, { text: "wait", invoke: ["li"] })))
-  assert.ok(ex._tag === "Failure" && /not invocable/.test(String(Cause.squash(ex.cause))))
-
+  assert.deepEqual(S.node(p0.id).playerCatalog, [])
+  const t10 = yield* go(S.act(p0.id, { text: "wait" }))
   // stop: the player halts the prose while it streams (the signal completes on the first delta). The text so far is the
   // reply, check is skipped, record runs, the node says `stopped`; "go on" is an note child that reads the partial back.
   i = calls().length
@@ -498,7 +475,7 @@ const program = Effect.gen(function* () {
       Stream.tap((e) => (e.kind === "delta" ? Deferred.succeed(halt, undefined) : Effect.void)),
     ),
   )
-  assert.deepEqual(since(i), ["decide", "narrate", "record"])
+  assert.deepEqual(since(i), ["lookup", "decide", "narrate", "record"])
   assert.equal(t12.end, "stopped")
   assert.ok(prose(t12).startsWith("PROSE#") && prose(t12).length < 100, prose(t12))
   assert.equal(made().at(-2)!.out, prose(t12)) // the narrate call reports what was kept
@@ -546,28 +523,6 @@ const program = Effect.gen(function* () {
   assert.ok(/^notes: ASK#notes$/m.test(str(prompts("record").at(-1)!)))
   assert.ok(/Notes are the record/.test(str(prompts("record").at(-2)!)))
 
-  // ───────── The lookup picks from the node's readable (the floor and the fold rule are test/derived.ts) ─────────
-  const V = makeSession({ card: full, rows: () => player, model, policy })
-  const untold = (id: number) => V.node(id).invocable.map((r) => r.id)
-  const v0 = yield* go(V.act(null, { text: "about li" }))
-  assert.deepEqual([v0.read, untold(v0.id)], [[{ id: "li", layer: 1 }], []])
-  // A recall row record wrote reaches the lookup's index through the node's readable once its node folds.
-  let f = yield* go(V.act(v0.id, { text: "names li" }))
-  const row = `people@${f.id}#0`
-  for (let k = 0; k < 4 && !untold(f.id).includes(row); k++) f = yield* go(V.act(f.id, { text: "wait" }))
-  const r3 = yield* go(V.act(f.id, { text: "about Li" }))
-  assert.deepEqual(
-    [str(prompts("lookup").at(-1)!).match(/Index: (.*)/)![1], r3.read],
-    [
-      V.node(f.id)
-        .invocable.map((e) => `${e.id}=${e.hook}`)
-        .join(", "),
-      [
-        { id: "li", layer: 1 },
-        { id: row, layer: 1 },
-      ],
-    ],
-  )
   // ───────── Stages bound to connections: a named stage gets its model, the rest the default ─────────
   let light = 0
   const lookup = fake((o) => (light++, script(o)))
@@ -577,7 +532,7 @@ const program = Effect.gen(function* () {
   const phases = made()
     .slice(before)
     .map((e) => e.phase)
-  assert.deepEqual([light, phases.filter((p) => p === "lookup").length], [1, 1])
+  assert.deepEqual([light, phases.filter((p) => p === "lookup").length], [3, 1])
   assert.ok(phases.includes("narrate") && phases.includes("record")) // unnamed: the default answered them
   console.log(str(lastNarr()))
   // ───────── The connection's hat, resolved per request by id; a tail-placed player fragment ─────────
@@ -729,11 +684,6 @@ const program = Effect.gen(function* () {
   // one character a delta: the held `<` at the end comes out only when the stream ends
   assert.deepEqual(joined("p\n<<aside>> inner\nq\n<".split("").flatMap((c) => cut(c))), { "": "p\n", inner: "q\n" })
   assert.deepEqual(cut("", true), [{ id: "inner", text: "<" }])
-  // A real recall row in the folded prefix remains pinnable.
-  yield* go(S.act(t5.id, { text: "wait", invoke: [`people@${t1.id}#0`] }))
-  assert.match(str(lastNarr()), /name=Li, note=/)
-  assert.doesNotMatch(str(lastNarr()), /undefined/)
-
   // An ancestor edit validates every branch before writing. Reopening keeps both the tree and the beat sequence.
   let saved: Log.Snapshot<Turn> | undefined
   let writes = 0

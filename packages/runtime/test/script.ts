@@ -7,9 +7,6 @@ import type { Phase } from "../src/session.ts"
 export interface StageDoc {
   phase: Phase
   open: string[] // Open: ids
-  index: [id: string, hook: string][] // lookup's Index: entries
-  again: boolean // lookup has a Read: continuation
-  catalog: boolean // lookup index lists ids alone
   soFar: string[] // decide's So far: events
   rules: string[] // Rule: lines
   known: string[] // record's Known: items
@@ -31,23 +28,15 @@ export const readStage = (o: FakeCall): StageDoc => {
       .find((m) => m.includes("\nQuestions: "))
       ?.split("\nQuestions: ")[1]!
       .split("\n") ?? []
-  const index = after(lines, "Index: ") ?? ""
-  const catalog = !!index && !index.includes("=")
   const tools = o.tools?.filter((t) => t.type === "function").map((t) => t.name) ?? []
   return {
     tools,
-    again: lines.some((l) => l.startsWith("Read: ")),
-    catalog,
     phase: (tools.includes("finish_record")
       ? "record"
-      : (o.responseFormat?.type === "json" && o.responseFormat.name) || "narrate") as Phase,
+      : tools.includes("search_context")
+        ? "lookup"
+        : (o.responseFormat?.type === "json" && o.responseFormat.name) || "narrate") as Phase,
     open: (after(lines, "Open: ")?.split(" | ") ?? []).map((e) => head(e, "=")),
-    // an entry is `id=hook`; a hook may hold ", ", so an entry starts only where an `id=` follows
-    index: !index
-      ? []
-      : catalog
-        ? index.split(", ").map((id) => [id, ""])
-        : index.split(/, (?=[^\s,=]+=)/).map((e) => [head(e, "="), e.slice(e.indexOf("=") + 1)]),
     soFar:
       after(lines, "So far: ")
         ?.split(",")
@@ -72,7 +61,7 @@ export const defaultAnswer = (doc: StageDoc, canned: Record<string, unknown> = {
   const json = (v: unknown) => ({ text: JSON.stringify(v) })
   switch (doc.phase) {
     case "lookup":
-      return json({ read: [], more: false, ...(doc.catalog ? { search: "" } : {}) })
+      return { text: "No additional context needed." }
     case "decide":
       return json({ next: "end" })
     case "direct":
@@ -99,4 +88,30 @@ export const defaultAnswer = (doc: StageDoc, canned: Record<string, unknown> = {
     case "narrate":
       return { text: "hello world" }
   }
+}
+
+/** Scripted native retrieval, used by integration fixtures. Real tool output supplies IDs. */
+export const lookupAnswer = (o: FakeCall, query?: string): FakeReply => {
+  const tool = o.prompt.findLast((m) => m.role === "tool")
+  if (tool?.role === "tool") {
+    const result = tool.content.at(-1)!
+    if (
+      result.type === "tool-result" &&
+      result.toolName === "search_context" &&
+      "value" in result.output &&
+      typeof result.output.value === "string"
+    ) {
+      const value = JSON.parse(result.output.value as string)
+      return {
+        text: "",
+        toolCalls: [
+          { name: "read_context", input: { refs: value.value.map((r: { resourceId: string }) => r.resourceId) } },
+        ],
+      }
+    }
+    return { text: "Context ready." }
+  }
+  return query
+    ? { text: "", toolCalls: [{ name: "search_context", input: { query } }] }
+    : { text: "No additional context needed." }
 }

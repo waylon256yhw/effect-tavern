@@ -3,12 +3,25 @@
 // lines, the ledger, the node projection. One factory per session; `at(path)` reads them, lazily, per fact. The memo
 // tables live as long as the factory, keyed by Turn object: a turn is immutable, an amended one is a new object.
 // session.ts is the caller: turn, project, setField and demand.
+import {
+  catalogEntry,
+  loreResource,
+  contextLookup,
+  freeze,
+  policy as resourcePolicy,
+  residentOn,
+  revision,
+  type Resource,
+  type DeliverySnapshot,
+  type CatalogEntry,
+} from "./context.ts"
+import type { PackEntry } from "./layer.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
 import type { Beat, Check, Rpg, State, LoreEntry } from "./card.ts"
 import { folded, ledger, makeSummaries, type Policy } from "./history.ts"
 import { deliveredIn, deliveredOn, notesOf, textOf as proseOf, type Turn as TurnOf } from "./journal.ts"
 import { key, type Disclosure, type Lore } from "./lore.ts"
-import { entryRef, fold, itemText, recallEntries, render, type Product } from "./product.ts"
+import { fold, itemText, render, type Product } from "./product.ts"
 import { applyChanges, initialWorld, worldOn, worldValue, type WorldState } from "./world.ts"
 import { tokens } from "./tokens.ts"
 
@@ -23,8 +36,8 @@ const title = (ref: string, fields: State, world: Record<string, unknown>): stri
 }
 
 type Turn = TurnOf<Beat>
-/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `invocable` contains
- *  the entries the player can request (hooks and tiers, never bodies). */
+/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `playerCatalog` contains
+ *  the entries the player can request (authorized titles, never bodies). */
 export interface Node {
   id: number
   parent: number | null
@@ -33,8 +46,8 @@ export interface Node {
   heading?: string
   events: readonly string[]
   checks: readonly Check[] // this turn's judged beats, in order; what the Record's check track draws
-  delivered: readonly (Disclosure & { text: string })[]
-  invocable: readonly { id: string; hook: string; invoke: "auto" | "manual" }[]
+  delivered: readonly DeliverySnapshot[]
+  playerCatalog: readonly CatalogEntry[]
 }
 
 /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
@@ -55,92 +68,29 @@ export const makeDerived = ({
   rpg,
   L,
   lore,
+  packs = () => [],
   products,
   policy,
   heading,
 }: {
   rpg: Rpg
   heading?: string
-  L: () => Lore<Paths, readonly string[]> // the card's entries and the player layer's, read per request
+  L: () => Lore<Paths, readonly string[]> // card lore only; Pack delivery must not advance a same-named story disclosure
+  packs?: () => readonly PackEntry[]
   lore: readonly LoreEntry[] // the card's own: the entries with a Cond floor (a pack's entry has none)
   products: () => readonly Product[] // the player toggles them mid-session
   policy: () => Policy // the routing can move the narrate window mid-session
 }) => {
-  /** What a disclosure says: a lore layer, or one item of a recall product stored on a node (`<product>@<node>#<i>`).
-   *  The node is looked up on the path: a recall row is only ever offered or delivered from a node on it (readable
-   *  keeps the folded prefix; a sibling's reused read comes from the same parent), so a ref off the path is a defect. */
-  const textIn = (path: readonly Turn[], d: Disclosure): string => {
-    const ref = entryRef(d.id)
-    if (!ref) return L().text(d)
-    const t = path.find((x) => x.id === ref.node)
-    if (!t) throw new Error(`${d.id}: node ${ref.node} is not on the path`)
-    const p = products().find((p) => p.id === ref.product)
-    if (p?.role === "world")
-      return worldRecall(p, path.slice(0, path.indexOf(t) + 1)).find((e) => e.id === d.id)?.text ?? ""
-    if (p?.shape.kind === "table" && typeof p.fold === "object") {
-      return (
-        recallEntries(
-          p,
-          path.slice(0, path.indexOf(t) + 1).map((t) => ({ id: t.id, v: t.products[p.id] })),
-        ).find((e) => e.id === d.id)?.text ?? ""
-      )
-    }
-    return itemText((t.products[ref.product] as unknown[])[ref.index])
-  }
-  // Bridge to the existing lookup stage until Step 3 replaces node references with revisioned resources.
-  // Identity and updates already come solely from committed domain changes, never a mutable name column.
-  const worldRecall = (p: Product, path: readonly Turn[]) => {
-    const entries = new Map<string, { id: string; hook: string; text: string }>()
-    let world = initialWorld([p])
-    for (const t of path) {
-      const changes = t.changes.filter((c) => ("collection" in c ? c.collection : c.product) === p.id)
-      world = applyChanges(world, changes)
-      if (p.shape.kind !== "table") {
-        if (changes.length) {
-          entries.clear()
-          for (const e of recallEntries(p, [{ id: t.id, v: world[p.id] }])) entries.set(e.id, e)
-        }
-        continue
-      }
-      const rows = world[p.id] as Record<string, Record<string, unknown>>
-      for (const c of changes) {
-        if (!("entityId" in c)) continue
-        if (c.kind === "remove_entity") {
-          entries.delete(c.entityId)
-          continue
-        }
-        const row = rows[c.entityId]
-        if (!row) {
-          entries.delete(c.entityId)
-          continue
-        }
-        if (p.shape.filter && !holds(p.shape.filter, row)) {
-          entries.delete(c.entityId)
-          continue
-        }
-        entries.set(c.entityId, {
-          id: `${p.id}@${t.id}#${Object.keys(rows).indexOf(c.entityId)}`,
-          hook: String(row[p.recall as string]),
-          text: itemText({ entityId: c.entityId, ...row }),
-        })
-      }
-    }
-    return [...entries.values()]
-  }
-
   const summaries = makeSummaries<Beat>()
   // A turn's cost in the narrator's transcript (input, prose, the lore delivered with it), memoized: a turn is immutable.
   const costs = new WeakMap<Turn, number>()
-  const costIn = (path: readonly Turn[]) => (t: Turn) => {
+  const costIn = (t: Turn) => {
     let c = costs.get(t)
     if (c === undefined)
-      costs.set(
-        t,
-        (c = tokens([t.input.text, proseOf(t.reply), ...deliveredIn(t).map((d) => textIn(path, d))].join("\n"))),
-      )
+      costs.set(t, (c = tokens([t.input.text, proseOf(t.reply), ...t.deliveries.map((d) => d.text)].join("\n"))))
     return c
   }
-  const foldOf = (path: readonly Turn[]) => folded(path, costIn(path), policy())
+  const foldOf = (path: readonly Turn[]) => folded(path, costIn, policy())
   /** The one summary every view of this path folds to (narrator, ledger), the same cached object. */
   const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
@@ -236,43 +186,69 @@ export const makeDerived = ({
     }
   }
 
-  /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
-   *  not currently held. Both the lookup index and the player menu come from these candidates. */
-  const candidatesOn = (path: readonly Turn[]) => {
-    // ponytail: each call still scans the path (counters, floors, seen, recall), so a snapshot is O(nodes·depth) in cheap
-    // scans; carry those folds parent → child in one id-order pass if a story outgrows it.
+  /** Only unlocked text becomes a resource. Memory identities come from committed entities,
+   * never the turn where a field happened to change. */
+  const resourcesOn = (path: readonly Turn[]): Resource[] => {
     const s = gated(path)
-    const seen = deliveredOn(path)
-    const held = deliveredOn(path.slice(foldOf(path)))
-    const seenKeys = new Set(held.map(key))
-    const prefix = new Set(path.slice(0, foldOf(path)).map((t) => t.id))
     const I = L()
-    const hooks = new Map(I.index(s, seen).map((e) => [e.id, e.hook]))
-    const readable = I.entries.flatMap((e) => {
-      const invoke = e.invoke ?? "auto"
-      if (invoke === "always" || !hooks.has(e.id)) return []
-      if (invoke === "auto" && !I.read(s, seen, held, e.id)?.length) return []
-      return [{ id: e.id, hook: hooks.get(e.id)!, invoke }]
+    const seen = deliveredOn(path)
+    const entries: Resource[] = I.entries.flatMap((e) => {
+      const depth = I.current(e, s, seen)
+      if (!depth) return []
+      return [loreResource(e, depth)]
     })
-    // The product's fold decides which rows exist (a keyed table is the newest row per key: a person re-rowed with what
-    // a later scene added is one entry); the seen filter runs after it, so reading the newest row never brings a
-    // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did). The
-    // fold filter runs after it too: a row enters the Index only once its node is folded; in the tail its prose is still
-    // verbatim in the narrator's transcript, and a lookup would tell it again.
-    const recall = products()
-      .filter((p) => p.recall !== undefined)
-      .flatMap((p) =>
-        p.role === "world"
-          ? worldRecall(p, path)
-          : recallEntries(
-              p,
-              path.map((t) => ({ id: t.id, v: t.products[p.id] })),
-            ),
-      )
-      .filter((e) => !seenKeys.has(`${e.id}#1`) && prefix.has(entryRef(e.id)!.node))
-      .map((e) => ({ id: e.id, hook: e.hook, invoke: "auto" as const }))
-    return [...readable, ...recall]
+    entries.push(...packs().map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)))
+    const ps = products().filter((p) => p.on && p.recall !== undefined)
+    const chronicle = fold(
+      ps.filter((p) => p.role !== "world"),
+      path.map((t) => t.products),
+    )
+    const memory: Resource[] = ps.flatMap((p) => {
+      const value = p.role === "world" ? worldValue(p, s.world[p.id]) : chronicle[p.id]
+      if (!Array.isArray(value)) return []
+      return value.flatMap((item): Resource[] => {
+        if (p.shape.kind === "table" && p.shape.filter && !holds(p.shape.filter, item)) return []
+        const identity =
+          p.role === "world" && p.shape.kind === "table"
+            ? item.entityId
+            : typeof p.fold === "object"
+              ? item[p.fold.key]
+              : revision(item)
+        const text = itemText(item)
+        return [
+          {
+            resourceId: `memory:${p.id}/${encodeURIComponent(String(identity))}`,
+            revision: revision(item),
+            title: p.shape.kind === "table" ? String(item[p.recall as string]) : String(item),
+            text,
+            source: "memory",
+            ...resourcePolicy("memory"),
+            product: p.id,
+            disclosures: [],
+          },
+        ]
+      })
+    })
+    return [...new Map([...entries, ...memory].map((r) => [r.resourceId, r])).values()]
   }
+  // The summary actually selected for this request, not a guessed creation/write watermark.
+  const resident = (path: readonly Turn[]) => {
+    const sum = summaryOf(path)
+    const resources = resourcesOn(path)
+    return residentOn(path, sum ? path.findIndex((t) => t.id === sum.to) + 1 : 0).filter(
+      (s) =>
+        // Removed entities no longer provide current context; their frozen evidence remains on the original turn.
+        s.source !== "memory" || resources.some((r) => r.resourceId === s.resourceId),
+    )
+  }
+  const currentResources = (path: readonly Turn[]) =>
+    resourcesOn(path).filter(
+      (r) => r.product && products().some((p) => p.id === r.product && p.id !== "notes" && p.on && p.feed),
+    )
+  const playerCatalog = (path: readonly Turn[]) =>
+    resourcesOn(path)
+      .filter((r) => r.access.player)
+      .map(catalogEntry)
   // One delivery per layer per turn: a sibling's base.read already holds the invoked and window's lower layers.
   const once = (ds: readonly Disclosure[]) => [...new Map(ds.map((d) => [key(d), d])).values()]
 
@@ -281,7 +257,7 @@ export const makeDerived = ({
     let all: ReturnType<typeof settledAlong> | undefined // walked once per handle: a node() reads four facts off it
     const along = () => (all ??= settledAlong(path))
     const last = () => along().at(-1) ?? { s: rpg.initial, events: [], checks: [], post: [], pre: rpg.initial }
-    const text = (d: Disclosure) => textIn(path, d)
+    const text = (d: Disclosure) => L().text(d)
     return {
       get state(): State {
         return last().s
@@ -301,30 +277,11 @@ export const makeDerived = ({
       },
       context: (fields: State = last().s) => gated(path, [], fields),
       gated: (extra?: readonly Disclosure[], s?: State) => gated(path, extra, s),
-      readable: () => candidatesOn(path).filter((e) => e.invoke === "auto"),
-      invocable: () => candidatesOn(path),
-      /** Search only the same auto candidates and unseen, unlocked layers that lookup can deliver. */
-      search: (q: string, k: number, exclude: readonly string[] = []): string[] => {
-        // ponytail: whitespace terms and substring counts, no segmentation or vectors; grow to BM25 or an
-        // embedding plugin when real cards need it. Stable sorting keeps index order for ties.
-        const terms = [...new Set(q.trim().toLowerCase().split(/\s+/).filter(Boolean))]
-        if (!terms.length) return []
-        const I = L()
-        const s = gated(path)
-        const seen = deliveredOn(path)
-        const held = deliveredOn(path.slice(foldOf(path)))
-        return candidatesOn(path)
-          .filter((e) => e.invoke === "auto" && !exclude.includes(e.id))
-          .map((e) => {
-            const ds = entryRef(e.id) ? [{ id: e.id, layer: 1 }] : (I.read(s, seen, held, e.id) ?? [])
-            const body = [e.id, e.hook, ...ds.map(text)].join("\n").toLowerCase()
-            return { e, score: terms.filter((term) => body.includes(term)).length }
-          })
-          .filter((hit) => hit.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, k)
-          .map(({ e }) => `${e.id}=${e.hook}`)
-      },
+      resources: () => resourcesOn(path),
+      resident: () => resident(path),
+      currentResources: () => currentResources(path).map((r) => freeze(r)),
+      playerCatalog: () => playerCatalog(path),
+      readable: () => contextLookup(resourcesOn(path), [...resident(path), ...currentResources(path)]).readable(),
       /** How many leading turns the fold covers. */
       fold: () => foldOf(path),
       summary: () => summaryOf(path),
@@ -345,8 +302,8 @@ export const makeDerived = ({
           ...(heading ? { heading: title(heading, settled.s, worldOn(products(), path)) } : {}),
           events: settled.events,
           checks: settled.checks,
-          delivered: deliveredIn(t).map((d) => ({ ...d, text: text(d) })),
-          invocable: candidatesOn(path),
+          delivered: t.deliveries,
+          playerCatalog: playerCatalog(path),
         }
       },
       /** The gate of the turn being made on this path: its settled state and beat events, what it read before the gate
@@ -367,14 +324,9 @@ export const makeDerived = ({
         const ds1 = deliveredOn(path, before)
         const I = L()
         const offered = I.offers(g1, ds1, [...events, ...last().post]).map(({ id, layer }) => ({ id, layer }))
-        // A window opens current+1; the unseen layers under it are read this turn, told like a lookup's (issue #9).
-        // ponytail: a sibling's gate counts those lower layers as shown this turn (they are in base.read), the fresh
-        // turn's did not, so a since/shown-gated window over unread layers can close on a reword; store the gate's own
-        // deliveries on the turn if a card hits it.
-        const disclosures = once([
-          ...before,
-          ...offered.flatMap((d) => I.read(g1, ds1, deliveredOn(path.slice(foldOf(path)), before), d.id) ?? []),
-        ])
+        // Story knowledge and request residency are separate. Previously disclosed lower layers do not
+        // count as a new reveal; the caller freezes the full offered context and reuses it on a reword.
+        const disclosures = once([...before, ...offered.flatMap((d) => I.read(g1, ds1, ds1, d.id) ?? [])])
         const open: Disclosure[] = offered
         return { offered, disclosures, open }
       },

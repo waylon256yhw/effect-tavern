@@ -197,30 +197,6 @@ export const fold = (ps: readonly Pick<Product, "id" | "shape" | "fold">[], hist
     }),
   )
 
-/** Entries a recall product contributes to the lookup index over a path: the folded items (filtered rows only), each
- *  id `<product>@<node>#<index>` naming the node and stored index it lives at, hook = the item or the named column. */
-export const recallEntries = (
-  p: Product,
-  path: readonly { id: number; v: unknown }[],
-): Array<{ id: string; hook: string; text: string }> => {
-  if (p.recall === undefined || (p.shape.kind !== "list" && p.shape.kind !== "table")) return []
-  const s = p.shape
-  return items(
-    p,
-    path.map((n) => n.v),
-  )
-    .filter(({ item }) => s.kind === "list" || !s.filter || holds(s.filter, item as Row))
-    .map(({ at, i, item }) => ({
-      id: `${p.id}@${path[at]!.id}#${i}`,
-      hook: s.kind === "list" ? String(item) : String((item as Row)[p.recall as string]),
-      text: itemText(item),
-    }))
-}
-export const entryRef = (id: string): { product: string; node: number; index: number } | undefined => {
-  const m = /^(.+)@(\d+)#(\d+)$/.exec(id)
-  return m ? { product: m[1]!, node: Number(m[2]), index: Number(m[3]) } : undefined
-}
-
 /** Presentation names for explicit product roles. */
 export const kindOf = (p: Pick<Product, "role">): "world" | "context" | "theater" =>
   p.role === "chronicle" ? "context" : p.role

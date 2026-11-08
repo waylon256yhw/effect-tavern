@@ -42,7 +42,7 @@ const marks = (ms: Message[]) =>
     .filter((i) => i >= 0)
 
 const asks: Record<Ask["stage"], Ask> = {
-  lookup: { stage: "lookup", ledger: [], question: "Which entries?", index: ["li=Li: A's friend.", "people@3#0=Li"] },
+  lookup: { stage: "lookup", ledger: [], question: "Which entries?", context: ["Resident: Li's friend."] },
   decide: {
     stage: "decide",
     ledger: [{ role: "system", text: "Ledger:\nhello → -" }],
@@ -102,7 +102,6 @@ const bare = request(c({ text: "", invoke: ["p/manual"] }), {
   history,
   summarized: false,
   told: [],
-  manual: [],
   outcome: [],
   must: [],
   may: [],
@@ -151,7 +150,8 @@ for (const s of stages.filter((s) => s !== "narrate")) {
   assert.ok(ms.slice(0, -1).every((m) => m.role === "system") && ms.at(-1)!.role === "user", s)
 }
 assert.deepEqual(line.lookup.slice(3).map(text), [
-  "Which entries?\nIndex: li=Li: A's friend., people@3#0=Li",
+  "Which entries?",
+  "Resident: Li's friend.",
   "Player note: 虚晃一招",
   "我拔剑。",
 ])
@@ -316,10 +316,7 @@ const read = (s: Ask["stage"], ms: Message[] = line[s]) =>
   readStage({ prompt: ms, responseFormat: s === "narrate" ? undefined : { type: "json", name: s } } as FakeCall)
 assert.equal(read("narrate").phase, "narrate")
 assert.equal(read("record").phase, "record")
-assert.deepEqual(read("lookup").index, [
-  ["li", "Li: A's friend."],
-  ["people@3#0", "Li"],
-])
+assert.equal(read("lookup").phase, "lookup")
 assert.deepEqual(read("decide").soFar, [])
 assert.deepEqual(
   read("decide", request(c({ text: "x" }), { ...asks.decide, soFar: ["strike:hit", "strike:miss"] } as Ask)).soFar,

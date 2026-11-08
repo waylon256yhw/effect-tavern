@@ -14,6 +14,7 @@
 //
 // The locks are all here and never throw for a player's row (a throw would kill a card at session open for what a pack
 // happens to declare): what they refuse lands in `dropped`, for a client to draw. Only the card's own bad product throws.
+import { ContextPolicy, checkContextPolicies } from "./lore.ts"
 import { Schema } from "effect"
 import type { Card } from "./card.ts"
 import { Format, Fragment, Snippet, Writing } from "./fragment.ts"
@@ -26,7 +27,7 @@ export type Ask = typeof Ask.Type
 export const PackEntry = Schema.Struct({
   id: Schema.String,
   text: Schema.String,
-  invoke: Schema.optionalKey(Schema.Literals(["always", "auto", "manual"])),
+  ...ContextPolicy.fields,
 }) // one layer; its first sentence is the hook (lore.ts `hook`)
 export type PackEntry = typeof PackEntry.Type
 export const Layer = Schema.Struct({
@@ -69,8 +70,17 @@ export const locked = <R extends Layer>(r: R): R => ({
 const decodeRow = Schema.decodeUnknownSync(Layer)
 const decodeLocalRow = Schema.decodeUnknownSync(Local)
 /** The boundary's decoders: every stored row goes through the lock as it comes in. */
-export const decodeLayer = (u: unknown): Layer => locked(decodeRow(u))
-export const decodeLocal = (u: unknown): Local => locked(decodeLocalRow(u))
+const checkEntries = (u: unknown) => {
+  if (u && typeof u === "object" && "entries" in u) checkContextPolicies(u.entries)
+}
+export const decodeLayer = (u: unknown): Layer => {
+  checkEntries(u)
+  return locked(decodeRow(u))
+}
+export const decodeLocal = (u: unknown): Local => {
+  checkEntries(u)
+  return locked(decodeLocalRow(u))
+}
 
 // ───────── The harness's own row ─────────
 // Every instruction the loop says to the model, with ids, in the open. Data lines (State:, Actions:, Open:, Known:,
@@ -82,11 +92,7 @@ export const decodeLocal = (u: unknown): Local => locked(decodeLocalRow(u))
 const words: readonly Ask[] = [
   {
     id: "lookup",
-    text: 'Which index entries does the player\'s line ask about or need right now? Most lines need none: pick nothing rather than something near. Set "more" only when the entries you pick may point to others you need; in catalog mode, "search" finds hooks by words (empty means no search).',
-  },
-  {
-    id: "lookup.again",
-    text: `Given the entries read so far and any search results, pick only what is still missing for the player's line, or nothing if unsure. Set "more" only when the entries you pick may point to others you need; in catalog mode, "search" finds hooks by words (empty means no search).`,
+    text: "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts.",
   },
   {
     id: "direct",

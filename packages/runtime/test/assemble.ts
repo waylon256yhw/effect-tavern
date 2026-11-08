@@ -19,6 +19,8 @@ const turn = (text: string, prose: string, notes: string[]): T => ({
   changes: [],
   settlementStatus: "committed",
   settlementVersion: 0,
+  deliveries: [],
+  opportunities: [],
   id: 0,
   parent: null,
   input: { text },
@@ -43,7 +45,7 @@ const assemble = (
 ): Msg[] => {
   const R = resolve({ ...chat, id: card.id, frame: card.frame, fiction: [] }, rows)
   const layers = stage === "narrate" ? [...R.frame, ...card.character] : R.frame // audience = layer
-  const history = stage === "narrate" ? narratorHistory(path, () => "") : ledger(path, () => [])
+  const history = stage === "narrate" ? narratorHistory(path) : ledger(path, () => [])
   return [...head(layers, { state, options }), ...history, { role: "user", text: input }]
 }
 

@@ -1,3 +1,4 @@
+import { residentOn, deliveryText } from "../src/context.ts"
 // Tests for src/history.ts over src/log.ts + src/journal.ts: history is a per-stage VIEW over the turn path, never stored (§17).
 // Only the narrator sees the transcript. Structured stages see facts; most see only this turn.
 // Compression is a derived view: a prefix range is replaced by the CODE fold of its notes plus the lore delivered in
@@ -60,7 +61,11 @@ const render = (card: Card, path: readonly Turn[], stage: Stage, cur: Current): 
       return [
         ...head,
         ...card.character.map(sys),
-        ...narratorHistory(path, L.text, summaries.summaryFor(path)),
+        ...narratorHistory(path, summaries.summaryFor(path)),
+        ...residentOn(
+          path,
+          summaries.summaryFor(path) ? path.findIndex((t) => t.id === summaries.summaryFor(path)!.to) + 1 : 0,
+        ).map((d) => sys(deliveryText(d))),
         ...tail,
       ] // this test's policy: longest cached prefix
     }
@@ -118,6 +123,15 @@ const run = (
         changes: [],
         settlementStatus: "committed",
         settlementVersion: 0,
+        deliveries: [...read, ...fired].map((d) => ({
+          resourceId: `card:${d.id}/${d.layer}`,
+          revision: "v1",
+          title: d.id,
+          text: L.text(d),
+          source: "card" as const,
+          residency: "window" as const,
+        })),
+        opportunities: [],
         parent,
         input,
         read,

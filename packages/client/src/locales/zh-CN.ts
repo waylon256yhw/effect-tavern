@@ -550,10 +550,15 @@ const zh = {
     local: "本卡",
   },
   invoke: {
-    manual: "手动",
-    auto: "自取",
-    always: "常驻",
-    mode: "调用",
+    manual: "玩家调用",
+    auto: "模型检索",
+    always: "自动装入",
+    mode: "激活方式",
+    onDemand: "按需装入",
+    residency: "保留时间",
+    permanent: "持续保留",
+    window: "窗口内保留",
+    turn: "仅本回合",
   },
 } as const
 export default zh

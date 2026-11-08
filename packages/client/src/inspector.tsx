@@ -476,7 +476,7 @@ export const Inspect = (props: { id: Id }) => {
           </button>
           <button role="tab" aria-selected={pane() === "node" ? "true" : "false"} onClick={() => setPane("node")}>
             {t("common.node")}
-            <Show when={node()?.invocable.length}>{(n) => <span class="v">{n()}</span>}</Show>
+            <Show when={node()?.playerCatalog.length}>{(n) => <span class="v">{n()}</span>}</Show>
           </button>
         </span>
       </header>
@@ -561,9 +561,9 @@ export const Inspect = (props: { id: Id }) => {
               <div class="sechead">
                 <span class="lbl">{t("inspector.untold")}</span>
               </div>
-              <Show when={x().invocable.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
+              <Show when={x().playerCatalog.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
                 <div class="hooks">
-                  <For each={x().invocable} keyed={(r) => r.id}>
+                  <For each={x().playerCatalog} keyed={(r) => r.id}>
                     {(r) => (
                       <div class="hook">
                         <span class="hb">

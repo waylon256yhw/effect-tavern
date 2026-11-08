@@ -14,7 +14,7 @@ type Row = Record<string, unknown>
 
 interface N extends L.Noded {
   text: string
-  input?: { text: string; note?: string } // a turn's player input, what `turns` counts
+  input?: { text: string; note?: string; invoke?: readonly string[] } // a turn's player input, what `turns` counts
   reply?: { type: string; text: string }[] // the model's parts; the text ones are the prose the search reads
 }
 const data = open(":memory:")
@@ -149,6 +149,7 @@ assert.deepEqual(hits("opening"), [{ id: story, turn: 0, kind: "reply", text: "A
 assert.deepEqual(hits("n"), [{ id: story, turn: 0, kind: "reply", text: "An opening scene.", count: 2 }]) // the root and node 7
 assert.deepEqual([hits("hidden"), hits(""), hits("  ")], [[], [], []]) // a reasoning part is not prose
 assert.deepEqual(data.stories.search("other", "hello"), [])
+
 {
   const long = `${"x".repeat(50)}needle${"y".repeat(200)}`
   back.commit(L.add(back.log, { parent: 7, text: "long", input: { text: long } }))
@@ -186,6 +187,24 @@ assert.deepEqual(data.stories.search("other", "hello"), [])
     data.stories.list("wuxia").map((s) => s.id),
     [story, second], // the commits above made `story` the newer
   )
+}
+// A chip-only input is a player turn in both shelf counts and search result numbering.
+{
+  const id = data.stories.create("chips")
+  const h = L.hold<N>(data.store<N>(id))
+  const g = h.commit(L.add(h.log, { parent: null, text: "greeting", input: { text: "" } })).node!
+  const n = h.commit(
+    L.add(h.log, {
+      parent: g.id,
+      text: "chip",
+      input: { text: "", invoke: ["pack:p/guide"] },
+      reply: [{ type: "text", text: "CHIP ONLY RESPONSE" }],
+    }),
+  ).node!
+  assert.equal(data.stories.list("chips", id)[0]!.turns, 1)
+  assert.equal(data.stories.search("chips", "CHIP ONLY RESPONSE")[0]!.turn, 1)
+  assert.deepEqual(data.stories.list("chips", id)[0]!.last, n.input)
+  data.stories.del(id)
 }
 data.stories.del(story)
 assert.deepEqual(

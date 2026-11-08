@@ -102,7 +102,17 @@ const canned = {
 const prose = { text: "said {{char}}" }
 const scripted = fake((o) => {
   const doc = readStage(o)
-  if (doc.phase === "lookup") return { text: JSON.stringify({ more: false, read: picks.shift() ?? [] }) }
+  if (doc.phase === "lookup") {
+    const refs = o.prompt.some((m) => m.role === "tool") ? [] : (picks.shift() ?? [])
+    return refs.length
+      ? {
+          text: "",
+          toolCalls: [
+            { name: "read_context", input: { refs: refs.map((id) => `${id.includes("/") ? "pack" : "card"}:${id}`) } },
+          ],
+        }
+      : { text: "Done" }
+  }
   if (doc.phase === "narrate") return prose
   return defaultAnswer(doc, canned)
 })
@@ -165,12 +175,8 @@ for (const s of [
 assert.ok(!narrate.some((m) => /-NO|\{\{missing/.test(m)))
 assert.ok(has(narrate, "{{char}} typed")) // the player's line goes as typed
 
-// the index: hooks expanded; an entry unfilled in any layer is not in it, whichever layer
-const index = doc(first, "lookup").find((m) => m.includes("Index: "))!
-assert.ok(index.includes("li=LORE 依瑞丝."))
-assert.ok(index.includes("pk/x=ENTRY 贝克兰德."))
-assert.ok(index.includes("held=HELD 玩家给的."))
-for (const id of ["un=", "late=", "pk/y="]) assert.ok(!index.includes(id), id)
+// Lookup no longer enumerates the catalog (including unavailable/unexpanded entries).
+assert.ok(!doc(first, "lookup").some((m) => m.includes("Index:")))
 
 // the record asks: expanded, the unfilled one not asked and not on the node; review wears its hat expanded
 const record = doc(first, "record")
@@ -183,7 +189,7 @@ assert.equal("skipped" in n1.turn.products, false)
 assert.equal(n1.turn.input.text, "{{char}} typed")
 assert.deepEqual(
   n1.delivered.map((d) => d.text),
-  ["LORE 依瑞丝.", "DEEP 依瑞丝.", "ENTRY 贝克兰德."],
+  ["LORE 依瑞丝.\n\nDEEP 依瑞丝.", "ENTRY 贝克兰德."],
 )
 
 // History: the literal holes in a past line and a past reply go back as they are
@@ -209,11 +215,11 @@ prose.text = "said {{char}}"
 rows = { ...player, local }
 assert.deepEqual(
   S.node(n2.id).delivered.map((d) => d.text),
-  [""],
+  ["HELD 玩家给的."],
 )
 assert.ok(S.snapshot().nodes.length >= 3)
 const third = await collect(S.act(n2.id, { text: "on" }))
-assert.ok(!has(doc(third, "narrate"), "HELD"))
+assert.ok(has(doc(third, "narrate"), "HELD 玩家给的."))
 
 // A Cond reading the counters of an entry that left the index still has an answer.
 {
@@ -304,7 +310,7 @@ assert.ok(!has(doc(third, "narrate"), "HELD"))
   const cardAsk = [{ id: "lookup", text: "CARD ASK" }]
   assert.ok((await lookup(cardAsk)).includes("CARD ASK"))
   const harness = await lookup(undefined)
-  assert.ok(harness.includes("Most lines need none") && !harness.includes("PLAYER"))
+  assert.ok(harness.includes("Find only the context") && !harness.includes("PLAYER"))
   assert.ok((await lookup(cardAsk, { char: "依瑞丝" })).includes("PLAYER 依瑞丝"))
 }
 

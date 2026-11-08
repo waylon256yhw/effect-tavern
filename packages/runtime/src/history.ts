@@ -8,10 +8,9 @@
 // and until then in the tail's Known line, which is rewritten every turn anyway. The boundary (`folded`) is a token
 // budget stepped in blocks; a path only grows, so along it the boundary never moves back and moves a block at a time.
 // One boundary drives three views: the narrator's summary + transcript, the ledger's summary + tail lines, and which
-// recall rows the lookup may read (only rows whose node is folded: a tail row is still verbatim in the transcript).
-import type { Disclosure } from "./lore.ts"
+// context deliveries retained by window residency; prose never establishes resource residency.
 import type { Msg } from "./fragment.ts"
-import { deliveredIn, notesOf, prose, type Turn } from "./journal.ts"
+import { notesOf, prose, type Turn } from "./journal.ts"
 
 export interface Summary {
   from: number
@@ -81,22 +80,17 @@ export const folded = <B>(path: readonly Turn<B>[], cost: (t: Turn<B>) => number
 const tailOf = <B>(path: readonly Turn<B>[], sum?: Summary) =>
   sum ? path.slice(path.findIndex((t) => t.id === sum.to) + 1) : path
 
-/** Narrator: past input + prose + the lore delivered at that turn (so `read` can dedupe against it); never brief/notes/note.
+/** Narrator transcript: past input and prose, never brief/notes/note.
+ * Context is injected separately from residentOn(), shared with lookup; history never resolves live resources.
  *  `sum` is the summary the POLICY chose for this path (what `compress` returned); the side table is a cache and a cache
  *  never decides what a view contains, so the view is a function of (path, policy) and identical across branches. */
-export const narratorHistory = <B>(
-  path: readonly Turn<B>[],
-  loreText: (d: Disclosure) => string,
-  sum?: Summary,
-): Msg[] => {
+export const narratorHistory = <B>(path: readonly Turn<B>[], sum?: Summary): Msg[] => {
   return [
     ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
     ...tailOf(path, sum).flatMap((t): Msg[] => [
-      ...(t.input.text ? [{ role: "user", text: t.input.text } as Msg] : []), // a greeting node has no input
-      ...deliveredIn(t).flatMap((d): Msg[] => {
-        const text = loreText(d) // "" = the entry is gone: no empty message, a provider refuses one
-        return text ? [{ role: "system", text }] : []
-      }),
+      ...(t.input.text || t.input.note || t.input.invoke?.length
+        ? [{ role: "user", text: t.input.text || "Continue the story." } as Msg]
+        : []),
       { role: "assistant", text: prose(t), parts: t.reply },
     ]),
   ]

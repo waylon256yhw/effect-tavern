@@ -2,33 +2,55 @@ import assert from "node:assert/strict"
 import { fake } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
+import { narratorHistory } from "../src/history.ts"
 import { chat, full } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "./script.ts"
-import type { Rows } from "../src/layer.ts"
+import { decodeLayer, type Rows } from "../src/layer.ts"
+import { decodeCard } from "../src/card.ts"
 
 const card = {
   ...chat,
   lore: [
-    { id: "secret", layers: ["SECRET ONE", "SECRET TWO"], unlock: [{ all: [] }, { all: [] }], offer: { any: [] } },
+    { id: "secret", layers: ["MODEL SECRET"], unlock: { all: [] }, offer: { any: [] } },
     {
       id: "guide",
-      invoke: "manual" as const,
+      access: { model: false, player: true },
+      residency: "turn" as const,
       layers: ["GUIDE ONE", "GUIDE TWO", "LOCKED GUIDE"],
       unlock: [{ all: [] }, { all: [] }, { any: [] }],
       offer: { all: [] },
     },
-    { id: "locked", layers: ["LOCKED"], unlock: { any: [] }, offer: { any: [] } },
+    {
+      id: "locked",
+      access: { model: true, player: true },
+      layers: ["LOCKED"],
+      unlock: { any: [] },
+      offer: { any: [] },
+    },
+    {
+      id: "p/auto",
+      access: { model: true, player: true },
+      layers: ["COLLIDING SECRET"],
+      unlock: { any: [] },
+      offer: { any: [] },
+    },
   ],
 }
+assert.throws(
+  () => decodeLayer({ id: "old", name: "Old", entries: [{ id: "x", text: "hidden", invoke: "manual" }] }),
+  /no longer supported/,
+)
+assert.throws(() => decodeCard({ ...card, lore: [{ ...card.lore[0], invoke: "manual" }] }), /no longer supported/)
 let rows: Rows = {
   packs: [
     {
       id: "p",
       name: "P",
       entries: [
-        { id: "always", text: "ALWAYS BODY", invoke: "always" },
-        { id: "manual", text: "MANUAL BODY", invoke: "manual" },
+        { id: "always", text: "ALWAYS BODY", activation: "always" },
+        { id: "manual", text: "MANUAL BODY", access: { model: false, player: true }, residency: "turn" },
         { id: "auto", text: "AUTO BODY" },
+        { id: "permanent", text: "PERMANENT BODY", residency: "permanent" },
       ],
     },
   ],
@@ -56,104 +78,63 @@ await Effect.runPromise(
   Effect.gen(function* () {
     const g = S.greet({ text: "Opening" }).node!
     assert.deepEqual(
-      S.node(g.id).invocable.map((e) => e.id),
-      ["secret", "guide", "p/manual", "p/auto"],
+      S.node(g.id).playerCatalog.map((e) => e.id),
+      ["card:guide", "pack:p/always", "pack:p/manual", "pack:p/auto", "pack:p/permanent"],
     )
-    for (const id of ["locked", "missing", "guide#3", "p/always"]) {
-      const result = yield* Effect.exit(go(S.act(g.id, { text: "", invoke: [id] })))
-      assert.equal(result._tag, "Failure")
+    for (const id of ["card:secret", "card:locked", "missing"]) {
+      assert.equal((yield* Effect.exit(go(S.act(g.id, { text: "", invoke: [id] }))))._tag, "Failure")
       assert.equal(calls.length, 0)
     }
-    const t = yield* go(S.act(g.id, { text: "", invoke: ["secret", "guide", "p/manual", "p/auto"] }))
-    assert.deepEqual(t.read, [
-      { id: "secret", layer: 1 },
-      { id: "secret", layer: 2 },
-      { id: "p/auto", layer: 1 },
-    ])
-    assert.deepEqual(t.fired, [])
-    assert.ok(text("narrate").includes("GUIDE ONE") && text("narrate").includes("GUIDE TWO"))
-    assert.ok(text("narrate").includes("MANUAL BODY") && !text("narrate").includes("LOCKED GUIDE"))
-    assert.ok(text("narrate").includes("ALWAYS BODY"))
-    for (const c of calls) for (const m of c.msgs) assert.notEqual(m.content, "")
-    assert.ok(S.node(t.id).invocable.some((e) => e.id === "guide"))
-    const next = yield* go(S.act(t.id, { text: "continue" }))
-    assert.ok(!text("narrate").includes("GUIDE ONE") && !text("narrate").includes("MANUAL BODY"))
-    assert.ok(text("narrate").includes("ALWAYS BODY"))
-    assert.ok(
-      !text("lookup").includes("guide") && !text("lookup").includes("p/manual") && !text("lookup").includes("p/always"),
+    const t = yield* go(
+      S.act(g.id, {
+        text: "",
+        invoke: ["card:guide", "pack:p/always", "pack:p/manual", "pack:p/auto", "pack:p/permanent"],
+      }),
     )
-    const folded = yield* go(S.act(next.id, { text: "continue" }))
-    assert.ok(S.node(folded.id).invocable.some((e) => e.id === "secret"))
-    yield* go(S.act(folded.id, { text: "continue", note: "look for a setting" }))
-    assert.ok(text("lookup").includes("secret=") && text("lookup").includes("Player note: look for a setting"))
-    assert.ok(!text("narrate").includes("SECRET ONE"))
-    for (const rerun of [() => S.swipe(t.id), () => S.reword(t.id)]) {
-      const sibling = yield* go(rerun())
-      assert.deepEqual(sibling.input.invoke, t.input.invoke)
-      assert.ok(text("narrate").includes("MANUAL BODY"))
-    }
-    // Actions and a director exist, and secret is unread: chips alone skip lookup/decide, but direct still runs.
-    const active = makeSession({
-      card: {
-        ...full,
-        lore: [
-          ...card.lore,
-          {
-            id: "window",
-            layers: ["WINDOW ONE", "WINDOW TWO"],
-            unlock: { all: [] },
-            offer: { all: [] },
-          },
-        ],
-      },
-      rows: () => rows,
-      model: () => ({ ...model, prefill: false }),
-    })
-    const opening = active.greet({ text: "Opening" }).node!
-    const onlyManual = yield* go(active.act(opening.id, { text: "", invoke: ["p/manual"] }))
     assert.deepEqual(
       calls.map((c) => c.phase),
-      ["direct", "narrate", "check", "record"],
+      ["narrate", "record"],
     )
-    assert.deepEqual(onlyManual.beats, [])
-    assert.ok(!onlyManual.read.some((d) => d.id === "secret"))
-    assert.ok(active.node(onlyManual.id).invocable.some((e) => e.id === "secret"))
-    const direct = calls.find((c) => c.phase === "direct")!.msgs
-    assert.equal(direct.at(-1)!.role, "user")
-    assert.ok(typeof direct.at(-1)!.content === "string" && direct.at(-1)!.content.length > 0)
+    assert.ok(text("narrate").includes("GUIDE TWO") && !text("narrate").includes("LOCKED GUIDE"))
+    assert.ok(text("narrate").includes("MANUAL BODY") && text("narrate").includes("ALWAYS BODY"))
+    assert.ok(!text("narrate").includes("MODEL SECRET"))
+    assert.ok(!S.node(t.id).playerCatalog.some((e) => e.id === "card:p/auto"))
+    assert.ok(!text("narrate").includes("COLLIDING SECRET"))
+    assert.equal(narratorHistory([g.turn, t]).filter((m) => m.role === "user").length, 1)
+    const next = yield* go(S.act(t.id, { text: "continue" }))
+    assert.ok(!text("narrate").includes("GUIDE ONE") && !text("narrate").includes("MANUAL BODY"))
+    assert.ok(text("narrate").includes("AUTO BODY") && text("lookup").includes("AUTO BODY"))
+    let last = next
+    for (let i = 0; i < 4; i++) last = yield* go(S.act(last.id, { text: "continue" }))
+    assert.ok(!text("narrate").includes("AUTO BODY"))
+    assert.ok(text("narrate").includes("PERMANENT BODY"))
+    const frozen = structuredClone(t.deliveries)
+    rows = {}
+    assert.deepEqual(S.node(t.id).delivered, frozen)
+    const rerun = yield* go(S.reword(t.id))
+    assert.deepEqual(rerun.deliveries, frozen)
     assert.ok(text("narrate").includes("MANUAL BODY"))
-
-    // Isolate the unmount case: no auto delivery, window, current product or hat can mask an assistant tail.
-    const bare = makeSession({
-      card: { ...chat, products: [] },
-      rows: () => rows,
-      model: () => ({ ...model, prefill: false }),
-    })
-    const bareOpening = bare.greet({ text: "Opening" }).node!
-    const manualTurn = yield* go(bare.act(bareOpening.id, { text: "", invoke: ["p/manual"] }))
-    assert.deepEqual(manualTurn.read, [])
-    rows = {}
-    const rerun = yield* go(bare.reword(manualTurn.id))
-    assert.deepEqual(rerun.input, { text: "", invoke: ["p/manual"] })
-    const narration = calls.find((c) => c.phase === "narrate")!.msgs
     assert.deepEqual(
-      narration.slice(-2).map((m) => m.role),
-      ["assistant", "user"],
+      S.node(t.id).playerCatalog.map((e) => e.id),
+      ["card:guide"],
     )
-    assert.ok(typeof narration.at(-1)!.content === "string" && narration.at(-1)!.content.length > 0)
-    assert.ok(!text("narrate").includes("MANUAL BODY"))
-    rows = {}
-    yield* go(S.reword(t.id))
-    assert.ok(!text("narrate").includes("MANUAL BODY"))
-    const old = JSON.parse(JSON.stringify({ ...t, input: { text: "legacy", pin: "secret" } }))
     const replay = makeSession({
-      card,
+      card: { ...card, lore: [] },
       rows: () => ({}),
       model: () => model,
-      store: { read: () => ({ nodes: [g.turn, old], head: old.id }), write: () => {} },
+      store: { read: () => ({ nodes: [...S.log.nodes.values()], head: t.id }), write: () => {} },
     })
-    assert.deepEqual(replay.node(old.id).turn.read, t.read)
-    yield* go(replay.reword(old.id))
+    yield* go(replay.reword(t.id))
+    assert.ok(text("narrate").includes("GUIDE TWO")) // card changes cannot rewrite frozen deliveries
+    // Chip-only editing is a real turn: check and record run, not the greeting edit shortcut.
+    const active = makeSession({ card: { ...full, lore: card.lore }, rows: () => ({}), model: () => model })
+    const a = yield* go(active.act(null, { text: "", invoke: ["card:guide"] }))
+    yield* go(active.edit(a.id, { text: "Edited chip-only turn" }))
+    assert.deepEqual(
+      calls.map((c) => c.phase),
+      ["check", "record"],
+    )
+    assert.ok(text("record").includes("Edited chip-only turn"))
   }),
 )
 console.log("invoke ok")

@@ -9,6 +9,8 @@ const turn = (id: number, parent: number | null, input: Turn["input"], reply: Tu
   changes: [],
   settlementStatus: "committed",
   settlementVersion: 0,
+  deliveries: [],
+  opportunities: [],
   id,
   parent,
   input,
@@ -85,7 +87,7 @@ assert.deepEqual(
   [b.format, b.version, b.exported, b.card, b.story, b.snapshot === x.snapshot],
   [
     "effect-tavern/story",
-    2,
+    3,
     "2026-10-28T12:00:00.000Z",
     x.card,
     { id: 7, title: "竹林夜话", starred: true, updated: 1700000000000 },

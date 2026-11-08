@@ -8,6 +8,7 @@
 // inside the record call, after the prose, recorded on the node; see `Readout`).
 // Ceilings (developer modules, same `settle` signature): parameterised actions over tables, formulas beyond one path
 // reference, dynamic entities, time. Fields are flat paths for now.
+import { ContextPolicy, checkContextPolicies } from "./lore.ts"
 import { Effect, Random, Schema } from "effect"
 import { Cond, holds, expandState, type State as Paths } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
@@ -270,7 +271,7 @@ export type Rpg = ReturnType<typeof makeCard>
 export const LoreEntry = Schema.Struct({
   id: Schema.String,
   layers: Schema.Array(Schema.String),
-  invoke: Schema.optionalKey(Schema.Literals(["auto", "manual"])),
+  ...ContextPolicy.fields,
   unlock: Schema.Union([Cond, Schema.Array(Cond)]),
   offer: Cond,
 })
@@ -305,4 +306,8 @@ export const Card = Schema.Struct({
 })
 export type Card = typeof Card.Type
 export type LoreEntry = typeof LoreEntry.Type
-export const decodeCard = Schema.decodeUnknownSync(Card)
+const decodeCardSchema = Schema.decodeUnknownSync(Card)
+export const decodeCard = (value: unknown): Card => {
+  if (value && typeof value === "object" && "lore" in value) checkContextPolicies(value.lore)
+  return decodeCardSchema(value)
+}

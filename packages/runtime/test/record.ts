@@ -249,7 +249,7 @@ console.log("record transactions ok")
   assert.ok(!toolsets[0]!.includes("insert_people"))
   assert.deepEqual(one.answers, {})
   assert.equal(T.node(one.id).heading, "woods")
-  assert.ok(T.node(one.id).invocable.some((e) => e.id === "trail"))
+  assert.deepEqual(T.node(one.id).playerCatalog, []) // unlocked model lore is not a player command
   const two = await Effect.runPromise(outcome(T.act(one.id, { text: "explore" })))
   assert.ok(prompts[1]!.includes("PLACE=woods SCORE=0"))
   assert.ok(prompts[1]!.includes("FOREST-ONLY"))

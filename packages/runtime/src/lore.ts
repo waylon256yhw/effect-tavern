@@ -1,3 +1,20 @@
+import { Schema } from "effect"
+
+export const ContextPolicy = Schema.Struct({
+  access: Schema.optionalKey(Schema.Struct({ model: Schema.Boolean, player: Schema.Boolean })),
+  activation: Schema.optionalKey(Schema.Literals(["always", "on_demand"])),
+  residency: Schema.optionalKey(Schema.Literals(["permanent", "window", "turn"])),
+})
+export type ContextPolicy = typeof ContextPolicy.Type
+
+/** Reject the removed policy before decoding can strip unknown fields and change its meaning. */
+export const checkContextPolicies = (entries: unknown): void => {
+  if (Array.isArray(entries))
+    for (const e of entries)
+      if (e && typeof e === "object" && "invoke" in e)
+        throw new Error("entry.invoke is no longer supported; declare access, activation and residency")
+}
+
 // §14 / §19: layered, state-gated knowledge. Pure queries over (state, deliveries); no LLM calls.
 //   layer 0      hidden: not in the index, not readable, never offered
 //   layer 1..n   layers[i-1]; the first sentence of layers[0] is the index hook
@@ -9,9 +26,9 @@ export interface Disclosure {
   id: string
   layer: number
 }
-export interface Entry<S, C> {
+export interface Entry<S, C> extends ContextPolicy {
+  source?: "card" | "pack"
   id: string
-  invoke?: "always" | "auto" | "manual"
   layers: readonly string[]
   unlock?: (s: S) => number
   offer?: (s: S, ctx: C) => boolean
@@ -55,10 +72,9 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
     /** Next layer of each visible entry whose window is open; never deeper than one step. Feeds the brief as `may`. */
     offers: (s: S, told: readonly Disclosure[], ctx: C) =>
       visible(s, told)
-        .filter((e) => (e.invoke ?? "auto") === "auto" && e.offer?.(s, ctx) && current(e, s, told) < e.layers.length)
+        .filter((e) => (e.access?.model ?? true) && e.offer?.(s, ctx) && current(e, s, told) < e.layers.length)
         .map((e) => ({ id: e.id, layer: current(e, s, told) + 1, text: e.layers[current(e, s, told)] })),
-    /** A disclosure's text; "" for an entry no longer here (a pack unmounted or deleted, a card's lore cut): old nodes
-     *  still replay. Nothing keeps a copy of what was told. */
+    /** Current authored layer text. History and reword read journal snapshots, never this live lookup. */
     text: (d: Disclosure) => byId.get(d.id)?.layers[d.layer - 1] ?? "",
     /** Derived per-entry state for `offer` to read as `lore.<id>.since` / `.shown`: turns since the entry last reached the
      *  narrator on this path (0 = this turn, Infinity = never) and how many turns it did. `perTurn` is the path's

@@ -1,3 +1,4 @@
+import type { DeliverySnapshot } from "./context.ts"
 // §17: one node per turn = the player's input plus every block the system produced for it. Only LLM outputs and seeds
 // are stored; events, state and deliveries are derived along the path. The tree itself (parents, siblings as versions,
 // head, drop) is src/log.ts; this file is what a node holds.
@@ -20,6 +21,8 @@ export interface Turn<B> {
   id: number
   parent: number | null
   input: Input
+  deliveries: readonly DeliverySnapshot[] // frozen context actually supplied this turn
+  opportunities: readonly (Disclosure & { text: string })[] // frozen gate candidates for reword/check
   read: readonly Disclosure[] // lore delivered by lookup
   opening?: readonly (typeof Effect_.Type)[] // a greeting's effects, applied before anything else on the path
   beats: readonly B[] // decide + seed, settled by code on replay

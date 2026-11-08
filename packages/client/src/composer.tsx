@@ -52,7 +52,7 @@ export const Composer = () => {
   // Revising a landed line: the chip names the turn (a tap scrolls to it) and cancels; Keep sits beside Send.
   const revise = read(revising)
   const selected = read(invoke)
-  const entries = () => line().at(-1)?.invocable ?? []
+  const entries = () => line().at(-1)?.playerCatalog ?? []
   const available = () => entries().filter((e) => !selected().includes(e.id))
   const line = read(path)
   const blocked = () =>
@@ -295,9 +295,6 @@ export const Composer = () => {
                     >
                       <span class="name">{e().id}</span>
                       <span class="hint">{e().hook}</span>
-                      <Show when={e().invoke === "manual"}>
-                        <span class="tag">{t("invoke.manual")}</span>
-                      </Show>
                     </button>
                   )}
                 </For>

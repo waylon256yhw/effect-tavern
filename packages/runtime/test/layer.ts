@@ -46,8 +46,6 @@ function here(r: Partial<Local> = {}): Local {
   const canned = { notes: "N", options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
   const model = fake((o) => {
     const d = readStage(o)
-    if (d.phase === "lookup")
-      return { text: JSON.stringify({ more: false, read: d.index.slice(0, 1).map((e) => e[0]) }) }
     if (d.phase === "narrate") return { text: "不是这样而是那样。".repeat(30) }
     return defaultAnswer(d, canned)
   })
@@ -725,7 +723,7 @@ const packs = [packB, packA]
   assert.deepEqual([by("good").text, by("good").unasked], ["Q 贝克兰德", undefined])
   assert.deepEqual([by("bad").text, by("bad").unasked], ["Q-NO {{missing}}", true])
   // an ask: down the chain, the code's own at the bottom
-  assert.deepEqual([R.asks["lookup"]!.from, /Most lines need none/.test(R.asks["lookup"]!.text)], ["harness", true])
+  assert.deepEqual([R.asks["lookup"]!.from, /Find only the context/.test(R.asks["lookup"]!.text)], ["harness", true])
   // `holes`: what nothing fills, in order of appearance, the same list whether or not the entry was dropped
   assert.deepEqual(R.holes, ["missing", "ask", "after"])
 }
@@ -816,7 +814,12 @@ const prose = { text: "hello world" }
 const model = () =>
   fake((o) => {
     const doc = readStage(o)
-    if (doc.phase === "lookup") return { text: JSON.stringify({ more: false, read: picks.shift() ?? [] }) }
+    if (doc.phase === "lookup") {
+      const refs = o.prompt.some((m) => m.role === "tool") ? [] : (picks.shift() ?? [])
+      return refs.length
+        ? { text: "", toolCalls: [{ name: "read_context", input: { refs: refs.map((r) => `pack:${r}`) } }] }
+        : { text: "Done" }
+    }
     return doc.phase === "narrate" ? prose : defaultAnswer(doc, canned)
   })
 const asked = (es: readonly Event[], phase: string) =>
@@ -849,14 +852,14 @@ const mount = (...mounts: string[]) => here({ mounts })
   const first = await collect(S.act(null, { text: "one" }))
   const n1 = nodeOf(first)
   const lookup = texts(asked(first, "lookup")).join("\n")
-  assert.ok(lookup.includes("packA/x=The first sentence."), lookup) // prefixed, the hook is the first sentence
-  assert.ok(lookup.includes("own=The card's own."), lookup)
+  assert.ok(!lookup.includes("packA/x="), lookup) // prefixed, the hook is the first sentence
+  assert.ok(!lookup.includes("own="), lookup)
   assert.ok(!lookup.includes("packB"), lookup) // not mounted, not readable
   assert.ok(!lookup.includes("The rest of it"), lookup)
-  assert.deepEqual(n1.delivered, [{ id: "packA/x", layer: 1, text: "The first sentence. The rest of it." }])
+  assert.equal(n1.delivered[0]!.text, "The first sentence. The rest of it.")
   assert.deepEqual(
-    n1.invocable.map((e) => e.id),
-    ["own"], // told: no longer readable; the card's entry still is
+    n1.playerCatalog.map((e) => e.id),
+    ["pack:packA/x"], // player catalog is independent of model residency
   )
   // the frame: the row's slot in the head, its tail fragment last in narrate alone
   const narrate = texts(asked(first, "narrate"))
@@ -865,12 +868,12 @@ const mount = (...mounts: string[]) => here({ mounts })
   assert.ok(!texts(asked(first, "record")).includes("PACK-TAIL"))
   const second = await collect(S.act(n1.id, { text: "two" }))
   const n2 = nodeOf(second)
-  assert.ok(texts(asked(second, "narrate")).includes("The first sentence. The rest of it."))
+  assert.ok(texts(asked(second, "narrate")).some((t) => t.includes("The first sentence. The rest of it.")))
 
   // Unmounted, read on the next request: nothing throws, the old node's delivery reads "", the frame and the index drop
   // it, and no empty message reaches the provider, from the transcript or from a reword reusing the read.
   rows.local = mount()
-  assert.deepEqual(S.node(n1.id).delivered, [{ id: "packA/x", layer: 1, text: "" }])
+  assert.deepEqual(S.node(n1.id).delivered, n1.delivered)
   assert.deepEqual(
     S.snapshot().nodes.map((n) => n.id),
     [n1.id, n2.id],
@@ -881,11 +884,12 @@ const mount = (...mounts: string[]) => here({ mounts })
   assert.ok(!narrated.includes("PACK-STYLE"))
   const sib = await collect(S.reword(n1.id))
   assert.ok(!texts(asked(sib, "narrate")).some((t) => t === ""))
+  assert.ok(texts(asked(sib, "narrate")).some((t) => t.includes("The rest of it.")))
 
   // Deleted from the library while still mounted: the id is skipped, the same.
   rows.local = mount("packA")
   rows.packs.length = 0
-  assert.deepEqual(S.node(n1.id).delivered, [{ id: "packA/x", layer: 1, text: "" }])
+  assert.deepEqual(S.node(n1.id).delivered, n1.delivered)
   assert.equal(S.snapshot().head, nodeOf(sib).id)
 }
 

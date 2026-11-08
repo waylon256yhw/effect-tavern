@@ -47,8 +47,8 @@ export type Ask =
       stage: "lookup"
       question: string
       ledger: readonly Msg[]
-      index: readonly string[] // id=hook in list mode; ids alone in catalog mode
-      steps?: readonly { read: readonly Told[]; found?: readonly string[]; question: string }[]
+      context: readonly string[]
+      current?: string
     }
   | {
       stage: "decide"
@@ -68,8 +68,6 @@ export type Ask =
     }
   | {
       stage: "narrate"
-      always?: readonly string[]
-      manual?: readonly string[]
       fiction: readonly Msg[]
       history: readonly Msg[]
       summarized: boolean // history[0] is the fold
@@ -132,15 +130,12 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
       return [
         ...frame,
         ...a.ledger.map(toP(w)),
-        sys(`${a.question}\nIndex: ${a.index.join(", ")}`),
+        sys(a.question),
+        ...a.context.map(sys),
+        ...(a.current ? [sys(a.current)] : []),
         ...noteOf(c.input),
         ...thoughtOf(c),
         said(c.input),
-        ...(a.steps ?? []).flatMap((step) => [
-          sys(`Read: ${step.read.map((d) => `${d.id}=${d.text}`).join(" | ") || "-"}`),
-          ...(step.found ? [sys(`Found: ${step.found.join(", ") || "-"}`)] : []),
-          sys(step.question),
-        ]),
       ]
     case "decide":
       return [
@@ -166,7 +161,6 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
           [
             ...c.frame,
             ...a.fiction,
-            ...(a.always ?? []).filter(Boolean).map((text): Msg => ({ role: "system", text })),
             ...hatHead.filter((m) => m.role === "system"),
             ...hatHead.filter((m) => m.role !== "system"),
           ],
@@ -178,7 +172,6 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ),
         said(c.input),
         ...a.told.map(sys),
-        ...(a.manual ?? []).filter(Boolean).map(sys),
         ...(a.outcome.length ? [sys(`Outcome: ${a.outcome.join(", ")}`)] : []),
         ...(a.current ? [sys(a.current)] : []),
         ...a.must.map((d) => sys(`MUST reveal: ${d.text}`)),

@@ -95,22 +95,17 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   })
   const L = makeLore<Record<string, unknown>, readonly string[]>([
     ...own.map((e) => ({
-      id: e.id,
-      layers: e.layers,
-      invoke: e.invoke,
+      ...e,
       unlock: () => floors.get(e.id)!,
       offer: (x: Record<string, unknown>, ev: readonly string[]) => holds(e.offer, x, ev),
     })),
-    ...R.entries.map((e) => ({ id: e.id, layers: [e.text], invoke: e.invoke, unlock: () => 1 })),
+    ...R.entries.map((e) => ({ ...e, layers: [e.text], unlock: () => 1 })),
   ])
   const gated = {
     ...context,
     lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id) }])),
   }
   const readable = L.readable(gated, [], [])
-  const index = L.index(gated, [])
-    .filter((e) => readable.includes(e.id) && (L.entries.find((x) => x.id === e.id)?.invoke ?? "auto") === "auto")
-    .map((e) => `${e.id}=${e.hook}`)
   const windows = new Map(L.offers(gated, [], opened.events).map((d) => [d.id, d.layer]))
   const lore = [
     ...own.map((e) => {
@@ -139,7 +134,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   // ───────── the document ─────────
   const ask: Ask =
     stage === "lookup"
-      ? { stage, question: R.asks["lookup"]!.text, index, ledger: [] }
+      ? { stage, question: R.asks["lookup"]!.text, context: [], ledger: [] }
       : stage === "record"
         ? {
             stage,
@@ -153,10 +148,11 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
         : {
             stage,
             fiction: head(fiction, { state: context }),
-            always: R.entries.filter((e) => e.invoke === "always").map((e) => e.text),
             history: [],
             summarized: false,
-            told: [],
+            told: L.entries
+              .filter((e) => e.activation === "always" && (e.access?.model ?? true))
+              .flatMap((e) => e.layers.slice(0, L.current(e, gated, []))),
             outcome: [],
             must: [],
             may: [],
@@ -195,7 +191,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
       tokens: frags.reduce((n, f) => n + f.tokens, 0),
       text: frags.map((f) => f.text).join("\n"),
     },
-    { name: "lore", tokens: tokens(index.join(", ")), text: lore.join("\n") },
+    { name: "lore", tokens: 0, text: lore.join("\n") },
     {
       name: "record",
       tokens: tokens([...asks, ...(questions ?? [])].join("\n")),

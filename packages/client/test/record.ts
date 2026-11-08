@@ -35,7 +35,7 @@ const node = (state: object, extra: any = {}) =>
     state,
     checks: [],
     delivered: [],
-    invocable: [],
+    playerCatalog: [],
     ...extra,
     turn: { input: {}, fired: [], products: {}, changes: [], ...extra.turn },
   }) as any
@@ -47,12 +47,12 @@ const els = record(
     { hp: 30, foe: 20, mood: "high" },
     {
       checks: [{ action: "strike", chance: 0.6, roll: 0.7, hit: false }],
-      delivered: [{ id: "li", layer: 1, text: "a clue" }],
-      invocable: [{ id: "li", hook: "more" }],
+      delivered: [{ resourceId: "li", revision: "v1", source: "card", text: "a clue" }],
+      playerCatalog: [{ id: "li", hook: "more" }],
       turn: { input: { text: "go", invoke: ["li"] }, fired: [], changes: [], products: { notes: "a fact" } },
     },
   ),
-  node({ hp: 40, foe: 30, mood: "low" }, { invocable: [{ id: "li", hook: "a hook" }] }),
+  node({ hp: 40, foe: 30, mood: "low" }, { playerCatalog: [{ id: "li", hook: "a hook" }] }),
 )
 assert.deepEqual(els, [
   { kind: "meter", path: "hp", label: "体力", min: 0, max: 100, was: 40, now: 30, cuts: [], scale: false },

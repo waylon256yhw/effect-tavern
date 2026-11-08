@@ -10,7 +10,7 @@
 // outside dialogue, the question asks for the same sentence said plainly, and a blank answer keeps the sentence
 // (polish.ts `splice`). The verdict on the node is check's, on the prose before polish; a rewrite that drops a clue's
 // wording or brushes a guard rule is the price, and `switches.polish: false` turns the stage off.
-// record uses an attempt-local native tool transaction. Lookup remains a bounded structured pick until Step 3.
+// record uses an attempt-local transaction; lookup uses native read-only tools and revisioned context snapshots.
 // Truncation: a narrate that finishes with "length" is re-asked once with the partial as a trailing assistant message
 // when the connection declares `prefill`; the turn records the concatenation once. Current Claude rejects the prefix
 // (docs/provider-reading.md §7), so on such connections the partial stands and recovery is still undecided.
@@ -35,6 +35,15 @@
 // Errors: a model failure is a `ModelError` on the stream; an action that names what does not exist (a node, an
 // option, a product, a value outside a field) is a defect, the caller's bug.
 import {
+  contextLookup,
+  deliveryText,
+  freeze,
+  latest,
+  loreResource,
+  uniqueDeliveries,
+  type DeliverySnapshot,
+} from "./context.ts"
+import {
   object,
   runStageTools,
   ModelError,
@@ -45,6 +54,7 @@ import {
   type Part,
   type Usage,
   type StageEvent,
+  type StageOptions,
 } from "@effect-tavern/provider"
 import { Deferred, Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
@@ -53,22 +63,14 @@ import { holds, expandState, type State as Paths } from "./cond.ts"
 import { gateOf, makeDerived, type Node } from "./derived.ts"
 import { head as headOf, type Hat } from "./fragment.ts"
 import { narratorHistory, policyFor, type Policy } from "./history.ts"
-import {
-  deliveredOn,
-  split,
-  splitter,
-  textOf as proseOf,
-  type Brief,
-  type Input,
-  type Turn as TurnOf,
-} from "./journal.ts"
+import { split, splitter, textOf as proseOf, type Brief, type Input, type Turn as TurnOf } from "./journal.ts"
 import * as Log from "./log.ts"
 import { resolve, shown, type Resolved, type Rows } from "./layer.ts"
-import { key, makeLore, type Disclosure, type Lore } from "./lore.ts"
+import { makeLore, type Disclosure, type Lore } from "./lore.ts"
 import { expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
-import { cap, entryRef, type Product } from "./product.ts"
+import { cap, type Product } from "./product.ts"
 import { recordTransaction, worldValue, worldOn, type RecordResult } from "./world.ts"
 
 export type Turn = TurnOf<Beat>
@@ -88,15 +90,6 @@ export type Change = Log.Change<Node>
 export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
 
-// ponytail: three steps until a card needs its own cap; then make it a card setting.
-const lookupCap = 3
-// ponytail: keep hooks within 2000 estimated tokens. If ids themselves hit provider enum limits,
-// upgrade catalog's first step to search-only, then enumerate the results.
-const indexBudget = 2000
-const Lookup = (ids: readonly string[], catalog: boolean) => {
-  const fields = { read: Schema.Array(Schema.Literals(ids)), more: Schema.Boolean }
-  return catalog ? Schema.Struct({ ...fields, search: Schema.String }) : Schema.Struct(fields)
-}
 const BriefOf = (open: readonly string[]) =>
   Schema.Struct({
     must: Schema.Array(Schema.Literals(open)),
@@ -200,23 +193,19 @@ export const makeSession = ({
   policy?: Policy | (() => Policy)
 }) => {
   const rpg = makeCard(card.rules)
-  const cardLore = card.lore.map((e) => ({ id: e.id, layers: e.layers, invoke: e.invoke, ...gateOf(e.id, e.offer) }))
-  /** The layer and the lookup index this request stands on: `resolve` once, from every session entry (`fresh`) until the
-   *  next, so a snapshot's nodes read one index and a turn's stages one layer. A request landing mid-turn moves the turn
-   *  onto the rows it read, which is no worse than each stage reading its own. The index is the card's lore and the
-   *  player layer's entries, expanded: an entry with an unfilled hole in any layer is not in it, and a node that already
-   *  told it replays "" (lore.ts `text`). */
+  const cardLore = card.lore.map((e) => ({ ...e, source: "card" as const, ...gateOf(e.id, e.offer) }))
+  /** Resolve one request's rows and card lore. Pack resources bypass the story disclosure
+   *  engine, so a same-named Pack can never unlock card lore. Historical text lives on turns. */
   let now: { R: Resolved; I: Lore<Paths, readonly string[]> } | undefined
   const current = () => {
     if (now) return now
     const R = resolve(card, rows())
-    const I = makeLore<Paths, readonly string[]>([
-      ...cardLore.flatMap((e) => {
+    const I = makeLore<Paths, readonly string[]>(
+      cardLore.flatMap((e) => {
         const layers = e.layers.map((l) => expand(l, R.names))
         return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
       }),
-      ...R.entries.map((e) => ({ id: e.id, layers: [e.text], invoke: e.invoke, unlock: () => 1 })),
-    ])
+    )
     return (now = { R, I })
   }
   const layer = () => current().R
@@ -236,8 +225,10 @@ export const makeSession = ({
   }
   const held = Log.hold<Turn>(store)
   for (const t of held.log.nodes.values())
-    if (!t.settlementStatus || !t.changes)
-      throw new Error("unsupported pre-transaction story; export or migrate it before opening")
+    if (!t.settlementStatus || !t.changes || !t.deliveries || !t.opportunities)
+      throw new Error(
+        "unsupported story format (requires transactions and delivery snapshots); export or migrate it before opening",
+      )
   const chain = (id: number | null) => Log.chain(held.log, id)
   const turnOf = (id: number) => Log.get(held.log, id)
   let seeds = [...held.log.nodes.values()].reduce((n, t) => t.beats.reduce((n, b) => Math.max(n, b.seed), n), 0)
@@ -260,6 +251,7 @@ export const makeSession = ({
     rpg,
     L,
     lore: card.lore,
+    packs: () => layer().entries,
     heading: card.heading,
     products,
     policy: () => policy ?? policyOf(),
@@ -285,14 +277,7 @@ export const makeSession = ({
         input,
         thought: wording("input.thought"),
       },
-      a.stage === "narrate"
-        ? {
-            ...a,
-            always: layer()
-              .entries.filter((e) => e.invoke === "always")
-              .map((e) => e.text),
-          }
-        : a,
+      a,
       {
         reasoningBack: M.reasoningBack,
         ttl: M.ttl,
@@ -330,20 +315,39 @@ export const makeSession = ({
       return r.value
     })
 
-  /** Ids the player or the lookup named, as the disclosures they deliver: every unseen layer up to a lore entry's current
-   *  one, or the one layer of a recalled product row. Already-seen ones deliver nothing. */
-  const deliver = (
-    s: Paths,
-    told: readonly Disclosure[],
-    seen: readonly Disclosure[],
-    ids: readonly string[],
-  ): Disclosure[] => {
-    const seenKeys = new Set(seen.map(key))
-    const I = L()
-    return [...new Set(ids)]
-      .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (I.read(s, told, seen, id) ?? [])))
-      .filter((d) => !seenKeys.has(key(d)))
-  }
+  /** Both native stages report the full SDK tool trace, including cancellation. */
+  const native = (emit: Emit, phase: "lookup" | "record", msgs: Message[], options: StageOptions) =>
+    Effect.gen(function* () {
+      yield* emit({ kind: "stage", phase })
+      const started = Date.now()
+      const events: StageEvent[] = []
+      let reported = false
+      const report = (out: unknown, usage: Usage) =>
+        Effect.gen(function* () {
+          reported = true
+          yield* emit({ kind: "call", phase, msgs, out, usage, ms: Date.now() - started })
+        })
+      return yield* runStageTools(modelFor(phase), msgs, { ...options, onEvent: (e) => events.push(e) }).pipe(
+        Effect.tap((r) => report(r, r.usage)),
+        Effect.tapError((e) => report({ status: "failed", message: e.message, trace: e.trace }, e.usage)),
+        Effect.mapError((e) => new ModelError({ message: e.message, cause: e })),
+        Effect.ensuring(
+          Effect.suspend(() =>
+            reported
+              ? Effect.void
+              : report(
+                  { status: "cancelled", events },
+                  events.findLast((e) => e.kind === "end")?.usage ?? {
+                    input: 0,
+                    output: 0,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                  },
+                ),
+          ),
+        ),
+      )
+    })
 
   const record = (
     emit: Emit,
@@ -375,41 +379,12 @@ export const makeSession = ({
         questions: qs?.lines,
         prose: proseOf(scene.reply),
       })
-      yield* emit({ kind: "stage", phase: "record" })
-      const started = Date.now()
-      const events: StageEvent[] = []
-      let reported = false
-      const report = (out: unknown, usage: Usage) =>
-        Effect.gen(function* () {
-          reported = true
-          yield* emit({ kind: "call", phase: "record", msgs, out, usage, ms: Date.now() - started })
-        })
-      const result = yield* runStageTools(modelFor("record"), msgs, {
+      const result = yield* native(emit, "record", msgs, {
         tools: tx.tools,
         completion: { tool: "finish_record" },
         budget: { maxSteps: 8, maxOutputTokens: 4096, maxTotalOutputTokens: 16384, timeoutMs: 120000 },
         call: { name: "record", effort: "off", temperature: 0 },
-        onEvent: (e) => events.push(e),
-      }).pipe(
-        Effect.tap((r) => report(r, r.usage)),
-        Effect.tapError((e) => report({ status: "failed", message: e.message, trace: e.trace }, e.usage)),
-        Effect.mapError((e) => new ModelError({ message: e.message, cause: e })),
-        Effect.ensuring(
-          Effect.suspend(() =>
-            reported
-              ? Effect.void
-              : report(
-                  { status: "cancelled", events },
-                  events.findLast((e) => e.kind === "end")?.usage ?? {
-                    input: 0,
-                    output: 0,
-                    cacheRead: 0,
-                    cacheWrite: 0,
-                  },
-                ),
-          ),
-        ),
-      )
+      })
       if (result.status !== "completed")
         return yield* Effect.fail(
           new ModelError({ message: `record budget exhausted: ${result.reason}`, cause: result }),
@@ -430,9 +405,9 @@ export const makeSession = ({
         {
           stage: "narrate",
           fiction: fictionAt(here.context(state)),
-          history: narratorHistory(path, here.text, sum),
+          history: narratorHistory(path, sum),
           summarized: sum !== undefined,
-          told: [],
+          told: here.resident().map(deliveryText),
           outcome: [],
           current: here.known().current,
           must: [],
@@ -471,62 +446,53 @@ export const makeSession = ({
       if (path.some((t) => t.settlementStatus === "pending" || t.settlementStatus === "failed"))
         throw new Error("parent settlement must be completed or explicitly skipped")
       const here = derived.at(path)
-      const told = (ds: readonly Disclosure[]): Told[] => ds.map((d) => ({ id: d.id, text: here.text(d) }))
       // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
       const guard = card.guard.flatMap((g) => expand(g, layer().names) ?? [])
       const s0 = here.state
-      const g0 = here.gated()
-      const seen = deliveredOn(path.slice(here.fold()))
-      const all = deliveredOn(path)
-      // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the
-      // items of recall products stored on the path and not yet delivered (model-written memory walks the same road as
-      // lore). Nothing to pick → no call.
+      const resources = here.resources()
+      const resident = here.resident()
+      const current = here.currentResources()
+      const reused = from !== "lookup"
       const invoked = [...new Set(input.invoke ?? [])]
-      const candidates = here.invocable()
+      const selected = resources.filter((r) => invoked.includes(r.resourceId) && r.access.player)
       for (const id of invoked)
-        if (!candidates.some((e) => e.id === id) && !base?.input.invoke?.includes(id))
+        if (!selected.some((r) => r.resourceId === id) && !(reused && base!.input.invoke?.includes(id)))
           throw new Error(`${id}: not invocable`)
-      const automatic = invoked.filter((id) => candidates.some((e) => e.id === id && e.invoke === "auto"))
-      const manual = invoked.flatMap((id) => {
-        const e = L().entries.find((e) => e.id === id && e.invoke === "manual")
-        return e ? [(L().read(g0, all, [], id) ?? []).map(L().text).filter(Boolean).join("\n\n")].filter(Boolean) : []
-      })
-      const selected = deliver(g0, all, seen, automatic)
-      const untold = here.readable().filter((e) => !invoked.includes(e.id))
-      const idx = untold.map((e) => e.id)
-      // A chip-only turn supplies context, not a player line for lookup or action judgement.
+      const automatic = resources.filter((r) => r.access.model && r.activation === "always")
+      let deliveries: DeliverySnapshot[] = reused
+        ? [...base!.deliveries]
+        : [...automatic, ...selected].map((r) =>
+            freeze(
+              r,
+              resident.find((s) => s.resourceId === r.resourceId),
+            ),
+          )
+      let looked: Disclosure[] = reused ? [...base!.read] : [...automatic, ...selected].flatMap((r) => r.disclosures)
       const hasInput = !!(input.text || input.note)
-      let looked = from !== "lookup" ? [...base!.read] : []
-      if (from === "lookup" && hasInput && idx.length) {
-        const index = untold.map((e) => `${e.id}=${e.hook}`)
-        const catalog = tokens(index.join(", ")) > indexBudget
-        const steps: { read: Told[]; found?: string[]; question: string }[] = []
-        const read = new Set<string>()
-        for (let step = 0; step < lookupCap; step++) {
-          const remaining = idx.filter((id) => !read.has(id))
-          if (!remaining.length) break
-          const answer = yield* obj(
+      if (!reused && hasInput) {
+        const injected = latest([...resident, ...current, ...deliveries])
+        const lookup = contextLookup(resources, injected)
+        if (lookup.readable().length) {
+          // No catalog enumeration: request size is independent of the number of unseen resources.
+          yield* native(
             emit,
             "lookup",
-            Lookup(remaining, catalog),
             ask(here.context(s0), input, {
               stage: "lookup",
               ledger: here.ledger(),
               question: wording("lookup"),
-              index: catalog ? idx : index,
-              steps,
+              context: latest([...resident, ...deliveries]).map(deliveryText),
+              current: here.known().current,
             }),
+            {
+              tools: lookup.tools,
+              completion: { text: true },
+              budget: { maxSteps: 5, maxOutputTokens: 1024, maxTotalOutputTokens: 4096, timeoutMs: 60000 },
+              call: { name: "lookup", effort: "off", temperature: 0 },
+            },
           )
-          const fresh = answer.read.filter((id) => !read.has(id))
-          for (const id of fresh) read.add(id)
-          looked = deliver(g0, all, seen, [...read])
-          const search = "search" in answer ? answer.search.trim() : ""
-          if (!(answer.more && fresh.length) && !search) break
-          steps.push({
-            read: told(deliver(g0, all, seen, fresh)),
-            ...(search ? { found: here.search(search, 8, [...invoked, ...read]) } : {}),
-            question: wording("lookup.again"),
-          })
+          deliveries.push(...lookup.delivered)
+          looked.push(...lookup.disclosures)
         }
       }
       // decide → settle, looping; the k-th decide sees the first k events
@@ -577,16 +543,19 @@ export const makeSession = ({
       // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate
       // (derived.ts `gate`). Director only if the card has one and something is open.
       const gateEvents = [...events, ...here.post]
-      const { offered, disclosures, open } = here.gate({
+      const gate = here.gate({
         state: s1,
         events,
-        before: [...looked, ...selected],
+        before: looked,
       })
+      const disclosures = reused ? base!.read : gate.disclosures
+      const open = reused ? base!.opportunities : gate.open.map((d) => ({ ...d, text: here.text(d) }))
+      const told = (ds: readonly (Disclosure & { text: string })[]): Told[] => ds.map(({ id, text }) => ({ id, text }))
       const openIds = [...new Set(open.map((d) => d.id))] // Literals(openIds) below: a duplicate must never reach it
       const briefed: Brief =
         from !== "lookup"
           ? base!.brief
-          : card.director && offered.length
+          : card.director && open.length
             ? yield* obj(
                 emit,
                 "direct",
@@ -602,6 +571,24 @@ export const makeSession = ({
               )
             : { must: [], may: openIds }
       const brief = briefed
+      if (!reused) {
+        // Freeze gate deliveries before the model runs. Reword/check reuse these exact bytes,
+        // even if a card or pack changes after this turn.
+        const revealed = [...disclosures, ...open.filter((d) => brief.must.includes(d.id) || brief.may.includes(d.id))]
+        for (const id of new Set(revealed.map((d) => d.id))) {
+          const e = L().entries.find((e) => e.id === id)!
+          const depth = Math.max(...revealed.filter((d) => d.id === id).map((d) => d.layer))
+          const r = loreResource(e, depth)
+          if (deliveries.some((s) => s.resourceId === r.resourceId && s.revision === r.revision)) continue
+          deliveries.push(
+            freeze(
+              r,
+              [...resident, ...deliveries].findLast((s) => s.resourceId === r.resourceId),
+            ),
+          )
+        }
+        deliveries = uniqueDeliveries(deliveries)
+      }
       // narrate, streamed, with truncation recovery and at most one correction rewrite
       const fed = here.known()
       const sum = here.summary()
@@ -659,10 +646,9 @@ export const makeSession = ({
           const msgs = ask(here.context(s1), input, {
             stage: "narrate",
             fiction: fictionAt(here.context(s1)),
-            history: narratorHistory(path, here.text, sum),
+            history: narratorHistory(path, sum),
             summarized: sum !== undefined,
-            manual,
-            told: disclosures.map(here.text).filter(Boolean), // a sibling's reused read may name an entry since gone
+            told: latest([...resident, ...deliveries]).map(deliveryText),
             outcome: events,
             current: fed.current, // feed products other than notes: where the scene stands, as data
             must: told(open.filter((d) => brief.must.includes(d.id))),
@@ -716,7 +702,7 @@ export const makeSession = ({
             c = cut ? { fired: [], violated: [] } : yield* check(proseOf(reply))
           }
         }
-        fired = open.filter((d) => c.fired.includes(d.id))
+        fired = open.filter((d) => c.fired.includes(d.id)).map(({ id, layer }) => ({ id, layer }))
         violated = [...c.violated]
       }
       // polish: code scans the final prose for the lexicon (layer.ts: the highest rank's first); hit sentences go to one call
@@ -750,6 +736,8 @@ export const makeSession = ({
           parent,
           input,
           read: disclosures,
+          deliveries,
+          opportunities: open,
           beats,
           answers: {},
           end: cut ? "stopped" : end,
@@ -865,6 +853,8 @@ export const makeSession = ({
             parent: null,
             input: { text: "" },
             read: [],
+            deliveries: [],
+            opportunities: [],
             ...(g.do ? { opening: g.do } : {}),
             beats: [],
             answers: {},
@@ -911,9 +901,11 @@ export const makeSession = ({
     },
     activeContext: (nodeId: number | null) => {
       fresh()
-      const state = derived.at(chain(nodeId)).context()
+      const here = derived.at(chain(nodeId))
+      const state = here.context()
       return {
         state,
+        playerCatalog: here.playerCatalog(),
         products: Object.fromEntries(
           products()
             .filter((p) => p.role === "world")

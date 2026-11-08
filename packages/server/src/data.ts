@@ -438,16 +438,16 @@ export const open = (asked: string) => {
       list: (card?: string, only?: Id): StoryRow[] =>
         (
           q(
-            `with recursive line(story, id, parent, text, note) as (
-               select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
+            `with recursive line(story, id, parent, text, note, invocations) as (
+               select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'), json_array_length(json_extract(n.json, '$.input.invoke'))
                  from story s join node n on n.story = s.id and n.id = s.head
                  where (?1 is null or s.card = ?1) and (?2 is null or s.id = ?2)
                union all
-               select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note')
+               select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'), json_array_length(json_extract(n.json, '$.input.invoke'))
                  from node n join line l on n.story = l.story and n.id = l.parent),
              turns as (
                select story, count(*) as turns, max(id) as last from line
-                 where text != '' or note is not null group by story)
+                 where text != '' or note is not null or invocations > 0 group by story)
              select s.id, s.card, s.title, s.starred, s.persona, s.updated, coalesce(t.turns, 0) as turns,
                (select json_extract(json, '$.input') from node where story = s.id and id = t.last) as last
              from story s left join turns t on t.story = s.id
@@ -497,19 +497,19 @@ export const open = (asked: string) => {
         const needle = fold(query.trim())
         if (!needle) return []
         const rows = q(
-          `with recursive line(story, id, parent, text, note, prose) as (
-             select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
+          `with recursive line(story, id, parent, text, note, invocations, prose) as (
+             select s.id, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'), json_array_length(json_extract(n.json, '$.input.invoke')),
                (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
                   where json_extract(p.value, '$.type') = 'text')
                from story s join node n on n.story = s.id and n.id = s.head where (?1 is null or s.card = ?1)
              union all
-             select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'),
+             select l.story, n.id, n.parent, json_extract(n.json, '$.input.text'), json_extract(n.json, '$.input.note'), json_array_length(json_extract(n.json, '$.input.invoke')),
                (select group_concat(json_extract(p.value, '$.text'), '') from json_each(n.json, '$.reply') p
                   where json_extract(p.value, '$.type') = 'text')
                from node n join line l on n.story = l.story and n.id = l.parent),
            numbered as (
              select story, id, text, note, prose,
-               count(*) filter (where text != '' or note is not null) over (partition by story order by id) as turn
+               count(*) filter (where text != '' or note is not null or invocations > 0) over (partition by story order by id) as turn
              from line)
            select story, id, text, note, prose, turn from numbered
            where instr(lower(text), ?2) > 0 or instr(lower(coalesce(note, '')), ?2) > 0 or instr(lower(coalesce(prose, '')), ?2) > 0
