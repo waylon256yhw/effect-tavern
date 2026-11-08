@@ -270,7 +270,7 @@ export const Timeline = () => {
                     <span>{t("timeline.root", { id: th().root === null ? t("common.draft") : `#${th().root}` })}</span>
                     <span class="dim">
                       {t("timeline.nodesN", { n: th().root === null ? 1 : L.below(all(), th().root!) + 1 })}
-                      <Show when={th().root !== null && heading(view()?.heading, node(th().root!)!)}>
+                      <Show when={th().root !== null && heading(view()?.heading, node(th().root!)!, all())}>
                         {(h) => <> · {h()}</>}
                       </Show>
                     </span>
@@ -369,7 +369,7 @@ export const Timeline = () => {
                         {vs().index + 1}/{vs().list.length}
                       </Show>
                     </span>
-                    <Show when={heading(view()?.heading, n())}>{(h) => <span>{h()}</span>}</Show>
+                    <Show when={heading(view()?.heading, n(), all())}>{(h) => <span>{h()}</span>}</Show>
                     <span>
                       {t("timeline.belowN", { n: L.below(all(), n().id) })}
                       <Show when={target() !== n().id}> {t("timeline.leafN", { id: target() ?? "" })}</Show>

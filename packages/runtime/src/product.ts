@@ -9,9 +9,7 @@
 // the lookup stage like lore (hook = the item, or one column). The harness owns a default list (notes, options, inner);
 // a card patches by id, a player row patches label, text and `on` or declares a 小剧场 (layer.ts). `stage` says who writes it: record (one structured call, any shape) or
 // narrate (the narrator after the prose, in a block opened by `<<aside>> <id>`, streamed, text only: no schema to force).
-// Retraction is not a verb (issue #7): a fact that can change is a row of a `{ key }` table (record re-rows it, the fold
-// keeps the newest), and a row that should vanish re-rows into a `filter` column that hides it; `notes` stays an
-// append-only chronicle, what was said stays said, and its weight is the compression policy's business (issue #6).
+// Keyed tables accept partial rows and deletion tombstones; records merge defined fields. Notes remain a chronicle.
 // Ceilings: pinning a row so record leaves it alone; a cap derived from state; `every` n turns.
 import { Schema } from "effect"
 import { Cond, holds } from "./cond.ts"
@@ -30,10 +28,23 @@ export const TableShape = Schema.Struct({
   max: Schema.optionalKey(Int), // max rows
   filter: Schema.optionalKey(Cond), // rows shown / recalled: a Cond over the row's columns (a row is a state object)
 })
-export const RecordShape = Schema.Struct({
+export interface RecordShape {
+  readonly kind: "record"
+  readonly keys: readonly (
+    | typeof Col.Type
+    | { readonly key: string; readonly shape: typeof ListShape.Type | typeof TableShape.Type | RecordShape }
+  )[]
+}
+export const RecordShape: Schema.Codec<RecordShape> = Schema.Struct({
   kind: Schema.Literal("record"),
   keys: Schema.Array(
-    Schema.Union([Col, Schema.Struct({ key: Schema.String, shape: Schema.Union([ListShape, TableShape]) })]),
+    Schema.Union([
+      Col,
+      Schema.Struct({
+        key: Schema.String,
+        shape: Schema.Union([ListShape, TableShape, Schema.suspend(() => RecordShape)]),
+      }),
+    ]),
   ),
 })
 export const Shape = Schema.Union([TextShape, ListShape, RecordShape, TableShape])
@@ -78,7 +89,7 @@ const colSchema = (c: typeof Col.Type) => {
   return Schema.Literals([...c.options])
 }
 /** The answer schema for a shape: what the record call is forced to produce. */
-export const shapeSchema = (s: Shape): Schema.Top => {
+export const shapeSchema = (s: Shape, partial = false): Schema.Top => {
   switch (s.kind) {
     case "text":
       return Schema.String
@@ -88,9 +99,93 @@ export const shapeSchema = (s: Shape): Schema.Top => {
       return Schema.Array(Schema.Struct(Object.fromEntries(s.columns.map((c) => [c.key, colSchema(c)]))))
     case "record":
       return Schema.Struct(
-        Object.fromEntries(s.keys.map((k) => [k.key, "shape" in k ? shapeSchema(k.shape) : colSchema(k)])),
+        Object.fromEntries(
+          s.keys.map((k) => {
+            const field = "shape" in k ? shapeSchema(k.shape, partial) : colSchema(k)
+            return [k.key, partial ? Schema.optionalKey(field) : field]
+          }),
+        ),
       )
   }
+}
+
+/** Cross-turn products use sparse operations; notes and theater remain required top-level answers. */
+export const sparse = (p: Pick<Product, "id" | "feed" | "recall">) => p.id !== "notes" && !!(p.feed || p.recall)
+export const opSchemas = (p: Product): Schema.Top[] => {
+  const product = Schema.Literal(p.id)
+  if (p.shape.kind === "table" && typeof p.fold === "object") {
+    const key = p.fold.key
+    return [
+      Schema.Struct({
+        op: Schema.Literal("upsert"),
+        product,
+        row: Schema.Struct(
+          Object.fromEntries(
+            p.shape.columns.map((c) => [c.key, c.key === key ? colSchema(c) : Schema.optionalKey(colSchema(c))]),
+          ),
+        ),
+      }),
+      Schema.Struct({
+        op: Schema.Literal("delete"),
+        product,
+        key: colSchema(p.shape.columns.find((c) => c.key === key)!),
+      }),
+    ]
+  }
+  return [Schema.Struct({ op: Schema.Literal("set"), product, value: shapeSchema(p.shape, true) })]
+}
+export type Op =
+  | { op: "set"; product: string; value: unknown }
+  | { op: "upsert"; product: string; row: Row }
+  | { op: "delete"; product: string; key: unknown }
+const defined = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined))
+const orderedRow = (s: Shape, r: Row): Row =>
+  s.kind === "table"
+    ? Object.fromEntries(s.columns.filter((c) => r[c.key] !== undefined).map((c) => [c.key, r[c.key]]))
+    : r
+export const mergeRecord = (s: RecordShape, prev: Row, patch: Row): Row => {
+  const out = { ...prev }
+  for (const k of s.keys) {
+    const v = patch[k.key]
+    if (v === undefined) continue
+    if ("shape" in k && k.shape.kind === "record") {
+      const merged = mergeRecord(k.shape, (prev[k.key] as Row | undefined) ?? {}, v as Row)
+      if (Object.keys(merged).length) out[k.key] = merged
+    } else out[k.key] = v
+  }
+  return out
+}
+/** Reduce this call's operations to node deltas. A delete followed by reinsertion keeps the reset boundary. */
+export const deltas = (ps: readonly Product[], ops: readonly Op[]): Row => {
+  const out: Row = {}
+  for (const o of ops) {
+    const p = ps.find((p) => p.id === o.product)!
+    if (o.op === "set") {
+      const value =
+        p.shape.kind === "record" ? mergeRecord(p.shape, (out[p.id] as Row | undefined) ?? {}, o.value as Row) : o.value
+      if (p.shape.kind === "record" && !Object.keys(value as Row).length) continue
+      out[p.id] = cap(p.shape, value)
+    } else {
+      const key = (p.fold as { key: string }).key
+      const row = o.op === "delete" ? { [key]: o.key, $delete: true } : orderedRow(p.shape, o.row)
+      const rows = (out[p.id] as Row[] | undefined) ?? []
+      const i = rows.findLastIndex((r) => r[key] === row[key])
+      if (i >= 0 && !(rows[i]!.$delete === true && o.op === "upsert")) {
+        rows[i] = o.op === "delete" ? row : orderedRow(p.shape, { ...rows[i], ...row })
+      } else rows.push(row)
+      out[p.id] = rows
+    }
+  }
+  // Count logical keys, not the extra tombstone needed for a delete/reinsert reset.
+  for (const p of ps) {
+    if (p.shape.kind !== "table" || typeof p.fold !== "object" || p.shape.max === undefined || out[p.id] === undefined)
+      continue
+    const key = p.fold.key
+    const rows = out[p.id] as Row[]
+    const kept = new Set([...new Set(rows.map((r) => r[key]))].slice(0, p.shape.max))
+    out[p.id] = rows.filter((r) => kept.has(r[key]))
+  }
+  return out
 }
 
 /** Caps are data applied by code: over the cap, the model's answer is cut, not rejected. */
@@ -98,7 +193,9 @@ export const cap = (s: Shape, v: unknown): unknown => {
   if (s.kind === "text") return s.max === undefined ? v : String(v).slice(0, s.max)
   if (s.kind === "list" || s.kind === "table") return s.max === undefined ? v : (v as unknown[]).slice(0, s.max)
   const r = v as Row
-  return Object.fromEntries(s.keys.map((k) => [k.key, "shape" in k ? cap(k.shape, r[k.key]) : r[k.key]]))
+  return Object.fromEntries(
+    s.keys.filter((k) => r[k.key] !== undefined).map((k) => [k.key, "shape" in k ? cap(k.shape, r[k.key]) : r[k.key]]),
+  )
 }
 /** Rows a table shows and recalls, with their index in the stored array (the filter never renumbers). */
 export const rows = (s: TableShape, v: unknown): Array<{ i: number; row: Row }> =>
@@ -123,7 +220,10 @@ export const render = (s: Shape, v: unknown): string => {
         .join(" | ")
     case "record": {
       const r = v as Row
-      return s.keys.map((k) => `${k.key}: ${"shape" in k ? render(k.shape, r[k.key]) : String(r[k.key])}`).join("; ")
+      return s.keys
+        .filter((k) => r[k.key] !== undefined)
+        .map((k) => `${k.key}: ${"shape" in k ? render(k.shape, r[k.key]) : String(r[k.key])}`)
+        .join("; ")
     }
   }
 }
@@ -137,8 +237,18 @@ const items = (
   const all = vs.flatMap((v, at) => (v === undefined ? [] : (v as unknown[]).map((item, i) => ({ at, i, item }))))
   const f = p.fold ?? (p.shape.kind === "list" ? "append" : "latest")
   if (f === "append") return all
-  if (f === "latest") return all.filter((x) => x.at === all.at(-1)?.at)
-  return [...new Map(all.map((x) => [String((x.item as Row)[f.key]), x])).values()]
+  if (f === "latest") {
+    const last = vs.findLastIndex((v) => v !== undefined)
+    return all.filter((x) => x.at === last)
+  }
+  const map = new Map<string, (typeof all)[number]>()
+  for (const x of all) {
+    const row = x.item as Row
+    const k = String(row[f.key])
+    if (row.$delete === true) map.delete(k)
+    else map.set(k, { ...x, item: orderedRow(p.shape, { ...(map.get(k)?.item as Row | undefined), ...defined(row) }) })
+  }
+  return [...map.values()]
 }
 /** The current value of each product along a path, by its fold; a product no node has is absent. */
 export const fold = (ps: readonly Pick<Product, "id" | "shape" | "fold">[], history: readonly Readonly<Row>[]): Row =>
@@ -146,7 +256,17 @@ export const fold = (ps: readonly Pick<Product, "id" | "shape" | "fold">[], hist
     ps.flatMap((p) => {
       const vs = history.map((h) => h[p.id])
       if (!vs.some((v) => v !== undefined)) return []
-      const flat = p.shape.kind === "text" || p.shape.kind === "record"
+      const flat = p.shape.kind === "text"
+      if (p.shape.kind === "record")
+        return [
+          [
+            p.id,
+            vs.reduce<Row>(
+              (acc, v) => (v === undefined ? acc : mergeRecord(p.shape as RecordShape, acc, v as Row)),
+              {},
+            ),
+          ],
+        ]
       return [[p.id, flat ? vs.filter((v) => v !== undefined).at(-1) : items(p, vs).map((x) => x.item)]]
     }),
   )

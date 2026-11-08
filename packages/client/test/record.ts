@@ -244,4 +244,25 @@ const moved = n(8, 1, { text: "on" }, { turn: { id: 8, input: {}, fired: [], pro
 const both = L.of({ nodes: [g, same, moved], head: 8 })
 assert.equal(sceneOf("scene.place", both, same), undefined) // the parent's title again: no new scene
 assert.equal(sceneOf("scene.place", both, moved), "林")
+// Sparse scene patches inherit titles only from their own ancestor chain.
+const partial = n(
+  9,
+  8,
+  { text: "on" },
+  { turn: { id: 9, input: {}, fired: [], products: { scene: { present: ["李"] } } } },
+)
+const sparseLog = L.of({ nodes: [g, same, moved, partial], head: 9 })
+assert.equal(heading("scene.place", partial, sparseLog), "林")
+assert.equal(heading("scene.place", partial), undefined)
+assert.equal(sceneOf("scene.place", sparseLog, partial), undefined)
+assert.equal(heading("scene.place", same, sparseLog), "亭")
+assert.equal(heading("scene.place", node({}, { turn: { input: { text: "go" }, products: { notes: "事实" } } })), "事实")
+assert.equal(heading("scene.place", node({}, { turn: { input: { text: "go" }, products: {} } })), "go")
+assert.equal(
+  heading(
+    "scene.place",
+    node({}, { turn: { input: {}, products: {}, reply: [{ type: "text", text: "正文\n下一行" }] } }),
+  ),
+  "正文",
+)
 console.log("ok")

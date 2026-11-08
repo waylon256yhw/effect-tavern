@@ -11,6 +11,7 @@
 // rows alone, the Status dot and the pill's yes/no (`fields`, `fieldChanged`, `marked`), a product's kind (`kindOf`), the input line and its channel, the parent,
 // the versions, the scene.
 import { drawn, type Check, type Field, type Rules, type State } from "@effect-tavern/runtime/src/card.ts"
+import { prose } from "@effect-tavern/runtime/src/journal.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import { kindOf, type Product, type Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
@@ -150,13 +151,28 @@ export const status = (
 }
 
 /** A turn's title under the card's `heading` reference: a field path, else `<product>.<key>`; absent when nothing is there. */
-export const heading = (ref: string | undefined, node: Node): string | undefined => {
+export const heading = (ref: string | undefined, node: Node, log?: L.Log<Node>): string | undefined => {
   if (ref === undefined) return undefined
   const v = node.state[ref]
   if (v !== undefined) return String(v)
   const [id, key] = ref.split(".")
-  const w = (node.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
-  return typeof w === "string" && w ? w : undefined
+  for (const n of log ? L.chain(log, node.id).toReversed() : [node]) {
+    const w = (n.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
+    if (typeof w === "string" && w) return w
+  }
+  if (!log) {
+    const notes = node.turn.products.notes
+    return (
+      (typeof notes === "string" && notes.trim()) ||
+      node.turn.input.text ||
+      node.turn.input.note ||
+      prose({ ...node.turn, reply: node.turn.reply ?? [] })
+        .split("\n")
+        .find((line) => line.trim()) ||
+      undefined
+    )
+  }
+  return undefined
 }
 
 /** The player's line on a turn: the act's text, else the note; a greeting has none. */
@@ -185,7 +201,7 @@ export const versions = (log: L.Log<Node>, node: Node): { list: Node[]; index: n
 
 /** A turn's scene: its heading where it differs from its parent's (the first turn under a new title); else none. */
 export const sceneOf = (ref: string | undefined, log: L.Log<Node>, node: Node): string | undefined => {
-  const h = heading(ref, node)
+  const h = heading(ref, node, log)
   const p = parentOf(log, node)
-  return h !== undefined && (!p || heading(ref, p) !== h) ? h : undefined
+  return h !== undefined && (!p || heading(ref, p, log) !== h) ? h : undefined
 }

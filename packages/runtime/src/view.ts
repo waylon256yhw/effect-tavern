@@ -12,6 +12,7 @@ import { hook, makeLore } from "./lore.ts"
 import { expand, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
 import { floorAt } from "./derived.ts"
+import { sparse } from "./product.ts"
 import { tokens } from "./tokens.ts"
 
 export const stages = ["narrate", "record", "lookup"] as const
@@ -119,9 +120,9 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   ]
 
   // ───────── record ─────────
-  const asks = R.products // a 小剧场 is narrate's, not this record document's
+  const asked = R.products // a 小剧场 is narrate's, not this record document's
     .filter((p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, s)))
-    .map((p) => `${p.id}: ${p.text}`)
+  const asks = asked.map((p) => `${p.id}: ${p.text}`)
   const qs = rpg.questions(s, R.names)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
   // the narrate products on: one `<id>: <question>` line each after the prose directive (session.ts `penned`)
@@ -134,7 +135,15 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     stage === "lookup"
       ? { stage, question: R.asks["lookup"]!.text, index, ledger: [] }
       : stage === "record"
-        ? { stage, known: "Known: ", asks, readout: R.asks["record.readout"]!.text, questions, prose: "" }
+        ? {
+            stage,
+            known: "Known: ",
+            asks,
+            ops: asked.some(sparse) ? R.asks["record.ops"]!.text : undefined,
+            readout: R.asks["record.readout"]!.text,
+            questions,
+            prose: "",
+          }
         : {
             stage,
             fiction: head(fiction, { state: s }),
