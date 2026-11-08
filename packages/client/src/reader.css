@@ -850,3 +850,12 @@ button:focus-visible {
   letter-spacing: normal;
   text-indent: 0;
 }
+
+.settlement {
+  margin-block: var(--space-3);
+  color: var(--ink-2);
+  font-size: var(--text-body);
+}
+.settlement button + button {
+  margin-inline-start: var(--space-3);
+}

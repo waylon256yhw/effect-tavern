@@ -115,6 +115,9 @@ const run = (
     const notes = yield* ask("record", render(card, path, "record", cur))
     return held.commit(
       Log.add(held.log, {
+        changes: [],
+        settlementStatus: "committed",
+        settlementVersion: 0,
         parent,
         input,
         read,

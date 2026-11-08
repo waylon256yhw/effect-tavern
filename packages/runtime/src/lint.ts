@@ -3,7 +3,7 @@
 // wired wrong (topology: events, fields, bands, layers) or written where code should do the work (prose: numbers and
 // output formats in the text). Rules are the list at the bottom; there is no plugin system and no config.
 import type { Card, Effect_, Field } from "./card.ts"
-import { type Cond, holds, reads } from "./cond.ts"
+import { type Cond, holds, reads, STATE_HOLE } from "./cond.ts"
 import { SLOTS } from "./fragment.ts"
 import { hook } from "./lore.ts"
 import { HOLE, unfilled } from "./names.ts"
@@ -80,7 +80,7 @@ interface Piece {
 }
 const counter = /^lore\.[^.]+\.(since|shown)$/ // lore counters: readable like a field, never declared
 const fieldOf = (fields: ReadonlyMap<string, Field>, path: string): Pick<Field, "type" | "min" | "max" | "options"> =>
-  fields.get(path) ?? (counter.test(path) ? { type: "int", min: 0 } : { type: "number" })
+  fields.get(path.replace(/^fields\./, "")) ?? (counter.test(path) ? { type: "int", min: 0 } : { type: "number" })
 const pieces = (f: Pick<Field, "type" | "min" | "max">, cuts: readonly number[]): Piece[] => {
   const int = f.type === "int"
   const lo = f.min ?? -Infinity
@@ -211,12 +211,12 @@ const rules: Rule[] = [
   // `lore` is the gate's derived counters, not a card field.
   (card) =>
     card.rules.fields
-      .filter((f) => f.path === "lore" || f.path.startsWith("lore."))
+      .filter((f) => /^(fields|world|lore)(\.|$)/.test(f.path))
       .map((f) => ({
         rule: "reserved-path",
         level: "error" as const,
         path: `rules.fields.${f.path}`,
-        message: `${f.path} is reserved for lore counters`,
+        message: `${f.path} is a reserved state namespace`,
       })),
   // The frame is the head of every stage's document, the structured ones included, and its ids are the slots the
   // player's layer meets it on (fragment.ts SLOTS). A frame fragment under any other id is most often a person or a
@@ -247,19 +247,25 @@ const rules: Rule[] = [
   // The ecosystem's scripted macros are not holes: nothing expands them, so the model would read them as written.
   (card) =>
     named(card).flatMap(([path, t]) =>
-      Array.from(t.replace(HOLE, "").matchAll(/\{\{.*?\}\}/gs), ([m]) => ({
-        rule: "unsupported-macro",
-        level: "error" as const,
-        path,
-        message: `${m} is not a name: only a plain {{key}} is filled`,
-        hint: "write the text out; state and randomness are fields, actions and products",
-      })),
+      Array.from(
+        t
+          .replace(HOLE, "")
+          .replace(STATE_HOLE, "")
+          .matchAll(/\{\{.*?\}\}/gs),
+        ([m]) => ({
+          rule: "unsupported-macro",
+          level: "error" as const,
+          path,
+          message: `${m} is not a name: only a plain {{key}} is filled`,
+          hint: "write the text out; state and randomness are fields, actions and products",
+        }),
+      ),
     ),
   // A path no field declares throws only when evaluation reaches it (holds, apply), and decode never sees it.
   (card) => {
     const known = new Set([
-      ...card.rules.fields.map((f) => f.path),
-      ...card.lore.flatMap((e) => [`lore.${e.id}.since`, `lore.${e.id}.shown`]),
+      ...card.rules.fields.flatMap((f) => [f.path, `fields.${f.path}`]),
+      ...card.lore.flatMap((e) => [`lore.${e.id}.since`, `lore.${e.id}.shown`, `lore.${e.id}.floor`]),
     ])
     const used: [string, string][] = [
       ...conds(card).flatMap(([p, c]) => reads(c).map((r): [string, string] => [p, r])),
@@ -272,10 +278,18 @@ const rules: Rule[] = [
       ),
     ]
     // heading may also name `<product>.<key>`, a key of one of the card's record products
-    const heading = card.heading?.split(".")[0]
+    const heading = card.heading?.replace(/^world\./, "").split(".")[0]
     if (card.heading && !(card.products ?? []).some((p) => p.id === heading)) used.push(["heading", card.heading])
     return used
-      .filter(([, r]) => !known.has(r))
+      .filter(([path, r]) => {
+        if (known.has(r)) return false
+        const read = conds(card).some(([p]) => p === path)
+        return !(
+          read &&
+          r.startsWith("world.") &&
+          (card.products ?? []).some((p) => p.role === "world" && p.id === r.split(".")[1])
+        )
+      })
       .map(([path, r]) => ({
         rule: "unknown-path",
         level: "error" as const,

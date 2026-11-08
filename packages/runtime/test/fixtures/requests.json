@@ -191,7 +191,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.\npeople: New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.\nIn ops, report only products changed or added in this scene. Use set for values (record keys merge), upsert for new or changed keyed table rows, and delete to remove a keyed row. Omit unchanged products, keys and columns. If nothing changed, return ops: []."
+          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.\npeople: New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
         },
         {
           "role": "system",
@@ -387,7 +387,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: 记事只记事实：谁做了什么、谁说了什么要紧的话、什么变了、新出现的人名和地名。不写景物、天气和气氛，不评价文字。一两句话。"
+          "content": "Known: \nnotes: 记事只记事实：谁做了什么、谁说了什么要紧的话、什么变了、新出现的人名和地名。不写景物、天气和气氛，不评价文字。一两句话。\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
         },
         {
           "role": "system",
@@ -527,7 +527,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed."
+          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
         },
         {
           "role": "system",
@@ -703,7 +703,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed."
+          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
         },
         {
           "role": "system",
@@ -1007,7 +1007,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.\npeople: New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.\nIn ops, report only products changed or added in this scene. Use set for values (record keys merge), upsert for new or changed keyed table rows, and delete to remove a keyed row. Omit unchanged products, keys and columns. If nothing changed, return ops: []."
+          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.\npeople: New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
         },
         {
           "role": "system",
@@ -1114,8 +1114,8 @@
         "text": "The input asked to keep going. Given the outcomes so far, pick the next action, or \"end\" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left."
       },
       {
-        "id": "record.ops",
-        "text": "In ops, report only products changed or added in this scene. Use set for values (record keys merge), upsert for new or changed keyed table rows, and delete to remove a keyed row. Omit unchanged products, keys and columns. If nothing changed, return ops: []."
+        "id": "record.tools",
+        "text": "Use the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
       },
       {
         "id": "record.readout",
@@ -1150,6 +1150,7 @@
         "shape": {
           "kind": "text"
         },
+        "role": "chronicle",
         "fold": "append",
         "feed": true
       },
@@ -1161,6 +1162,7 @@
           "kind": "list",
           "max": 4
         },
+        "role": "theater",
         "on": false
       },
       {
@@ -1170,6 +1172,7 @@
         "shape": {
           "kind": "text"
         },
+        "role": "theater",
         "stage": "narrate",
         "on": false
       }
@@ -1182,6 +1185,7 @@
         "shape": {
           "kind": "text"
         },
+        "role": "chronicle",
         "fold": "append",
         "feed": true
       },
@@ -1193,6 +1197,7 @@
           "kind": "list",
           "max": 4
         },
+        "role": "theater",
         "on": false
       },
       {
@@ -1202,6 +1207,7 @@
         "shape": {
           "kind": "text"
         },
+        "role": "theater",
         "stage": "narrate",
         "on": false
       }

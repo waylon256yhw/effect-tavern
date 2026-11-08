@@ -9,7 +9,18 @@ import { folded, ledger, makeSummaries, type Policy } from "./history.ts"
 import { deliveredIn, deliveredOn, notesOf, textOf as proseOf, type Turn as TurnOf } from "./journal.ts"
 import { key, type Disclosure, type Lore } from "./lore.ts"
 import { entryRef, fold, itemText, recallEntries, render, type Product } from "./product.ts"
+import { applyChanges, initialWorld, worldOn, worldValue, type WorldState } from "./world.ts"
 import { tokens } from "./tokens.ts"
+
+const title = (ref: string, fields: State, world: Record<string, unknown>): string | undefined => {
+  const value =
+    fields[ref.replace(/^fields\./, "")] ??
+    ref
+      .replace(/^world\./, "")
+      .split(".")
+      .reduce<unknown>((v, k) => (v as Record<string, unknown> | undefined)?.[k], world)
+  return value !== "" && (typeof value === "string" || typeof value === "number") ? String(value) : undefined
+}
 
 type Turn = TurnOf<Beat>
 /** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `invocable` contains
@@ -19,6 +30,7 @@ export interface Node {
   parent: number | null
   turn: Turn
   state: State
+  heading?: string
   events: readonly string[]
   checks: readonly Check[] // this turn's judged beats, in order; what the Record's check track draws
   delivered: readonly (Disclosure & { text: string })[]
@@ -26,7 +38,7 @@ export interface Node {
 }
 
 /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
-export const floorAt = (unlock: Cond | readonly Cond[], s: State) => {
+export const floorAt = (unlock: Cond | readonly Cond[], s: Paths) => {
   const cs = Array.isArray(unlock) ? unlock : [unlock]
   let n = 0
   while (n < cs.length && holds(cs[n]!, s)) n++
@@ -45,8 +57,10 @@ export const makeDerived = ({
   lore,
   products,
   policy,
+  heading,
 }: {
   rpg: Rpg
+  heading?: string
   L: () => Lore<Paths, readonly string[]> // the card's entries and the player layer's, read per request
   lore: readonly LoreEntry[] // the card's own: the entries with a Cond floor (a pack's entry has none)
   products: () => readonly Product[] // the player toggles them mid-session
@@ -61,6 +75,8 @@ export const makeDerived = ({
     const t = path.find((x) => x.id === ref.node)
     if (!t) throw new Error(`${d.id}: node ${ref.node} is not on the path`)
     const p = products().find((p) => p.id === ref.product)
+    if (p?.role === "world")
+      return worldRecall(p, path.slice(0, path.indexOf(t) + 1)).find((e) => e.id === d.id)?.text ?? ""
     if (p?.shape.kind === "table" && typeof p.fold === "object") {
       return (
         recallEntries(
@@ -71,6 +87,47 @@ export const makeDerived = ({
     }
     return itemText((t.products[ref.product] as unknown[])[ref.index])
   }
+  // Bridge to the existing lookup stage until Step 3 replaces node references with revisioned resources.
+  // Identity and updates already come solely from committed domain changes, never a mutable name column.
+  const worldRecall = (p: Product, path: readonly Turn[]) => {
+    const entries = new Map<string, { id: string; hook: string; text: string }>()
+    let world = initialWorld([p])
+    for (const t of path) {
+      const changes = t.changes.filter((c) => ("collection" in c ? c.collection : c.product) === p.id)
+      world = applyChanges(world, changes)
+      if (p.shape.kind !== "table") {
+        if (changes.length) {
+          entries.clear()
+          for (const e of recallEntries(p, [{ id: t.id, v: world[p.id] }])) entries.set(e.id, e)
+        }
+        continue
+      }
+      const rows = world[p.id] as Record<string, Record<string, unknown>>
+      for (const c of changes) {
+        if (!("entityId" in c)) continue
+        if (c.kind === "remove_entity") {
+          entries.delete(c.entityId)
+          continue
+        }
+        const row = rows[c.entityId]
+        if (!row) {
+          entries.delete(c.entityId)
+          continue
+        }
+        if (p.shape.filter && !holds(p.shape.filter, row)) {
+          entries.delete(c.entityId)
+          continue
+        }
+        entries.set(c.entityId, {
+          id: `${p.id}@${t.id}#${Object.keys(rows).indexOf(c.entityId)}`,
+          hook: String(row[p.recall as string]),
+          text: itemText({ entityId: c.entityId, ...row }),
+        })
+      }
+    }
+    return [...entries.values()]
+  }
+
   const summaries = makeSummaries<Beat>()
   // A turn's cost in the narrator's transcript (input, prose, the lore delivered with it), memoized: a turn is immutable.
   const costs = new WeakMap<Turn, number>()
@@ -89,10 +146,14 @@ export const makeDerived = ({
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[], recall = false) => {
     const feed = products().filter((p) => (p.feed || (recall && p.recall)) && p.on)
-    const cur = fold(
-      feed,
-      path.map((t) => t.products),
-    )
+    const world = worldOn(products(), path)
+    const cur = {
+      ...fold(
+        feed.filter((p) => p.role !== "world"),
+        path.map((t) => t.products),
+      ),
+      ...Object.fromEntries(feed.filter((p) => p.role === "world").map((p) => [p.id, worldValue(p, world[p.id])])),
+    }
     const rest = feed.filter((p) => p.id !== "notes" && cur[p.id] !== undefined && render(p.shape, cur[p.id]) !== "")
     return {
       known: `Known: ${path.flatMap(notesOf).join("; ")}`,
@@ -110,16 +171,16 @@ export const makeDerived = ({
   // (each is the last settle's `s`), so folding a node's path again costs a lookup per turn, not a settle. An amended
   // turn is a new object and misses; so does a turn under it, whose from-state is new.
   const settledFrom = new WeakMap<Turn, { from: State; out: ReturnType<typeof settleFresh> }>()
-  const settleTurn = (s: State, t: Turn) => {
+  const settleTurn = (s: State, t: Turn, world: Paths = {}) => {
     const hit = settledFrom.get(t)
-    if (hit?.from === s) return hit.out
-    const out = settleFresh(s, t)
+    if (hit?.from === s && !Object.keys(world).length) return hit.out
+    const out = settleFresh(s, t, world)
     settledFrom.set(t, { from: s, out })
     return out
   }
-  const settleFresh = (s: State, t: Turn) => {
+  const settleFresh = (s: State, t: Turn, world: Paths = {}) => {
     const o = t.opening ? rpg.apply(s, t.opening) : { s, events: [] as string[] }
-    const b = rpg.fold(o.s, t.beats)
+    const b = rpg.fold(o.s, t.beats, { fields: o.s, world })
     const r = rpg.settleReadouts(b.s, t.answers)
     const a = t.adjust ? rpg.apply(r.s, t.adjust) : { s: r.s, events: [] as string[] }
     return {
@@ -133,7 +194,11 @@ export const makeDerived = ({
   /** Every turn of the path settled, in order: each from the one before, the first from the card's initial state. */
   const settledAlong = (path: readonly Turn[]) => {
     const out: ReturnType<typeof settleFresh>[] = [] // pushed, not spread: a spread per turn made one call O(depth²)
-    for (const t of path) out.push(settleTurn(out.at(-1)?.s ?? rpg.initial, t))
+    let world = initialWorld(products())
+    for (const t of path) {
+      out.push(settleTurn(out.at(-1)?.s ?? rpg.initial, t, world))
+      world = applyChanges(world, t.changes)
+    }
     return out
   }
   /** The state the lore gate reads: the card state (the path's end, or `s` when the turn has settled past it) plus,
@@ -142,24 +207,35 @@ export const makeDerived = ({
    *  floor is monotone because knowledge is: what the fiction made available does not become unavailable again. A
    *  told layer already stayed (lore.ts keeps the deepest delivered); this keeps an untold one too. A card field named
    *  `lore` would collide, so none may be. */
-  const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): Paths => {
-    const states = [rpg.initial, ...settledAlong(path).map((o) => o.s)]
-    const at = s ?? states.at(-1)!
-    const counters = L().counters([...path.map(deliveredIn), extra]) // the turn being made is the last, shown now
+  const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): WorldState & Paths => {
+    let world = initialWorld(products())
+    const floors = new Map(lore.map((e) => [e.id, floorAt(e.unlock, { fields: rpg.initial, world })]))
+    const along = settledAlong(path)
+    const at = s ?? along.at(-1)?.s ?? rpg.initial
+    const observe = (fields: State) => {
+      for (const e of lore) floors.set(e.id, Math.max(floors.get(e.id)!, floorAt(e.unlock, { fields, world })))
+    }
+    for (const [i, o] of along.entries()) {
+      world = applyChanges(world, path[i]!.changes)
+      observe(o.s)
+    }
+    observe(at)
+    const counters = L().counters([...path.map(deliveredIn), extra])
     return {
-      ...at,
+      fields: at,
+      world,
       lore: Object.fromEntries(
         lore.map((e) => [
           e.id,
-          // an entry out of the index for an unfilled hole has no counters; a Cond reading them still gets an answer
           {
             ...(counters[e.id] ?? { since: Infinity, shown: 0 }),
-            floor: Math.max(...[...states, at].map((x) => floorAt(e.unlock, x))),
+            floor: floors.get(e.id)!,
           },
         ]),
       ),
     }
   }
+
   /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
    *  not currently held. Both the lookup index and the player menu come from these candidates. */
   const candidatesOn = (path: readonly Turn[]) => {
@@ -186,10 +262,12 @@ export const makeDerived = ({
     const recall = products()
       .filter((p) => p.recall !== undefined)
       .flatMap((p) =>
-        recallEntries(
-          p,
-          path.map((t) => ({ id: t.id, v: t.products[p.id] })),
-        ),
+        p.role === "world"
+          ? worldRecall(p, path)
+          : recallEntries(
+              p,
+              path.map((t) => ({ id: t.id, v: t.products[p.id] })),
+            ),
       )
       .filter((e) => !seenKeys.has(`${e.id}#1`) && prefix.has(entryRef(e.id)!.node))
       .map((e) => ({ id: e.id, hook: e.hook, invoke: "auto" as const }))
@@ -221,6 +299,7 @@ export const makeDerived = ({
       get post(): readonly string[] {
         return last().post
       },
+      context: (fields: State = last().s) => gated(path, [], fields),
       gated: (extra?: readonly Disclosure[], s?: State) => gated(path, extra, s),
       readable: () => candidatesOn(path).filter((e) => e.invoke === "auto"),
       invocable: () => candidatesOn(path),
@@ -253,7 +332,7 @@ export const makeDerived = ({
       ledger: () => ledger(path, (t) => along()[path.indexOf(t)]!.events, summaryOf(path)),
       text,
       /** A candidate turn settled on top of the path (setField's adjusted node, demand's `pre`). */
-      settle: (t: Turn) => settleTurn(last().s, t),
+      settle: (t: Turn) => settleTurn(last().s, t, worldOn(products(), path)),
       /** The node projection of the path's last turn. */
       node: (): Node => {
         const t = path.at(-1)!
@@ -263,6 +342,7 @@ export const makeDerived = ({
           parent: t.parent,
           turn: t,
           state: settled.s, // the fold to t's end
+          ...(heading ? { heading: title(heading, settled.s, worldOn(products(), path)) } : {}),
           events: settled.events,
           checks: settled.checks,
           delivered: deliveredIn(t).map((d) => ({ ...d, text: text(d) })),

@@ -26,7 +26,7 @@ import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
-import { Demand, RecordSheet, Rewrite, SiblingKind, StatusPage, Theater } from "./readings.tsx"
+import { Demand, RecordSheet, Settlement, Rewrite, SiblingKind, StatusPage, Theater } from "./readings.tsx"
 import { lineOf, versions } from "./record.ts"
 import { Shell } from "./shell.tsx"
 import { shrinkwrap } from "./shrinkwrap.ts"
@@ -499,6 +499,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
       <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={done} />
       </Show>
+      <Settlement node={props.node} />
       <Theater products={props.node.turn.products} node={props.node} />
       {/* the turn's row (#101): the Record pill (a ledger to open), 小剧场, the version count, "stopped"; then, at the right end, this turn's
           actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it

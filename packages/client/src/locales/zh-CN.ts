@@ -78,6 +78,7 @@ const zh = {
     turnN: "第 {n} 轮",
     vault: "密钥库",
     view: "视图",
+    loading: "加载中…",
   },
   composer: {
     closeNote: "收起场外指导",
@@ -259,6 +260,13 @@ const zh = {
     none: "无",
     rewordPlaceholder: "给重写的一句话…",
     turnActions: "这一轮的动作",
+    insert: "新增",
+    patch: "更新",
+    remove: "已移除",
+    replace: "替换",
+    settlementPending: "正文已保存。请完成或跳过本轮结算，再继续故事。",
+    retryRecord: "重试结算",
+    skipRecord: "跳过结算",
   },
   settings: {
     close: "关闭设置",

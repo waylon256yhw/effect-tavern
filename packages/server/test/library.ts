@@ -6,7 +6,7 @@ import { LLMock } from "@copilotkit/aimock"
 import { fake, fakeText, type Model } from "@effect-tavern/provider"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
-import { facets } from "@effect-tavern/runtime/src/session.ts"
+import { facets, makeSession } from "@effect-tavern/runtime/src/session.ts"
 import { harness } from "@effect-tavern/runtime/src/layer.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
@@ -21,7 +21,7 @@ import { DatabaseSync } from "node:sqlite"
 import { open, type Data } from "../src/data.ts"
 import { library, NoModel } from "../src/library.ts"
 import { shelf } from "../src/tavern.ts"
-import type { Out } from "../src/turn.ts"
+import { makeTurn, type Out } from "../src/turn.ts"
 
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
@@ -152,7 +152,10 @@ const over = (data: Data, m: () => Model = model) =>
   await Effect.runPromise(Fiber.interrupt(bad)) // gone before narrate is through, so before record fails
   while (t.busy) await new Promise((f) => setTimeout(f, 5))
   const failed = t.attach()
-  assert.deepEqual(failed?.draft, { parent: 2, input: { text: "lost" }, text: "hello world ".repeat(10), fresh: true })
+  assert.equal(failed?.draft, null) // prose is already persisted; it is no longer an unsaved draft
+  const failedNode = lib.session(p).log.head!
+  assert.equal(lib.session(p).log.nodes.get(failedNode)!.settlementStatus, "failed")
+  lib.session(p).skipRecord(failedNode)
   const told = await run(failed!.events)
   assert.deepEqual(
     told.map((e) => e.kind),
@@ -555,3 +558,42 @@ const over = (data: Data, m: () => Model = model) =>
   }
 }
 console.log("library ok")
+
+// Cancelling or explicitly skipping a slow record preserves prose and broadcasts the final node before SSE closes.
+for (const skip of [false, true]) {
+  let entered!: () => void
+  const ready = new Promise<void>((r) => {
+    entered = r
+  })
+  const M = fake((o) => {
+    const doc = readStage(o)
+    const answer = defaultAnswer(doc, { notes: "", scene: { place: "P", present: [] }, people: [] })
+    if (doc.phase === "record") return { ...answer, delay: 30 }
+    return answer
+  })
+  const S = makeSession({ card: chat, rows: () => ({}), model: () => M })
+  const filed: unknown[] = []
+  const T = makeTurn(S, (_, calls) => filed.push(...calls))
+  const done = Effect.runPromise(
+    Stream.runCollect(
+      T.start({ kind: "act", input: { text: "wait" } }).pipe(
+        Stream.tap((e) =>
+          Effect.sync(() => {
+            if (e.kind === "stage" && e.phase === "record") entered()
+          }),
+        ),
+      ),
+    ),
+  )
+  await ready
+  const id = S.log.head!
+  assert.equal(T.attach()!.draft, null)
+  if (skip) T.skip(id)
+  else assert.equal(T.stop(), "halted")
+  const events = await done
+  assert.equal(S.log.nodes.get(id)!.settlementStatus, skip ? "skipped" : "failed")
+  assert.ok(events.some((e) => e.kind === "change" && e.node?.turn.settlementStatus === (skip ? "skipped" : "failed")))
+  assert.ok(filed.some((e: any) => e.phase === "record" && e.out.status === "cancelled"))
+  assert.equal(events.at(-1)?.kind, "change") // the client's final change files every call before the stream closes
+  assert.equal(T.busy, null)
+}

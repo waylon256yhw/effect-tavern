@@ -61,6 +61,11 @@ const got = async <T>(res: Promise<Response>): Promise<T> => {
   return v
 }
 
+export const fetchContext = (
+  node: number | null,
+): Promise<{ state: import("@effect-tavern/runtime/src/world.ts").WorldState; products: Record<string, unknown> }> =>
+  got(call(`${base}/context?node=${node ?? "root"}`))
+
 export const fetchNodes = async (): Promise<void> =>
   registry.set(log, L.of((await got(call(`${base}/nodes`))) as L.Snapshot<Node>))
 let cardRead = 0 // a newer card read supersedes an older refresh, even on the same tab

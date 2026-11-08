@@ -12,7 +12,8 @@ import { hook, makeLore } from "./lore.ts"
 import { expand, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
 import { floorAt } from "./derived.ts"
-import { sparse } from "./product.ts"
+
+import { initialWorld } from "./world.ts"
 import { tokens } from "./tokens.ts"
 
 export const stages = ["narrate", "record", "lookup"] as const
@@ -60,10 +61,12 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
 
   // ───────── head ─────────
   const R = resolve(card, rows)
+  const world = initialWorld(R.products)
+  const context = { fields: s, world }
   const fiction = fill(card.fiction, R.names)
   const layers = [...R.frame, ...R.tail]
   const frag = (zone: string, f: Fragment) => {
-    const on = head([f], { state: s })
+    const on = head([f], { state: context })
     const name = `[${zone}] ${f.id}${f.label ? ` ${f.label}` : ""}${when(f.when)}`
     if (!f.text) return { tokens: 0, text: `${name}  (slot, empty)` }
     if (!on.length) return { tokens: 0, text: `${name}  (off)` }
@@ -79,7 +82,10 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
 
   // ───────── lore ─────────
   const floors = new Map(
-    card.lore.map((e) => [e.id, Math.max(...[rpg.initial, opened.s, s].map((x) => floorAt(e.unlock, x)))]),
+    card.lore.map((e) => [
+      e.id,
+      Math.max(...[rpg.initial, opened.s, s].map((x) => floorAt(e.unlock, { fields: x, world }))),
+    ]),
   )
   // the index as the session builds it (session.ts `current`): the card's entries expanded, one with an unfilled hole left
   // out, then the player layer's entries, one layer each and always unlocked
@@ -98,7 +104,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     ...R.entries.map((e) => ({ id: e.id, layers: [e.text], invoke: e.invoke, unlock: () => 1 })),
   ])
   const gated = {
-    ...s,
+    ...context,
     lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id) }])),
   }
   const readable = L.readable(gated, [], [])
@@ -121,13 +127,13 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
 
   // ───────── record ─────────
   const asked = R.products // a 小剧场 is narrate's, not this record document's
-    .filter((p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, s)))
+    .filter((p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, context)))
   const asks = asked.map((p) => `${p.id}: ${p.text}`)
-  const qs = rpg.questions(s, R.names)
+  const qs = rpg.questions(s, R.names, context)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
   // the narrate products on: one `<id>: <question>` line each after the prose directive (session.ts `penned`)
   const penned = R.products
-    .filter((p) => p.stage === "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, s)))
+    .filter((p) => p.stage === "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, context)))
     .map((p) => `${p.id}: ${p.text}`)
 
   // ───────── the document ─────────
@@ -139,14 +145,14 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
             stage,
             known: "Known: ",
             asks,
-            ops: asked.some(sparse) ? R.asks["record.ops"]!.text : undefined,
+            tools: R.asks["record.tools"]!.text,
             readout: R.asks["record.readout"]!.text,
             questions,
             prose: "",
           }
         : {
             stage,
-            fiction: head(fiction, { state: s }),
+            fiction: head(fiction, { state: context }),
             always: R.entries.filter((e) => e.invoke === "always").map((e) => e.text),
             history: [],
             summarized: false,
@@ -158,8 +164,8 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
           }
   const doc = request(
     {
-      frame: head(R.frame, { state: s }),
-      tail: head(R.tail, { state: s }),
+      frame: head(R.frame, { state: context }),
+      tail: head(R.tail, { state: context }),
       input: { text: "" },
       thought: R.asks["input.thought"]!.text,
     },
@@ -168,10 +174,10 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const total = tokens(doc.map(textOf).join("\n"))
 
   // ───────── bands ↔ readouts ─────────
-  const bands = rpg.asked(s, R.names).map((q) => {
+  const bands = rpg.asked(s, R.names, context).map((q) => {
     const moved = [...new Set(q.options.flatMap((x) => x.do.flatMap((e) => ("path" in e ? [e.path] : []))))]
     const active = card.fiction.filter(
-      (f) => f.when && reads(f.when).some((p) => moved.includes(p)) && head([f], { state: s }).length,
+      (f) => f.when && reads(f.when).some((p) => moved.includes(p)) && head([f], { state: context }).length,
     )
     return [
       `${q.id} moves ${moved.join(", ") || "nothing"}`,
@@ -205,9 +211,9 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   ].join("\n")
   return {
     state: s,
-    bands: card.fiction.filter((f) => f.when && head([f], { state: s }).length).map((f) => f.id),
+    bands: card.fiction.filter((f) => f.when && head([f], { state: context }).length).map((f) => f.id),
     windows: [...windows].map(([id, layer]) => `${id}→${layer}`),
-    asked: rpg.asked(s, R.names).map((q) => q.id),
+    asked: rpg.asked(s, R.names, context).map((q) => q.id),
     sections,
     doc,
     total,

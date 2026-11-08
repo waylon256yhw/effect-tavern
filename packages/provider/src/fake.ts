@@ -17,14 +17,32 @@ const usage = {
 const finish = (cut: boolean | undefined) => ({ unified: cut ? "length" : "stop", raw: undefined }) as const
 /** `reply` sees the provider-side request: `prompt` (messages), `responseFormat.name` (the `name` passed to `object`).
  *  A streamed request gets the same answer in eight-character deltas, `delay` milliseconds apart when set. */
-export const fake = (reply: (o: FakeCall) => { text: string; cut?: boolean; delay?: number }): Model => ({
+export interface FakeReply {
+  text: string
+  cut?: boolean
+  delay?: number
+  toolCalls?: readonly { name: string; input: unknown; id?: string }[]
+}
+export const fake = (reply: (o: FakeCall) => FakeReply): Model => ({
   format: "openai-compatible",
   prefill: false, // as on current Claude; a test that continues a cut prose sets it
   model: new MockLanguageModelV4({
     doGenerate: async (o) => {
       const r = reply(o)
       if (r.delay) await new Promise((f) => setTimeout(f, r.delay)) // a slow answer waits once; the stream waits per chunk
-      return { content: [{ type: "text", text: r.text }], finishReason: finish(r.cut), usage, warnings: [] }
+      return {
+        content: r.toolCalls
+          ? r.toolCalls.map((c, i) => ({
+              type: "tool-call" as const,
+              toolCallId: c.id ?? `call_${crypto.randomUUID()}_${i}`,
+              toolName: c.name,
+              input: JSON.stringify(c.input),
+            }))
+          : [{ type: "text" as const, text: r.text }],
+        finishReason: r.toolCalls ? { unified: "tool-calls" as const, raw: undefined } : finish(r.cut),
+        usage,
+        warnings: [],
+      }
     },
     doStream: async (o) => {
       const r = reply(o)

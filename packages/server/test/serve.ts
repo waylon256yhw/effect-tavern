@@ -115,7 +115,7 @@ const run = async (inspect: boolean) => {
     const evs = sse(await r.text())
     assert.deepEqual(
       evs.map((e) => e.event),
-      ["stage", "delta", "delta", "call", "stage", "call", "change"],
+      ["stage", "delta", "delta", "call", "change", "change", "stage", "call", "change"],
     )
     const calls = evs.filter((e) => e.event === "call").map((e) => e.data as Extract<Event, { kind: "call" }>)
     assert.deepEqual(
@@ -126,6 +126,10 @@ const run = async (inspect: boolean) => {
     assert.equal(node.turn.input.text, "hi")
     assert.deepEqual(node, wired(lib.session(story).node(node.id))) // the wire carries the projection whole
     assert.equal(lib.session(story).log.head, node.id)
+    const context = (await (await fetch(`${base}/context?node=${node.id}`)).json()) as any
+    assert.equal(context.state.world.scene.place, "P")
+    assert.deepEqual(context, wired(lib.session(story).activeContext(node.id)))
+    assert.ok(!("world" in node))
     // the trace stays on the server, by node, stripped the same way as the stream; every call carries its duration
     const trace = (await (await fetch(`${base}/calls`)).json()) as Record<string, Extract<Event, { kind: "call" }>[]>
     assert.deepEqual(trace[node.turn.id], wired(calls))
@@ -444,7 +448,7 @@ const run = async (inspect: boolean) => {
       asks: layerRows[0]!.asks!.map((a) => (a.id === "lookup" ? { ...a, text: "OVERLAY" } : a)),
       products: [
         { id: "options", on: true, shape: { kind: "table", columns: [] } },
-        { id: "town", text: "gossip", shape: { kind: "list" } },
+        { role: "theater" as const, id: "town", text: "gossip", shape: { kind: "list" } },
       ],
     }
     const after = (await (await pack(edited, "harness")).json()) as typeof layerRows

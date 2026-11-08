@@ -1,7 +1,7 @@
 // §8 / §18: Fragment = text + position + condition. The head zone = player layer → card frame → fiction.
 // Frame ids are slots; how a player's slot meets the card's same slot is the player's per-fragment setting.
 import { Schema } from "effect"
-import { Cond, holds, type State } from "./cond.ts"
+import { Cond, holds, expandState, type State } from "./cond.ts"
 
 export const Fragment = Schema.Struct({
   id: Schema.String, // in the frame, the id is the slot
@@ -97,4 +97,4 @@ export const head = (
 ): Msg[] =>
   layers
     .filter((f) => (options[f.id] ?? f.enabled ?? true) && (!f.when || holds(f.when, state)))
-    .flatMap((f) => (f.text ? [{ role: f.role ?? "system", text: f.text }] : []))
+    .flatMap((f) => (f.text ? [{ role: f.role ?? "system", text: expandState(f.text, state) }] : []))

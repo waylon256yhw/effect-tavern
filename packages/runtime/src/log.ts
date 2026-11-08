@@ -116,8 +116,8 @@ export const hold = <T extends Noded>(store?: Store<T>) => {
       return log
     },
     commit: ([next, c]: Written<T>): Change<T> => {
+      store?.write(c, next)
       log = next
-      store?.write(c, log)
       return c
     },
   }

@@ -1,7 +1,7 @@
 // The session (src/session.ts) on a scripted model, through its interface only: actions in, events out, nodes read
 // back. Every stage's request shape (from `call` events) and the node's contents are asserted. The script answers by
 // phase name and by what the request says; reveals, kills and cuts are queued per turn.
-import { fake, fakeText, type FakeCall, type Message } from "@effect-tavern/provider"
+import { fake, fakeText, type FakeCall, type Message, type FakeReply } from "@effect-tavern/provider"
 import { Cause, Deferred, Effect, Stream } from "effect"
 import assert from "node:assert/strict"
 import * as Log from "../src/log.ts"
@@ -16,7 +16,7 @@ const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "a
 const warmths: string[] = [] // scripted readout answers; default "flat"
 const onCheck: Array<() => void> = [] // run inside the next check call, on the session's own path
 let n = 0
-function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
+function script(o: FakeCall): FakeReply {
   const doc = readStage(o)
   const { phase, open } = doc
   const last = o.prompt.at(-1)!
@@ -67,9 +67,7 @@ function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
         people: /^Player's line: (ask about|names) li/im.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
         inner: `INNER#${n}`,
       }
-      const products = JSON.parse(defaultAnswer(doc, canned).text)
-      out = JSON.stringify(doc.questions.length ? { ...products, answers } : products)
-      break
+      return defaultAnswer(doc, { ...canned, answers })
     }
     default: {
       if (last.role === "assistant") {
@@ -162,7 +160,16 @@ const program = Effect.gen(function* () {
   // The event stream: a stage announced before each call, the prose streamed by part, the node last.
   assert.deepEqual(
     events.map((e) => e.kind),
-    ["stage", ...Array(Math.ceil(prose(c0).length / 8)).fill("delta"), "call", "stage", "call", "change"],
+    [
+      "stage",
+      ...Array(Math.ceil(prose(c0).length / 8)).fill("delta"),
+      "call",
+      "change",
+      "change",
+      "stage",
+      "call",
+      "change",
+    ],
   )
   assert.equal(
     events
@@ -174,9 +181,9 @@ const program = Effect.gen(function* () {
   assert.deepEqual(events.at(-1), { kind: "change", node: C.node(c0.id), head: c0.id })
   // Products: the default `inner` stays off; `options` (switched on by the card) is capped by code to four; the feed
   // record `scene` is stored whole; unchanged `people` is absent this turn.
-  assert.deepEqual(Object.keys(c0.products).sort(), ["notes", "options", "scene"])
+  assert.deepEqual(Object.keys(c0.products).sort(), ["notes", "options"])
   assert.deepEqual(c0.products.options, ["O1", "O2", "O3", "O4"])
-  assert.deepEqual(c0.products.scene, { place: "P#1", present: [{ name: "B", mood: "calm" }] })
+  assert.deepEqual(C.context(c0.id).world.scene, { place: "P#1", present: [{ name: "B", mood: "calm" }] })
   assert.ok(
     /^notes: Notes are the record/m.test(str(prompts("record")[0]!)) &&
       /^scene: Where the scene/m.test(str(prompts("record")[0]!)),
@@ -196,7 +203,7 @@ const program = Effect.gen(function* () {
   const rec1 = str(prompts("record").at(-1)!)
   assert.ok(/Questions: warmth: 这一幕里裴青舟对待你的态度/.test(rec1) && !/bond|State:/.test(rec1))
   assert.ok(str(lastNarr()).includes(full.fiction[1]!.text!) && !/bond/.test(str(lastNarr())))
-  assert.deepEqual(t1.products.people, [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
+  assert.deepEqual(Object.values(S.context(t1.id).world.people as object), [{ name: "Li", note: "N#2" }]) // a recall row: readable by later lookups
   assert.equal(t1.products.notes, "NOTE#2") // one sentence a turn (#82)
 
   // Recall pins must be readable: neither a row still in the tail nor an invented index reaches the model.
@@ -338,7 +345,7 @@ const program = Effect.gen(function* () {
   const t7 = yield* go(S.act(t6.id, { text: "speak about Li" }))
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t7.read, [{ id: `people@${t1.id}#0`, layer: 1 }])
-  assert.deepEqual(S.node(t7.id).delivered[0]!.text, "name=Li, note=N#2")
+  assert.match(S.node(t7.id).delivered[0]!.text, /^entityId=e_\w+, name=Li, note=N#2$/)
   assert.ok(str(lastNarr()).includes("Summary:") && str(lastNarr()).includes(prose(t3)))
   // The ledger folds at the same boundary: decide gets the narrator's own Summary, then lines for the tail turns only.
   const line = (p: readonly Message[], head: string) => p.map(msgText).find((t) => t.startsWith(head))
@@ -640,6 +647,7 @@ const program = Effect.gen(function* () {
   // The fake streams eight characters a delta, so the nine-character delimiter always arrives split across two.
   // `inner` is the harness's narrate product (switched on here), `diary` a card's; `stray` is declared by nobody.
   const diary = {
+    role: "theater" as const,
     id: "diary",
     label: "日记",
     text: "Her diary entry.",

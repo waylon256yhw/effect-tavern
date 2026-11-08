@@ -5,8 +5,6 @@ import assert from "node:assert/strict"
 import { Schema } from "effect"
 import {
   cap,
-  deltas,
-  opSchemas,
   decodeProducts,
   entryRef,
   fold,
@@ -19,10 +17,11 @@ import {
 } from "../src/product.ts"
 
 const defaults = decodeProducts([
-  { id: "notes", text: "facts", shape: { kind: "list" }, feed: true },
-  { id: "options", text: "four moves", shape: { kind: "list", max: 4 }, on: false },
+  { role: "chronicle" as const, id: "notes", text: "facts", shape: { kind: "list" }, feed: true },
+  { role: "theater" as const, id: "options", text: "four moves", shape: { kind: "list", max: 4 }, on: false },
 ])
 const inventory: Product = {
+  role: "world" as const,
   id: "bag",
   text: "what the player carries",
   shape: {
@@ -38,8 +37,9 @@ const inventory: Product = {
   feed: true,
   recall: "item",
 }
-const keyed: Product = { ...inventory, id: "kbag", fold: { key: "item" } } // rows merged by item, newest wins
+const keyed: Product = { ...inventory, role: "chronicle", id: "kbag", fold: { key: "item" } } // rows merged by item, newest wins
 const scene: Product = {
+  role: "world" as const,
   id: "scene",
   text: "the scene",
   shape: {
@@ -106,84 +106,11 @@ assert.equal(validate({ ...inventory, on: false }).on, false)
 assert.throws(() => validate({ id: "ghost" }), /needs text and shape/)
 assert.throws(() => validate({ ...inventory, recall: "weight" }), /names a column/)
 assert.throws(() => validate({ ...scene, recall: true }), /only lists and tables/)
-assert.throws(() => validate({ ...inventory, fold: { key: "weight" } }), /fold key names a table column/)
-assert.throws(() => validate({ ...inventory, stage: "narrate" }), /a narrate product is text/)
+assert.throws(
+  () => validate({ ...inventory, role: "chronicle", fold: { key: "weight" } }),
+  /fold key names a table column/,
+)
+assert.throws(() => validate({ ...inventory, stage: "narrate" }), /world writes belong to record/)
 
-// Sparse schemas keep only the table key required; nested records merge defined fields.
-const decodeOp = (p: Product) =>
-  Schema.decodeUnknownSync(Schema.Union(opSchemas(p)) as unknown as Schema.Codec<unknown>)
-assert.deepEqual(decodeOp(keyed)({ op: "upsert", product: "kbag", row: { item: "coin", n: 3 } }), {
-  op: "upsert",
-  product: "kbag",
-  row: { item: "coin", n: 3 },
-})
-assert.throws(() => decodeOp(keyed)({ op: "upsert", product: "kbag", row: { n: 3 } }))
-assert.throws(() => decodeOp(keyed)({ op: "delete", product: "kbag", key: 1 }))
-assert.throws(() => decodeOp(keyed)({ op: "set", product: "kbag", value: [] }))
-assert.deepEqual(cap(scene.shape, { place: "inn" }), { place: "inn" })
-assert.equal(render(scene.shape, { place: "inn" }), "place: inn")
-const nested: Product = {
-  ...scene,
-  shape: {
-    kind: "record",
-    keys: [{ key: "inner", shape: scene.shape as Extract<Product["shape"], { kind: "record" }> }],
-  },
-}
-assert.deepEqual(decodeOp(nested)({ op: "set", product: "scene", value: { inner: { place: "woods" } } }), {
-  op: "set",
-  product: "scene",
-  value: { inner: { place: "woods" } },
-})
-assert.deepEqual(
-  fold(
-    [nested],
-    [
-      { scene: { inner: { place: "inn", present: ["A"] } } },
-      { scene: { inner: { place: "woods", present: undefined } } },
-    ],
-  ),
-  { scene: { inner: { place: "woods", present: ["A"] } } },
-)
-assert.deepEqual(deltas([nested], [{ op: "set", product: "scene", value: { inner: {} } }]), {})
-assert.deepEqual(
-  deltas(
-    [scene],
-    [
-      { op: "set", product: "scene", value: { place: "inn" } },
-      { op: "set", product: "scene", value: { present: ["A", "B"], place: undefined } },
-    ],
-  ),
-  { scene: { place: "inn", present: ["A"] } },
-)
-const patch = deltas(
-  [keyed],
-  [
-    { op: "upsert", product: "kbag", row: { item: "sword", n: 2 } },
-    { op: "upsert", product: "kbag", row: { item: "sword", n: 3 } },
-  ],
-)
-assert.deepEqual(patch, { kbag: [{ item: "sword", n: 3 }] })
-assert.deepEqual(fold([keyed], [kpath[0]!, patch]), { kbag: [{ item: "sword", n: 3, kind: "weapon" }, bag[1]] })
-const deleted = deltas([keyed], [{ op: "delete", product: "kbag", key: "sword" }])
-assert.deepEqual(recallEntries(keyed, nodes([kpath[0]!, deleted], [1, 2], "kbag")), [])
-const reset = deltas(
-  [keyed],
-  [
-    { op: "delete", product: "kbag", key: "sword" },
-    { op: "upsert", product: "kbag", row: { item: "sword", n: 4 } },
-  ],
-)
-assert.deepEqual(fold([keyed], [kpath[0]!, reset]), { kbag: [bag[1], { item: "sword", n: 4 }] })
-const one = { ...keyed, shape: { ...(inventory.shape as Extract<Product["shape"], { kind: "table" }>), max: 1 } }
-assert.deepEqual(
-  deltas(
-    [one],
-    [
-      { op: "delete", product: "kbag", key: "sword" },
-      { op: "upsert", product: "kbag", row: { item: "sword", n: 4 } },
-    ],
-  ),
-  reset,
-)
-assert.deepEqual(fold([inventory], [{ bag }, { bag: [] }]), { bag: [] })
-console.log("ok")
+assert.throws(() => validate({ ...inventory, fold: { key: "item" } }), /world state uses transactions/)
+console.log("product ok")

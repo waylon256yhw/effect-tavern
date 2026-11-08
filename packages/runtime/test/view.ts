@@ -9,6 +9,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Card } from "../src/card.ts"
 import { makeSession } from "../src/session.ts"
+import { defaultAnswer, readStage } from "./script.ts"
 import { fields, openings, view } from "../src/view.ts"
 import { cardNames, loadCard, player } from "./cards/index.ts"
 
@@ -20,9 +21,13 @@ const answers: Record<string, string> = {
   check: '{"fired":[],"violated":[]}',
   record: '{"notes":"","options":[],"answers":{"tension":"same"}}',
 }
-const scripted = fake((o) => ({
-  text: (o.responseFormat?.type === "json" && answers[o.responseFormat.name!]) || "PROSE",
-}))
+const scripted = fake((o) =>
+  readStage(o).phase === "record"
+    ? defaultAnswer(readStage(o), { notes: "", options: [], answers: { tension: "same" } })
+    : {
+        text: (o.responseFormat?.type === "json" && answers[o.responseFormat.name!]) || "PROSE",
+      },
+)
 const model = () => scripted
 const S = makeSession({ card: yandao, rows: () => player, model })
 const root = S.greet(yandao.greetings[1]!).node!.id

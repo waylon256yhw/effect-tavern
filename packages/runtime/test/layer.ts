@@ -49,11 +49,7 @@ function here(r: Partial<Local> = {}): Local {
     if (d.phase === "lookup")
       return { text: JSON.stringify({ more: false, read: d.index.slice(0, 1).map((e) => e[0]) }) }
     if (d.phase === "narrate") return { text: "不是这样而是那样。".repeat(30) }
-    const a = defaultAnswer(d, canned) as { text: string }
-    if (d.phase !== "record") return a
-    const v = JSON.parse(a.text)
-    for (const id of d.asked) if (v[id] === undefined || v[id] === null) v[id] = id === "notes" ? "N" : []
-    return { text: JSON.stringify(v) }
+    return defaultAnswer(d, canned)
   })
   const variant = async (name: string): Promise<Card> => {
     if (name !== "wuxia+") return loadCard(name)
@@ -71,7 +67,14 @@ function here(r: Partial<Local> = {}): Local {
     assert.equal(JSON.stringify(calls), JSON.stringify(fixture[name]), name)
   }
   if (process.env["CAPTURE"]) writeFileSync(file, `${JSON.stringify(fixture, null, 1)}\n`)
-  // the words the fixture's turns do not reach: every default moved over as it was
+  if (process.env["CAPTURE"]) {
+    const act = harness("act")
+    fixture.harness.asks = act.asks!.filter((a) => !a.id.startsWith("switch."))
+    fixture.harness.act = act.products
+    fixture.harness.note = harness("note").products
+    writeFileSync(file, `${JSON.stringify(fixture, null, 1)}\n`)
+  }
+  // All default asks remain covered by the fixture.
   const h = fixture.harness
   const act = harness("act")
   const sentences = Object.entries(h.sentences as Record<string, Record<string, string>>).flatMap(([k, vs]) =>
@@ -445,6 +448,7 @@ const packs = [packB, packA]
         harness: row("harness", {
           products: [
             {
+              role: "world" as const,
               id,
               label: "X",
               text: "NEW",
@@ -472,17 +476,20 @@ const packs = [packB, packA]
   }).products.find((p) => p.id === "inner")!
   assert.deepEqual([onOff.on, onOff.label, onOff.from, onOff.text], [false, "P", "harness", P({}, "inner")!.text])
   // so a card's product toggled on the local row is still the card's, and `shown` still strips its text
-  const cardsOwn = { ...chat, products: [{ id: "scene", text: "CARD-Q", shape: { kind: "text" as const } }] }
+  const cardsOwn = {
+    ...chat,
+    products: [{ role: "world" as const, id: "scene", text: "CARD-Q", shape: { kind: "text" as const } }],
+  }
   const toggledCard = shown(
     resolve(cardsOwn, { local: here({ products: [{ id: "scene", on: false }] }) }),
   ).products.find((p) => p.id === "scene")!
   assert.deepEqual([toggledCard.from, toggledCard.on, "text" in toggledCard], ["card", false, false])
   // a card's whole patch: a table's shape stays under a pack's text
   const people = {
+    role: "world" as const,
     id: "people",
     text: "Who.",
     shape: { kind: "table" as const, columns: [{ key: "name", type: "text" as const }] },
-    fold: { key: "name" },
     feed: true,
     when: { path: "n", op: "gt" as const, value: 0 },
   }
@@ -493,7 +500,7 @@ const packs = [packB, packA]
   }).products.at(-1)!
   assert.deepEqual(
     [onTable.text, onTable.shape, onTable.fold, onTable.when, onTable.from],
-    ["MINE", people.shape, people.fold, people.when, "p"],
+    ["MINE", people.shape, undefined, people.when, "p"],
   )
   // the overlay's patch on the card's id stays a patch under the card: its toggle and label stand where the card is
   // silent, the card's text, shape and stage stand over it (it never compiles to a narrate text)
@@ -523,6 +530,7 @@ const packs = [packB, packA]
     "town",
   )!
   assert.deepEqual(town, {
+    role: "theater" as const,
     id: "town",
     label: "T",
     text: "gossip",
@@ -566,7 +574,14 @@ const packs = [packB, packA]
   // the card's own shape error still throws; an overlay's goes in the ledger, since it would kill every card
   assert.throws(() => resolve({ ...chat, products: [{ id: "ghost" }] }, {}), /needs text and shape/)
   assert.throws(
-    () => resolve({ ...chat, products: [{ id: "n", text: "t", shape: { kind: "list" }, stage: "narrate" }] }, {}),
+    () =>
+      resolve(
+        {
+          ...chat,
+          products: [{ role: "theater" as const, id: "n", text: "t", shape: { kind: "list" }, stage: "narrate" }],
+        },
+        {},
+      ),
     /a narrate product is text/,
   )
   const badOverlay = resolve(chat, { harness: row("harness", { products: [{ id: "ghost", label: "G" }] }) })
@@ -578,8 +593,16 @@ const packs = [packB, packA]
     { from: "harness", kind: "product", id: "ghost", why: "a new product needs text" },
   ])
   // an overlay's new id is a 小剧场 like a pack's, whatever else it wrote; a later row patches it
-  const whole = { id: "w", text: "W", shape: { kind: "list" as const }, stage: "record" as const, feed: true }
+  const whole = {
+    role: "world" as const,
+    id: "w",
+    text: "W",
+    shape: { kind: "list" as const },
+    stage: "record" as const,
+    feed: true,
+  }
   assert.deepEqual(P({ harness: row("harness", { products: [whole] }) }, "w"), {
+    role: "theater" as const,
     id: "w",
     text: "W",
     shape: { kind: "text" },
@@ -763,7 +786,7 @@ const packs = [packB, packA]
       { id: "t", text: "TAIL-SECRET", at: "tail" },
     ],
     asks: [{ id: "lookup", text: "ASK-SECRET" }],
-    products: [{ id: "scene", text: "PRODUCT-SECRET", shape: { kind: "text" } }],
+    products: [{ role: "world" as const, id: "scene", text: "PRODUCT-SECRET", shape: { kind: "text" } }],
     lexicon: [{ pattern: "LEXICON-SHOWN" }], // a ban is a prompt, to a player too: it goes whole
   }
   const R = shown(resolve(c, { harness: row("harness", { fragments: [{ id: "mine", text: "MINE" }] }) }))
@@ -866,7 +889,7 @@ const mount = (...mounts: string[]) => here({ mounts })
   assert.equal(S.snapshot().head, nodeOf(sib).id)
 }
 
-// Resolved once per request, whatever a turn's stages read; rows read again by the next.
+// Narration and settlement each resolve their own request configuration; retry can run independently.
 {
   let reads = 0
   const S = makeSession({
@@ -876,7 +899,7 @@ const mount = (...mounts: string[]) => here({ mounts })
   })
   reads = 0
   const n = nodeOf(await collect(S.act(null, { text: "one" })))
-  assert.equal(reads, 1)
+  assert.equal(reads, 2)
   reads = 0
   S.node(n.id)
   S.snapshot()

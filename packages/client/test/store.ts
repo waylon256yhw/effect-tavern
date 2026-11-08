@@ -1,8 +1,9 @@
 // The reducer on a scripted event sequence: path follows head, a draft grows by frames and starts over on the rewrite,
 // a change event lands it and moves head.
 import * as L from "@effect-tavern/runtime/src/log.ts"
+import { captureArtifact, expectNoDiagnostics } from "@solidjs/diagnostics"
 import assert from "node:assert/strict"
-import { apply, calls, draft, log, path, registry, stage } from "../src/store.ts"
+import { apply, calls, draft, log, path, registry, stage, working, compose, error } from "../src/store.ts"
 
 let frames: (() => void)[] = []
 ;(globalThis as any).requestAnimationFrame = (f: () => void) => frames.push(f)
@@ -91,3 +92,25 @@ assert.deepEqual(
   ["narrate", "record"],
 )
 console.log("ok")
+
+const { artifact } = await captureArtifact(
+  () => {
+    registry.set(draft, { parent: null, input: { text: "saved input" }, text: "saved prose", fresh: true })
+    registry.set(compose, "")
+    const pending = node(99, null, "saved prose")
+    pending.turn.settlementStatus = "pending"
+    apply({ kind: "change", node: pending, head: 99 })
+    while (frames.length) tick()
+    assert.equal(registry.get(draft), null)
+    assert.equal(registry.get(working), true)
+    assert.equal(registry.get(stage), "record")
+    apply({ kind: "change", node: { ...pending, turn: { ...pending.turn, settlementStatus: "failed" } }, head: 99 })
+    apply({ kind: "error", message: "record failed" })
+    assert.equal(registry.get(working), false)
+    assert.equal(registry.get(compose), "") // persisted prose never returns its input to the composer
+    assert.equal(registry.get(log).nodes.get(99)!.turn.settlementStatus, "failed")
+    assert.equal(registry.get(error)?.message, "record failed")
+  },
+  { scenario: "saved-prose-settlement-failure" },
+)
+expectNoDiagnostics(artifact)

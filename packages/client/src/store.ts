@@ -390,7 +390,8 @@ const applyNow = (e: Wire): void => {
       if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made.splice(0)]))
       if (id !== undefined || !registry.get(draft)) {
         settle(!amended) // an amend leaves a typed revision alone
-        running(null)
+        if (e.node?.turn.settlementStatus === "pending") registry.set(stage, "record")
+        else running(null)
       }
       return
     }

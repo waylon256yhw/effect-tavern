@@ -12,12 +12,12 @@ export interface Exported {
   card: { id: string; title: string }
   story: StoryRow
   snapshot: L.Snapshot<Turn>
-  products: readonly Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall">[] // the card's, as declared
+  products: readonly Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall" | "role">[] // the card's, as declared
 }
 /** The backup: a format name and version first, so a reader knows what it holds before the tree. */
 export const backup = (x: Exported, at = new Date()) => ({
   format: "effect-tavern/story",
-  version: 1,
+  version: 2,
   exported: at.toISOString(),
   card: x.card,
   story: { id: x.story.id, title: x.story.title, starred: x.story.starred, updated: x.story.updated },

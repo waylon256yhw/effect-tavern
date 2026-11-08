@@ -11,7 +11,6 @@
 // rows alone, the Status dot and the pill's yes/no (`fields`, `fieldChanged`, `marked`), a product's kind (`kindOf`), the input line and its channel, the parent,
 // the versions, the scene.
 import { drawn, type Check, type Field, type Rules, type State } from "@effect-tavern/runtime/src/card.ts"
-import { prose } from "@effect-tavern/runtime/src/journal.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import { kindOf, type Product, type Shape } from "@effect-tavern/runtime/src/product.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
@@ -34,7 +33,14 @@ export type Element =
   | { kind: "value"; path: string; label: string; was: State[string]; now: State[string] } // any other change
   | { kind: "check"; check: Check }
   | { kind: "clue"; id: string; text: string }
-  | { kind: "product"; id: string; label: string; shape: Shape; value: unknown } // a world product's value this turn, drawn by its shape
+  | {
+      kind: "product"
+      id: string
+      label: string
+      shape: Shape
+      value: unknown
+      change: "insert" | "patch" | "remove" | "replace"
+    } // a world product's value this turn, drawn by its shape
 
 export const reading = (
   f: Field,
@@ -95,9 +101,8 @@ export const fieldChanged = (rules: Rules | undefined, node: Node, prev: Node | 
   return rules.fields.some((f) => !f.hidden && was[f.path] !== node.state[f.path])
 }
 
-/** What the card view says of a product: its id, shown name, shape, and the three declarations its kind is read off
- *  (store.ts CardView). */
-export type Declared = Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall">
+/** Product presentation declarations carried by the card view. */
+export type Declared = Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall" | "role">
 
 /** A product's kind (docs/theater-brief.md §1): one definition, the server's export reads it too. */
 export { kindOf }
@@ -118,10 +123,29 @@ export const record = (
   const out: Element[] = fields(rules, node, prev, whens)
   for (const check of node.checks) out.push({ kind: "check", check })
   for (const d of node.delivered) out.push({ kind: "clue", id: d.id, text: d.text })
-  for (const p of products) {
-    const value = node.turn.products[p.id]
-    if (kindOf(p) === "world" && fresh(value))
-      out.push({ kind: "product", id: p.id, label: p.label ?? p.id, shape: p.shape, value })
+  for (const c of node.turn.changes) {
+    const id = "product" in c ? c.product : c.collection
+    const p = products.find((p) => p.id === id)
+    if (!p) continue
+    const value =
+      c.kind === "insert_entity"
+        ? [c.data]
+        : c.kind === "patch_entity"
+          ? [{ ...c.prev, ...c.patch }]
+          : c.kind === "remove_entity"
+            ? [c.prev]
+            : c.kind === "patch_record"
+              ? c.patch
+              : c.value
+    const change =
+      c.kind === "insert_entity"
+        ? "insert"
+        : c.kind === "remove_entity"
+          ? "remove"
+          : c.kind === "replace"
+            ? "replace"
+            : "patch"
+    out.push({ kind: "product", id, label: p.label ?? id, shape: p.shape, value, change })
   }
   return out
 }
@@ -151,29 +175,7 @@ export const status = (
 }
 
 /** A turn's title under the card's `heading` reference: a field path, else `<product>.<key>`; absent when nothing is there. */
-export const heading = (ref: string | undefined, node: Node, log?: L.Log<Node>): string | undefined => {
-  if (ref === undefined) return undefined
-  const v = node.state[ref]
-  if (v !== undefined) return String(v)
-  const [id, key] = ref.split(".")
-  for (const n of log ? L.chain(log, node.id).toReversed() : [node]) {
-    const w = (n.turn.products[id!] as Record<string, unknown> | undefined)?.[key!]
-    if (typeof w === "string" && w) return w
-  }
-  if (!log) {
-    const notes = node.turn.products.notes
-    return (
-      (typeof notes === "string" && notes.trim()) ||
-      node.turn.input.text ||
-      node.turn.input.note ||
-      prose({ ...node.turn, reply: node.turn.reply ?? [] })
-        .split("\n")
-        .find((line) => line.trim()) ||
-      undefined
-    )
-  }
-  return undefined
-}
+export const heading = (_ref: string | undefined, node: Node, _log?: L.Log<Node>): string | undefined => node.heading
 
 /** The player's line on a turn: the act's text, else the note; a greeting has none. */
 export const lineOf = (node: Node): string => node.turn.input.text || node.turn.input.note || ""

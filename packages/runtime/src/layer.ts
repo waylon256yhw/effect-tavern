@@ -104,8 +104,8 @@ const words: readonly Ask[] = [
   // refused on the turn it was made: the prose ended on the question, the player had not answered, and the model took
   // the one option it could not rule out by the letter (#83). A card's option texts still have to cover that turn.
   {
-    id: "record.ops",
-    text: "In ops, report only products changed or added in this scene. Use set for values (record keys merge), upsert for new or changed keyed table rows, and delete to remove a keyed row. Omit unchanged products, keys and columns. If nothing changed, return ops: [].",
+    id: "record.tools",
+    text: "Use the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed.",
   },
   {
     id: "record.readout",
@@ -173,6 +173,7 @@ const products = (input: "act" | "note"): readonly Product[] =>
   decodeProducts([
     {
       id: "notes",
+      role: "chronicle",
       label: "事件摘要",
       // One text, not a list: a list reads as "fill it", and on a pure-chat card (伴星, Opus) it came back as six or
       // seven items a turn, the prose paraphrased paragraph by paragraph, one item split in three on a quoted "我懂"
@@ -185,6 +186,7 @@ const products = (input: "act" | "note"): readonly Product[] =>
     },
     {
       id: "options",
+      role: "theater",
       label: "行动选项",
       text:
         input === "note"
@@ -195,6 +197,7 @@ const products = (input: "act" | "note"): readonly Product[] =>
     },
     {
       id: "inner",
+      role: "theater",
       label: "人物心声",
       text: "What the character thought this scene but did not say, one short paragraph.",
       shape: { kind: "text" },
@@ -442,7 +445,16 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     if (was) stock.set(id, { ...was, ...patch, from: patch.text === undefined ? was.from : from })
     else if (toggleOnly(p)) return
     else if (patch.text === undefined) dropped.push({ from, kind: "product", id, why: "a new product needs text" })
-    else stock.set(id, { id, ...patch, text: patch.text, shape: { kind: "text" }, stage: "narrate", from })
+    else
+      stock.set(id, {
+        id,
+        ...patch,
+        text: patch.text,
+        shape: { kind: "text" },
+        role: "theater",
+        stage: "narrate",
+        from,
+      })
   }
   // An id the card declares exists at the overlay's rank too: the patch stays a patch, and the card's own fields go over it.
   for (const p of overlay?.products ?? []) {

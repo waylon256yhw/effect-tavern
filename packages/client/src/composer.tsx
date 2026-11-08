@@ -33,8 +33,8 @@ import { t } from "./i18n.ts"
 export const Composer = () => {
   const busy = read(working)
   const phase = read(stage)
-  // the prose can still be halted: before and during narrate, not while the turn settles
-  const stoppable = () => !settling(phase())
+  // Narrate halts the prose; record cancellation preserves the already saved node.
+  const stoppable = () => phase() === "record" || !settling(phase())
   const text = read(compose)
   const noteText = read(noted)
   const view = read(card)
@@ -55,6 +55,8 @@ export const Composer = () => {
   const entries = () => line().at(-1)?.invocable ?? []
   const available = () => entries().filter((e) => !selected().includes(e.id))
   const line = read(path)
+  const blocked = () =>
+    !revise() && line().some((n) => n.turn.settlementStatus === "pending" || n.turn.settlementStatus === "failed")
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
   // An empty line on a card with openings: the story starts from one of them (the card page), not from a typed root.
@@ -119,7 +121,7 @@ export const Composer = () => {
     </For>
   )
   const submit = (keep = false) => {
-    if (!filled() || busy() || waiting()) return false
+    if (!filled() || busy() || waiting() || blocked()) return false
     const t = text().trim()
     const n = acting() ? noteText().trim() : ""
     if (keep) turn.keep(t, n)
@@ -346,7 +348,7 @@ export const Composer = () => {
                 type="submit"
                 class="send"
                 aria-label={t("composer.send")}
-                disabled={!filled() || busy() || waiting()}
+                disabled={!filled() || busy() || waiting() || blocked()}
                 onPointerDown={keep}
               >
                 <Send />

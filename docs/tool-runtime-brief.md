@@ -275,3 +275,12 @@ export interface DeliverySnapshot {
 | **Step 2：统一状态树与 `record` 事务** | `Product` 显式职责、宿主生成 `entityId`、`WorldState` 统一读取树、`DomainChange` 暂存事务 + `finish_record`、四态结算状态机（`pending/failed/committed/skipped`） | 删后重建 ID 不复用、无 `$delete` 墓碑、`Cond` 可读 `world` 状态、未闭合节点阻塞后续生成且支持重试/跳过 |
 | **Step 3：四维上下文与 `lookup` 检索** | 四维资源模型（`source/access/activation/residency`）、全量冻结 `DeliverySnapshot`、纯请求级 `revision` 驻留去重、`search_context` / `read_context` 工具 | 局部更新后可重读新版本、大目录请求体积受控、卸载外部包不影响历史回放、模型与玩家目录同受 `unlock` 与 `access` 约束 |
 | **Step 4：客户端按需契约与 `#154` Composer** | 轻量 `TimelineNode` + 按需 `TurnDetail` / `ActiveContextView` / `InspectorTrace`、客户端移除状态恢复逻辑、落地 `#154` Composer 多级菜单与统一草稿 | 前端零 `fold()` / 零 `$delete` / 零祖先遍历；时间线加载轻量；Composer 完整闭环 `#154` |
+
+### Step 2 实施契约
+
+- `product.ts` 的 `role` 必须显式声明；`world` 不再接受 `fold`，也不能由 narrate 写入。可声明 `initial`；实体集合初始值是 `{ entityId: data }`，创建后的 ID 由宿主生成，展示名可以修改。
+- `world.ts` 负责初始状态校验、领域变更投影和单次 record 暂存事务。当前工具按产品生成 `read_*`、`insert_*`、`patch_*`、`remove_*`、`replace_*`；`finish_record` 校验完成输出，`discard_error` 显式撤回无效提案。世界状态超限返回可修正错误，不静默截断。
+- 条件和当前阶段模板读取 `{ fields, world, lore }`；支持 `{{fields.hp}}`、`{{world.scene.place}}` 等路径。确定性规则仍只能写声明过的规则字段。历史输入、正文不会重新展开模板。
+- 正文先保存为 `pending`，再开始 record。`retryRecord` 只重跑结算；`skipRecord` 是终态。取消 record 会保存 `failed` 并发完状态与调用轨迹，再结束事件流。attempt、节点版本和父链快照共同阻止过期提交。
+- `Turn.changes` 保存领域变更；`Turn.products` 仅保存 chronicle/theater。节点投影提供 `heading`；`GET /context?node=<id|root>` 按需返回统一状态和展示值。客户端不再折叠世界状态或解释删除墓碑。
+- 本次不隐式转换旧故事：缺少事务字段的旧存档明确拒绝打开；导出格式版本为 2。原文件保留，可另行导出或迁移。检索阶段暂沿现有目录读取已提交变更，资源 revision、交付快照和原生 lookup 在 Step 3 替换。

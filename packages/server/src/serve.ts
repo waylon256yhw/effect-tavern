@@ -305,6 +305,8 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     const s = lib.session(story)
     const turn = lib.turn(story)
     if (req.method === "GET" && req.url === "/card") return json(200, lib.view(lib.cardOf(story)!, story))
+    const contextAt = req.method === "GET" && /^\/context\?node=(root|\d+)$/.exec(req.url ?? "")
+    if (contextAt) return reply(() => s.activeContext(contextAt[1] === "root" ? null : Number(contextAt[1])), 404)
     if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
     if (req.method === "GET" && req.url === "/calls")
       return json(
@@ -352,7 +354,14 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     } catch (e) {
       return bad(e)
     }
-    if (turn.busy) return busy()
+    if (turn.busy) {
+      if (action.kind !== "skipRecord") return busy()
+      try {
+        return stream(Stream.make(turn.skip(action.node)))
+      } catch (e) {
+        return bad(e)
+      }
+    }
     stream(turn.start(action))
   }
 }

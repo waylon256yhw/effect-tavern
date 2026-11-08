@@ -79,6 +79,7 @@ const en: Dict = {
     turnN: "Turn {n}",
     vault: "Key vault",
     view: "View",
+    loading: "Loading…",
   },
   composer: {
     closeNote: "Close the note",
@@ -260,6 +261,13 @@ const en: Dict = {
     none: "none",
     rewordPlaceholder: "A word for the rewrite…",
     turnActions: "Actions on this turn",
+    insert: "Added",
+    patch: "Updated",
+    remove: "Removed",
+    replace: "Replaced",
+    settlementPending: "The prose is saved. Complete or skip this turn’s settlement before continuing.",
+    retryRecord: "Retry settlement",
+    skipRecord: "Skip settlement",
   },
   settings: {
     close: "Close settings",

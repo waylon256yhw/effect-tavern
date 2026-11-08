@@ -1,10 +1,10 @@
 // The Record's pieces: one renderer per reading element (src/record.ts projects them; this file only draws), the
 // full-page sheet they sit in on the phone, the sibling actions a turn's row holds, the Status
 // table, and the 读数 page they make up. The reader (App.tsx) and the inspector (inspector.tsx) draw with these.
-import { fold, type Shape, type TableShape } from "@effect-tavern/runtime/src/product.ts"
+import { type Shape, type TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
 import { type JSX } from "@solidjs/web"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Loading, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe } from "./icons.tsx"
@@ -36,6 +36,7 @@ import {
   working,
 } from "./store.ts"
 import { turn } from "./turn.ts"
+import { fetchContext } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -113,13 +114,7 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
                   {(r) => (
                     <tr>
                       <For each={tbl().columns} keyed={(c) => c.key}>
-                        {(c) => (
-                          <td>
-                            <Show when={r().$delete === true} fallback={cell(r()[c().key])}>
-                              <del>{cell(r()[c().key])}</del>
-                            </Show>
-                          </td>
-                        )}
+                        {(c) => <td>{cell(r()[c().key])}</td>}
                       </For>
                     </tr>
                   )}
@@ -156,6 +151,42 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
         )}
       </Match>
     </Switch>
+  )
+}
+
+const changeLabel = (kind: "insert" | "patch" | "remove" | "replace") => {
+  switch (kind) {
+    case "insert":
+      return t("readings.insert")
+    case "patch":
+      return t("readings.patch")
+    case "remove":
+      return t("readings.remove")
+    case "replace":
+      return t("readings.replace")
+  }
+}
+
+export const Settlement = (props: { node: Node }) => {
+  const busy = read(working)
+  const unresolved = () =>
+    props.node.turn.settlementStatus === "pending" || props.node.turn.settlementStatus === "failed"
+  return (
+    <Show when={unresolved()}>
+      <aside class="settlement">
+        <p>{t("readings.settlementPending")}</p>
+        <button type="button" disabled={busy()} onClick={() => turn.retryRecord(props.node.id)}>
+          {t("readings.retryRecord")}
+        </button>
+        <button
+          type="button"
+          disabled={busy() && props.node.turn.settlementStatus !== "pending"}
+          onClick={() => turn.skipRecord(props.node.id)}
+        >
+          {t("readings.skipRecord")}
+        </button>
+      </aside>
+    </Show>
   )
 }
 
@@ -336,7 +367,9 @@ export const Reading = (props: { el: Element }) => (
     <Match when={is(props.el, "product")}>
       {(el) => (
         <div class="product">
-          <span class="plabel">{el().label}</span>
+          <span class="plabel">
+            {el().label} · {changeLabel(el().change)}
+          </span>
           <Shaped shape={el().shape} value={el().value} />
         </div>
       )}
@@ -591,22 +624,21 @@ export const StatusTable = () => {
   )
 }
 
-/** The world products' values now: each folded along the reading line by its own fold (runtime product.ts `fold`),
- *  drawn by its shape, in the card's order; one no node has yet, or whose rows are still none, is absent (`fresh`). */
+/** The active world's server projection, fetched only while the readings page is open. */
 const World = () => {
   const view = read(card)
   const line = read(path)
-  const now = createMemo(
-    () => {
-      const ws = (view()?.layer?.products ?? []).filter((p) => kindOf(p) === "world")
-      const v = fold(
-        ws,
-        line().map((n) => n.turn.products),
-      )
-      return ws.filter((p) => fresh(v[p.id])).map((p) => ({ p, value: v[p.id] }))
-    },
-    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
-  )
+  const current = createMemo(() => {
+    // Reading the path tracks both checkout and a settlement amendment at the same ID.
+    const last = line().at(-1)
+    view()
+    return fetchContext(last?.id ?? null)
+  })
+  const now = createMemo(() => {
+    const ws = (view()?.layer?.products ?? []).filter((p) => kindOf(p) === "world")
+    const v = current().products
+    return ws.filter((p) => fresh(v[p.id])).map((p) => ({ p, value: v[p.id] }))
+  })
   return (
     <For each={now()} keyed={(x) => x.p.id}>
       {(x) => (
@@ -642,7 +674,9 @@ export const StatusPage = () => (
           <h2>{t("common.status")}</h2>
           <StatusTable />
         </section>
-        <World />
+        <Loading fallback={<p class="dim">{t("common.loading")}</p>}>
+          <World />
+        </Loading>
       </div>
     </div>
   </div>

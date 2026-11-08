@@ -52,6 +52,7 @@ const draftOf = (s: Session, a: Action): Draft | null => {
 
 interface Run {
   phase: Phase
+  node?: Id
   draft: Draft | null
   narrating: boolean // a character of prose has streamed: a stop halts, no longer withdraws
   halt: Deferred.Deferred<void>
@@ -73,6 +74,10 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
     for (const q of r.subs) Queue.endUnsafe(q)
   }
   const track = (r: Run, e: Event) => {
+    if (e.kind === "change" && e.node) {
+      r.draft = null
+      r.node = e.node.id
+    }
     if (e.kind === "stage") {
       r.phase = e.phase
       // each draft starts over: a narrate after check is the rewrite, the first one kept as `prev`
@@ -101,6 +106,7 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
       failed = undefined
       const r: Run = {
         phase: first[a.kind] ?? "record",
+        ...(a.kind === "retryRecord" ? { node: a.node } : {}),
         draft: draftOf(s, a),
         narrating: false,
         halt: Effect.runSync(Deferred.make<void>()),
@@ -125,16 +131,32 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
               else failed = { draft: r.draft, cause } // nobody heard it: the next attach does
             }),
           ),
-          Effect.ensuring(Effect.sync(() => end(r))),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (r.node !== undefined && made.length) file(r.node, made.splice(0))
+              end(r)
+            }),
+          ),
         ),
       )
       return events
+    },
+    skip: (node: Id): Event => {
+      const r = run
+      if (!r || r.phase !== "record" || r.node !== node)
+        throw new Error("this settlement is not the active record attempt")
+      const event: Event = { kind: "change", ...s.skipRecord(node) }
+      for (const q of r.subs) Queue.offerUnsafe(q, event)
+      return event
     },
     /** "withdrawn" before the first character (nothing is saved, the story is free at once), "halted" after it (the
      *  turn goes on into a `stopped` node, on the same streams), null when nothing runs. */
     stop: (): "withdrawn" | "halted" | null => {
       const r = run
       if (!r) return null
+      if (r.phase === "record" && r.node !== undefined && s.cancelRecord(r.node)) {
+        return "halted" // the saved node remains; finalization broadcasts failed before closing
+      }
       if (r.narrating) {
         Deferred.doneUnsafe(r.halt, Effect.void)
         return "halted"

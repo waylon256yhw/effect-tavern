@@ -9,7 +9,7 @@
 // Ceilings (developer modules, same `settle` signature): parameterised actions over tables, formulas beyond one path
 // reference, dynamic entities, time. Fields are flat paths for now.
 import { Effect, Random, Schema } from "effect"
-import { Cond, holds } from "./cond.ts"
+import { Cond, holds, expandState, type State as Paths } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
 import { expand, Names } from "./names.ts"
 import { Entry } from "./polish.ts"
@@ -83,7 +83,7 @@ const cutsOf = (c: Cond | undefined, path: string): number[] =>
         ? c.any.flatMap((x) => cutsOf(x, path))
         : "not" in c
           ? cutsOf(c.not, path)
-          : "op" in c && c.path === path
+          : "op" in c && c.path.replace(/^fields\./, "") === path
             ? [c.op === "gt" || c.op === "lte" ? c.value + 1 : c.value]
             : []
 /** The stage thresholds of a meter on `path`: every comparison in `whens` (the fiction bands' conditions) plus 0 when
@@ -120,6 +120,8 @@ export const decodeRules = Schema.decodeUnknownSync(Rules)
 export const rollOf = (seed: number) => Effect.runSync(Random.next.pipe(Random.withSeed(seed)))
 
 export const makeCard = (r: Rules) => {
+  for (const f of r.fields)
+    if (/^(fields|world|lore)(\.|$)/.test(f.path)) throw new Error(`${f.path}: reserved state namespace`)
   const fields = new Map(r.fields.map((f) => [f.path, f]))
   const initial: State = Object.fromEntries(r.fields.map((f) => [f.path, f.initial]))
   const fieldSchema = (f: typeof Field.Type) => {
@@ -140,7 +142,8 @@ export const makeCard = (r: Rules) => {
     if (typeof v !== "number") throw new Error(`${path} is not a number`)
     return v
   }
-  const available = (s: State) => r.actions.filter((a) => !a.when || holds(a.when, s))
+  const available = (s: State, context: Paths = s) =>
+    r.actions.filter((a) => !a.when || holds(a.when, { ...context, fields: s }))
   const apply = (s: State, effects: readonly (typeof Effect_.Type)[]) => {
     let out = { ...s }
     const events: string[] = []
@@ -162,8 +165,8 @@ export const makeCard = (r: Rules) => {
     if (b.chance === undefined) throw new Error(`${a.id}: judge chance missing on the beat`)
     return b.chance
   }
-  const settle = (s: State, b: Beat) => {
-    const a = available(s).find((x) => x.id === b.next)
+  const settle = (s: State, b: Beat, context: Paths = s) => {
+    const a = available(s, context).find((x) => x.id === b.next)
     if (!a) throw new Error(`${b.next}: not an available action`)
     const p = chanceOf(s, a, b)
     if (p === undefined) return { ...apply(s, a.do ?? []), check: undefined }
@@ -171,10 +174,10 @@ export const makeCard = (r: Rules) => {
     const hit = roll < p
     return { ...apply(s, hit ? (a.hit ?? []) : (a.miss ?? [])), check: { action: a.id, chance: p, roll, hit } }
   }
-  const fold = (s: State, beats: readonly Beat[]) =>
+  const fold = (s: State, beats: readonly Beat[], context: Paths = s) =>
     beats.reduce<{ s: State; events: string[]; checks: Check[] }>(
       (acc, b) => {
-        const r = settle(acc.s, b)
+        const r = settle(acc.s, b, { ...context, fields: acc.s })
         return { s: r.s, events: [...acc.events, ...r.events], checks: r.check ? [...acc.checks, r.check] : acc.checks }
       },
       { s, events: [], checks: [] },
@@ -183,8 +186,8 @@ export const makeCard = (r: Rules) => {
    *  `again` is read on the first beat only: whether the input's own wording asks for more beats after this one
    *  ("until he falls", "twice"). Without it the turn is one beat and the per-beat loop is never entered; with it the
    *  loop asks after each outcome (§10.2). A model asked "another?" after every beat answers the input again. */
-  const decideSchema = (s: State) => {
-    const acts = available(s)
+  const decideSchema = (s: State, context: Paths = s) => {
+    const acts = available(s, context)
     const judged = acts.filter((a) => a.roll !== undefined && typeof a.roll === "object" && "judge" in a.roll)
     const next = Schema.Literals([...acts.map((a) => a.id), "end"])
     const again = Schema.optionalKey(Schema.Boolean)
@@ -201,16 +204,16 @@ export const makeCard = (r: Rules) => {
       : Schema.Struct({ next, again })
   }
 
-  const menu = (s: State) =>
-    available(s).map(
+  const menu = (s: State, context: Paths = s) =>
+    available(s, context).map(
       (a) =>
-        `${a.id}: ${a.text}${a.roll && typeof a.roll === "object" && "judge" in a.roll ? ` (estimate chance: ${a.roll.judge})` : ""}`,
+        `${a.id}: ${expandState(a.text, { ...context, fields: s })}${a.roll && typeof a.roll === "object" && "judge" in a.roll ? ` (estimate chance: ${a.roll.judge})` : ""}`,
     )
   // Readouts: asked on the post-settlement state; the enum per question is the gate. Nothing asked → no schema.
   // With `names`, the wording expanded; a readout with an unfilled hole in its question or an option is not asked.
-  const asked = (s: State, names?: Names) =>
+  const asked = (s: State, names?: Names, context: Paths = s) =>
     (r.readouts ?? [])
-      .filter((q) => !q.when || holds(q.when, s))
+      .filter((q) => !q.when || holds(q.when, { ...context, fields: s }))
       .flatMap((q) => {
         if (!names) return [q]
         const [text, ...options] = [q.text, ...q.options.map((o) => o.text)].map((t) => expand(t, names))
@@ -218,14 +221,17 @@ export const makeCard = (r: Rules) => {
           ? []
           : [{ ...q, text, options: q.options.map((o, i) => ({ ...o, text: options[i]! })) }]
       })
-  const readoutSchema = (s: State, names?: Names) => {
-    const qs = asked(s, names)
+  const readoutSchema = (s: State, names?: Names, context: Paths = s) => {
+    const qs = asked(s, names, context)
     return qs.length
       ? Schema.Struct(Object.fromEntries(qs.map((q) => [q.id, Schema.Literals(q.options.map((o) => o.id))])))
       : undefined
   }
-  const questions = (s: State, names?: Names) =>
-    asked(s, names).map((q) => `${q.id}: ${q.text} [${q.options.map((o) => `${o.id}: ${o.text}`).join(" | ")}]`)
+  const questions = (s: State, names?: Names, context: Paths = s) =>
+    asked(s, names, context).map(
+      (q) =>
+        `${q.id}: ${expandState(q.text, { ...context, fields: s })} [${q.options.map((o) => `${o.id}: ${expandState(o.text, { ...context, fields: s })}`).join(" | ")}]`,
+    )
   const settleReadouts = (s: State, a: Answers) => {
     let out = { s, events: [] as string[] }
     for (const [qid, oid] of Object.entries(a)) {
@@ -250,7 +256,7 @@ export const makeCard = (r: Rules) => {
     readoutSchema,
     questions,
     settleReadouts,
-    over: (s: State) => (r.over ? holds(r.over, s) : false),
+    over: (s: State, context: Paths = s) => (r.over ? holds(r.over, { ...context, fields: s }) : false),
     cap: r.cap ?? Infinity,
   }
 }

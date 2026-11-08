@@ -28,6 +28,9 @@ let next = 0
 const add = (path: readonly Turn[], t: Partial<Turn> = {}): Turn[] => [
   ...path,
   {
+    changes: [],
+    settlementStatus: "committed",
+    settlementVersion: 0,
     id: next++,
     parent: path.at(-1)?.id ?? null,
     input: { text: "wait" },
@@ -115,7 +118,9 @@ const none = { events: [], before: [] }
       .readable()
       .map((r) => r.id)
       .filter((id) => id !== "li")
-  const li = (note: string) => ({ products: { people: [{ name: "Li", note }] } })
+  const li = (note: string): Partial<Turn> => ({
+    changes: [{ kind: "insert_entity", collection: "people", entityId: "e_li", data: { name: "Li", note } }],
+  })
   const r1 = add(add([], { read: [{ id: "li", layer: 1 }] }), li("N1")) // li told first; the row's node at index 1
   const id1 = `people@${r1[1]!.id}#0`
   assert.deepEqual([D.at(r1).fold(), untold(r1)], [0, []])
@@ -136,7 +141,7 @@ const none = { events: [], before: [] }
   const r3 = add(f2, { read: [{ id: id2, layer: 1 }] })
   assert.deepEqual(untold(r3), [])
   // A recall ref reads its text off the path; a ref to a node not on it is a defect.
-  assert.equal(D.at(r3).text({ id: id2, layer: 1 }), "name=Li, note=N2")
+  assert.equal(D.at(r3).text({ id: id2, layer: 1 }), "entityId=e_li, name=Li, note=N2")
   assert.throws(() => D.at(r1).text({ id: id2, layer: 1 }), /is not on the path/)
 }
 

@@ -6,6 +6,9 @@ import assert from "node:assert/strict"
 import { backup, disposition, markdown, type Exported } from "../src/export.ts"
 
 const turn = (id: number, parent: number | null, input: Turn["input"], reply: Turn["reply"]): Turn => ({
+  changes: [],
+  settlementStatus: "committed",
+  settlementVersion: 0,
   id,
   parent,
   input,
@@ -47,9 +50,9 @@ const x: Exported = {
     next: 4,
   },
   products: [
-    { id: "notes", label: "事件摘要", shape: { kind: "text" }, fold: "append", feed: true },
-    { id: "options", label: "行动选项", shape: { kind: "list", max: 4 } },
-    { id: "inner", label: "人物心声", shape: { kind: "text" } },
+    { role: "chronicle", id: "notes", label: "事件摘要", shape: { kind: "text" }, fold: "append", feed: true },
+    { role: "theater", id: "options", label: "行动选项", shape: { kind: "list", max: 4 } },
+    { role: "theater", id: "inner", label: "人物心声", shape: { kind: "text" } },
   ],
 }
 const at = new Date("2026-10-28T12:00:00Z")
@@ -82,7 +85,7 @@ assert.deepEqual(
   [b.format, b.version, b.exported, b.card, b.story, b.snapshot === x.snapshot],
   [
     "effect-tavern/story",
-    1,
+    2,
     "2026-10-28T12:00:00.000Z",
     x.card,
     { id: 7, title: "竹林夜话", starred: true, updated: 1700000000000 },

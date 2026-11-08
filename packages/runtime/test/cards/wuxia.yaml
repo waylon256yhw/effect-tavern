@@ -125,6 +125,7 @@ director: true
 # lookup stage can deliver later, like lore). `options` is the player's toggle (the dev and test players turn it on).
 products:
   - id: scene
+    role: world
     label: 场景
     text: |-
       Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.
@@ -140,6 +141,7 @@ products:
               - { key: mood, type: enum, options: [calm, tense] }
     feed: true
   - id: people
+    role: world
     label: 新人物
     text: |-
       New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.
@@ -149,5 +151,4 @@ products:
         - { key: name, type: text }
         - { key: note, type: text }
       max: 8
-    fold: { key: name }
     recall: name

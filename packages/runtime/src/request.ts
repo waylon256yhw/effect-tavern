@@ -86,7 +86,7 @@ export type Ask =
   | { stage: "polish"; question: string; hints: readonly string[]; prose: string } // prose with <target> marks
   | {
       stage: "record"
-      ops?: string
+      tools?: string
       known: string
       current?: string
       asks: readonly string[] // `<product>: <question>` lines
@@ -204,7 +204,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
     case "record":
       return [
         ...reviewed,
-        sys([a.known, ...(a.current ? [a.current] : []), ...a.asks, ...(a.ops ? [a.ops] : [])].join("\n")),
+        sys([a.known, ...(a.current ? [a.current] : []), ...a.asks, ...(a.tools ? [a.tools] : [])].join("\n")),
         ...(a.questions ? [sys(`${a.readout}\nQuestions: ${a.questions.join("\n")}`)] : []),
         ...thoughtOf(c),
         scene(c.input, a.prose),

@@ -1,6 +1,7 @@
 // §17: one node per turn = the player's input plus every block the system produced for it. Only LLM outputs and seeds
 // are stored; events, state and deliveries are derived along the path. The tree itself (parents, siblings as versions,
 // head, drop) is src/log.ts; this file is what a node holds.
+import type { DomainChange } from "./world.ts"
 import type { Effect_ } from "./card.ts"
 import type { Part } from "./fragment.ts"
 import type { Disclosure } from "./lore.ts"
@@ -30,7 +31,12 @@ export interface Turn<B> {
   adjust?: readonly (typeof Effect_.Type)[] // the player's field edits on this node, applied last in the fold; replayed like any effect
   violated: readonly string[]
   sibling?: "swipe" | "reword" | "edit" // which action made this sibling; absent on a player's own turn
-  products: Readonly<Record<string, unknown>> // by id, shaped by the card (src/product.ts): record's answers, narrate's blocks; `notes` is one
+  changes: readonly DomainChange[]
+  settlementStatus: "pending" | "failed" | "committed" | "skipped"
+  settlementVersion: number
+  settlementAttempt?: string
+  settlementError?: string
+  products: Readonly<Record<string, unknown>> // per-turn chronicle/theater outputs only; world writes live in changes
 }
 /** The notes product, the compression source: this turn's sentence, as the one-item list every fold joins. A library
  *  written before #82 holds a list per turn; it reads the same. */

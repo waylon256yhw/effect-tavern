@@ -19,8 +19,13 @@ export const Cond: Schema.Codec<Cond> = Schema.Union([
 ])
 
 export type State = Record<string, unknown>
-const lookup = (s: State, path: string) => {
+export const lookup = (s: State, path: string) => {
+  // Bare paths address rule fields; world and lore are explicit namespaces.
+  if (s.fields && Object.hasOwn(s.fields as State, path)) return (s.fields as State)[path]
+  if (path.startsWith("fields.") && s.fields && Object.hasOwn(s.fields as State, path.slice(7)))
+    return (s.fields as State)[path.slice(7)]
   const v = path in s ? s[path] : path.split(".").reduce<unknown>((o, k) => (o as State | undefined)?.[k], s)
+  if (v === undefined && path.startsWith("world.")) return undefined
   if (v === undefined) throw new Error(`unknown state path ${path}`)
   return v
 }
@@ -31,6 +36,7 @@ export const holds = (c: Cond, s: State, events: readonly string[] = []): boolea
   if ("event" in c) return events.includes(c.event)
   const v = lookup(s, c.path)
   if ("is" in c) return v === c.is
+  if (v === undefined) return false
   if (typeof v !== "number") throw new Error(`${c.path} is not a number`)
   return c.op === "lt" ? v < c.value : c.op === "lte" ? v <= c.value : c.op === "gt" ? v > c.value : v >= c.value
 }
@@ -45,3 +51,11 @@ export const reads = (c: Cond): string[] =>
         : "event" in c
           ? []
           : [c.path]
+
+/** State interpolation is separate from proper names and runs only on current-stage declarations. */
+export const STATE_HOLE = /\{\{\s*((?:fields|world|lore)\.[^{}\s]+)\s*\}\}/g
+export const expandState = (text: string, state: State): string =>
+  text.replace(STATE_HOLE, (_, path: string) => {
+    const value = lookup(state, path)
+    return value === undefined ? "" : typeof value === "string" ? value : JSON.stringify(value)
+  })

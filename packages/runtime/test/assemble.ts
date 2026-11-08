@@ -16,6 +16,9 @@ interface Card {
 type Stage = "direct" | "narrate"
 type T = Turn<never>
 const turn = (text: string, prose: string, notes: string[]): T => ({
+  changes: [],
+  settlementStatus: "committed",
+  settlementVersion: 0,
   id: 0,
   parent: null,
   input: { text },

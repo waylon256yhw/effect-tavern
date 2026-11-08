@@ -56,10 +56,10 @@ const card: Card = {
     { id: "held", layers: ["HELD {{given}}."], unlock: { all: [] }, offer: { any: [] } },
   ],
   products: [
-    { id: "kept", text: "ASK {{char}}", shape: { kind: "text" } },
-    { id: "skipped", text: "ASK-NO {{missing}}", shape: { kind: "text" } },
-    { id: "blk", text: "BLOCK {{char}}", shape: { kind: "text" }, stage: "narrate" },
-    { id: "blkno", text: "BLOCK-NO {{missing}}", shape: { kind: "text" }, stage: "narrate" },
+    { role: "theater" as const, id: "kept", text: "ASK {{char}}", shape: { kind: "text" } },
+    { role: "theater" as const, id: "skipped", text: "ASK-NO {{missing}}", shape: { kind: "text" } },
+    { role: "theater" as const, id: "blk", text: "BLOCK {{char}}", shape: { kind: "text" }, stage: "narrate" },
+    { role: "theater" as const, id: "blkno", text: "BLOCK-NO {{missing}}", shape: { kind: "text" }, stage: "narrate" },
   ],
 }
 const pack: Layer = {
@@ -320,7 +320,7 @@ assert.ok(!has(doc(third, "narrate"), "HELD"))
     fiction: [{ id: "f", text: "{{b}}" }],
     greetings: [{ text: "{{c}}" }],
     lore: [{ id: "l", layers: ["{{d}}", "{{e}}"], unlock: { all: [] }, offer: { any: [] } }],
-    products: [{ id: "q", text: "{{f}}", shape: { kind: "text" }, on: false }], // off is still demandable
+    products: [{ role: "theater" as const, id: "q", text: "{{f}}", shape: { kind: "text" }, on: false }], // off is still demandable
   }
   const kit: Layer = {
     id: "k",

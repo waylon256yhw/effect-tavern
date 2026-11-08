@@ -105,6 +105,15 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
       const { n, input } = revised(fillKnown(rawText, dict), fillKnown(rawNote, dict))
       start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
     },
+    retryRecord: (id: Id): void => {
+      registry.set(error, null)
+      registry.set(stage, "record")
+      go({ kind: "retryRecord", node: id })
+    },
+    skipRecord: (id: Id): void => {
+      registry.set(error, null)
+      go({ kind: "skipRecord", node: id })
+    },
     setField: (id: Id, effects: Extract<Action, { kind: "setField" }>["effects"]): void =>
       go({ kind: "setField", node: id, effects }),
     /** One product asked for over a node's scene: a record call, the answer kept on the node, no turn and no draft. */
@@ -126,7 +135,7 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
         return clear() // the revision, if any, stays: its line is back in the box under it
       }
       // halted: what the server is doing with the cut prose; the node (or record's error) comes down the stream
-      if (how === "halted") registry.set(stage, "record")
+      if (how === "halted" && registry.get(working)) registry.set(stage, "record")
     },
     /** Landing on a story: the turn already in flight there, if any, drawn as it stands and read to its end. */
     attach: (): void => void streams.push(attach()),
