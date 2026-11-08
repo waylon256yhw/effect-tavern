@@ -530,6 +530,7 @@
 }
 /* a row: the name, the hint aligned after it, the fill glyph at the end; the columns are the menu's */
 .snippets .item {
+  box-sizing: border-box;
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
@@ -561,7 +562,8 @@
   height: 14px;
   color: var(--ink-3);
 }
-.snippets hr:is(:first-child, :last-child) {
+.snippets hr:is(:first-child, :last-child),
+.snippets hr + hr {
   display: none;
 }
 .snippets hr {

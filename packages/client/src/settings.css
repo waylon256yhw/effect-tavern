@@ -296,10 +296,17 @@
   color: var(--primary-ink);
   box-shadow: none;
 }
+.btn.primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--primary) 85%, var(--primary-ink));
+}
 .btn.ghost {
   background: none;
   box-shadow: none;
   color: var(--ink-2);
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--ghost-hover);
+  color: var(--ink);
 }
 .btn-join {
   display: inline-flex;

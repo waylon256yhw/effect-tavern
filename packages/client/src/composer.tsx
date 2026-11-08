@@ -269,11 +269,11 @@ export const Composer = () => {
                 <InvocationMenu
                   keyboard={menuKeyboard}
                   quick={
-                    <div class="quick">
+                    <>
                       <Items of={inStory()} />
                       <hr />
                       <Items of={toNarrator()} />
-                    </div>
+                    </>
                   }
                   choose={(item) => {
                     registry.update(composition, (d) => addInvocation(d, item))

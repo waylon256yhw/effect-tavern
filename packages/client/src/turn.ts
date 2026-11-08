@@ -127,11 +127,13 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
     },
     retryRecord: (id: Id): void => {
       registry.set(error, null)
+      registry.set(demanded, null)
       registry.set(stage, "record")
       go({ kind: "retryRecord", node: id })
     },
     skipRecord: (id: Id): void => {
       registry.set(error, null)
+      registry.set(demanded, null)
       go({ kind: "skipRecord", node: id })
     },
     setField: (id: Id, effects: Extract<Action, { kind: "setField" }>["effects"]): void =>

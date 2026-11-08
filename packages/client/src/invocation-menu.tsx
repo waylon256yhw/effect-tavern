@@ -82,6 +82,7 @@ export const InvocationMenu = (props: {
                     }}
                   >
                     <span class="name">{s === "pack" ? t("composer.playerTools") : t("composer.cardTools")}</span>
+                    <span class="hint" />
                     <span aria-hidden="true">›</span>
                   </button>
                 </Show>

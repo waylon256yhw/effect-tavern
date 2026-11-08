@@ -8,8 +8,9 @@ import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu } from "./controls.tsx"
-import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe } from "./icons.tsx"
+import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe, Warning } from "./icons.tsx"
 import { close } from "./pages.ts"
+import { openSettings } from "./settings.tsx"
 import { demandable, fresh, heading, kindOf, marked, record, status, theater, whens, type Element } from "./record.ts"
 import {
   card,
@@ -159,21 +160,51 @@ const changeLabel = (kind: "insert" | "patch" | "remove" | "replace") => {
 
 export const Settlement = (props: { node: Node }) => {
   const busy = read(working)
-  const unresolved = () => props.node.settlementStatus === "pending" || props.node.settlementStatus === "failed"
+  const failed = read(error)
+  const asked = read(demanded)
+  const line = read(path)
+  const settling = () => props.node.settlementStatus === "pending" && busy()
+  const unresolved = () =>
+    (props.node.settlementStatus === "pending" || props.node.settlementStatus === "failed") && !settling()
+  const reason = () => (asked() === null && line().at(-1)?.id === props.node.id ? failed() : null)
   return (
     <Show when={unresolved()}>
-      <aside class="settlement">
-        <p>{t("readings.settlementPending")}</p>
-        <button type="button" disabled={busy()} onClick={() => turn.retryRecord(props.node.id)}>
-          {t("readings.retryRecord")}
-        </button>
-        <button
-          type="button"
-          disabled={busy() && props.node.settlementStatus !== "pending"}
-          onClick={() => turn.skipRecord(props.node.id)}
-        >
-          {t("readings.skipRecord")}
-        </button>
+      <aside class="settlement" role="alert">
+        <Warning aria-hidden="true" />
+        <div class="body">
+          <p>{t("readings.settlementPending")}</p>
+          <Show when={reason()}>
+            {(e) => (
+              <p class="detail">
+                {e().message}
+                <Show when={e().code === "no-model"}>
+                  {" "}
+                  <button type="button" class="go" onClick={() => openSettings("routing")}>
+                    {t("app.goDefaultModel")}
+                  </button>
+                </Show>
+              </p>
+            )}
+          </Show>
+        </div>
+        <div class="btns">
+          <button
+            type="button"
+            class="btn sm primary"
+            disabled={busy()}
+            onClick={() => turn.retryRecord(props.node.id)}
+          >
+            {t("readings.retryRecord")}
+          </button>
+          <button
+            type="button"
+            class="btn sm"
+            disabled={busy() && props.node.settlementStatus !== "pending"}
+            onClick={() => turn.skipRecord(props.node.id)}
+          >
+            {t("readings.skipRecord")}
+          </button>
+        </div>
       </aside>
     </Show>
   )
@@ -499,6 +530,7 @@ export const Demand = (props: { node: Node }) => {
   const busy = read(working)
   const failed = read(error)
   const asked = read(demanded)
+  const unresolved = () => props.node.settlementStatus === "pending" || props.node.settlementStatus === "failed"
   const demands = () => demandable(view()?.layer?.products ?? [], props.node)
   return (
     <>
@@ -507,7 +539,7 @@ export const Demand = (props: { node: Node }) => {
           action={t("readings.aside")}
           label={t("readings.aside")}
           value={undefined}
-          options={busy() ? [] : demands()}
+          options={busy() || unresolved() ? [] : demands()}
           onPick={(id) => (dismiss(), turn.demand(props.node.id, id))}
         />
       </Show>
@@ -525,6 +557,7 @@ const trimmed = (v: unknown) => (typeof v === "string" ? v.trim() : v)
 export const Theater = (props: { products: Readonly<Record<string, unknown>>; node?: Node }) => {
   const view = read(card)
   const busy = read(working)
+  const unresolved = () => props.node?.settlementStatus === "pending" || props.node?.settlementStatus === "failed"
   const answered = () => theater(view()?.layer?.products ?? []).filter((p) => props.products[p.id] !== undefined)
   return (
     <For each={answered()} keyed={(p) => p.id}>
@@ -538,7 +571,7 @@ export const Theater = (props: { products: Readonly<Record<string, unknown>>; no
                   <button
                     class="icon"
                     aria-label={t("readings.again")}
-                    disabled={busy()}
+                    disabled={busy() || unresolved()}
                     onClick={() => (dismiss(), turn.demand(n().id, p().id))}
                   >
                     <Die />
@@ -555,28 +588,46 @@ export const Theater = (props: { products: Readonly<Record<string, unknown>>; no
 }
 
 /** The Record pill under a turn and the sheet it opens: the turn's ledger (record.ts `record`), by the card's heading or
- *  the turn's number. An empty ledger has nothing to open: no pill (`marked`). The turn's own actions sit in the row
- *  beside it (`Demand`, `Rewrite`). */
+ *  the turn's number. While settlement is actively running on this node, the pill pulses with three dots and offers a
+ *  quiet skip; an empty settled ledger has nothing to open (`marked`). The turn's own actions sit in the row beside it
+ *  (`Demand`, `Rewrite`). */
 export const RecordSheet = (props: { node: Node; n: number }) => {
   const all = read(log)
   const view = read(card)
+  const busy = read(working)
   const [shown, setShown] = createSignal(false)
   let dlg!: HTMLDialogElement
+  const settling = () => props.node.settlementStatus === "pending" && busy()
   return (
-    <Show when={marked(props.node)}>
-      <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
-        <Record aria-hidden="true" />
-      </button>
-      <Sheet
-        dialog={(el) => (dlg = el)}
-        onClose={() => setShown(false)}
-        heading={heading(view()?.heading, props.node, all()) ?? t("common.turnN", { n: props.n })}
-      >
-        <Show when={shown()}>
-          <TurnRecord node={props.node} />
-        </Show>
-      </Sheet>
-    </Show>
+    <Switch>
+      <Match when={settling()}>
+        <span class="record-pill" role="status" aria-label={t("app.phaseRecord")}>
+          <Record aria-hidden="true" />
+          <span class="dots">
+            <span />
+            <span />
+            <span />
+          </span>
+        </span>
+        <button type="button" class="btn ghost sm" onClick={() => turn.skipRecord(props.node.id)}>
+          {t("readings.skipRecord")}
+        </button>
+      </Match>
+      <Match when={marked(props.node)}>
+        <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
+          <Record aria-hidden="true" />
+        </button>
+        <Sheet
+          dialog={(el) => (dlg = el)}
+          onClose={() => setShown(false)}
+          heading={heading(view()?.heading, props.node, all()) ?? t("common.turnN", { n: props.n })}
+        >
+          <Show when={shown()}>
+            <TurnRecord node={props.node} />
+          </Show>
+        </Sheet>
+      </Match>
+    </Switch>
   )
 }
 
