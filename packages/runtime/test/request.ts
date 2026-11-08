@@ -1,6 +1,7 @@
 // src/request.ts through its interface: the whole document each stage reads, asserted the way a person reads a preset,
 // top to bottom. One frame, one set of facts; the inputs vary, and the seven stages differ only in what the module lets
 // each one see.
+import { wire } from "@effect-tavern/provider/src/call.ts"
 import type { FakeCall, Message } from "@effect-tavern/provider"
 import assert from "node:assert/strict"
 import type { Hat, Msg } from "../src/fragment.ts"
@@ -84,6 +85,34 @@ const asks: Record<Ask["stage"], Ask> = {
 const stages = Object.keys(asks) as Ask["stage"][]
 const all = (input: Common["input"]) =>
   Object.fromEntries(stages.map((s) => [s, request(c(input), asks[s])])) as Record<Ask["stage"], Message[]>
+
+// Chip-only requests retain a user boundary after the history and at the end of structured stages.
+for (const stage of ["lookup", "decide", "direct"] as const) {
+  const ms = request(c({ text: "", invoke: ["p/manual"] }), asks[stage])
+  assert.ok(ms.slice(0, -1).every((m) => m.role === "system"))
+  assert.equal(ms.at(-1)!.role, "user")
+  assert.ok(text(ms.at(-1)!).trim())
+  for (const format of ["anthropic", "gemini"] as const)
+    assert.ok(wire(format, ms, false).some((m) => m.role === "user"))
+}
+// No remaining entry body, directives or products after an unmount: history must not become a prefill.
+const bare = request(c({ text: "", invoke: ["p/manual"] }), {
+  stage: "narrate",
+  fiction,
+  history,
+  summarized: false,
+  told: [],
+  manual: [],
+  outcome: [],
+  must: [],
+  may: [],
+})
+assert.deepEqual(
+  bare.slice(-2).map((m) => m.role),
+  ["assistant", "user"],
+)
+assert.ok(text(bare.at(-1)!).trim())
+for (const format of ["anthropic", "gemini"] as const) assert.doesNotThrow(() => wire(format, bare, false))
 
 // ───────── The frame leads every stage; the fiction and the transcript reach only the narrator ─────────
 const line = all({ text: "我拔剑。", note: "虚晃一招" })

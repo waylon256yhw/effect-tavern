@@ -448,6 +448,8 @@ export const makeSession = ({
       const selected = deliver(g0, all, seen, automatic)
       const untold = here.readable().filter((e) => !invoked.includes(e.id))
       const idx = untold.map((e) => e.id)
+      // A chip-only turn supplies context, not a player line for lookup or action judgement.
+      const hasInput = !!(input.text || input.note)
       const looked =
         from !== "lookup"
           ? base!.read
@@ -455,7 +457,7 @@ export const makeSession = ({
               g0,
               all,
               seen,
-              idx.length
+              hasInput && idx.length
                 ? (yield* obj(
                     emit,
                     "lookup",
@@ -471,7 +473,7 @@ export const makeSession = ({
       // decide → settle, looping; the k-th decide sees the first k events
       let beats: Beat[] = from !== "lookup" ? [...base!.beats] : []
       let end: Turn["end"] = from !== "lookup" ? base!.end : "end"
-      if (card.rules.actions.length && from === "lookup") {
+      if (hasInput && card.rules.actions.length && from === "lookup") {
         for (;;) {
           const { s, events } = rpg.fold(s0, beats)
           if (rpg.over(s)) {

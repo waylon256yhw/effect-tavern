@@ -102,8 +102,9 @@ const openLine = (open: readonly Told[]) => `Open: ${open.map((d) => `${d.id}=${
 
 // ───────── The input as one unit ─────────
 /** This turn's user message: the line when there is one, else the note itself (directed prose: the player writes to the
- *  narrator, not as anyone in the story). */
-const said = (i: Input): Message[] => (i.text || i.note ? [usr(i.text || i.note!)] : [])
+ *  narrator, not as anyone in the story). A chip-only turn continues the story: keep a nonempty user
+ *  boundary even if its invoked entries were removed before a rerun. */
+const said = (i: Input): Message => usr(i.text || i.note || "Continue the story.")
 /** The note as a system line, only beside a line; alone it is already the user message. */
 const noteOf = (i: Input) => (i.text && i.note ? [sys(`Player note: ${i.note}`)] : [])
 /** A thought (⦅ ⦆) in the line is a perception scope inside the fiction; every stage that reads the line hears what it is. */
@@ -126,7 +127,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         sys(`${a.question}\nIndex: ${a.index.join(", ")}`),
         ...noteOf(c.input),
         ...thoughtOf(c),
-        ...said(c.input),
+        said(c.input),
       ]
     case "decide":
       return [
@@ -134,7 +135,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...a.ledger.map(toP(w)),
         sys(`${a.question}\nState: ${a.state}\nActions: ${a.menu.join(" | ")}\nSo far: ${a.soFar.join(",") || "-"}`),
         ...thoughtOf(c),
-        ...said(c.input),
+        said(c.input),
       ]
     case "direct":
       return [
@@ -144,7 +145,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         sys(`${a.question}\n${openLine(a.open)}\nEvents: ${a.events.join(",")}`),
         ...noteOf(c.input),
         ...thoughtOf(c),
-        ...said(c.input),
+        said(c.input),
       ]
     case "narrate":
       return [
@@ -162,7 +163,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...a.history.map((m, i, all) =>
           i === all.length - 1 || (i === 0 && a.summarized) ? breakpoint(toP(w)(m)) : toP(w)(m),
         ),
-        ...said(c.input),
+        said(c.input),
         ...a.told.map(sys),
         ...(a.manual ?? []).filter(Boolean).map(sys),
         ...(a.outcome.length ? [sys(`Outcome: ${a.outcome.join(", ")}`)] : []),

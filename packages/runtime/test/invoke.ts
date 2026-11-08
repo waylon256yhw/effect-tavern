@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { fake } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
-import { chat } from "./cards/index.ts"
+import { chat, full } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "./script.ts"
 import type { Rows } from "../src/layer.ts"
 
@@ -92,6 +92,56 @@ await Effect.runPromise(
       assert.deepEqual(sibling.input.invoke, t.input.invoke)
       assert.ok(text("narrate").includes("MANUAL BODY"))
     }
+    // Actions and a director exist, and secret is unread: chips alone skip lookup/decide, but direct still runs.
+    const active = makeSession({
+      card: {
+        ...full,
+        lore: [
+          ...card.lore,
+          {
+            id: "window",
+            layers: ["WINDOW ONE", "WINDOW TWO"],
+            unlock: { all: [] },
+            offer: { all: [] },
+          },
+        ],
+      },
+      rows: () => rows,
+      model: () => ({ ...model, prefill: false }),
+    })
+    const opening = active.greet({ text: "Opening" }).node!
+    const onlyManual = yield* go(active.act(opening.id, { text: "", invoke: ["p/manual"] }))
+    assert.deepEqual(
+      calls.map((c) => c.phase),
+      ["direct", "narrate", "check", "record"],
+    )
+    assert.deepEqual(onlyManual.beats, [])
+    assert.ok(!onlyManual.read.some((d) => d.id === "secret"))
+    assert.ok(active.node(onlyManual.id).invocable.some((e) => e.id === "secret"))
+    const direct = calls.find((c) => c.phase === "direct")!.msgs
+    assert.equal(direct.at(-1)!.role, "user")
+    assert.ok(typeof direct.at(-1)!.content === "string" && direct.at(-1)!.content.length > 0)
+    assert.ok(text("narrate").includes("MANUAL BODY"))
+
+    // Isolate the unmount case: no auto delivery, window, current product or hat can mask an assistant tail.
+    const bare = makeSession({
+      card: { ...chat, products: [] },
+      rows: () => rows,
+      model: () => ({ ...model, prefill: false }),
+    })
+    const bareOpening = bare.greet({ text: "Opening" }).node!
+    const manualTurn = yield* go(bare.act(bareOpening.id, { text: "", invoke: ["p/manual"] }))
+    assert.deepEqual(manualTurn.read, [])
+    rows = {}
+    const rerun = yield* go(bare.reword(manualTurn.id))
+    assert.deepEqual(rerun.input, { text: "", invoke: ["p/manual"] })
+    const narration = calls.find((c) => c.phase === "narrate")!.msgs
+    assert.deepEqual(
+      narration.slice(-2).map((m) => m.role),
+      ["assistant", "user"],
+    )
+    assert.ok(typeof narration.at(-1)!.content === "string" && narration.at(-1)!.content.length > 0)
+    assert.ok(!text("narrate").includes("MANUAL BODY"))
     rows = {}
     yield* go(S.reword(t.id))
     assert.ok(!text("narrate").includes("MANUAL BODY"))
