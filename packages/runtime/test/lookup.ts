@@ -81,6 +81,10 @@ for (const size of [2, 4]) {
   assert.equal(t.read.length, Math.min(size, 3))
   for (let i = 1; i < f.lookup.length; i++) {
     assert.deepEqual(f.lookup[i]!.prompt.slice(0, f.lookup[i - 1]!.prompt.length), f.lookup[i - 1]!.prompt)
+    assert.deepEqual(
+      messages(f.lookup[i]!).filter((m) => m.startsWith("Read: ")),
+      entries.slice(0, i).map((e) => `Read: ${e.id}=${e.layers[0]}`),
+    )
   }
 }
 {
@@ -100,6 +104,25 @@ const large = [
   { ...lore("manual", "hiddenkeyword"), invoke: "manual" as const },
   { ...lore("locked", "hiddenkeyword"), unlock: { any: [] } },
 ]
+{
+  // A search-only second step appends an empty Read, without repeating the first step's body.
+  const f = fixture(large, (_, n) => ({
+    read: n === 0 ? ["noodle"] : n === 2 ? ["street"] : [],
+    more: n === 0,
+    search: n === 1 ? "西栅街面" : "",
+  }))
+  const t = await f.go(f.S.act(f.g.id, { text: "follow the noodle shop" }))
+  assert.equal(f.lookup.length, 3)
+  assert.deepEqual(f.lookup[2]!.prompt.slice(0, f.lookup[1]!.prompt.length), f.lookup[1]!.prompt)
+  assert.deepEqual(
+    messages(f.lookup[2]!).filter((m) => m.startsWith("Read: ")),
+    ["Read: noodle=Noodles. 福记面馆 西栅街面", "Read: -"],
+  )
+  assert.deepEqual(
+    t.read.map((d) => d.id),
+    ["noodle", "street"],
+  )
+}
 for (const query of ["福记面馆 西栅街面", "hiddenkeyword"]) {
   const f = fixture(large, (o) => ({
     read: readStage(o).again && query !== "hiddenkeyword" ? ["noodle"] : [],

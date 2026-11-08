@@ -485,7 +485,7 @@ export const makeSession = ({
           const search = "search" in answer ? answer.search.trim() : ""
           if (!(answer.more && fresh.length) && !search) break
           steps.push({
-            read: told(looked),
+            read: told(deliver(g0, all, seen, fresh)),
             ...(search ? { found: here.search(search, 8, [...invoked, ...read]) } : {}),
             question: wording("lookup.again"),
           })
