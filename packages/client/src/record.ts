@@ -86,7 +86,21 @@ export const fields = (rules: Rules, detail: TurnDetail, whens: readonly (Cond |
 export const fieldChanged = (node: Node): boolean => node.changeSummary.fields > 0
 
 /** Product presentation declarations carried by the card view. */
-export type Declared = Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall" | "role">
+export type Declared = Pick<Product, "id" | "label" | "shape" | "fold" | "feed" | "recall" | "role" | "on" | "trigger">
+
+/** A card's 小剧场: its theater products (`kindOf`) except `options`, which has its own container. */
+export const theater = (products: readonly Declared[]) =>
+  products.filter((p) => p.id !== "options" && kindOf(p) === "theater")
+
+/** The 小剧场 a node can still be asked for (the `demand` action): theater, enabled on this card (`on !== false`), and
+ *  not on the node yet; one asked for leaves the list as it lands. */
+export const demandable = (
+  products: readonly Declared[],
+  node: Pick<Node, "theater">,
+): { value: string; label: string }[] =>
+  theater(products)
+    .filter((p) => p.on !== false && node.theater[p.id] === undefined)
+    .map((p) => ({ value: p.id, label: p.label ?? p.id }))
 
 /** A product's kind (docs/theater-brief.md §1): one definition, the server's export reads it too. */
 export { kindOf }

@@ -618,7 +618,12 @@ export const makeSession = ({
       const sum = here.summary()
       // the narrate products on this turn: one ask line each in narrate's tail, each block cut off the reply
       const penned = products().filter(
-        (p) => p.stage === "narrate" && p.on && (!p.when || holds(p.when, here.context(s1))) && !p.unasked,
+        (p) =>
+          p.stage === "narrate" &&
+          p.on &&
+          p.trigger !== "demand" &&
+          (!p.when || holds(p.when, here.context(s1))) &&
+          !p.unasked,
       )
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
@@ -792,7 +797,8 @@ export const makeSession = ({
       const pre = derived.at(path).settle(original).pre
       const context = derived.at(path).context(pre)
       const asked = products().filter(
-        (p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, context)),
+        (p) =>
+          p.stage !== "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
       )
       const N = layer().names
       const qs = rpg.readoutSchema(pre, N, context)

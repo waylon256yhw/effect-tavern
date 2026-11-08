@@ -202,22 +202,34 @@ const ths = withProductPatch([{ id: "inner", on: true }], {
   label: "人物心声",
   text: "写{{char}}心声",
   on: true,
+  trigger: "demand",
 })
-assert.deepEqual(ths, [{ id: "inner", label: "人物心声", text: "写{{char}}心声", on: true }])
+assert.deepEqual(ths, [{ id: "inner", label: "人物心声", text: "写{{char}}心声", on: true, trigger: "demand" }])
 assert.deepEqual(withoutProductPatch(ths, "inner"), [])
 // 恢复默认 keeps the toggle; a patch left with only its id goes
 assert.deepEqual(withoutProductText(ths, "inner"), [{ id: "inner", on: true }])
-assert.deepEqual(withoutProductText([{ id: "inner", label: "x" }], "inner"), [])
-// the dialog's save: only what changed; a label alone is a patch; a card item shows no text, so typed text goes; a new
+assert.deepEqual(withoutProductText([{ id: "inner", label: "x", trigger: "demand" }], "inner"), [])
+// the dialog's save: only what changed; a label or trigger alone is a patch; a card item shows no text, so typed text goes; a new
 // 小剧场 needs text and starts off
 const shownInner = { id: "inner", label: "人物心声", text: "What the character thought" }
 assert.deepEqual(productEdit(shownInner, "inner", " 心声 ", "What the character thought"), {
   id: "inner",
   label: "心声",
 })
+assert.deepEqual(productEdit(shownInner, "inner", "人物心声", "What the character thought", "demand"), {
+  id: "inner",
+  trigger: "demand",
+})
+assert.equal(productEdit(shownInner, "inner", "人物心声", "What the character thought", "turn"), undefined)
 assert.equal(productEdit(shownInner, "inner", "人物心声", ""), undefined)
 assert.deepEqual(productEdit({ id: "mood" }, "mood", "mood", "写心情"), { id: "mood", text: "写心情" })
 assert.equal(productEdit(undefined, "th-1", "新", ""), undefined)
 assert.deepEqual(productEdit(undefined, "th-1", "", "写"), { id: "th-1", text: "写", on: false })
+assert.deepEqual(productEdit(undefined, "th-1", "", "写", "demand"), {
+  id: "th-1",
+  text: "写",
+  trigger: "demand",
+  on: false,
+})
 
 console.log("writing ok")

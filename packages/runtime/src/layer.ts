@@ -54,16 +54,17 @@ export const Local = Schema.Struct({
 })
 export type Local = typeof Local.Type
 
-/** A row as a player may store it: no Cond and no role on a fragment, a product patch only label, text and on. */
+/** A row as a player may store it: no Cond and no role on a fragment, a product patch only label, text, on and trigger. */
 export const locked = <R extends Layer>(r: R): R => ({
   ...r,
   ...(r.fragments && { fragments: r.fragments.map(({ when: _w, role: _r, ...f }) => f) }),
   ...(r.products && {
-    products: r.products.map(({ id, label, text, on }) => ({
+    products: r.products.map(({ id, label, text, on, trigger }) => ({
       id,
       ...(label !== undefined && { label }),
       ...(text !== undefined && { text }),
       ...(on !== undefined && { on }),
+      ...(trigger !== undefined && { trigger }),
     })),
   }),
 })
@@ -255,7 +256,9 @@ export const overlayOf = (input: "act" | "note", row: Layer): Layer => {
   const products = (row.products ?? []).flatMap((p) => {
     const was = h.products?.find((d) => d.id === p.id) as Record<string, unknown> | undefined
     if (!was) return [p]
-    const changed = Object.entries(p).filter(([k, v]) => k !== "id" && !same(v, was[k]))
+    const changed = Object.entries(p).filter(
+      ([k, v]) => k !== "id" && !same(v, was[k] ?? (k === "trigger" ? "turn" : undefined)),
+    )
     return changed.length ? [{ id: p.id, ...Object.fromEntries(changed) }] : []
   })
   const snippets = (row.snippets ?? []).filter(
@@ -441,12 +444,18 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     (code.products ?? []).map((p) => [p.id, { ...p, from: "harness" }]),
   )
   /** A toggle on an id this card does not declare says nothing about this card (an overlay's `people` on a card without it). */
-  const toggleOnly = (p: { id: string }) => Object.keys(p).every((k) => k === "id" || k === "on")
-  /** A player row's patch: label, text and on over an id that exists; a new id is a 小剧场, dropped without text. The
+  const toggleOnly = (p: { id: string }) => Object.keys(p).every((k) => k === "id" || k === "on" || k === "trigger")
+  /** A player row's patch: label, text, on and trigger over an id that exists; a new id is a 小剧场, dropped without text. The
    *  author of the question that stands is `from`: a toggle or a label changes nothing the card wrote (`shown` strips
    *  a card's text by it). */
   const patched = (from: From, p: ProductPatch) => {
-    const { id, ...patch } = p as { id: string; label?: string; text?: string; on?: boolean }
+    const { id, ...patch } = p as {
+      id: string
+      label?: string
+      text?: string
+      on?: boolean
+      trigger?: "demand" | "turn"
+    }
     const was = stock.get(id)
     if (was) stock.set(id, { ...was, ...patch, from: patch.text === undefined ? was.from : from })
     else if (toggleOnly(p)) return

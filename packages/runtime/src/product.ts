@@ -60,6 +60,7 @@ export const Product = Schema.Struct({
   fold: Schema.optionalKey(Fold),
   when: Schema.optionalKey(Cond), // asked only when it holds on the post-settlement state
   on: Schema.optionalKey(Schema.Boolean), // default true; the later row wins (layer.ts)
+  trigger: Schema.optionalKey(Schema.Literals(["demand", "turn"])), // theater trigger when on: per-turn auto (default) or on-demand
   feed: Schema.optionalKey(Schema.Boolean), // default false: fold goes back to the model (Known / Current)
   recall: Schema.optionalKey(Schema.Union([Schema.Literal(true), Schema.String])), // list: true; table: the hook column
 })

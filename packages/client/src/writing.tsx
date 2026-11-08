@@ -197,6 +197,7 @@ interface ProductEditDraft {
   isNew: boolean
   label: string
   text: string
+  trigger: "demand" | "turn"
 }
 
 const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => {
@@ -265,26 +266,43 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
   let prodDlg!: HTMLDialogElement
 
   const openNewTheater = () => {
-    setEditingProd({ id: newId("th"), isNew: true, label: "", text: "" })
+    setEditingProd({ id: newId("th"), isNew: true, label: "", text: "", trigger: "demand" })
     prodDlg.showModal()
   }
-  const openEditProduct = (p: { id: string; label?: string; text?: string }) => {
+  const openEditProduct = (p: { id: string; label?: string; text?: string; trigger?: "demand" | "turn" }) => {
     const own = loc()?.products?.find((x) => x.id === p.id)
     setEditingProd({
       id: p.id,
       isNew: false,
       label: own?.label ?? p.label ?? p.id,
       text: own?.text ?? p.text ?? "",
+      trigger: own?.trigger ?? p.trigger ?? "turn",
     })
     prodDlg.showModal()
   }
   const shownProduct = (id: string) =>
-    products().find((p) => p.id === id) as { id: string; from: string; label?: string; text?: string } | undefined
+    products().find((p) => p.id === id) as
+      | {
+          id: string
+          from: string
+          role?: "world" | "chronicle" | "theater"
+          label?: string
+          text?: string
+          trigger?: "demand" | "turn"
+        }
+      | undefined
+  const canTrigger = (d: ProductEditDraft) => d.isNew || (shownProduct(d.id)?.role === "theater" && d.id !== "options")
   const saveProduct = () => {
     const d = editingProd()
     const cid = cardId()
     if (!d || !cid) return
-    const patch = productEdit(d.isNew ? undefined : shownProduct(d.id), d.id, d.label, d.text)
+    const patch = productEdit(
+      d.isNew ? undefined : shownProduct(d.id),
+      d.id,
+      d.label,
+      d.text,
+      canTrigger(d) ? d.trigger : undefined,
+    )
     if (patch) {
       const nextPage = d.isNew ? Math.floor(theaters().length / THEATER_PAGE_SIZE) : curThPage()
       void putLocalAndRefresh(cid, (l) => ({ ...l, products: withProductPatch(l.products, patch) }))
@@ -292,7 +310,7 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
     }
     prodDlg.close()
   }
-  /** 删除 a theater the player made here (its whole patch); 恢复默认 elsewhere (label and text go, `on` stays). */
+  /** 删除 a theater the player made here (its whole patch); 恢复默认 elsewhere (label, text and trigger go, `on` stays). */
   const removeProductPatch = () => {
     const d = editingProd()
     const cid = cardId()
@@ -306,7 +324,9 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
     prodDlg.close()
   }
   const hasLocalPatch = (id: string) =>
-    loc()?.products?.some((x) => x.id === id && (x.text !== undefined || x.label !== undefined)) ?? false
+    loc()?.products?.some(
+      (x) => x.id === id && (x.text !== undefined || x.label !== undefined || x.trigger !== undefined),
+    ) ?? false
   // a theater the player made on this card: the local row is its author, its id is one this client minted
   // (controls.tsx `newId("th")`), and no pack in the library declares it (a pack's theater patched here is still the pack's)
   const isLocalOnly = (id: string) =>
@@ -322,12 +342,15 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
       <div
         class="prod-item"
         data-editable="true"
-        onClick={() => openEditProduct({ id: p().id, label: p().label, text: textOf() })}
+        onClick={() => openEditProduct({ id: p().id, label: p().label, text: textOf(), trigger: p().trigger })}
       >
         <div class="prod-top">
           <span class={{ pname: true, pid: !p().label }}>{p().label ?? p().id}</span>
           <For each={missing()}>{(m) => <span class="tag warn mono">{`{{${m}}}`}</span>}</For>
           <span class="tag">{props.fromLabel(p().from)}</span>
+          <Show when={p().role === "theater" && p().id !== "options"}>
+            <span class="tag">{p().trigger === "demand" ? t("packs.onDemand") : t("packs.everyTurn")}</span>
+          </Show>
           <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
             <span onClick={(e) => e.stopPropagation()}>
               <Switch
@@ -482,6 +505,27 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
                     onInput={(e) => setEditingProd({ ...d(), label: e.currentTarget.value })}
                   />
                 </label>
+                <Show when={canTrigger(d())}>
+                  <div class="mfield">
+                    <span>{t("packs.trigger")}</span>
+                    <div class="at-toggle" role="group" aria-label={t("packs.trigger")}>
+                      <button
+                        type="button"
+                        aria-pressed={d().trigger === "demand" ? "true" : "false"}
+                        onClick={() => setEditingProd({ ...d(), trigger: "demand" })}
+                      >
+                        {t("packs.onDemand")}
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={d().trigger === "turn" ? "true" : "false"}
+                        onClick={() => setEditingProd({ ...d(), trigger: "turn" })}
+                      >
+                        {t("packs.everyTurn")}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
                 <label class="mfield">
                   <span>{t("packs.prompt")}</span>
                   <div class="field-well">

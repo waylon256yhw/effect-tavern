@@ -65,34 +65,39 @@ export const toggleMount = (l: Local, packId: string): Local => {
 export const withProductPatch = (list: readonly ProductPatch[] | undefined, item: ProductPatch): ProductPatch[] => {
   const cur = list ?? []
   const idx = cur.findIndex((p) => p.id === item.id)
-  return idx >= 0 ? cur.map((p, i) => (i === idx ? { ...p, ...item } : p)) : [...cur, item]
+  const clean = (p: ProductPatch) =>
+    Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) as ProductPatch
+  return idx >= 0 ? cur.map((p, i) => (i === idx ? clean({ ...p, ...item }) : p)) : [...cur, clean(item)]
 }
 
 export const withoutProductPatch = (list: readonly ProductPatch[] | undefined, id: string): ProductPatch[] =>
   (list ?? []).filter((p) => p.id !== id)
 
-/** 恢复默认 on a player's row: the patch for `id` loses its label and text and keeps its `on`; left with only its id, it goes. */
+/** 恢复默认 on a player's row: the patch for `id` loses its label, text and trigger and keeps its `on`; left with only its id, it goes. */
 export const withoutProductText = (list: readonly ProductPatch[] | undefined, id: string): ProductPatch[] =>
   (list ?? []).flatMap((p) => {
     if (p.id !== id) return [p]
-    const { label: _l, text: _t, ...rest } = p
+    const { label: _l, text: _t, trigger: _tr, ...rest } = p
     return Object.keys(rest).length > 1 ? [rest] : []
   })
 
-/** What the Writing page's product dialog saves: only a label or text that is non-empty and not what is shown (a card's
- *  item shows no text, so any typed text goes); no `shown` is a new 小剧场, which needs text and starts off; nothing
- *  changed is undefined. */
+/** What the Writing page's product dialog saves: only a label, text or trigger that is non-empty and not what is shown
+ *  (a card's item shows no text, so any typed text goes); no `shown` is a new 小剧场, which needs text and starts off;
+ *  nothing changed is undefined. */
 export const productEdit = (
-  shown: { id: string; label?: string; text?: string } | undefined,
+  shown: { id: string; label?: string; text?: string; trigger?: "demand" | "turn" } | undefined,
   id: string,
   label: string,
   text: string,
+  trigger?: "demand" | "turn",
 ): ProductPatch | undefined => {
   const l = label.trim()
   const x = text.trim()
+  const shownTrigger = shown?.trigger ?? "turn"
   const patch = {
     ...(l && l !== (shown?.label ?? shown?.id) && { label: l }),
     ...(x && x !== shown?.text && { text: x }),
+    ...(trigger !== undefined && (shown ? trigger !== shownTrigger : trigger === "demand") && { trigger }),
   }
   if (!shown) return x ? { id, ...patch, on: false } : undefined
   return Object.keys(patch).length ? { id, ...patch } : undefined

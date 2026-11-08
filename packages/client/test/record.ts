@@ -5,6 +5,7 @@ import * as L from "@effect-tavern/runtime/src/log.ts"
 import { timelineNode, token } from "./fixtures.ts"
 import {
   channelOf,
+  demandable,
   fieldChanged,
   fields,
   heading,
@@ -133,3 +134,18 @@ console.log("record ok")
 
 assert.equal(channelOf({ ...chips, input: { text: "", invoke: ["pack:guide"] } }), "invoke")
 assert.equal(lineOf({ ...chips, input: { text: "", invoke: ["pack:guide"] } }), "Title pack:guide")
+
+const declaredTheaters = [
+  { id: "options", label: "行动选项", role: "theater" as const, shape: { kind: "list" as const }, on: true },
+  { id: "inner", label: "人物心声", role: "theater" as const, shape: { kind: "text" as const }, on: false },
+  {
+    id: "diary",
+    label: "日记",
+    role: "theater" as const,
+    shape: { kind: "text" as const },
+    on: true,
+    trigger: "demand" as const,
+  },
+]
+assert.deepEqual(demandable(declaredTheaters, { theater: {} }), [{ value: "diary", label: "日记" }])
+assert.deepEqual(demandable(declaredTheaters, { theater: { diary: "written" } }), [])

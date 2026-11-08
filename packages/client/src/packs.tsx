@@ -856,6 +856,7 @@ interface ProductDraft {
   isNew: boolean
   label: string
   on: boolean
+  trigger: "demand" | "turn"
   text: string
 }
 const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
@@ -864,15 +865,16 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
   let dlg!: HTMLDialogElement
 
   const openNew = () => {
-    setEditing({ id: newId("th"), isNew: true, label: "", on: false, text: "" })
+    setEditing({ id: newId("th"), isNew: true, label: "", on: false, trigger: "demand", text: "" })
     dlg.showModal()
   }
-  const openEdit = (p: { id: string; label?: string; on?: boolean; text?: string }) => {
+  const openEdit = (p: { id: string; label?: string; on?: boolean; trigger?: "demand" | "turn"; text?: string }) => {
     setEditing({
       id: p.id,
       isNew: false,
       label: p.label ?? p.id,
       on: !!p.on,
+      trigger: p.trigger ?? "turn",
       text: p.text ?? "",
     })
     dlg.showModal()
@@ -885,6 +887,9 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
       label: d.label.trim(),
       text: d.text.trim(),
       ...(d.id !== "notes" ? { on: d.on } : {}),
+      ...(d.id !== "notes" && d.id !== "options"
+        ? { trigger: props.pack.id === "harness" && d.trigger === "turn" ? undefined : d.trigger }
+        : {}),
     }
     void props.onSave((p) => ({ ...p, products: withProductPatch(p.products, item) }))
     dlg.close()
@@ -894,7 +899,7 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
     if (!d) return
     const def = defaultOf(d.id)
     void props.onSave((p) => {
-      if (def) return { ...p, products: withProductPatch(p.products, def) }
+      if (def) return { ...p, products: withProductPatch(p.products, { ...def, trigger: undefined }) }
       const next = withoutProductPatch(p.products, d.id)
       const { products: _, ...rest } = p
       return next.length ? { ...rest, products: next } : rest
@@ -932,6 +937,9 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
               <div class="pack-row" onClick={() => openEdit(p())}>
                 <span class="d-name">{p().label ?? p().id}</span>
                 <span class="tag mono">{p().id}</span>
+                <Show when={p().id !== "notes" && p().id !== "options"}>
+                  <span class="tag">{p().trigger === "demand" ? t("packs.onDemand") : t("packs.everyTurn")}</span>
+                </Show>
                 <span class="row-text">{p().text ?? ""}</span>
                 <Show when={p().id !== "notes"} fallback={<span class="tag">{t("writing.alwaysOn")}</span>}>
                   <span onClick={(e) => e.stopPropagation()}>
@@ -971,21 +979,21 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
                     onInput={(e) => setEditing({ ...d(), label: e.currentTarget.value })}
                   />
                 </label>
-                <Show when={d().id !== "notes"}>
+                <Show when={d().id !== "notes" && d().id !== "options"}>
                   <div class="mfield">
                     <span>{t("packs.trigger")}</span>
                     <div class="at-toggle" role="group" aria-label={t("packs.trigger")}>
                       <button
                         type="button"
-                        aria-pressed={!d().on ? "true" : "false"}
-                        onClick={() => setEditing({ ...d(), on: false })}
+                        aria-pressed={d().trigger === "demand" ? "true" : "false"}
+                        onClick={() => setEditing({ ...d(), trigger: "demand" })}
                       >
                         {t("packs.onDemand")}
                       </button>
                       <button
                         type="button"
-                        aria-pressed={d().on ? "true" : "false"}
-                        onClick={() => setEditing({ ...d(), on: true })}
+                        aria-pressed={d().trigger === "turn" ? "true" : "false"}
+                        onClick={() => setEditing({ ...d(), trigger: "turn" })}
                       >
                         {t("packs.everyTurn")}
                       </button>

@@ -671,6 +671,19 @@ const program = Effect.gen(function* () {
   assert.deepEqual(l.by, {})
   // no narrate product on: no instruction at all
   assert.ok(!/<<aside>>/.test(str(prompts("narrate")[0]!))) // c0's, inner off
+  // an enabled theater set to `trigger: "demand"` is not asked on every turn, only on demand
+  const onDemandOnly = makeSession({
+    card: full,
+    rows: () => ({
+      harness: {
+        ...player.harness!,
+        products: [...player.harness!.products!, { id: "inner", on: true, trigger: "demand" }],
+      },
+    }),
+    model,
+  })
+  yield* go(onDemandOnly.act(null, { text: "hello" }))
+  assert.ok(!/<<aside>>/.test(str(lastNarr())))
   // the cutter alone: no delimiter, the very parts; a bare `<<aside>>` is `aside`; a chunk boundary anywhere holds
   const kept = [{ type: "text" as const, text: "a\n<<asides are prose>> b" }]
   assert.equal(split(kept).reply, kept)

@@ -7,10 +7,10 @@ import type { TimelineNode as Node } from "@effect-tavern/runtime/src/projection
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
-import { Menu, type Option } from "./controls.tsx"
+import { Menu } from "./controls.tsx"
 import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe } from "./icons.tsx"
 import { close } from "./pages.ts"
-import { fresh, heading, kindOf, marked, record, status, whens, type Declared, type Element } from "./record.ts"
+import { demandable, fresh, heading, kindOf, marked, record, status, theater, whens, type Element } from "./record.ts"
 import {
   card,
   type CardView,
@@ -366,15 +366,7 @@ export const Reading = (props: { el: Element }) => (
   </Switch>
 )
 
-/** A card's 小剧场: its theater products (record.ts `kindOf`) but options, which has its own container. */
-const theater = (products: readonly Declared[]) => products.filter((p) => p.id !== "options" && kindOf(p) === "theater")
-
-/** The 小剧场 a node can still be asked for (the `demand` action): theater, and not on the node (off by the player, or
- *  not produced this turn); one asked for leaves the list as it lands. */
-export const demandable = (products: readonly Declared[], node: Node): Option<string>[] =>
-  theater(products)
-    .filter((p) => node.theater[p.id] === undefined)
-    .map((p) => ({ value: p.id, label: p.label ?? p.id }))
+export { demandable }
 
 /** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
  *  with a close, the body, an optional footer. Scrim click and Escape close it (closedby). Record and Status share it;

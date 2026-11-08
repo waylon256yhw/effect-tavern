@@ -466,13 +466,16 @@ const packs = [packB, packA]
       ["X", "NEW", true, "harness", was.shape, was.stage, was.fold, was.feed],
     )
   }
-  // no text keeps the question and its author; the later rank's `on` wins over the pack's
+  // no text keeps the question and its author; the later rank's `on` and `trigger` win over the pack's
   const onOff = resolve(chat, {
-    harness: row("harness", { products: [{ id: "inner", on: false }] }),
-    packs: [row("p", { products: [{ id: "inner", on: true, label: "P" }] })],
+    harness: row("harness", { products: [{ id: "inner", on: false, trigger: "demand" }] }),
+    packs: [row("p", { products: [{ id: "inner", on: true, trigger: "turn", label: "P" }] })],
     local: here({ mounts: ["p"], products: [{ id: "inner", on: false }] }),
   }).products.find((p) => p.id === "inner")!
-  assert.deepEqual([onOff.on, onOff.label, onOff.from, onOff.text], [false, "P", "harness", P({}, "inner")!.text])
+  assert.deepEqual(
+    [onOff.on, onOff.trigger, onOff.label, onOff.from, onOff.text],
+    [false, "turn", "P", "harness", P({}, "inner")!.text],
+  )
   // so a card's product toggled on the local row is still the card's, and `shown` still strips its text
   const cardsOwn = {
     ...chat,

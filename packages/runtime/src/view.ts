@@ -122,13 +122,19 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
 
   // ───────── record ─────────
   const asked = R.products // a 小剧场 is narrate's, not this record document's
-    .filter((p) => p.stage !== "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, context)))
+    .filter(
+      (p) =>
+        p.stage !== "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
+    )
   const asks = asked.map((p) => `${p.id}: ${p.text}`)
   const qs = rpg.questions(s, R.names, context)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
   // the narrate products on: one `<id>: <question>` line each after the prose directive (session.ts `penned`)
   const penned = R.products
-    .filter((p) => p.stage === "narrate" && p.on && !p.unasked && (!p.when || holds(p.when, context)))
+    .filter(
+      (p) =>
+        p.stage === "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
+    )
     .map((p) => `${p.id}: ${p.text}`)
 
   // ───────── the document ─────────
