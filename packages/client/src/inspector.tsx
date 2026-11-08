@@ -122,6 +122,9 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         <Show when={ids(out().read)} fallback={<span class="pill">{t("inspector.nothingRead")}</span>}>
           {(r) => <span class="pill">read: {r()}</span>}
         </Show>
+        <Show when={typeof out().search === "string" && String(out().search).trim()}>
+          {(q) => <span class="pill">search: {q()}</span>}
+        </Show>
       </Match>
       <Match when={props.row.phase === "decide"}>
         <Show when={check()} fallback={<span class="pill">{beats()[props.nth]?.next ?? "end"}</span>}>
@@ -257,7 +260,10 @@ const Step = (props: {
       >
         <span class="stage">
           <Next class="chev" aria-hidden="true" />
-          <span class="nm">{props.row.phase}</span>
+          <span class="nm">
+            {props.row.phase}
+            <Show when={props.row.phase === "lookup" || props.row.phase === "decide"}> {props.nth + 1}</Show>
+          </span>
           <Show when={hits()}>{(h) => <span class="hits">{h()}</span>}</Show>
         </span>
         <span class="digest">

@@ -29,6 +29,7 @@ function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
       // Index entries are `id=hook` (a lore entry's first sentence, a recall row's key); the script reads "about <id>" or
       // "about <hook>".
       out = JSON.stringify({
+        more: false,
         read: doc.index
           .filter((e) => e.some((k) => want.toLowerCase().includes(`about ${k.toLowerCase()}`)))
           .map(([id]) => id),

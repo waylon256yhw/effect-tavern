@@ -102,7 +102,7 @@ export const narratorHistory = <B>(
   ]
 }
 
-/** Director / decide: facts only — input, events, fired, notes. No prose anywhere. The folded prefix is the narrator's
+/** Lookup / director / decide: facts only — input, events, read, fired, notes. No prose anywhere. The folded prefix is the narrator's
  *  own summary (its events are already in the state the stage reads), then one line per tail turn. */
 export const ledger = <B>(
   path: readonly Turn<B>[],
@@ -116,7 +116,7 @@ export const ledger = <B>(
       ? [
           {
             role: "system",
-            text: `Ledger:\n${tail.map((t) => `${t.input.text} → ${eventsOf(t).join(",") || "-"}; fired ${t.fired.map((d) => d.id).join(",") || "-"}; ${notesOf(t).join("; ")}`).join("\n")}`,
+            text: `Ledger:\n${tail.map((t) => `${t.input.text} → ${eventsOf(t).join(",") || "-"}; read ${[...new Set(t.read.map((d) => d.id))].join(",") || "-"}; fired ${t.fired.map((d) => d.id).join(",") || "-"}; ${notesOf(t).join("; ")}`).join("\n")}`,
           } as Msg,
         ]
       : []),

@@ -15,7 +15,7 @@ import { cardNames, loadCard, player } from "./cards/index.ts"
 // A real turn on 盐道 from its second greeting, with 局势 set on the greeting node: every call's messages kept.
 const yandao = await loadCard("yandao")
 const answers: Record<string, string> = {
-  lookup: '{"read":[]}',
+  lookup: '{"read":[],"more":false}',
   direct: '{"must":[],"may":[],"tone":""}',
   check: '{"fired":[],"violated":[]}',
   record: '{"notes":"","options":[],"answers":{"tension":"same"}}',
@@ -52,8 +52,13 @@ const head = on.map((f) =>
 )
 assert.equal(head.length, 8) // language, pov, style; town, sides, now, tense (局势 ≥ 6), blood (起点 血案)
 assert.deepEqual(sent("narrate").slice(0, 8), head)
-// lookup and record: the same document but for the last message (the session's note and prose; view's are empty)
-assert.deepEqual(sent("lookup").slice(0, -1), at("lookup").doc.map(text).slice(0, -1))
+// lookup and record: preview has no path ledger; the final message is the session's note/prose (empty in preview).
+assert.deepEqual(
+  sent("lookup")
+    .filter((m) => !m.startsWith("Ledger:"))
+    .slice(0, -1),
+  at("lookup").doc.map(text).slice(0, -1),
+)
 assert.match(sent("lookup").join("\n"), /Index: yandao=盐道之争已经半年/)
 const r = at("record")
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))
