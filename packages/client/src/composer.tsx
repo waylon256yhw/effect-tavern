@@ -1,10 +1,13 @@
+import { AsyncView } from "./async-view.tsx"
+import { InvocationMenu } from "./invocation-menu.tsx"
+import { addInvocation, backspaceInvocation, removeInvocation } from "./composition.ts"
 // The composer: the one raised object under the column, one line at rest (#117): `+` (the snippets menu, or / on an
 // empty box), the box, Send / Stop. What serves the typing hangs on the box's top edge only while it is in use: the
 // format keys, a row of glyph chips over the text while the hand is in the box or words are; the note to the
 // narrator a note snippet opens (a word that goes with the line, or alone), its own box in a thin strip; the line
 // being revised, a strip naming its turn; entry chips carry this turn's invocations.
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
-import { For, Show } from "solid-js"
+import { createSignal, onSettled, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
@@ -12,16 +15,13 @@ import { roam } from "./controls.tsx"
 import { fillKnown } from "./pack.ts"
 import {
   acting,
-  aside,
+  composition,
+  updateComposition,
   cancelRevise,
   card,
-  compose,
-  noted,
-  invoke,
   path,
   registry,
   revising,
-  setBoxes,
   settling,
   stage,
   turnOf,
@@ -35,8 +35,9 @@ export const Composer = () => {
   const phase = read(stage)
   // Narrate halts the prose; record cancellation preserves the already saved node.
   const stoppable = () => phase() === "record" || !settling(phase())
-  const text = read(compose)
-  const noteText = read(noted)
+  const model = read(composition)
+  const text = () => model().text
+  const noteText = () => model().note
   const view = read(card)
   // The card's default channel is the mode for the whole session (GET /card `input`): in participant mode the box is the
   // character's line, a thought is this turn's deviation inside it, and a note to the narrator is a second box under it
@@ -48,15 +49,14 @@ export const Composer = () => {
   const keys = () => view()?.layer?.format ?? []
   // The note box is open (participant mode only). It is one state, not a tag per snippet: any number of note snippets
   // may go into that box; it clears after the send.
-  const toNarratorOn = read(aside)
+  const toNarratorOn = () => model().noteOpen
   // Revising a landed line: the chip names the turn (a tap scrolls to it) and cancels; Keep sits beside Send.
   const revise = read(revising)
-  const selected = read(invoke)
-  const entries = () => line().at(-1)?.playerCatalog ?? []
-  const available = () => entries().filter((e) => !selected().includes(e.id))
+  const selected = () => model().invocations
+  const [menuOpen, setMenuOpen] = createSignal(false)
   const line = read(path)
   const blocked = () =>
-    !revise() && line().some((n) => n.turn.settlementStatus === "pending" || n.turn.settlementStatus === "failed")
+    !revise() && line().some((n) => n.settlementStatus === "pending" || n.settlementStatus === "failed")
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
   // An empty line on a card with openings: the story starts from one of them (the card page), not from a typed root.
@@ -67,13 +67,14 @@ export const Composer = () => {
   let box: HTMLTextAreaElement | undefined
   let noteBox: HTMLTextAreaElement | undefined
   let menu: HTMLDivElement | undefined
+  let menuKeyboard = false
   /** What a send carries: the main box, and the note box when it is there. */
   const filled = () => selected().length > 0 || !!(text().trim() || (acting() && noteText().trim()))
   // The caret lands after what went in, and the hand with it: a note snippet puts the hand in the note's box, where
   // its words are (sent as they stand, or finished there), and the line's box, with the keys that serve it, waits for
   // a tap of its own.
   const put = (value: string, caret: number, note = false) => {
-    registry.set(note ? noted : compose, value)
+    updateComposition(note ? { note: value } : { text: value })
     requestAnimationFrame(() => {
       const el = note ? noteBox : box
       el?.setSelectionRange(caret, caret)
@@ -89,7 +90,7 @@ export const Composer = () => {
     ;(document.activeElement as HTMLElement | null)?.blur()
     menu?.hidePopover()
     const note = !!s.note && acting()
-    if (note) registry.set(aside, true)
+    if (note) updateComposition({ noteOpen: true })
     const el = note ? noteBox : box
     const v = note ? noteText() : text()
     const a = el?.selectionStart ?? v.length
@@ -122,17 +123,18 @@ export const Composer = () => {
   )
   const submit = (keep = false) => {
     if (!filled() || busy() || waiting() || blocked()) return false
-    const t = text().trim()
-    const n = acting() ? noteText().trim() : ""
-    if (keep) turn.keep(t, n)
-    else turn.act(t, n)
-    setBoxes({ text: "", note: "", aside: false })
+    if (keep) turn.keep()
+    else turn.act()
     return true
   }
   // oxlint-disable-next-line solid/reactivity -- submit runs inside the keydown handler, where its reads are current
   const ime = imeController(submit)
   // oxlint-disable-next-line solid/reactivity -- the note box's own composition state, the same submit
   const noteIme = imeController(submit)
+  onSettled(() => () => {
+    ime.dispose()
+    noteIme.dispose()
+  })
   const keep = (e: Event) => e.preventDefault() // a tap on a control must not take focus (and the phone's keyboard) from the box
   return (
     <form
@@ -191,13 +193,13 @@ export const Composer = () => {
               value={noteText()}
               enterkeyhint="enter"
               aria-label={t("composer.noteToNarrator")}
-              onInput={(e) => registry.set(noted, e.currentTarget.value)}
+              onInput={(e) => updateComposition({ note: e.currentTarget.value })}
               onCompositionStart={noteIme.compositionStart}
               onCompositionEnd={noteIme.compositionEnd}
               onKeyDown={(e) => {
                 if (e.key === "Escape" && revise()) cancelRevise()
                 else if (e.key === "Escape" && !noteText()) {
-                  registry.set(aside, false) // the strip goes inert: the hand leaves it, and returns to the line only if words wait there (as ×)
+                  updateComposition({ noteOpen: false }) // the strip goes inert: the hand leaves it, and returns to the line only if words wait there (as ×)
                   if (text()) box?.focus()
                 } else noteIme.keyDown(e)
               }}
@@ -207,7 +209,11 @@ export const Composer = () => {
               class="icon"
               aria-label={t("composer.closeNote")}
               onPointerDown={keep}
-              onClick={() => (registry.set(aside, false), registry.set(noted, ""), text() && box?.focus())}
+              onClick={() => (
+                updateComposition({ noteOpen: false }),
+                updateComposition({ note: "" }),
+                text() && box?.focus()
+              )}
             >
               <Close />
             </button>
@@ -215,25 +221,8 @@ export const Composer = () => {
         </Show>
         {/* the format keys: a row of glyph chips right over the text, there while the hand is in the box or words are
             (reader.css); at rest the box is one line */}
-        <Show when={keys().length > 0 || selected().length > 0}>
+        <Show when={keys().length > 0}>
           <div class="format" aria-label={t("composer.formatKeys")}>
-            <For each={selected()} keyed={(id) => id}>
-              {(id) => (
-                <button
-                  type="button"
-                  class="chip invocation"
-                  onPointerDown={keep}
-                  onClick={() =>
-                    registry.set(
-                      invoke,
-                      selected().filter((x) => x !== id()),
-                    )
-                  }
-                >
-                  {id()} <Close />
-                </button>
-              )}
-            </For>
             <For each={keys()} keyed={(k) => k.label}>
               {(k) => (
                 <button type="button" class="chip" onPointerDown={keep} onClick={() => insert(k())}>
@@ -244,88 +233,117 @@ export const Composer = () => {
           </div>
         </Show>
         <div class="row">
-          <Show when={quick().length > 0 || available().length > 0}>
-            <button
-              type="button"
-              class="icon"
-              aria-label={t("composer.snippets")}
-              aria-haspopup="menu"
-              popovertarget="snippets"
-              onPointerDown={keep}
-            >
-              <Snippets />
-            </button>
-            <div
-              id="snippets"
-              class="snippets"
-              popover
-              role="menu"
-              ref={(el) => (menu = el)}
-              onKeyDown={roam}
-              onFocusOut={(e) => !menu?.contains(e.relatedTarget as HTMLElement | null) && menu?.hidePopover()}
-              // the first item takes the focus when the menu opens from the keyboard: Enter on the focused + key here,
-              // "/" in the box below. A pointer never focuses the key (keep), so it leaves the hand where it was: in the
-              // box, where what hangs on it for that hand stays, or nowhere at rest, where the box stays one line
-              onToggle={(e) =>
-                e.newState === "open" &&
-                e.currentTarget.matches(":popover-open") && // the event is queued: a pick may already have closed it
-                document.activeElement?.matches("[popovertarget=snippets]") &&
-                e.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus()
-              }
-            >
-              {/* two groups, in the story and to the narrator, parted by a line: the items are the card's language, the chrome adds no words */}
-              <Items of={inStory()} />
-              <hr />
-              <Items of={toNarrator()} />
-              <Show when={available().length > 0}>
-                <hr />
-                <For each={available()} keyed={(e) => e.id}>
-                  {(e) => (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      class="item"
-                      tabindex="-1"
-                      onPointerDown={keep}
-                      onClick={() => {
-                        registry.set(invoke, [...selected(), e().id])
-                        menu?.hidePopover()
-                        box?.focus()
-                      }}
-                    >
-                      <span class="name">{e().id}</span>
-                      <span class="hint">{e().hook}</span>
-                    </button>
-                  )}
-                </For>
-              </Show>
-            </div>
-          </Show>
-          <textarea
-            ref={(el) => (box = el)}
-            value={text()}
-            placeholder={prompt()}
-            enterkeyhint="enter"
-            onInput={(e) => registry.set(compose, e.currentTarget.value)}
-            // a thought's open bracket brings its close: half a pair would leave the model guessing where the thought ends
-            onBeforeInput={(e) => {
-              if (e.inputType !== "insertText" || e.data !== "⦅") return
-              e.preventDefault()
-              const { selectionStart: a, selectionEnd: b, value } = e.currentTarget
-              put(`${value.slice(0, a)}⦅${value.slice(a, b)}⦆${value.slice(b)}`, a + 1)
+          <button
+            type="button"
+            class="icon"
+            aria-label={t("composer.snippets")}
+            aria-haspopup="menu"
+            popovertarget="snippets"
+            onPointerDown={(e) => {
+              menuKeyboard = false
+              keep(e)
             }}
-            onCompositionStart={ime.compositionStart}
-            onCompositionEnd={ime.compositionEnd}
             onKeyDown={(e) => {
-              // "/" on an empty box opens the snippets menu: the keyboard's way to the same menu, no command grammar.
-              if (e.key === "/" && !e.isComposing && text() === "" && menu) {
-                e.preventDefault()
-                menu.showPopover()
-                menu.querySelector<HTMLElement>("[role=menuitem]")?.focus()
-              } else if (e.key === "Escape" && revise()) cancelRevise()
-              else ime.keyDown(e)
+              if (e.key === "Enter" || e.key === " ") menuKeyboard = true
             }}
-          />
+          >
+            <Snippets />
+          </button>
+          <div
+            id="snippets"
+            class="snippets"
+            popover
+            role="menu"
+            ref={(el) => (menu = el)}
+            onKeyDown={(e) => {
+              if (!(e.target instanceof HTMLInputElement)) roam(e)
+            }}
+            onToggle={(e) => {
+              setMenuOpen(e.newState === "open")
+              if (e.newState === "open" && document.activeElement?.matches("[popovertarget=snippets]"))
+                requestAnimationFrame(() => menu?.querySelector<HTMLElement>("[role=menuitem]")?.focus())
+            }}
+          >
+            <Show when={menuOpen()}>
+              <AsyncView>
+                <InvocationMenu
+                  keyboard={menuKeyboard}
+                  quick={
+                    <div class="quick">
+                      <Items of={inStory()} />
+                      <hr />
+                      <Items of={toNarrator()} />
+                    </div>
+                  }
+                  choose={(item) => {
+                    registry.update(composition, (d) => addInvocation(d, item))
+                    menu?.hidePopover()
+                    requestAnimationFrame(() => box?.focus())
+                  }}
+                />
+              </AsyncView>
+            </Show>
+          </div>
+          <div class="compose-input">
+            <For each={selected()} keyed={(i) => i.resourceId}>
+              {(item) => (
+                <button
+                  type="button"
+                  class="chip invocation"
+                  aria-label={t("composer.removeInvocation", { title: item().title })}
+                  onPointerDown={keep}
+                  onClick={() => {
+                    const id = item().resourceId
+                    registry.update(composition, (d) => removeInvocation(d, id))
+                  }}
+                >
+                  {item().title}
+                  <Close />
+                </button>
+              )}
+            </For>
+            <textarea
+              ref={(el) => (box = el)}
+              value={text()}
+              placeholder={selected().length ? "" : prompt()}
+              aria-label={prompt()}
+              enterkeyhint="enter"
+              onInput={(e) => updateComposition({ text: e.currentTarget.value })}
+              // a thought's open bracket brings its close: half a pair would leave the model guessing where the thought ends
+              onBeforeInput={(e) => {
+                if (e.inputType !== "insertText" || e.data !== "⦅") return
+                e.preventDefault()
+                const { selectionStart: a, selectionEnd: b, value } = e.currentTarget
+                put(`${value.slice(0, a)}⦅${value.slice(a, b)}⦆${value.slice(b)}`, a + 1)
+              }}
+              onCompositionStart={ime.compositionStart}
+              onCompositionEnd={ime.compositionEnd}
+              onKeyDown={(e) => {
+                // "/" on an empty box opens the snippets menu: the keyboard's way to the same menu, no command grammar.
+                if (e.key === "Backspace") {
+                  const before = registry.get(composition)
+                  const after = backspaceInvocation(
+                    before,
+                    e.currentTarget.selectionStart,
+                    e.currentTarget.selectionEnd,
+                    e.isComposing || ime.compositionActive() || e.keyCode === 229,
+                  )
+                  if (before !== after) {
+                    e.preventDefault()
+                    registry.set(composition, after)
+                    return
+                  }
+                }
+                if (e.key === "/" && !e.isComposing && !ime.compositionActive() && text() === "" && menu) {
+                  e.preventDefault()
+                  menuKeyboard = true
+                  menu.showPopover()
+                  menu.querySelector<HTMLElement>("[role=menuitem]")?.focus()
+                } else if (e.key === "Escape" && revise()) cancelRevise()
+                else ime.keyDown(e, selected().length > 0 && !text().trim() && !noteText().trim())
+              }}
+            />
+          </div>
           <Show when={revise()}>
             <button
               type="button"

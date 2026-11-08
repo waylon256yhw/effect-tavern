@@ -80,6 +80,7 @@ const en: Dict = {
     vault: "Key vault",
     view: "View",
     loading: "Loading…",
+    retry: "Retry",
   },
   composer: {
     closeNote: "Close the note",
@@ -95,6 +96,11 @@ const en: Dict = {
     stop: "Stop",
     toNarrator: "To the narrator, not in the story…",
     yourLine: "Your line…",
+    playerTools: "Writing skills",
+    cardTools: "Card actions",
+    localTools: "Local writing skills",
+    noMatches: "No matching actions available",
+    removeInvocation: "Remove {title}",
   },
   controls: {
     backToList: "Back to the list",
@@ -135,6 +141,8 @@ const en: Dict = {
     targets: "{n} targets",
     tokenLegend: "in / out / cache read / cache write",
     untold: "Untold",
+    step: "Step {n}",
+    messages: "Request and response messages",
   },
   lexicon: {
     noList: "No lexicon in the file: it needs an array, or an object with a lexicon key",
@@ -368,6 +376,7 @@ const en: Dict = {
     newStory: "New story",
     notePreview: "(To the narrator) {note}",
     opening: "Opening",
+    invocationPreview: "Invoked {n} items",
   },
   switches: {
     agency: "Agency",

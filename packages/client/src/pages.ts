@@ -21,7 +21,6 @@ type Kind = Exclude<Page, object> | "inspect"
 const kindOf = (p: Page): Kind => (typeof p === "object" ? "inspect" : p)
 /** What each page reads when it opens; a page not named reads nothing of its own. */
 const loads: Partial<Record<Kind, () => unknown>> = {
-  inspect: wire.fetchCalls,
   settings: wire.fetchSettings,
   writing: wire.fetchPacks,
 }

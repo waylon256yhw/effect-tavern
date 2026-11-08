@@ -258,7 +258,44 @@ console.log("record transactions ok")
   assert.equal(T.context(two.id).fields.score, 1)
   assert.equal(T.context(one.id).fields.score, 0)
   assert.ok(!("world" in T.node(two.id))) // full world is fetched on demand, never copied into timeline nodes
-  assert.equal(T.activeContext(two.id).state.fields.score, 1)
+  assert.equal(T.activeContext(two.id).worldState.fields.score, 1)
+  const timeline = T.timeline()
+  assert.deepEqual(
+    timeline.nodes.map((n) => n.id),
+    [one.id, two.id],
+  )
+  const light = T.timelineNode(two.id)
+  assert.equal(light.heading, "woods")
+  assert.equal(light.changeSummary.fields, 1)
+  assert.deepEqual(T.detail(two.id).fieldChanges, [{ path: "score", was: 0, now: 1 }])
+  for (const key of ["turn", "state", "changes", "checks", "delivered", "playerCatalog"])
+    assert.ok(!(key in light), key)
+  assert.ok(light.deliverySummary.every((d) => !("text" in d)))
+  const heavy = T.node(two.id)
+  const delivery = {
+    resourceId: "pack:p/guide",
+    title: "Guide",
+    source: "pack" as const,
+    revision: "v1",
+    residency: "window" as const,
+    text: "large body".repeat(10000),
+  }
+  const wire = T.projectTimeline({
+    ...heavy,
+    delivered: [delivery],
+    turn: {
+      ...heavy.turn,
+      deliveries: [delivery],
+      changes: [{ kind: "replace", product: "scene", value: { place: "large state".repeat(10000), present: [] } }],
+    },
+  })
+  assert.ok(JSON.stringify(wire).length < 2048)
+  assert.ok(!JSON.stringify(wire).includes("large body"))
+  assert.ok(!JSON.stringify(wire).includes("large state"))
+
+  T.setField(one.id, [{ path: "score", set: 5 }])
+  assert.equal(T.activeContext(two.id).worldState.fields.score, 6)
+  assert.deepEqual(T.detail(two.id).fieldChanges, [{ path: "score", was: 5, now: 6 }])
 }
 
 // Initialization rejects malformed fixed state; replacement and nested patch have different clearing semantics.

@@ -1,3 +1,4 @@
+import { emptyDraft, type DraftModel } from "./composition.ts"
 // The turn in flight (docs: GLOSSARY §二, review/architecture-review-2026-10-30.html card 3): the eight actions by
 // node id, plus stop, attach and abandon. Each one sends through the wire and lets the stream land it (store.ts
 // `apply`); the ones that run the narrator (act, swipe, reword, edit, keep) first put a draft under the node's parent.
@@ -18,7 +19,7 @@ import {
   type Id,
   inputOf,
   log,
-  invoke,
+  composition,
   prose,
   registry,
   revising,
@@ -46,40 +47,51 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
     input: { text: string; note?: string; invoke?: readonly string[] },
     action: Action,
     text = "",
+    submitted?: DraftModel,
   ) => {
     registry.set(error, null)
     registry.set(demanded, null)
-    registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
+    registry.set(draft, {
+      parent,
+      input,
+      text,
+      composition: submitted,
+      invocations:
+        submitted?.invocations ??
+        ("node" in action && action.node !== null ? registry.get(log).nodes.get(action.node)?.invocations : undefined),
+      fresh: action.kind === "act" || registry.get(revising) !== null,
+    })
     go(action)
   }
   const node = (id: Id) => L.get(registry.get(log), id)
   /** The revised input (the invoke kept, a cleared note gone) and the node it revises. */
-  const revised = (text: string, note: string) => {
+  const revised = (text: string, note: string, selected: readonly string[]) => {
     const n = node(registry.get(revising)!.node)
-    const { note: _, invoke: __, ...kept } = n.turn.input
-    const selected = registry.get(invoke)
-    registry.set(invoke, [])
+    const { note: _, invoke: __, ...kept } = n.input
     return { n, input: { ...kept, ...inputOf(text, note), ...(selected.length ? { invoke: selected } : {}) } }
   }
   return {
     /** The player's line (and note) as a new turn under head; revising, beside the revised one under the same parent. */
-    act: (rawText: string, rawNote: string): void => {
+    act: (): void => {
+      const submitted = registry.get(composition)
+      const rawText = submitted.text.trim()
+      const rawNote = submitted.note.trim()
+      const selected = submitted.invocations.map((i) => i.resourceId)
+      registry.set(composition, emptyDraft())
       const dict = registry.get(card)?.layer?.names
       const text = fillKnown(rawText, dict)
       const note = fillKnown(rawNote, dict)
       if (registry.get(revising)) {
-        const { n, input } = revised(text, note)
-        return start(n.parent, input, { kind: "act", parent: n.parent, input })
+        const { n, input } = revised(text, note, selected)
+        return start(n.parent, input, { kind: "act", parent: n.parent, input }, "", submitted)
       }
-      const selected = registry.get(invoke)
       const input = { ...inputOf(text, note), ...(selected.length ? { invoke: selected } : {}) }
-      registry.set(invoke, [])
-      start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
+      start(registry.get(log).head, input, { kind: "act", input }, "", submitted) // under head: the server knows where that is
     },
     /** The story starts from an opening (none on the card: an empty line, the player's first words start it). The
      *  caller (the card page's Begin) then closes onto the reader: this module sits under pages.ts and moves no page. */
     greet: (index?: number): void => {
-      registry.set(invoke, []) // the old story's invoke and error do not carry into a new one
+      registry.set(composition, emptyDraft()) // the old story's invoke and error do not carry into a new one
       registry.set(error, null)
       if (registry.get(card)?.greetings.length) go({ kind: "greet", ...(index !== undefined && { greeting: index }) })
     },
@@ -87,23 +99,31 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
     checkout: (id: Id | null): void => go({ kind: "checkout", node: id }),
     swipe: (id: Id): void => {
       const n = node(id)
-      start(n.parent, n.turn.input, { kind: "swipe", node: id })
+      start(n.parent, n.input, { kind: "swipe", node: id })
     },
     reword: (id: Id, note?: string): void => {
       const n = node(id)
-      const input = { ...n.turn.input, note: [n.turn.input.note, note].filter(Boolean).join("\n") || undefined } // joined as the session joins it
+      const input = { ...n.input, note: [n.input.note, note].filter(Boolean).join("\n") || undefined } // joined as the session joins it
       start(n.parent, input, { kind: "reword", node: id, ...(note !== undefined && { note }) })
     },
     /** The prose rewritten by the player: check and record run over it, nothing is narrated. */
     edit: (id: Id, text: string): void => {
       const n = node(id)
-      start(n.parent, n.turn.input, { kind: "edit", node: id, text }, text)
+      start(n.parent, n.input, { kind: "edit", node: id, text }, text)
     },
     /** The revised line sent with the prose kept: a sibling whose record is redone over the same prose. */
-    keep: (rawText: string, rawNote: string): void => {
+    keep: (): void => {
+      const submitted = registry.get(composition)
+      const rawText = submitted.text.trim()
+      const rawNote = submitted.note.trim()
+      registry.set(composition, emptyDraft())
       const dict = registry.get(card)?.layer?.names
-      const { n, input } = revised(fillKnown(rawText, dict), fillKnown(rawNote, dict))
-      start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n))
+      const { n, input } = revised(
+        fillKnown(rawText, dict),
+        fillKnown(rawNote, dict),
+        submitted.invocations.map((i) => i.resourceId),
+      )
+      start(n.parent, input, { kind: "edit", node: n.id, input }, prose(n), submitted)
     },
     retryRecord: (id: Id): void => {
       registry.set(error, null)

@@ -8,7 +8,7 @@
 // heads, pills); timeline.css adds the rail and the node pane's own pieces. No boxes: the rail, the knots and the
 // weight of the ink say what is where; only the selected station sits on a surface.
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Node } from "@effect-tavern/runtime/src/session.ts"
+import type { TimelineNode as Node } from "@effect-tavern/runtime/src/projection.ts"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Checkout, Clue, Notes, Trash } from "./icons.tsx"
@@ -115,9 +115,9 @@ export const Timeline = () => {
       >
         <div class="row1">
           <span class="nid">#{p.id}</span>
-          <Show when={n().turn.sibling}>
+          <Show when={n().sibling}>
             <span class="how">
-              <SiblingKind of={n().turn.sibling} />
+              <SiblingKind of={n().sibling} />
             </span>
           </Show>
           <span class="where">{sceneOf(view()?.heading, all(), n()) ?? ""}</span>
@@ -128,13 +128,13 @@ export const Timeline = () => {
             <Match when={isTarget(p.id)}>
               <span class="badge target">→leaf</span>
             </Match>
-            <Match when={n().turn.end === "stopped"}>
+            <Match when={n().end === "stopped"}>
               <span class="badge stop">{t("timeline.stopBadge")}</span>
             </Match>
           </Switch>
         </div>
         <div class="row2">
-          <Show when={n().turn.input.note && n().turn.input.text}>
+          <Show when={n().input.note && n().input.text}>
             <span class="pill">{t("timeline.notePill")}</span>
           </Show>
           {textOf(n())}
@@ -163,9 +163,9 @@ export const Timeline = () => {
                 aria-label={`Node ${id()}`}
                 onClick={() => setSelected(id())}
               >
-                <SiblingKind of={node(id())!.turn.sibling} />#{id()}
-                <Show when={node(id())!.turn.input.note}>✦</Show>
-                <Show when={node(id())!.turn.end === "stopped"}>
+                <SiblingKind of={node(id())!.sibling} />#{id()}
+                <Show when={node(id())!.input.note}>✦</Show>
+                <Show when={node(id())!.end === "stopped"}>
                   <i class="stopdot" />
                 </Show>
               </button>
@@ -316,7 +316,7 @@ export const Timeline = () => {
                       <Show when={!isHead(n().id) && onLine().has(n().id)}>
                         <span class="pill ok">{t("timeline.onLine")}</span>
                       </Show>
-                      <Show when={n().turn.end === "stopped"}>
+                      <Show when={n().end === "stopped"}>
                         <span class="pill bad">{t("common.stopped")}</span>
                       </Show>
                     </h2>
@@ -363,7 +363,7 @@ export const Timeline = () => {
                       {t("timeline.parent")} <b>{n().parent === null ? t("timeline.noParent") : `#${n().parent}`}</b>
                     </span>
                     <span>
-                      <b>{n().turn.sibling ?? (n().parent === null ? "root" : "act")}</b>
+                      <b>{n().sibling ?? (n().parent === null ? "root" : "act")}</b>
                       <Show when={vs().list.length > 1}>
                         {" "}
                         {vs().index + 1}/{vs().list.length}
@@ -379,14 +379,14 @@ export const Timeline = () => {
                 {/* the reader's line block (App.tsx Said), without its actions: this page is a view */}
                 <Show when={lineOf(n())} fallback={<span class="dim">{t("timeline.openingOnly")}</span>}>
                   <div class="spoke">
-                    <Show when={n().turn.input.text}>
+                    <Show when={n().input.text}>
                       <div class="said">
-                        <span class="text">{n().turn.input.text}</span>
+                        <span class="text">{n().input.text}</span>
                       </div>
                     </Show>
-                    <Show when={n().turn.input.note}>
+                    <Show when={n().input.note}>
                       <div class="said note">
-                        <span class="text">{n().turn.input.note}</span>
+                        <span class="text">{n().input.note}</span>
                       </div>
                     </Show>
                   </div>
@@ -413,7 +413,7 @@ export const Timeline = () => {
                           <span class="v">
                             {i() + 1}/{vs().list.length} · #{s().id}
                           </span>
-                          <SiblingKind of={s().turn.sibling} />
+                          <SiblingKind of={s().sibling} />
                           <span class="text">{textOf(s())}</span>
                           <span class="meta">{L.below(all(), s().id) ? `+${L.below(all(), s().id)}` : "leaf"}</span>
                         </button>

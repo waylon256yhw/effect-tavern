@@ -53,6 +53,11 @@ const pad = (s: CSSStyleDeclaration) => parseFloat(s.paddingLeft) + parseFloat(s
 const fit = (block: HTMLElement) => {
   if (available <= 0) return
   for (const bubble of block.querySelectorAll<HTMLElement>(".said")) {
+    // Inline tokens have their own padding and borders; let native layout measure mixed content.
+    if (bubble.querySelector(".invocation")) {
+      bubble.style.width = ""
+      continue
+    }
     const s = getComputedStyle(bubble)
     const inner = available - pad(s)
     if (inner <= 0) continue

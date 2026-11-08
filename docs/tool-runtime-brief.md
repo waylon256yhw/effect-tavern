@@ -295,3 +295,15 @@ export interface DeliverySnapshot {
 - `Node.playerCatalog` 与模型目录分离，Composer/Inspector 已切换；Pack 编辑器分别编辑权限、激活及驻留。纯芯片输入保留用户消息边界，编辑仍走 check/record，书架计数与搜索回合编号也计入它。
 - 删除旧的 `invoke` 模式字段、`Lookup` 枚举及 `more/search/Read/Found/lookup.again` 协议、`product@node#index` 记忆引用。旧条目策略在解码边界明确拒绝，不静默改变权限含义；缺少交付快照的旧故事不隐式转换，备份格式升至 **3**。
 - Step 4 仍负责完整的 `TimelineNode` / `TurnDetail` 拆分与 Composer 分类交互；本步不把完整世界状态加入时间线节点。
+
+### Step 4 实施契约
+
+- `runtime/src/projection.ts` 定义公开读取边界：`TimelineNode` 仅携带输入、调用标签、正文、小剧场、服务端标题、结算状态、交付摘要与变更计数；`GET /nodes` 和 SSE change 都使用此契约。内部 `Node` 和完整 journal 不再直接传给客户端。规则字段修正还投影受影响后代的轻量节点，所有订阅者同步刷新标题和计数。
+- `GET /nodes/:id/detail` 返回 `TurnDetail`：字段前后值、checks、冻结交付、领域变更、服务端已合成的产品展示值和本轮记录。前端不沿父链重建状态，不合并 patch，不解释墓碑。`GET /context?node=<id|root>` 返回 `ActiveContextView { worldState, products, playerCatalog }`；World/Status 与调用菜单分别在打开时读取。
+- `GET /nodes/:id/trace` 是唯一 Inspector 轨迹读取入口；旧的全故事 `/calls` 和 SSE call 移除。服务端仍完整保存调用；关闭 inspect 时不交付请求和工具结果正文。Inspector 展示原生步骤、工具参数/结果、校验错误、重放标记、取消/预算耗尽与预算值。
+- 客户端详情缓存最多 8 个，完整上下文与轨迹各 1 个，按故事、节点和日志变更失效；版本使用弱引用编号，不为缓存保留旧日志。失败请求可在局部面板重试，不破坏编辑中的草稿。
+- `PlayerCatalogItem` 使用 `{ resourceId, title, category, source, summary, available }`，只由已解锁且允许玩家调用的资源生成。Composer 根菜单保留快捷片段，分开写作技能与卡片调用；写作技能继续按挂载包/本地分组，子菜单可搜索、滚动，宽度跟随输入框。目录不展示未解锁设定或内部记忆。
+- `composition.ts` 的 `DraftModel { text, note, invocations, noteOpen }` 是唯一输入状态；`noteOpen` 仅控制备注框展开。调用标签保存稳定 ID、标题与来源。发送先保存并清空整个草稿，失败/撤回原样恢复，切换故事和取消修订也整体保存/恢复；迟到的失败不会覆盖玩家新写的文字或标签。
+- 保留正文的输入编辑仍校验新增调用的权限并冻结快照，原输入与修改后的输入分开处理。`record` 读取本轮显式调用的冻结引用（仅作参考，世界事实仍从正文提取），结算重试复用同一份引用；重抽中的输入也使用原轮次冻结标签。
+- 标签进入主输入行和已发送气泡内部，纯标签输入无占位符、失焦不隐藏；纯标签 Enter 发送，文字输入仍按原约定使用 Ctrl/⌘+Enter。行首 Backspace 删除前一个标签，选区和 IME 组合阶段不误删。纯标签回合的时间线预览使用冻结标题，故事列表使用调用计数，不再显示成空白开场。
+- 验证包括真实 HTTP/SSE 契约、超大交付/状态不进入轻量节点、祖先修正后的后代刷新、缓存隔离/容量、草稿完整恢复和 Solid diagnostics。`packages/client/test/browser.tsx` 使用真实组件与脚本化传输；在 client 目录运行 `bun test/build-browser.ts` 可生成独立 HTML，验证菜单、IME、Record/Status、Inspector，无须启动开发服务或调用真实模型。

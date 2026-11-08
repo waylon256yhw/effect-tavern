@@ -1,3 +1,4 @@
+import { emptyDraft, hasDraft, type DraftModel } from "./composition.ts"
 // The client's state as atoms, fed by the wire's events. The log tree lives in `log`, a replica of the server's
 // (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
 // keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
@@ -9,8 +10,12 @@ import type { Provider, SecretView } from "@effect-tavern/provider/src/providers
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Layer, Local, shown } from "@effect-tavern/runtime/src/layer.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Event, Facets, Node, Phase } from "@effect-tavern/runtime/src/session.ts"
-import type { Call } from "./inspect.ts"
+import type { Facets, Phase } from "@effect-tavern/runtime/src/session.ts"
+import type {
+  TimelineNode as Node,
+  TimelineEvent as Event,
+  InvocationToken,
+} from "@effect-tavern/runtime/src/projection.ts"
 import * as Atom from "./atom.ts"
 import { registry } from "./atom.ts"
 import { t } from "./i18n.ts"
@@ -22,6 +27,8 @@ export interface Draft {
   text: string
   products?: Record<string, string> // narrate blocks so far by id (`product-delta`), drawn where the node's 小剧场 lands
   prev?: string // the discarded first draft, shown greyed under the rewrite
+  invocations?: readonly InvocationToken[]
+  composition?: DraftModel
   fresh?: boolean // the line is nowhere else (an act, a revised line): a failed turn puts it back in the composer
 }
 /** A failed turn as the server's `error` event says it: `code` "no-model" (no model to run it on) is the one the ghost
@@ -96,10 +103,9 @@ export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)
 export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
 export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)
 export const packs = Atom.make<readonly Layer[]>([]).pipe(Atom.keepAlive)
-export const invoke = Atom.make<readonly string[]>([]).pipe(Atom.keepAlive)
-export const compose = Atom.make("") // the composer's main box: the line (participant mode) or the direction (author mode); an Options row writes here and never sends
-export const noted = Atom.make("") // the note box under the line: a word to the narrator that goes with this send (participant mode only)
-export const aside = Atom.make(false) // the note box is open (participant mode's deviation); clears after the send
+export const composition = Atom.make<DraftModel>(emptyDraft())
+export const updateComposition = (patch: Partial<DraftModel>): void =>
+  registry.update(composition, (d) => ({ ...d, ...patch }))
 /** Participant mode: the main box is the character's line and a note may go with it. Author mode: every input is a
  *  direction, the main box is the note and there is no line. One mapping at the edges (send, revise, withdraw). */
 export const acting = (): boolean => card()?.input === "act" // tracked: the composer draws by it
@@ -111,17 +117,6 @@ export const boxesOf = (i: {
   acting() ? { text: i.text, note: i.note ?? "" } : { text: i.note ?? "", note: "" }
 export const inputOf = (text: string, note: string): { text: string; note?: string; invoke?: readonly string[] } =>
   acting() ? { text, ...(note && { note }) } : { text: "", note: text }
-/** What the composer's boxes hold: the line, the note, whether the note box is open. One write for the three. */
-export const boxes = (): { text: string; note: string; aside: boolean } => ({
-  text: registry.get(compose),
-  note: registry.get(noted),
-  aside: registry.get(aside),
-})
-export const setBoxes = (b: { text: string; note: string; aside: boolean }): void => {
-  registry.set(compose, b.text)
-  registry.set(noted, b.note)
-  registry.set(aside, b.aside)
-}
 export const stage = Atom.make<Phase | null>(null)
 /** The prose is done and the turn settles (check, polish, record): the queue plays out, nothing halts it any more. */
 export const settling = (phase: Phase | null): boolean => phase === "check" || phase === "polish" || phase === "record"
@@ -130,8 +125,7 @@ export const editing = Atom.make<Id | null>(null) // the node whose prose is a t
 export const revising = Atom.make<{
   node: Id
   field: "text" | "note"
-  previous: { text: string; note: string; aside: boolean }
-  previousInvoke: readonly string[]
+  previous: DraftModel
 } | null>(null)
 export const error = Atom.make<Failure | null>(null)
 /** The node whose 小剧场 was last asked for (`turn.demand`): a demand has no draft to carry its failure, so `error`
@@ -187,8 +181,6 @@ export const focus = Atom.make((get) => activeOf(get(tabs)).card).pipe(Atom.keep
 export const layer = Atom.make<"shelf" | "workspace">((get) => (get(focus) === null ? "shelf" : "workspace")).pipe(
   Atom.keepAlive,
 )
-/** The calls by node (GET /calls): read when the Inspect page opens, then fed by the stream as nodes land. */
-export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
 /** The reading line: root → head. */
 const emptyPath: Node[] = []
@@ -211,11 +203,7 @@ export const turnOf = (line: readonly Node[], id: Id): string => {
   return i >= 0 ? t("common.turnN", { n: i + 1 }) : `#${id}`
 }
 
-export const prose = (n: Node): string =>
-  n.turn.reply
-    .filter((p) => p.type === "text")
-    .map((p) => (p as { text: string }).text)
-    .join("")
+export const prose = (n: Node): string => n.prose
 
 // Playout: Cherry Studio's adaptive jitter buffer (src/renderer/hooks/useSmoothStream.ts), as one module-level queue.
 // Deltas arrive in bursts (token groups, SSE coalescing); they are queued as graphemes and released at the stream's
@@ -329,7 +317,6 @@ const tick = () => {
 // error never overtake the prose on screen (a fast model ends narrate with a cushion still to play). Deltas flow while
 // nothing waits; behind a waiting event they wait too, in order.
 let held: Wire[] = []
-const made: Call[] = [] // this action's calls, filed under its node when it lands (as the server files them)
 // A block's delta waits too: it is drawn under the prose, so it starts once the prose above it has played out.
 const flows = (e: Wire) => e.kind === "delta" && e.part.type !== "product-delta"
 export const apply = (e: Wire): void => {
@@ -380,23 +367,24 @@ const applyNow = (e: Wire): void => {
         )
       }
       return
-    case "call":
-      made.push(e)
-      return
     case "change": {
       const amended = e.node !== undefined && registry.get(log).nodes.has(e.node.id)
-      registry.update(log, (l) => L.apply(l, e))
+      registry.update(log, (l) => {
+        const next = L.apply(l, e)
+        if (!e.updated?.length) return next
+        const nodes = new Map(next.nodes)
+        for (const n of e.updated) nodes.set(n.id, n)
+        return { ...next, nodes }
+      })
       const id = e.node?.id
-      if (id !== undefined) registry.update(calls, (m) => new Map(m).set(id, [...(m.get(id) ?? []), ...made.splice(0)]))
       if (id !== undefined || !registry.get(draft)) {
         settle(!amended) // an amend leaves a typed revision alone
-        if (e.node?.turn.settlementStatus === "pending") registry.set(stage, "record")
+        if (e.node?.settlementStatus === "pending") registry.set(stage, "record")
         else running(null)
       }
       return
     }
     case "error":
-      made.length = 0
       resetPlay()
       registry.set(error, { message: e.message, ...(e.code && { code: e.code }) })
       registry.set(stage, null)
@@ -409,7 +397,6 @@ const applyNow = (e: Wire): void => {
 /** The draft is over, landed or withdrawn: nothing plays, nothing waits. */
 export const clear = (): void => {
   held = []
-  made.length = 0
   resetPlay()
   registry.set(draft, null)
   registry.set(stage, null)
@@ -429,32 +416,28 @@ export const dismiss = (): void => {
 /** The turn did not become a node: its line and note go back into their boxes (unless the reader has typed since). */
 export const withdraw = (): void => {
   const d = registry.get(draft)
-  if (!d?.fresh || registry.get(compose) || registry.get(noted)) return
+  if (!d?.fresh || hasDraft(registry.get(composition))) return
   const b = boxesOf(d.input)
-  setBoxes({ ...b, aside: !!b.note })
-  registry.set(invoke, d.input.invoke ?? [])
+  registry.set(composition, d.composition ?? { ...b, noteOpen: !!b.note, invocations: d.invocations ?? [] })
 }
 
 // Revise: the bubble puts the turn's input in the composer, line and note in their boxes (what was there is stashed,
 // back on cancel); Send makes a new turn beside it (turn.ts `act`), Keep a sibling with the prose kept (`keep`).
 // Revising ends when the node lands (`settle`), so a failed send puts the input back under the same revision.
 export const revise = (n: Node, field: "text" | "note"): void => {
-  const previous = registry.get(revising)?.previous ?? boxes()
+  const previous = registry.get(revising)?.previous ?? registry.get(composition)
   registry.set(revising, {
     node: n.id,
     field,
     previous,
-    previousInvoke: registry.get(revising)?.previousInvoke ?? registry.get(invoke),
   })
-  registry.set(invoke, n.turn.input.invoke ?? [])
-  const b = boxesOf(n.turn.input)
-  setBoxes({ ...b, aside: acting() && (!!b.note || field === "note") })
+  const b = boxesOf(n.input)
+  registry.set(composition, { ...b, noteOpen: acting() && (!!b.note || field === "note"), invocations: n.invocations })
 }
 /** Revising given up: the line put back, the displaced draft restored. */
 export const cancelRevise = (): void => {
   const r = registry.get(revising)
   if (!r) return
   registry.set(revising, null)
-  setBoxes(r.previous)
-  registry.set(invoke, r.previousInvoke)
+  registry.set(composition, r.previous)
 }

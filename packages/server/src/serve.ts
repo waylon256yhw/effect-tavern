@@ -1,5 +1,5 @@
 // The wire adapter at the session's seam: one process, a session per story, no logic of its own. A request names its
-// story in `x-tavern-story` (the client's `stories.current`); a story route (/card, /nodes, /calls, /turn, /stop,
+// story in `x-tavern-story` (the client's `stories.current`); a story route (/card, /nodes, /context, /turn, /stop,
 // POST /, DELETE /nodes/<id>) without the header, or with one naming no story, is a 404. The rest (/stories, /cards,
 // /personas, /hats, /packs, /secrets, /providers, /routing) is the install's, the same for every story. A story runs
 // one turn at a time (turn.ts): an action on a story whose turn is in flight, a synchronous one too (greet, checkout,
@@ -15,7 +15,9 @@
 //   POST /stop    the player's stop {stopped: "withdrawn" | "halted" | null}: before the first character the action is
 //                 interrupted and nothing is saved (its stream ends, nothing more), after it the prose halts and the
 //                 turn finishes a `stopped` node down the same streams; null when nothing ran.
-//   GET  /nodes   the snapshot: every node's projection and head, for a client that just opened.
+//   GET  /nodes   the lightweight timeline and head, for a client that just opened.
+//   GET  /nodes/<id>/detail  the selected turn's frozen deliveries, changes and presentation values.
+//   GET  /context?node=<id|root>  the selected complete state and authorized player catalog.
 //   GET  /stories every card's stories (id, card, title or null, starred, persona or null, turns: the nodes with a player line or note,
 //                 so a greeting is none, last: the last turn's input or null, updated, busy: the phase of a turn in
 //                 flight or null), newest first, and `current`: the story the client is to be on (the one it named
@@ -65,7 +67,7 @@
 //   GET  /routing which (provider, model) runs each stage: {default?, stages?}; PUT /routing replaces it (in force
 //                 from the next request).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
-//   GET  /calls   the story's `call` events by node id: the inspector's trace. The turn files them in the library
+//   GET  /nodes/<id>/trace  the selected node's `call` events: the inspector's trace. The turn files them in the library
 //                 under the node they made once it lands (turn.ts), whoever listened; they go with the node, and only
 //                 a story's last 200 nodes keep theirs.
 //   GET  /cards   every card the install knows, as {id, title}; a card file's row adds its summary and facets
@@ -82,8 +84,8 @@
 //                 GET /cards/<id>/local is that row alone, PUT /cards/<id>/local writes it whole (decoded as `Local`,
 //                 its card the URL's; in force from the next request; 404 when there is no such card, a bad body a 400).
 //   GET  /card    the same for the story's own card.
-// `inspect` keeps the request messages on `call` events (the stream and /calls); they carry the card's fragment
-// bodies, so a player client gets phase, answer and usage only.
+// Calls never travel on SSE. `inspect` includes request and result bodies in the selected trace; otherwise only
+// phase and metrics leave this endpoint, since tool arguments and results can contain private card text.
 import { Provider, Secret } from "@effect-tavern/provider"
 import { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import { decodeLayer, decodeLocal } from "@effect-tavern/runtime/src/layer.ts"
@@ -145,7 +147,6 @@ const IdsBody = Schema.decodeUnknownSync(Schema.Struct({ ids: Schema.Array(Schem
 const NewStory = Schema.decodeUnknownSync(Schema.Struct({ card: Schema.String }))
 
 export const handle = (lib: Library, { inspect = false } = {}) => {
-  const shown = (e: Event) => (inspect || e.kind !== "call" ? e : { ...e, msgs: [] })
   return async (req: IncomingMessage, res: ServerResponse) => {
     const json = (status: number, v: unknown) => {
       if (req.socket.destroyed || res.destroyed) return // body() already closed an oversized request's socket
@@ -307,14 +308,30 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (req.method === "GET" && req.url === "/card") return json(200, lib.view(lib.cardOf(story)!, story))
     const contextAt = req.method === "GET" && /^\/context\?node=(root|\d+)$/.exec(req.url ?? "")
     if (contextAt) return reply(() => s.activeContext(contextAt[1] === "root" ? null : Number(contextAt[1])), 404)
-    if (req.method === "GET" && req.url === "/nodes") return json(200, s.snapshot())
-    if (req.method === "GET" && req.url === "/calls")
-      return json(
-        200,
-        Object.fromEntries(
-          Object.entries(lib.calls(story).list()).map(([id, cs]) => [id, cs.map((c) => shown(c as Event))]),
-        ),
-      )
+    if (req.method === "GET" && req.url === "/nodes") return json(200, s.timeline())
+    const detailAt = req.method === "GET" && /^\/nodes\/(\d+)\/(detail|trace)$/.exec(req.url ?? "")
+    if (detailAt)
+      return reply(() => {
+        const id = Number(detailAt[1])
+        if (!s.log.nodes.has(id)) throw new Error(`no node ${id}`)
+        if (detailAt[2] === "detail") return s.detail(id)
+        return lib
+          .calls(story)
+          .get(id)
+          .map((v) => {
+            const c = v as Extract<Event, { kind: "call" }>
+            return inspect ? c : { ...c, msgs: [], out: undefined }
+          })
+      }, 404)
+    const shown = (e: Exclude<Event, { kind: "call" }>) => {
+      if (e.kind !== "change") return e
+      const { invalidated, ...c } = e
+      return {
+        ...c,
+        ...(c.node && { node: s.projectTimeline(c.node) }),
+        ...(invalidated?.length && { updated: invalidated.map((id) => s.timelineNode(id)) }),
+      }
+    }
     if (req.method === "POST" && req.url === "/stop") return json(200, { stopped: turn.stop() })
     /** Streams `events` as SSE, after `first` when given; the response's close unsubscribes, nothing more. */
     const stream = (events: Stream.Stream<Out>, first?: [string, unknown]) => {
@@ -326,7 +343,10 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       if (first) send(...first)
       const fiber = Effect.runFork(
         Stream.runForEach(events, (e) =>
-          Effect.sync(() => (e.kind === "error" ? send("error", failure(e.cause)) : send(e.kind, shown(e)))),
+          Effect.sync(() => {
+            if (e.kind === "error") send("error", failure(e.cause))
+            else if (e.kind !== "call") send(e.kind, shown(e))
+          }),
         ).pipe(Effect.ensuring(Effect.sync(() => void (closed || res.end())))),
       )
       // `req` "close" means the request body was consumed (Node ≥ 16), not that the client went away; the response's does.

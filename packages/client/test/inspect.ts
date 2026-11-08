@@ -1,3 +1,4 @@
+import { nativeTrace } from "../src/inspect.ts"
 // The pipeline projection: only the calls that ran, the second-draft loop and a stop read off the order, the drafts
 // folded into trays, a request split into regions at its cache breakpoints, one turn's totals.
 import assert from "node:assert/strict"
@@ -135,3 +136,25 @@ assert.deepEqual(totals([call("narrate", 5), call("record", 2)]), {
   ms: 7,
 })
 console.log("ok")
+
+const tool = {
+  toolCallId: "t1",
+  name: "read_context",
+  input: { resourceId: "pack:p/guide" },
+  result: { ok: false, code: "stale", message: "refresh" },
+  replayed: false,
+  ms: 1,
+}
+const cancelled = nativeTrace({
+  status: "cancelled",
+  budget: { maxSteps: 3 },
+  events: [
+    { kind: "request", step: 0, messages: [] },
+    { kind: "tool", step: 0, call: tool },
+  ],
+})!
+assert.equal(cancelled.status, "cancelled")
+assert.equal(cancelled.steps[0]!.calls[0]!.toolCallId, "t1")
+assert.equal(cancelled.budget!.maxSteps, 3)
+assert.equal(nativeTrace("text"), undefined)
+assert.deepEqual(nativeTrace({ status: "completed", trace: [] })!.steps, [])

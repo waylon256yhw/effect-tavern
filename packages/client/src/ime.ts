@@ -24,8 +24,9 @@ export const imeController = (submit: () => boolean) => {
         timer = undefined
       }, 0)
     },
-    keyDown: (e: KeyboardEvent): boolean => {
-      const modEnter = (e.metaKey || e.ctrlKey) && e.key === "Enter"
+    compositionActive: () => composing || justEnded,
+    keyDown: (e: KeyboardEvent, plainEnter = false): boolean => {
+      const modEnter = (e.metaKey || e.ctrlKey || (plainEnter && !e.shiftKey)) && e.key === "Enter"
       if (!modEnter || e.isComposing || e.keyCode === 229 || composing || justEnded) return false
       if (!submit()) return false
       e.preventDefault()

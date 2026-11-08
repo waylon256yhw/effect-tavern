@@ -1,7 +1,10 @@
+import { readCache } from "./read-cache.ts"
+import type { TimelineNode as Node, ActiveContextView, TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
+type Change = L.Change<Node>
 // The seam to packages/server: `GET /card`, `GET /nodes` (nodes and head) and the library (`/stories`, `/personas`,
 // `/cards/<id>/local`) are the snapshot, `POST /` is one action whose events come back as SSE. A story call (open, new, delete)
 // answers the listing with the story to be on (`current`, none on an empty library): the client names it on every
-// request after, and pages.ts lands on it (nodes, calls, the draft and invocation chips gone; a delete that leaves the open
+// request after, and pages.ts lands on it (timeline cleared, the unified draft restored; a delete that leaves the open
 // story open only replaces the listing). A new story is of a card (`POST /stories {card}`); a card's page is readable
 // before any story of it (`GET /cards/<id>`). The manager's search (`GET /stories/search`) and the exports
 // (`/stories/<id>/export.md|json`, plain links the browser downloads) are the manager's (stories.ts, side.tsx).
@@ -14,12 +17,11 @@ import type { Format } from "@effect-tavern/provider/src/url.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Layer, Local } from "@effect-tavern/runtime/src/layer.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Action, Change, Node } from "@effect-tavern/runtime/src/session.ts"
+import type { Action } from "@effect-tavern/runtime/src/session.ts"
 import type { Call } from "./inspect.ts"
 import type { Hit } from "./stories.ts"
 import {
   apply,
-  calls,
   card,
   cards,
   hats,
@@ -61,13 +63,28 @@ const got = async <T>(res: Promise<Response>): Promise<T> => {
   return v
 }
 
-export const fetchContext = (
-  node: number | null,
-): Promise<{ state: import("@effect-tavern/runtime/src/world.ts").WorldState; products: Record<string, unknown> }> =>
-  got(call(`${base}/context?node=${node ?? "root"}`))
+const contexts = readCache<ActiveContextView>(1)
+const details = readCache<TurnDetail>(8)
+const traces = readCache<readonly Call[]>(1)
+// Include story identity even when two stories use the same numeric node id.
+const readKey = (node: number | null) => `${registry.get(stories)?.current}/${node}`
+export const fetchContext = (node: number | null): Promise<ActiveContextView> => {
+  const version = registry.get(log)
+  const c = registry.get(card)
+  return contexts(`${readKey(node)}/${JSON.stringify(c?.mounts)}/${JSON.stringify(c?.layer)}`, version, () =>
+    got(call(`${base}/context?node=${node ?? "root"}`)),
+  )
+}
+export const fetchDetail = (node: number): Promise<TurnDetail> =>
+  details(readKey(node), registry.get(log), () => got(call(`${base}/nodes/${node}/detail`)))
+export const fetchTrace = (node: number): Promise<readonly Call[]> =>
+  traces(readKey(node), registry.get(log), () => got(call(`${base}/nodes/${node}/trace`)))
 
-export const fetchNodes = async (): Promise<void> =>
-  registry.set(log, L.of((await got(call(`${base}/nodes`))) as L.Snapshot<Node>))
+export const fetchNodes = async (): Promise<void> => {
+  const story = registry.get(stories)?.current
+  const snapshot = await got<L.Snapshot<Node>>(call(`${base}/nodes`))
+  if (registry.get(stories)?.current === story) registry.set(log, L.of(snapshot))
+}
 let cardRead = 0 // a newer card read supersedes an older refresh, even on the same tab
 export const fetchCard = async (current: () => boolean = () => true): Promise<void> => {
   const request = ++cardRead
@@ -90,10 +107,6 @@ export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(call(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
   registry.update(log, (l) => L.apply(l, c))
   await fetchStories() // the head moved: the row's last line and size follow
-}
-export const fetchCalls = async (): Promise<void> => {
-  const by = (await got(call(`${base}/calls`))) as Record<string, Call[]>
-  registry.set(calls, new Map(Object.entries(by).map(([id, list]) => [Number(id), list])))
 }
 /** A listing read or answered by a write keeps the client's own `current`: to a request that names no story (a tab on
  *  a card's page) the server names its newest, and which story the client is on is its tabs' (tabs.ts). The first

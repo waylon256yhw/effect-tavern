@@ -85,6 +85,7 @@ export type Ask =
   | {
       stage: "record"
       tools?: string
+      invoked?: readonly string[] // frozen player selections, including additions on a prose-preserving edit
       known: string
       current?: string
       asks: readonly string[] // `<product>: <question>` lines
@@ -197,6 +198,9 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
     case "record":
       return [
         ...reviewed,
+        ...(a.invoked?.length
+          ? [sys(`Invoked context (reference only; extract world facts from the scene):\n${a.invoked.join("\n\n")}`)]
+          : []),
         sys([a.known, ...(a.current ? [a.current] : []), ...a.asks, ...(a.tools ? [a.tools] : [])].join("\n")),
         ...(a.questions ? [sys(`${a.readout}\nQuestions: ${a.questions.join("\n")}`)] : []),
         ...thoughtOf(c),

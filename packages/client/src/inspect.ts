@@ -1,3 +1,4 @@
+import type { StageStep, StageEvent, StageBudget } from "@effect-tavern/provider/src/stage.ts"
 // The Inspect projection (docs/inspector-prototype.html is the page's shape): one turn's calls as the pipeline that
 // ran, a request as its cache regions, a turn's totals. `rows` names each call's place: a check followed by a narrate
 // failed into the second draft, the last narrate of a stopped turn is where the player halted. Stages without a call
@@ -32,12 +33,17 @@ export const rows = (calls: readonly Call[], turn: Pick<Turn<unknown>, "end">): 
   return calls.map((c, i) => {
     const drafting = c.phase === "narrate" && i < settled
     if (drafting) draft++
+    const native = nativeTrace(c.out)
     const status: Status =
-      c.phase === "check" && calls[i + 1]?.phase === "narrate"
-        ? "failed"
-        : drafting && draft === narrates && turn.end === "stopped"
-          ? "stopped"
-          : "ok"
+      native?.status === "cancelled"
+        ? "stopped"
+        : native && native.status !== "completed"
+          ? "failed"
+          : c.phase === "check" && calls[i + 1]?.phase === "narrate"
+            ? "failed"
+            : drafting && draft === narrates && turn.end === "stopped"
+              ? "stopped"
+              : "ok"
     const drafted = narrates > 1 && i < settled && (c.phase === "narrate" || c.phase === "check")
     return { phase: c.phase, status, call: c, ...(drafted && { draft }) }
   })
@@ -141,4 +147,34 @@ export const rowHits = (r: Row, q: string): number =>
 export const defaultTab = (hits: readonly number[], q: string): number => {
   const first = q ? hits.findIndex((h) => h > 0) : -1
   return first >= 0 ? first : Math.max(0, hits.length - 1)
+}
+
+/** Successful, exhausted and failed attempts carry steps; cancellation retains incremental events. */
+export const nativeTrace = (
+  out: unknown,
+): { steps: readonly StageStep[]; status: string; reason?: string; budget?: StageBudget } | undefined => {
+  if (!out || typeof out !== "object" || !("status" in out)) return undefined
+  const value = out as {
+    status: string
+    reason?: string
+    budget?: StageBudget
+    trace?: StageStep[]
+    events?: StageEvent[]
+  }
+  if (value.trace) return { ...value, steps: value.trace }
+  if (!value.events) return undefined
+  const steps = new Map<number, StageStep>()
+  for (const event of value.events) {
+    if (event.kind === "end") continue
+    const step = steps.get(event.step) ?? { index: event.step, messages: [], calls: [] }
+    if (event.kind === "request") step.messages = event.messages
+    if (event.kind === "response") {
+      step.response = event.messages
+      step.usage = event.usage
+      step.finishReason = event.finishReason
+    }
+    if (event.kind === "tool") step.calls.push(event.call)
+    steps.set(event.step, step)
+  }
+  return { ...value, steps: [...steps.values()] }
 }

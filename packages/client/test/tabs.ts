@@ -1,3 +1,4 @@
+import { composition, updateComposition } from "../src/store.ts"
 // The tabs (src/tabs.ts) over one Reading on a faked wire: a tab keeps its page stack and scroll, a switch to another
 // story activates it once and a switch to the same story (a mirror) not at all; "+" is always a home tab with nothing
 // in the slots and no story named, so a turn left running and a line half typed stay the story's; the active tab
@@ -14,7 +15,6 @@ import { createReading, reading } from "../src/reading.ts"
 import {
   activeOf,
   apply,
-  boxes,
   card,
   type CardView,
   focus,
@@ -23,7 +23,6 @@ import {
   log,
   page,
   registry,
-  setBoxes,
   settle,
   stories,
   type StoryRow,
@@ -77,7 +76,7 @@ await openStory(1)
 const A = tab().id
 open("timeline")
 top = 120
-setBoxes({ text: "半句", note: "", aside: false })
+updateComposition({ text: "半句", note: "", noteOpen: false })
 apply({ kind: "stage", phase: "lookup" })
 assert.deepEqual([registry.get(working), busy(1)], [true, "lookup"])
 // "+": always a home tab, never a mirror of A: the slots empty, no story named, the sidebar on the shelf, A's row still
@@ -88,7 +87,13 @@ assert.deepEqual(
   [null, null, "home", "shelf", [1]],
 )
 assert.deepEqual(
-  [boxes().text, registry.get(working), registry.get(log).nodes.size, registry.get(stories)?.current, busy(1)],
+  [
+    registry.get(composition).text,
+    registry.get(working),
+    registry.get(log).nodes.size,
+    registry.get(stories)?.current,
+    busy(1),
+  ],
   ["", false, 0, null, "lookup"],
 )
 // a home tab is the bottom of its stack: Escape and its own click leave it on home
@@ -108,7 +113,10 @@ top = 40
 pick(A)
 await select(A) // the switch pick started, done
 assert.deepEqual([registry.get(page), registry.get(focus), registry.get(card)?.id], ["timeline", "a", "a"])
-assert.deepEqual([opened, restored, boxes().text, registry.get(unread).size], [[1, 2, 1], [120], "半句", 0])
+assert.deepEqual(
+  [opened, restored, registry.get(composition).text, registry.get(unread).size],
+  [[1, 2, 1], [120], "半句", 0],
+)
 // the active tab clicked again does nothing; each page's own Back returns to the reader
 pick(A)
 assert.equal(registry.get(page), "timeline")
@@ -294,12 +302,18 @@ assert.deepEqual([tab().id, isHome(tab()), registry.get(page), registry.get(laye
 // strip dropped the oldest); `< 所有卡片` (toHome) takes the active tab and the sidebar back to home and the shelf
 await select(full.list.at(-1)!.id)
 assert.equal(registry.get(layer), "workspace")
-setBoxes({ text: "留字", note: "", aside: false })
+updateComposition({ text: "留字", note: "", noteOpen: false })
 await toHome()
 assert.deepEqual(
-  [isHome(tab()), registry.get(page), registry.get(layer), registry.get(stories)?.current, boxes().text],
+  [
+    isHome(tab()),
+    registry.get(page),
+    registry.get(layer),
+    registry.get(stories)?.current,
+    registry.get(composition).text,
+  ],
   [true, "home", "shelf", null, ""],
 )
 await openStory(1)
-assert.equal(boxes().text, "留字")
+assert.equal(registry.get(composition).text, "留字")
 console.log("tabs ok")

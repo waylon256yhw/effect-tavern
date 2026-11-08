@@ -538,6 +538,10 @@ export const open = (asked: string) => {
     },
     /** One story's trace: calls by node id, in the order they were made. */
     calls: (story: Id) => ({
+      get: (node: Id): unknown[] =>
+        (q("select json from call where story = ? and node = ? order by seq").all(story, node) as Row[]).map((r) =>
+          parse<unknown>(r),
+        ),
       list: (): Record<number, unknown[]> => {
         const by: Record<number, unknown[]> = {}
         for (const r of q("select node, json from call where story = ? order by seq").all(story) as Row[])

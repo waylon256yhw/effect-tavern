@@ -838,14 +838,6 @@ button:focus-visible {
   height: var(--icon);
 }
 
-.invocations {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.invocations:empty {
-  display: none;
-}
 .format .invocation {
   letter-spacing: normal;
   text-indent: 0;
@@ -858,4 +850,70 @@ button:focus-visible {
 }
 .settlement button + button {
   margin-inline-start: var(--space-3);
+}
+
+/* Tokens belong to the editable field, including an otherwise empty draft. */
+.compose-input {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.composer .compose-input textarea {
+  flex: 1 1 10ch;
+  width: 10ch;
+}
+.compose-input .invocation {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.said .invocation {
+  display: inline-flex;
+  vertical-align: baseline;
+  margin-inline-end: 0.4em;
+  white-space: normal;
+}
+#snippets {
+  box-sizing: border-box;
+  position-anchor: --composer;
+  width: min(anchor-size(width), calc(100vw - 24px));
+  max-width: var(--measure);
+}
+.invocation-menu .menu-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+}
+.invocation-menu input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-block: var(--space-1);
+}
+.invocation-menu .menu-results {
+  max-height: min(45dvh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#snippets .invocation-menu .item {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  max-width: none;
+}
+#snippets .invocation-menu .asset {
+  flex-wrap: wrap;
+  text-align: start;
+}
+#snippets .invocation-menu .asset .hint {
+  flex-basis: 100%;
+  white-space: normal;
+  grid-column: 1 / -1;
+}
+
+#snippets:popover-open {
+  display: block;
 }

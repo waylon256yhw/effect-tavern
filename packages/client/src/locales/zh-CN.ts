@@ -79,6 +79,7 @@ const zh = {
     vault: "密钥库",
     view: "视图",
     loading: "加载中…",
+    retry: "重试",
   },
   composer: {
     closeNote: "收起场外指导",
@@ -94,6 +95,11 @@ const zh = {
     stop: "停止",
     toNarrator: "对叙事者说，不进故事…",
     yourLine: "你的台词…",
+    playerTools: "写作技能",
+    cardTools: "卡片调用",
+    localTools: "本地写作技能",
+    noMatches: "没有可调用的匹配项",
+    removeInvocation: "移除 {title}",
   },
   controls: {
     backToList: "返回列表",
@@ -134,6 +140,8 @@ const zh = {
     targets: "{n} 个目标句",
     tokenLegend: "入 / 出 / 缓存读 / 缓存写",
     untold: "未揭示",
+    step: "步骤 {n}",
+    messages: "请求与响应消息",
   },
   lexicon: {
     noList: "文件里没有词表：需要一个数组，或带 lexicon 键的对象",
@@ -366,6 +374,7 @@ const zh = {
     newStory: "新故事",
     notePreview: "（场外指导）{note}",
     opening: "开场白",
+    invocationPreview: "调用了 {n} 项内容",
   },
   switches: {
     agency: "主导",

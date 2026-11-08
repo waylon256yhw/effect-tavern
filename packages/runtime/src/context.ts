@@ -1,3 +1,4 @@
+import type { PlayerCatalogItem } from "./projection.ts"
 // Resource identity, immutable deliveries and request-local residency. Story unlocks are
 // resolved by derived.ts; a lookup can only see this already-authorized resource set.
 import { createHash } from "node:crypto"
@@ -20,12 +21,6 @@ export interface Resource extends DeliverySnapshot {
   activation: "always" | "on_demand"
   disclosures: readonly Disclosure[]
   product?: string
-}
-export interface CatalogEntry {
-  id: string
-  title: string
-  hook: string
-  source: Source
 }
 export const revision = (value: unknown): string =>
   createHash("sha256")
@@ -76,11 +71,13 @@ export const freeze = (r: Resource, previous?: DeliverySnapshot): DeliverySnapsh
   residency: r.residency,
   ...(previous && previous.revision !== r.revision ? { superseded: previous.revision } : {}),
 })
-export const catalogEntry = (r: Resource): CatalogEntry => ({
-  id: r.resourceId,
+export const catalogEntry = (r: Resource): PlayerCatalogItem => ({
+  resourceId: r.resourceId,
   title: r.title.slice(0, 160),
-  hook: r.title.slice(0, 160),
+  summary: (r.text.slice(r.title.length).trim() || r.title).replace(/\s+/g, " ").slice(0, 240),
+  category: r.source === "pack" ? r.resourceId.slice(5).split("/")[0]! : "card",
   source: r.source,
+  available: true,
 })
 /** The latest actually injected snapshot per identity; a logical ID alone never means resident. */
 export const latest = (snapshots: readonly DeliverySnapshot[]) => [

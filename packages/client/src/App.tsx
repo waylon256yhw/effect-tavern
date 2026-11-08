@@ -1,3 +1,4 @@
+import type { TimelineNode as Node, InvocationToken } from "@effect-tavern/runtime/src/projection.ts"
 // One screen: the reading line as sections, the draft growing at its end, a composer at the bottom. A turn's actions
 // sit under what they act on (#101): a row under the player's bubble (revise, copy), a row under the prose (the
 // Record pill, drawn when the turn has a ledger and opening a full-page sheet of it, src/record.ts projecting it; the
@@ -12,7 +13,7 @@
 // the platform is the component library. This file is the reader: the flow and the column; readings.tsx draws the
 // Record's pieces, composer.tsx the box, inspector.tsx the Inspect page, bridge.ts the atom → accessor read they all use.
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Node, Phase } from "@effect-tavern/runtime/src/session.ts"
+import type { Phase } from "@effect-tavern/runtime/src/session.ts"
 import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { CardPage } from "./card.tsx"
@@ -31,7 +32,7 @@ import { lineOf, versions } from "./record.ts"
 import { Shell } from "./shell.tsx"
 import { shrinkwrap } from "./shrinkwrap.ts"
 import {
-  compose,
+  updateComposition,
   dismiss,
   draft,
   editing,
@@ -311,7 +312,7 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
   const writing = () => !done() && !props.error
   return (
     <section class={{ draft: true, dead: props.error !== null }}>
-      <Said input={props.d.input} />
+      <Said input={props.d.input} invocations={props.d.composition?.invocations ?? props.d.invocations} />
       <div class="drafts">
         <Show when={props.d.prev}>
           {(p) => (
@@ -377,8 +378,9 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
 }
 
 /** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
-const Said = (props: {
+export const Said = (props: {
   input: { text: string; note?: string; invoke?: readonly string[] }
+  invocations?: readonly InvocationToken[]
   node?: Node // a landed turn's: its line can be revised; the draft's keys are disabled
   revising?: "text" | "note" // the field of this line that is in the composer now: that bubble is marked
 }) => {
@@ -387,10 +389,17 @@ const Said = (props: {
   // revise puts the turn's input back in the composer (Cherry Studio's edit), line and note together, copy copies the
   // line. The draft has the same row with the keys disabled, so nothing moves when the node lands.
   const Bubble = (p: { field: "text" | "note"; text: string }) => (
-    <div class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}>{p.text}</div>
+    <div class={{ said: true, note: p.field === "note", revising: props.revising === p.field }}>
+      <Show when={p.field === field()}>
+        <For each={props.node?.invocations ?? props.invocations ?? []}>
+          {(item) => <span class="chip invocation">{item.title}</span>}
+        </For>
+      </Show>
+      {p.text}
+    </div>
   )
   // the field the row speaks of: the line, or the note when the turn is that word alone
-  const field = () => (props.input.text ? "text" : "note")
+  const field = () => (props.input.text || !props.input.note ? "text" : "note")
   const busy = read(working)
   const [copied, setCopied] = createSignal(false)
   const copy = () =>
@@ -409,17 +418,12 @@ const Said = (props: {
   return (
     <Show when={props.input.text || props.input.note || props.input.invoke?.length}>
       <div class="spoke" ref={(el) => (block = el)}>
-        <Show when={props.input.text}>
+        <Show when={props.input.text || (!props.input.note && props.input.invoke?.length)}>
           <Bubble field="text" text={props.input.text} />
         </Show>
         <Show when={props.input.note}>
           <Bubble field="note" text={props.input.note!} />
         </Show>
-        <div class="invocations">
-          <For each={props.input.invoke ?? []} keyed={(id) => id}>
-            {(id) => <span class="chip">{id()}</span>}
-          </For>
-        </div>
         <div class="acts" role="toolbar" aria-label={t("app.lineActions")}>
           <button
             type="button"
@@ -452,7 +456,7 @@ const Options = (props: { items: readonly string[] }) => (
   <div class="options" role="group" aria-label={t("app.options")}>
     <For each={props.items} keyed={false}>
       {(t, i) => (
-        <button class="option" onClick={() => registry.set(compose, t())}>
+        <button class="option" onClick={() => updateComposition({ text: t() })}>
           <span class="n">{i + 1}</span>
           <span>{t()}</span>
           <Insert aria-hidden="true" />
@@ -475,7 +479,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
   // the version's whole follow-up comes back: the server moves head to its newest leaf; the turn's top stays put when
   // already in view, or lands at the column's top when a long version had scrolled it past the head
   const go = (i: number) => {
-    const sec = document.getElementById(`node-${props.node.turn.id}`)
+    const sec = document.getElementById(`node-${props.node.id}`)
     if (sec) {
       const head = parseFloat(getComputedStyle(sec).scrollMarginTop) || 0
       const top = sec.getBoundingClientRect().top - scroller().getBoundingClientRect().top
@@ -483,24 +487,24 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
     }
     turn.checkout(siblings()[i]!.id)
   }
-  const options = () => props.node.turn.products.options as readonly string[] | undefined
+  const options = () => props.node.theater.options as readonly string[] | undefined
   // the editor's close: with text, the edit is sent; without (Escape, unchanged, empty), it is only closed
   const done = (text?: string) => {
     registry.set(editing, null)
     if (text !== undefined) turn.edit(props.node.id, text)
   }
   return (
-    <section id={`node-${props.node.turn.id}`}>
+    <section id={`node-${props.node.id}`}>
       <Said
-        input={props.node.turn.input}
+        input={props.node.input}
         node={props.node}
         revising={revised()?.node === props.node.id ? revised()!.field : undefined}
       />
-      <Show when={edited() === props.node.turn.id} fallback={<Prose text={prose(props.node)} />}>
+      <Show when={edited() === props.node.id} fallback={<Prose text={prose(props.node)} />}>
         <Editor text={prose(props.node)} onDone={done} />
       </Show>
       <Settlement node={props.node} />
-      <Theater products={props.node.turn.products} node={props.node} />
+      <Theater products={props.node.theater} node={props.node} />
       {/* the turn's row (#101): the Record pill (a ledger to open), 小剧场, the version count, "stopped"; then, at the right end, this turn's
           actions (readings.tsx `Rewrite`), which a pointer sees on the latest turn always and on a past one while it
           is over the section, a touch screen always (reader.css) */}
@@ -518,32 +522,27 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
               <Prev />
             </button>
             {/* the counter opens the list: which action made each version, its opening, how many nodes follow it */}
-            <button
-              class="count"
-              aria-haspopup="menu"
-              disabled={busy()}
-              popovertarget={`versions-${props.node.turn.id}`}
-            >
+            <button class="count" aria-haspopup="menu" disabled={busy()} popovertarget={`versions-${props.node.id}`}>
               {at() + 1}/{siblings().length}
             </button>
             <div
-              id={`versions-${props.node.turn.id}`}
+              id={`versions-${props.node.id}`}
               class="versions"
               popover
               role="menu"
               ref={(el) => (list = el)}
               onFocusOut={(e) => !list?.contains(e.relatedTarget as HTMLElement | null) && list?.hidePopover()}
             >
-              <For each={siblings()} keyed={(s) => s.turn.id}>
+              <For each={siblings()} keyed={(s) => s.id}>
                 {(s, i) => (
                   <button
                     role="menuitem"
                     class="version"
                     disabled={busy()}
-                    aria-current={s().turn.id === props.node.turn.id ? "true" : undefined}
+                    aria-current={s().id === props.node.id ? "true" : undefined}
                     onClick={() => (list?.hidePopover(), go(i()))}
                   >
-                    <SiblingKind of={s().turn.sibling} class="kind" fallback={<span class="kind" />} />
+                    <SiblingKind of={s().sibling} class="kind" fallback={<span class="kind" />} />
                     <span class="first">
                       {vs().varied ? `${lineOf(s())} · ${plain(prose(s()))}` : plain(prose(s()))}
                     </span>
@@ -562,10 +561,10 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
             </button>
           </span>
         </Show>
-        <Show when={props.node.turn.end === "stopped"}>
+        <Show when={props.node.end === "stopped"}>
           <span class="end">{t("app.stopped")}</span>
         </Show>
-        <Rewrite rerun={!!lineOf(props.node) || !!props.node.turn.input.invoke?.length} node={props.node.id} />
+        <Rewrite rerun={!!lineOf(props.node) || !!props.node.input.invoke?.length} node={props.node.id} />
       </footer>
       <Show when={props.last && options()?.length}>
         <Options items={options()!} />
@@ -595,7 +594,7 @@ const Reader = () => {
       <div class="scroll">
         <main>
           {/* keyed by id: a snapshot read back (after a stop) refreshes each section in place instead of rebuilding them */}
-          <For each={shown()} keyed={(n) => n.turn.id}>
+          <For each={shown()} keyed={(n) => n.id}>
             {(n, i) => <Section node={n()} n={i() + 1} last={!busy() && i() === shown().length - 1} />}
           </For>
           <Show when={d()}>{(dr) => <Draft d={dr()} phase={phase()} error={err()} />}</Show>

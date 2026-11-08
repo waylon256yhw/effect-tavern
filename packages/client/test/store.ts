@@ -1,9 +1,11 @@
+import { emptyDraft } from "../src/composition.ts"
+import { timelineNode as node } from "./fixtures.ts"
 // The reducer on a scripted event sequence: path follows head, a draft grows by frames and starts over on the rewrite,
 // a change event lands it and moves head.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import { captureArtifact, expectNoDiagnostics } from "@solidjs/diagnostics"
 import assert from "node:assert/strict"
-import { apply, calls, draft, log, path, registry, stage, working, compose, error } from "../src/store.ts"
+import { apply, draft, log, path, registry, stage, working, composition, error } from "../src/store.ts"
 
 let frames: (() => void)[] = []
 ;(globalThis as any).requestAnimationFrame = (f: () => void) => frames.push(f)
@@ -16,17 +18,14 @@ const tick = () => {
   frames = []
   fs.forEach((f) => f())
 }
-const node = (id: number, parent: number | null, text: string) =>
-  ({ id, parent, turn: { id, parent, input: { text: `in${id}` }, reply: [{ type: "text", text }], end: "end" } }) as any
-
 registry.set(log, L.of({ nodes: [node(0, null, "root"), node(1, 0, "a"), node(2, 0, "b")], head: 2 }))
 assert.deepEqual(
-  registry.get(path).map((n) => n.turn.id),
+  registry.get(path).map((n) => n.id),
   [0, 2],
 ) // the line runs to head
 apply({ kind: "change", head: 1 }) // a checkout's reply
 assert.deepEqual(
-  registry.get(path).map((n) => n.turn.id),
+  registry.get(path).map((n) => n.id),
   [0, 1],
 )
 
@@ -58,7 +57,7 @@ while (registry.get(draft) !== null && n++ < 120) tick()
 assert.equal(registry.get(draft), null)
 assert.equal(registry.get(log).nodes.size, 4)
 assert.deepEqual(
-  registry.get(path).map((n) => n.turn.id),
+  registry.get(path).map((n) => n.id),
   [0, 1, 3],
 )
 tick() // a frame left over from before the node must not resurrect a draft
@@ -74,64 +73,38 @@ tick()
 assert.equal(registry.get(stage), "narrate")
 apply({ kind: "stage", phase: "narrate" })
 apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "second" } })
-apply({ kind: "call", phase: "narrate", msgs: [], out: "second", usage: {}, ms: 1 } as any)
 apply({ kind: "change", node: node(4, 3, "second"), head: 4 })
 n = 0
 while (registry.get(draft) && registry.get(draft)!.prev !== "slow words" && n++ < 200) tick()
 assert.deepEqual([registry.get(draft)!.prev, registry.get(stage)], ["slow words", "narrate"])
 while (registry.get(draft) !== null && n++ < 400) tick()
-assert.deepEqual([registry.get(draft), registry.get(calls).get(4)?.length, registry.get(log).head], [null, 1, 4])
-// An amend (a demand) appends only its own call to the node's trace; earlier turns' calls do not leak into it.
-apply({ kind: "call", phase: "record", msgs: [], out: { inner: "i" }, usage: {}, ms: 1 } as any)
-apply({ kind: "change", node: node(4, 3, "second"), head: 4 })
-assert.deepEqual(
-  registry
-    .get(calls)
-    .get(4)
-    ?.map((c) => c.phase),
-  ["narrate", "record"],
-)
+assert.deepEqual([registry.get(draft), registry.get(log).head], [null, 4])
 console.log("ok")
 
 const { artifact } = await captureArtifact(
   () => {
     registry.set(draft, { parent: null, input: { text: "saved input" }, text: "saved prose", fresh: true })
-    registry.set(compose, "")
+    registry.set(composition, emptyDraft())
     const pending = node(99, null, "saved prose")
-    pending.turn.settlementStatus = "pending"
+    pending.settlementStatus = "pending"
     apply({ kind: "change", node: pending, head: 99 })
     while (frames.length) tick()
     assert.equal(registry.get(draft), null)
     assert.equal(registry.get(working), true)
     assert.equal(registry.get(stage), "record")
-    apply({ kind: "change", node: { ...pending, turn: { ...pending.turn, settlementStatus: "failed" } }, head: 99 })
+    apply({ kind: "change", node: { ...pending, settlementStatus: "failed" }, head: 99 })
     apply({ kind: "error", message: "record failed" })
     assert.equal(registry.get(working), false)
-    assert.equal(registry.get(compose), "") // persisted prose never returns its input to the composer
-    assert.equal(registry.get(log).nodes.get(99)!.turn.settlementStatus, "failed")
+    assert.equal(registry.get(composition).text, "") // persisted prose never returns its input to the composer
+    assert.equal(registry.get(log).nodes.get(99)!.settlementStatus, "failed")
     assert.equal(registry.get(error)?.message, "record failed")
   },
   { scenario: "saved-prose-settlement-failure" },
 )
 expectNoDiagnostics(artifact)
 
-// Composer reads this branch's authorized player catalog, independently of prior deliveries.
-const { artifact: catalogArtifact } = await captureArtifact(
-  () => {
-    const a = {
-      ...node(100, null, "A"),
-      playerCatalog: [{ id: "pack:p/guide", title: "Guide", hook: "Guide", source: "pack" }],
-    }
-    const b = { ...node(101, null, "B"), playerCatalog: [] }
-    apply({ kind: "change", node: a, head: a.id })
-    assert.equal(registry.get(path).at(-1)!.playerCatalog[0]!.id, "pack:p/guide")
-    apply({ kind: "change", node: b, head: b.id })
-    assert.deepEqual(registry.get(path).at(-1)!.playerCatalog, [])
-    apply({ kind: "change", head: a.id })
-    assert.equal(registry.get(path).at(-1)!.playerCatalog[0]!.id, "pack:p/guide")
-    apply({ kind: "change", node: { ...a, playerCatalog: [] }, head: a.id })
-    assert.deepEqual(registry.get(path).at(-1)!.playerCatalog, [])
-  },
-  { scenario: "branch-local-player-catalog" },
-)
-expectNoDiagnostics(catalogArtifact)
+// An ancestor correction replaces descendant presentation projections for every attached client.
+const updated = { ...node(100, 99, "child"), heading: "new heading" }
+apply({ kind: "change", node: node(100, 99, "child"), head: 100 })
+apply({ kind: "change", node: node(99, null, "parent"), updated: [updated], head: 100 })
+assert.equal(registry.get(log).nodes.get(100)?.heading, "new heading")

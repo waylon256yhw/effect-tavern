@@ -1,3 +1,4 @@
+import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } from "./projection.ts"
 // A session: one card, the player's rows (layer.ts), one connection, one log tree. Its interface is the crossing protocol the
 // client speaks: player actions in (each returns the stream of events it causes, ending with the node), node
 // projections out. The in-process callers (test/loop.ts, test/live.ts) and the wire adapter cross the same seam.
@@ -76,7 +77,7 @@ import { recordTransaction, worldValue, worldOn, type RecordResult } from "./wor
 export type Turn = TurnOf<Beat>
 export const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const
 export type Phase = (typeof phases)[number]
-export type { Node } from "./derived.ts" // the node projection lives with the facts it carries; the client imports it here
+export type { Node } from "./derived.ts" // internal complete projection; clients use projection.ts
 export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part | ProductDelta }
@@ -85,7 +86,7 @@ export type Event =
 /** A narrate block's text as it streams, beside the provider's `text-delta`: the block `<<aside>> <id>` opened. */
 export type ProductDelta = { type: "product-delta"; id: string; text: string }
 export type Events = Stream.Stream<Event, ModelError>
-export type Change = Log.Change<Node>
+export type Change = Log.Change<Node> & { invalidated?: readonly number[] }
 /** A stop signal: completes when the player halts the prose (a Deferred's await on the wire). Only narrate listens. */
 export type Stop = Effect.Effect<void>
 type Emit = (e: Event) => Effect.Effect<void>
@@ -322,10 +323,17 @@ export const makeSession = ({
       const started = Date.now()
       const events: StageEvent[] = []
       let reported = false
-      const report = (out: unknown, usage: Usage) =>
+      const report = (out: object, usage: Usage) =>
         Effect.gen(function* () {
           reported = true
-          yield* emit({ kind: "call", phase, msgs, out, usage, ms: Date.now() - started })
+          yield* emit({
+            kind: "call",
+            phase,
+            msgs,
+            out: { ...out, budget: options.budget },
+            usage,
+            ms: Date.now() - started,
+          })
         })
       return yield* runStageTools(modelFor(phase), msgs, { ...options, onEvent: (e) => events.push(e) }).pipe(
         Effect.tap((r) => report(r, r.usage)),
@@ -354,7 +362,7 @@ export const makeSession = ({
     asked: readonly Product[],
     path: readonly Turn[],
     state: State,
-    scene: Pick<Turn, "input" | "reply">,
+    scene: Pick<Turn, "input" | "reply" | "deliveries">,
     qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
   ) =>
     Effect.gen(function* () {
@@ -373,6 +381,9 @@ export const makeSession = ({
         stage: "record",
         known: fed.known,
         current: fed.current,
+        invoked: latest(scene.deliveries)
+          .filter((d) => scene.input.invoke?.includes(d.resourceId))
+          .map(deliveryText),
         asks: asked.map((p) => `${p.id}: ${expandState(p.text, context)}`),
         tools: wording("record.tools"),
         readout: wording("record.readout"),
@@ -468,6 +479,19 @@ export const makeSession = ({
             ),
           )
       let looked: Disclosure[] = reused ? [...base!.read] : [...automatic, ...selected].flatMap((r) => r.disclosures)
+      // An edit keeps its original context, but newly selected player tools still need a frozen delivery.
+      if (reused) {
+        const added = selected.filter((r) => !base!.input.invoke?.includes(r.resourceId))
+        deliveries.push(
+          ...added.map((r) =>
+            freeze(
+              r,
+              resident.find((s) => s.resourceId === r.resourceId),
+            ),
+          ),
+        )
+        looked.push(...added.flatMap((r) => r.disclosures))
+      }
       const hasInput = !!(input.text || input.note)
       if (!reused && hasInput) {
         const injected = latest([...resident, ...current, ...deliveries])
@@ -839,8 +863,9 @@ export const makeSession = ({
       )
     })
   const sibling = (nodeId: number, from: "lookup" | "narrate" | "check", patch?: Partial<Turn>, stop?: Stop) => {
-    const base = { ...turnOf(nodeId), ...patch }
-    return emitting((emit) => turn(emit, base.parent, base.input, from, base, stop))
+    const original = turnOf(nodeId)
+    const base = { ...original, ...patch, input: original.input }
+    return emitting((emit) => turn(emit, base.parent, patch?.input ?? base.input, from, base, stop))
   }
 
   return {
@@ -899,12 +924,12 @@ export const makeSession = ({
       fresh()
       return derived.at(chain(nodeId)).context()
     },
-    activeContext: (nodeId: number | null) => {
+    activeContext: (nodeId: number | null): ActiveContextView => {
       fresh()
       const here = derived.at(chain(nodeId))
       const state = here.context()
       return {
-        state,
+        worldState: state,
         playerCatalog: here.playerCatalog(),
         products: Object.fromEntries(
           products()
@@ -913,11 +938,33 @@ export const makeSession = ({
         ),
       }
     },
+    projectTimeline: (n: Node): TimelineNode =>
+      timelineNode(n, derived.at(chain(n.parent)).state, card.rules, products()),
+    timelineNode: (id: number): TimelineNode => {
+      fresh()
+      const t = turnOf(id)
+      return timelineNode(derived.at(chain(id)).node(false), derived.at(chain(t.parent)).state, card.rules, products())
+    },
+    timeline: (): Log.Snapshot<TimelineNode> => {
+      fresh()
+      return {
+        nodes: [...held.log.nodes.values()].map((t) =>
+          timelineNode(derived.at(chain(t.id)).node(false), derived.at(chain(t.parent)).state, card.rules, products()),
+        ),
+        head: held.log.head,
+        next: held.log.next,
+      }
+    },
+    detail: (id: number) => {
+      fresh()
+      const t = turnOf(id)
+      return turnDetail(derived.at(chain(id)).node(false), derived.at(chain(t.parent)).state, card.rules)
+    },
     node: (id: number): Node => {
       fresh()
       return project(turnOf(id))
     },
-    /** Every node projected, and head: what a client opens with. */
+    /** Complete in-process snapshot for runtime consumers; HTTP uses timeline(). */
     snapshot: (): Log.Snapshot<Node> => {
       fresh()
       policy = policyOf()
@@ -1002,7 +1049,7 @@ export const makeSession = ({
         derived.at(Log.chain(next, t.parent)).settle(t)
         affected.add(t.id)
       }
-      return change(held.commit(amended))
+      return { ...change(held.commit(amended)), invalidated: [...affected].filter((id) => id !== nodeId) }
     },
     /** A player action on a node: ask for one product (on or off) over that node's scene, and keep it on the node. Not a
      *  turn, not in the transcript; replay reads it back like any recorded output. The first instance is the "inner

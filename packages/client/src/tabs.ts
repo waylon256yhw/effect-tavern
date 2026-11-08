@@ -47,7 +47,6 @@ const show = async (id: number, current: () => boolean): Promise<void> => {
     await (own ? wire.fetchCard(current) : wire.fetchCardOf(t.card, current)) // the story's card, or one browsed on this tab
   }
   if (!current()) return
-  if (typeof t.page === "object") await wire.fetchCalls()
   else if (t.page === "settings") await wire.fetchSettings()
   if (!current()) return
   if (

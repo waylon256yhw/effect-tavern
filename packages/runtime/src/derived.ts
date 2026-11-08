@@ -1,3 +1,4 @@
+import type { PlayerCatalogItem } from "./projection.ts"
 // Derived (GLOSSARY 派生): the facts code folds along a path, never stored. State and events, each turn's pre / post,
 // the gate state (counters and floors), the readable list, the fold boundary and its summary, the Known / Current
 // lines, the ledger, the node projection. One factory per session; `at(path)` reads them, lazily, per fact. The memo
@@ -13,7 +14,6 @@ import {
   revision,
   type Resource,
   type DeliverySnapshot,
-  type CatalogEntry,
 } from "./context.ts"
 import type { PackEntry } from "./layer.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
@@ -36,8 +36,7 @@ const title = (ref: string, fields: State, world: Record<string, unknown>): stri
 }
 
 type Turn = TurnOf<Beat>
-/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `playerCatalog` contains
- *  the entries the player can request (authorized titles, never bodies). */
+/** Internal runtime projection. HTTP exposes projection.ts contracts instead of this complete journal view. */
 export interface Node {
   id: number
   parent: number | null
@@ -47,7 +46,7 @@ export interface Node {
   events: readonly string[]
   checks: readonly Check[] // this turn's judged beats, in order; what the Record's check track draws
   delivered: readonly DeliverySnapshot[]
-  playerCatalog: readonly CatalogEntry[]
+  playerCatalog: readonly PlayerCatalogItem[]
 }
 
 /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
@@ -291,7 +290,7 @@ export const makeDerived = ({
       /** A candidate turn settled on top of the path (setField's adjusted node, demand's `pre`). */
       settle: (t: Turn) => settleTurn(last().s, t, worldOn(products(), path)),
       /** The node projection of the path's last turn. */
-      node: (): Node => {
+      node: (withCatalog = true): Node => {
         const t = path.at(-1)!
         const settled = last()
         return {
@@ -303,7 +302,7 @@ export const makeDerived = ({
           events: settled.events,
           checks: settled.checks,
           delivered: t.deliveries,
-          playerCatalog: playerCatalog(path),
+          playerCatalog: withCatalog ? playerCatalog(path) : [],
         }
       },
       /** The gate of the turn being made on this path: its settled state and beat events, what it read before the gate

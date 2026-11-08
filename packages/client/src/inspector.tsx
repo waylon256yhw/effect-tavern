@@ -1,9 +1,13 @@
+import { AsyncView } from "./async-view.tsx"
+import { fetchDetail, fetchTrace, fetchContext } from "./wire.ts"
+type Node = Timeline & TurnDetail
 import { splitter } from "@effect-tavern/runtime/src/journal.ts"
-import type { Node } from "@effect-tavern/runtime/src/session.ts"
+import type { TimelineNode as Timeline, TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
 import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch, untrack } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Check, Clue, Copy, Next, Prev, Record } from "./icons.tsx"
 import {
+  nativeTrace,
   defaultTab,
   groups,
   isTray,
@@ -20,13 +24,13 @@ import {
   type Tray,
 } from "./inspect.ts"
 import { KeyValues, Reading, Shaped } from "./readings.tsx"
-import { channelOf, fields, lineOf, parentOf, versions, whens } from "./record.ts"
-import { calls, card, log, path, registry, type Id } from "./store.ts"
+import { channelOf, fields, lineOf, versions, whens } from "./record.ts"
+import { card, log, path, registry, type Id } from "./store.ts"
 import { close, open } from "./pages.ts"
 import { t } from "./i18n.ts"
 
 // the input's channel in the harness's own words (the inspector speaks English like its stage names)
-const CHANNEL = { act: "act", note: "note", both: "act + note", greeting: "greeting" } as const
+const CHANNEL = { act: "act", note: "note", both: "act + note", invoke: "invoke", greeting: "greeting" } as const
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
 // A full page over the reader (the reader stays mounted, so a turn in flight keeps streaming under it), shaped by
@@ -40,7 +44,7 @@ const CHANNEL = { act: "act", note: "note", both: "act + note", greeting: "greet
 // tokens, open to their answers (the brief stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
 // path, `[` `]` too, Escape goes back (pages.ts). src/inspect.ts projects; this draws.
 export const openInspector = () => {
-  const id = registry.get(path).at(-1)?.turn.id
+  const id = registry.get(path).at(-1)?.id
   if (id !== undefined) open({ inspect: id })
 }
 const fmt = (n: number) => n.toLocaleString("en-US")
@@ -67,7 +71,7 @@ const Marked = (props: { text: string; q: string }) => {
 }
 /** A row's head: what the stage decided, from the call's answer and the node's facts (never a written summary). */
 const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
-  const out = () => props.row.call.out as Record<string, unknown>
+  const out = () => (props.row.call.out ?? {}) as Record<string, unknown>
   // narrate: the prose's first line and the blocks it opened (journal.ts `splitter`); a demanded block has no prose,
   // so its own first line stands in
   const cut = () => {
@@ -85,7 +89,7 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
   }
   const ids = (v: unknown) => (Array.isArray(v) ? (v as string[]).join(", ") : "")
   // decide: the nth beat of the turn; its judged check is the one among the beats with a chance up to it
-  const beats = () => props.node.turn.beats
+  const beats = () => props.node.beats
   const check = () =>
     beats()[props.nth]?.chance === undefined
       ? undefined
@@ -95,20 +99,8 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
             .filter((x) => x.chance !== undefined).length - 1
         ]
   const fired = () => (out().fired as string[] | undefined) ?? []
-  const missed = () => props.node.turn.brief.must.filter((id) => !fired().includes(id))
+  const missed = () => props.node.brief.must.filter((id) => !fired().includes(id))
   const violated = () => (out().violated as string[] | undefined) ?? []
-  const products = () =>
-    [
-      ...new Set([
-        ...Object.entries(out())
-          .filter(
-            ([k, v]) =>
-              k !== "answers" && k !== "ops" && v !== undefined && v !== "" && !(Array.isArray(v) && !v.length),
-          )
-          .map(([k, v]) => (Array.isArray(v) ? `${k} (${v.length})` : k)),
-        ...((out().ops as { product: string }[] | undefined) ?? []).map((o) => o.product),
-      ]),
-    ].join(" · ")
   // polish: the sentences sent (the marks in the request, when the trace carries it) against the ones that came back changed
   const sent = createMemo(
     () =>
@@ -121,17 +113,27 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
       ),
   )
   const changed = () => Object.entries(out()).filter(([k, v]) => sent().has(k) && sent().get(k) !== v).length
-  const answers = () =>
-    Object.entries((out().answers as Record<string, string> | undefined) ?? {}).map(([k, v]) => `${k}=${v}`)
   return (
     <Switch>
-      <Match when={props.row.phase === "lookup"}>
-        <Show when={ids(out().read)} fallback={<span class="pill">{t("inspector.nothingRead")}</span>}>
-          {(r) => <span class="pill">read: {r()}</span>}
-        </Show>
-        <Show when={typeof out().search === "string" && String(out().search).trim()}>
-          {(q) => <span class="pill">search: {q()}</span>}
-        </Show>
+      <Match when={nativeTrace(props.row.call.out)}>
+        {(trace) => (
+          <>
+            <span class="pill">{trace().status}</span>
+            <Show
+              when={
+                props.row.phase === "lookup" &&
+                !trace().steps.some((s) => s.calls.some((c) => c.name === "read_context" && c.result.ok))
+              }
+            >
+              <span class="pill">{t("inspector.nothingRead")}</span>
+            </Show>
+            <span class="dtext">
+              {trace()
+                .steps.flatMap((s) => s.calls.map((c) => c.name))
+                .join(" → ")}
+            </span>
+          </>
+        )}
       </Match>
       <Match when={props.row.phase === "decide"}>
         <Show when={check()} fallback={<span class="pill">{beats()[props.nth]?.next ?? "end"}</span>}>
@@ -193,12 +195,6 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         <Show when={sent().size}>
           <span class="dtext">{t("inspector.changed", { n: changed() })}</span>
         </Show>
-      </Match>
-      <Match when={props.row.phase === "record"}>
-        <For each={answers()} keyed={false}>
-          {(a) => <span class="pill">{a()}</span>}
-        </For>
-        <span class="dtext">{products()}</span>
       </Match>
     </Switch>
   )
@@ -334,7 +330,57 @@ const Step = (props: {
                 <span class="role">{t("inspector.answer")}</span>
                 <Show
                   when={typeof c().out === "string"}
-                  fallback={<KeyValues of={c().out as Record<string, unknown>} />}
+                  fallback={
+                    <Show
+                      when={nativeTrace(c().out)}
+                      fallback={<KeyValues of={(c().out ?? {}) as Record<string, unknown>} />}
+                    >
+                      {(trace) => (
+                        <div class="native-trace">
+                          <p>
+                            {trace().status} {trace().reason}
+                          </p>
+                          <Show when={trace().budget}>{(b) => <KeyValues of={{ budget: b() }} />}</Show>
+                          <For each={trace().steps} keyed={(s) => s.index}>
+                            {(step) => (
+                              <section>
+                                <h4>
+                                  {t("inspector.step", { n: step().index + 1 })} · {step().finishReason}
+                                </h4>
+                                <For each={step().calls} keyed={(c) => c.toolCallId}>
+                                  {(tool) => (
+                                    <details class="native-tool">
+                                      <summary>
+                                        <code>{tool().name}</code> · {tool().result.ok ? "ok" : "error"} ·{" "}
+                                        {secs(tool().ms)} {tool().replayed ? "replayed" : ""}
+                                      </summary>
+                                      <KeyValues
+                                        of={{
+                                          toolCallId: tool().toolCallId,
+                                          input: tool().input,
+                                          result: tool().result,
+                                        }}
+                                      />
+                                    </details>
+                                  )}
+                                </For>
+                                <details>
+                                  <summary>{t("inspector.messages")}</summary>
+                                  <pre>
+                                    {JSON.stringify(
+                                      { request: step().messages, response: step().response, usage: step().usage },
+                                      null,
+                                      2,
+                                    )}
+                                  </pre>
+                                </details>
+                              </section>
+                            )}
+                          </For>
+                        </div>
+                      )}
+                    </Show>
+                  }
                 >
                   <p class="prose">
                     <Marked text={c().out as string} q={props.q} />
@@ -349,25 +395,39 @@ const Step = (props: {
   )
 }
 
-export const Inspect = (props: { id: Id }) => {
+const InspectBody = (props: { id: Id }) => {
   const all = read(log)
   const line = read(path)
-  const trace = read(calls)
   const view = read(card)
-  const node = () => all().nodes.get(props.id)
-  const at = () => line().findIndex((x) => x.turn.id === props.id) // -1: a sibling off the reading line
-  const parent = () => (node() ? parentOf(all(), node()!) : undefined)
+  const trace = createMemo(() => {
+    all()
+    return fetchTrace(props.id)
+  })
+  const detail = createMemo(() => {
+    all()
+    return fetchDetail(props.id)
+  })
+  const context = createMemo(() => {
+    all()
+    view()
+    return fetchContext(props.id)
+  })
+  const node = createMemo(() => {
+    const n = all().nodes.get(props.id)
+    return n ? { ...n, ...detail() } : undefined
+  })
+  const at = () => line().findIndex((x) => x.id === props.id) // -1: a sibling off the reading line
   const vs = createMemo(() => (node() ? versions(all(), node()!) : { list: [], index: -1, varied: false }))
   const go = (d: number) => {
     const x = line()[at() + d]
-    if (x) open({ inspect: x.turn.id })
+    if (x) open({ inspect: x.id })
   }
-  const mine = () => trace().get(props.id) ?? []
+  const mine = () => trace()
   // the server's gate: without `inspect` no call carries a request body
-  const dev = createMemo(() => [...trace().values()].some((l) => l.some((c) => c.msgs.length > 0)))
+  const dev = createMemo(() => trace().some((c) => c.msgs.length > 0))
   const [pane, setPane] = createSignal<"pipeline" | "node">("pipeline")
   const [q, setQ] = createSignal("")
-  const trows = createMemo(() => (node() ? rows(mine(), node()!.turn) : []))
+  const trows = createMemo(() => (node() ? rows(mine(), node()!) : []))
   const grouped = createMemo(() => groups(trows()))
   const sums = createMemo(() => totals(mine()))
   const nth = (r: Row) =>
@@ -405,7 +465,7 @@ export const Inspect = (props: { id: Id }) => {
   const changes = createMemo(() => {
     const r = view()?.rules
     const x = node()
-    return r && x ? fields(r, x, parent(), whens(view())) : []
+    return r && x ? fields(r, x, whens(view())) : []
   })
   const shapeOf = (id: string) => view()?.layer?.products.find((p) => p.id === id)?.shape
   const One = (p: { row: Row }) => (
@@ -476,7 +536,7 @@ export const Inspect = (props: { id: Id }) => {
           </button>
           <button role="tab" aria-selected={pane() === "node" ? "true" : "false"} onClick={() => setPane("node")}>
             {t("common.node")}
-            <Show when={node()?.playerCatalog.length}>{(n) => <span class="v">{n()}</span>}</Show>
+            <Show when={context().playerCatalog.length}>{(n) => <span class="v">{n()}</span>}</Show>
           </button>
         </span>
       </header>
@@ -547,13 +607,13 @@ export const Inspect = (props: { id: Id }) => {
               </div>
               <div class="inwell">
                 <p class="line">{lineOf(x())}</p>
-                <Show when={(x().turn.input.text && x().turn.input.note) || x().turn.input.invoke?.length}>
+                <Show when={(x().input.text && x().input.note) || x().input.invoke?.length}>
                   <div class="pills">
-                    <Show when={x().turn.input.text && x().turn.input.note}>
-                      <span class="pill">note: {x().turn.input.note}</span>
+                    <Show when={x().input.text && x().input.note}>
+                      <span class="pill">note: {x().input.note}</span>
                     </Show>
-                    <For each={x().turn.input.invoke ?? []} keyed={(id) => id}>
-                      {(id) => <span class="pill">invoke: {id()}</span>}
+                    <For each={x().invocations} keyed={(i) => i.resourceId}>
+                      {(item) => <span class="pill">{item().title}</span>}
                     </For>
                   </div>
                 </Show>
@@ -561,14 +621,14 @@ export const Inspect = (props: { id: Id }) => {
               <div class="sechead">
                 <span class="lbl">{t("inspector.untold")}</span>
               </div>
-              <Show when={x().playerCatalog.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
+              <Show when={context().playerCatalog.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
                 <div class="hooks">
-                  <For each={x().playerCatalog} keyed={(r) => r.id}>
+                  <For each={context().playerCatalog} keyed={(r) => r.resourceId}>
                     {(r) => (
                       <div class="hook">
                         <span class="hb">
-                          <span class="hid">{r().id}</span>
-                          <span class="ht">{r().hook}</span>
+                          <span class="hid">{r().title}</span>
+                          <span class="ht">{r().summary}</span>
                         </span>
                       </div>
                     )}
@@ -591,7 +651,7 @@ export const Inspect = (props: { id: Id }) => {
               <div class="sechead">
                 <span class="lbl">{t("inspector.products")}</span>
               </div>
-              <For each={Object.entries(x().turn.products)} keyed={([k]) => k}>
+              <For each={Object.entries(x().products)} keyed={([k]) => k}>
                 {(e) => (
                   <div class="prod">
                     <span class="pid">{e()[0]}</span>
@@ -608,3 +668,9 @@ export const Inspect = (props: { id: Id }) => {
     </div>
   )
 }
+
+export const Inspect = (props: { id: Id }) => (
+  <AsyncView>
+    <InspectBody id={props.id} />
+  </AsyncView>
+)

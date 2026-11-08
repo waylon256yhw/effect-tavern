@@ -77,7 +77,11 @@ export const preview = (row: StoryRow): string | null => {
   const text = row.last.text.trim()
   if (text) return text
   const note = row.last.note?.trim()
-  return note ? t("stories.notePreview", { note: note }) : null
+  return note
+    ? t("stories.notePreview", { note })
+    : row.last.invoke?.length
+      ? t("stories.invocationPreview", { n: row.last.invoke.length })
+      : null
 }
 /** Whether a row stays under the search: no search, its title holds the query, or the server's hits name it. */
 export const matches = (row: StoryRow, q: string, hits: ReadonlyMap<number, Hit>): boolean => {

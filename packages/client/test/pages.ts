@@ -1,3 +1,4 @@
+import { timelineNode } from "./fixtures.ts"
 // The page over the reader (src/pages.ts) on a stubbed wire: close returns to the page under, the reader at the
 // bottom; landing on a story decides card or reader, forgets what was under, closes the old story's stream, reads the
 // story's card and picks up its turn in flight; no story at all lands on the first card's page; a delete of another
@@ -8,8 +9,7 @@ import { activeOf, card, focus, layer, log, page, registry, stories, type StoryR
 import { fetchCard, fetchCardOf, fetchNodes } from "../src/wire.ts"
 import { turn } from "../src/turn.ts"
 
-const node = (id: number, parent: number | null) =>
-  ({ id, parent, turn: { id, parent, input: { text: "" }, reply: [], end: "end" } }) as any
+const node = (id: number, parent: number | null) => timelineNode(id, parent, "", "")
 let nodes: unknown[] = [] // what GET /nodes answers
 const rows = [1, 2, 3, 7].map((id) => ({ id, card: "first", busy: null, title: null }) as unknown as StoryRow)
 const listing = (current: number | null) => ({ current, stories: current === null ? [] : rows })

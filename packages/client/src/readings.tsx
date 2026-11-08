@@ -1,26 +1,16 @@
+import { AsyncView } from "./async-view.tsx"
 // The Record's pieces: one renderer per reading element (src/record.ts projects them; this file only draws), the
 // full-page sheet they sit in on the phone, the sibling actions a turn's row holds, the Status
 // table, and the 读数 page they make up. The reader (App.tsx) and the inspector (inspector.tsx) draw with these.
 import { type Shape, type TableShape } from "@effect-tavern/runtime/src/product.ts"
-import type { Node } from "@effect-tavern/runtime/src/session.ts"
+import type { TimelineNode as Node } from "@effect-tavern/runtime/src/projection.ts"
 import { type JSX } from "@solidjs/web"
-import { createMemo, createSignal, For, Loading, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
 import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe } from "./icons.tsx"
 import { close } from "./pages.ts"
-import {
-  fresh,
-  heading,
-  kindOf,
-  marked,
-  parentOf,
-  record,
-  status,
-  whens,
-  type Declared,
-  type Element,
-} from "./record.ts"
+import { fresh, heading, kindOf, marked, record, status, whens, type Declared, type Element } from "./record.ts"
 import {
   card,
   type CardView,
@@ -36,14 +26,14 @@ import {
   working,
 } from "./store.ts"
 import { turn } from "./turn.ts"
-import { fetchContext } from "./wire.ts"
+import { fetchContext, fetchDetail } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
 /** Which sibling action made a version (GLOSSARY §二 swipe / reword / edit), as its icon; a plain act draws the
  *  fallback (nothing unless given). The reader's version list and the Timeline draw with it. */
-export const SiblingKind = (props: { of: Node["turn"]["sibling"]; class?: string; fallback?: JSX.Element }) => (
+export const SiblingKind = (props: { of: Node["sibling"]; class?: string; fallback?: JSX.Element }) => (
   <Switch fallback={props.fallback}>
     <Match when={props.of === "swipe"}>
       <Swipe class={props.class} aria-label={t("common.swipe")} />
@@ -169,8 +159,7 @@ const changeLabel = (kind: "insert" | "patch" | "remove" | "replace") => {
 
 export const Settlement = (props: { node: Node }) => {
   const busy = read(working)
-  const unresolved = () =>
-    props.node.turn.settlementStatus === "pending" || props.node.turn.settlementStatus === "failed"
+  const unresolved = () => props.node.settlementStatus === "pending" || props.node.settlementStatus === "failed"
   return (
     <Show when={unresolved()}>
       <aside class="settlement">
@@ -180,7 +169,7 @@ export const Settlement = (props: { node: Node }) => {
         </button>
         <button
           type="button"
-          disabled={busy() && props.node.turn.settlementStatus !== "pending"}
+          disabled={busy() && props.node.settlementStatus !== "pending"}
           onClick={() => turn.skipRecord(props.node.id)}
         >
           {t("readings.skipRecord")}
@@ -384,7 +373,7 @@ const theater = (products: readonly Declared[]) => products.filter((p) => p.id !
  *  not produced this turn); one asked for leaves the list as it lands. */
 export const demandable = (products: readonly Declared[], node: Node): Option<string>[] =>
   theater(products)
-    .filter((p) => node.turn.products[p.id] === undefined)
+    .filter((p) => node.theater[p.id] === undefined)
     .map((p) => ({ value: p.id, label: p.label ?? p.id }))
 
 /** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
@@ -411,14 +400,15 @@ export const Sheet = (props: {
 )
 
 /** A turn's readings: what it changed and produced (src/record.ts). */
-export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
+const RecordBody = (props: { node: Node }) => {
+  const detail = createMemo(() => fetchDetail(props.node.id))
   const view = read(card)
   // equal by content: the projection is fresh each run (the log or the card view changed), and an unchanged Record
   // must not re-run its rows ([UNSTABLE_MEMO_OUTPUT] under the diagnostics when the card view is read again)
   const els = createMemo(
     () => {
       const r = view()?.rules
-      return r ? record(r, props.node, props.prev, view()?.layer?.products, whens(view())) : []
+      return r ? record(r, detail(), view()?.layer?.products, whens(view())) : []
     },
     { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
   )
@@ -431,6 +421,12 @@ export const TurnRecord = (props: { node: Node; prev: Node | undefined }) => {
     </div>
   )
 }
+
+export const TurnRecord = (props: { node: Node }) => (
+  <AsyncView>
+    <RecordBody node={props.node} />
+  </AsyncView>
+)
 
 /** The sibling actions on a node: Swipe (the turn again, dice and all), Reword (the same turn, new prose: the wand
  *  opens a box for a word to the narrator, which rides as that sibling's note; Enter sends, empty or not, and so does
@@ -574,9 +570,8 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
   const view = read(card)
   const [shown, setShown] = createSignal(false)
   let dlg!: HTMLDialogElement
-  const prev = () => parentOf(all(), props.node)
   return (
-    <Show when={marked(view()?.rules, props.node, prev(), view()?.layer?.products)}>
+    <Show when={marked(props.node)}>
       <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
         <Record aria-hidden="true" />
       </button>
@@ -586,7 +581,7 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
         heading={heading(view()?.heading, props.node, all()) ?? t("common.turnN", { n: props.n })}
       >
         <Show when={shown()}>
-          <TurnRecord node={props.node} prev={prev()} />
+          <TurnRecord node={props.node} />
         </Show>
       </Sheet>
     </Show>
@@ -597,12 +592,16 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
 export const StatusTable = () => {
   const view = read(card)
   const last = read(latest)
+  const current = createMemo(() => {
+    view()
+    return fetchContext(last()?.node.id ?? null)
+  })
   // equal by content, like the Record's: the card view read again must not re-run unchanged rows
   const groups = createMemo(
     () => {
       const r = view()?.rules
       const l = last()
-      return r && l ? status(r, l.node.state, whens(view())) : []
+      return r && l ? status(r, current().worldState.fields, whens(view())) : []
     },
     { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
   )
@@ -672,11 +671,13 @@ export const StatusPage = () => (
       <div class="still">
         <section class="status">
           <h2>{t("common.status")}</h2>
-          <StatusTable />
+          <AsyncView>
+            <StatusTable />
+          </AsyncView>
         </section>
-        <Loading fallback={<p class="dim">{t("common.loading")}</p>}>
+        <AsyncView>
           <World />
-        </Loading>
+        </AsyncView>
       </div>
     </div>
   </div>

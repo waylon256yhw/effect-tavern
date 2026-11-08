@@ -78,7 +78,7 @@ await Effect.runPromise(
   Effect.gen(function* () {
     const g = S.greet({ text: "Opening" }).node!
     assert.deepEqual(
-      S.node(g.id).playerCatalog.map((e) => e.id),
+      S.node(g.id).playerCatalog.map((e) => e.resourceId),
       ["card:guide", "pack:p/always", "pack:p/manual", "pack:p/auto", "pack:p/permanent"],
     )
     for (const id of ["card:secret", "card:locked", "missing"]) {
@@ -98,7 +98,7 @@ await Effect.runPromise(
     assert.ok(text("narrate").includes("GUIDE TWO") && !text("narrate").includes("LOCKED GUIDE"))
     assert.ok(text("narrate").includes("MANUAL BODY") && text("narrate").includes("ALWAYS BODY"))
     assert.ok(!text("narrate").includes("MODEL SECRET"))
-    assert.ok(!S.node(t.id).playerCatalog.some((e) => e.id === "card:p/auto"))
+    assert.ok(!S.node(t.id).playerCatalog.some((e) => e.resourceId === "card:p/auto"))
     assert.ok(!text("narrate").includes("COLLIDING SECRET"))
     assert.equal(narratorHistory([g.turn, t]).filter((m) => m.role === "user").length, 1)
     const next = yield* go(S.act(t.id, { text: "continue" }))
@@ -115,7 +115,7 @@ await Effect.runPromise(
     assert.deepEqual(rerun.deliveries, frozen)
     assert.ok(text("narrate").includes("MANUAL BODY"))
     assert.deepEqual(
-      S.node(t.id).playerCatalog.map((e) => e.id),
+      S.node(t.id).playerCatalog.map((e) => e.resourceId),
       ["card:guide"],
     )
     const replay = makeSession({
@@ -135,6 +135,15 @@ await Effect.runPromise(
       ["check", "record"],
     )
     assert.ok(text("record").includes("Edited chip-only turn"))
+    const kept = yield* go(S.edit(next.id, { input: { text: "continue", invoke: ["card:guide"] } }))
+    assert.ok(kept.deliveries.some((d) => d.resourceId === "card:guide" && d.text.includes("GUIDE TWO")))
+    assert.equal(S.timelineNode(kept.id).invocations[0]?.resourceId, "card:guide")
+    assert.ok(text("record").includes("GUIDE TWO"))
+    assert.equal(
+      (yield* Effect.exit(go(S.edit(next.id, { input: { text: "continue", invoke: ["card:secret"] } }))))._tag,
+      "Failure",
+    )
+    assert.equal(calls.length, 0)
   }),
 )
 console.log("invoke ok")

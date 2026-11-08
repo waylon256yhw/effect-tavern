@@ -1,3 +1,4 @@
+import type { InvocationToken } from "@effect-tavern/runtime/src/projection.ts"
 // The turn in flight on one story, owned by the story (library.ts keeps one beside each session), never by a response.
 // `start` runs an action to its end whether anyone listens or not and answers its events as a stream; a response is
 // only a subscriber, and closing it stops nothing. `stop` is the player's: before the first character of prose the
@@ -18,6 +19,7 @@ import { Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect"
 export interface Draft {
   parent: Id | null
   input: Input
+  invocations?: readonly InvocationToken[]
   text: string
   products?: Record<string, string> // narrate blocks so far, by id
   prev?: string
@@ -36,7 +38,7 @@ const first: Partial<Record<Action["kind"], Phase>> = {
   edit: "check",
 }
 /** The draft an action puts up, as the client draws it (client turn.ts): none for the ones that narrate nothing. */
-const draftOf = (s: Session, a: Action): Draft | null => {
+const draftInput = (s: Session, a: Action): Draft | null => {
   if (a.kind === "act")
     return { parent: a.parent === undefined ? s.log.head : a.parent, input: a.input, text: "", fresh: true }
   if (a.kind !== "swipe" && a.kind !== "reword" && a.kind !== "edit") return null
@@ -48,6 +50,20 @@ const draftOf = (s: Session, a: Action): Draft | null => {
     return { parent: n.parent, input: note ? { ...n.input, note } : n.input, text: "" }
   }
   return { parent: n.parent, input: a.input ?? n.input, text: a.text ?? textOf(n.reply) }
+}
+
+const draftOf = (s: Session, a: Action): Draft | null => {
+  const d = draftInput(s, a)
+  if (!d?.input.invoke?.length || (d.parent !== null && !s.log.nodes.has(d.parent))) return d
+  const catalog = s.activeContext(d.parent).playerCatalog
+  const prior = "node" in a && a.node !== null && s.log.nodes.has(a.node) ? s.timelineNode(a.node).invocations : []
+  return {
+    ...d,
+    invocations: d.input.invoke.flatMap((id) => {
+      const item = catalog.find((i) => i.resourceId === id) ?? prior.find((i) => i.resourceId === id)
+      return item ? [{ resourceId: item.resourceId, title: item.title, source: item.source }] : []
+    }),
+  }
 }
 
 interface Run {

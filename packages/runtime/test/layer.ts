@@ -858,7 +858,7 @@ const mount = (...mounts: string[]) => here({ mounts })
   assert.ok(!lookup.includes("The rest of it"), lookup)
   assert.equal(n1.delivered[0]!.text, "The first sentence. The rest of it.")
   assert.deepEqual(
-    n1.playerCatalog.map((e) => e.id),
+    n1.playerCatalog.map((e) => e.resourceId),
     ["pack:packA/x"], // player catalog is independent of model residency
   )
   // the frame: the row's slot in the head, its tail fragment last in narrate alone

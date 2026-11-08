@@ -1,3 +1,6 @@
+import { timelineNode as node } from "./fixtures.ts"
+import { composition, updateComposition } from "../src/store.ts"
+import { token } from "./fixtures.ts"
 // The turn in flight (src/turn.ts) on a scripted wire: an act lands; a stop the server withdraws puts the line back in
 // its box, one it halts waits on the same stream for the stopped node (or record's error, the line back); a failed
 // revision keeps the revision and gives the line back; a story switch drops the stream without withdrawing; a demand
@@ -7,18 +10,15 @@ import type { Action } from "@effect-tavern/runtime/src/session.ts"
 import assert from "node:assert/strict"
 import {
   apply,
-  boxes,
   cancelRevise,
   card,
   dismiss,
   draft,
   error,
   log,
-  invoke,
   registry,
   revise,
   revising,
-  setBoxes,
   stage,
   stories,
   working,
@@ -42,8 +42,6 @@ const tick = () => {
 const playOut = () => {
   for (let n = 0; frames.length && n < 400; n++) tick()
 }
-const node = (id: number, parent: number | null, text: string, input = `in${id}`) =>
-  ({ id, parent, turn: { id, parent, input: { text: input }, reply: [{ type: "text", text }], end: "end" } }) as any
 const delta = (text: string): Wire => ({ kind: "delta", part: { type: "text-delta", id: "0", text } }) as Wire
 
 // the scripted wire: each send or attach is a stream the test feeds; an aborted one applies nothing more. A stop
@@ -68,7 +66,8 @@ registry.set(card, { input: "act", greetings: [] } as unknown as CardView)
 registry.set(log, L.of({ nodes: [node(0, null, "root")], head: 0 }))
 
 // (a) act → lookup → narrate → deltas → the node lands: nothing in flight, nothing left over
-turn.act("hi", "")
+updateComposition({ text: "hi", note: "", noteOpen: false })
+turn.act()
 assert.deepEqual(last().action, { kind: "act", input: { text: "hi" } })
 assert.equal(registry.get(draft)?.parent, 0)
 last().emit({ kind: "stage", phase: "lookup" }, { kind: "stage", phase: "narrate" }, delta("hel"), delta("lo"))
@@ -84,8 +83,9 @@ assert.equal(registry.get(log).head, 1)
 // stream closed so nothing late lands; idle, a stop asks nothing
 await turn.stop()
 assert.equal(stops, 0)
-turn.act("line", "note")
-setBoxes({ text: "", note: "", aside: false }) // the composer clears after the send
+updateComposition({ text: "line", note: "note", noteOpen: true })
+turn.act()
+updateComposition({ text: "", note: "", noteOpen: false }) // the composer clears after the send
 registry.set(stories, { current: 1, stories: [{ id: 1, busy: null } as unknown as StoryRow] })
 last().emit({ kind: "stage", phase: "narrate" })
 assert.equal(registry.get(stories)?.stories[0]?.busy, "narrate") // the row says so before any listing
@@ -93,12 +93,13 @@ stopping = "withdrawn"
 await turn.stop()
 assert.ok(last().aborted)
 assert.equal(registry.get(stories)?.stories[0]?.busy, null) // withdrawn: no node comes to end it, the row is told
-assert.deepEqual(boxes(), { text: "line", note: "note", aside: true })
+assert.deepEqual(registry.get(composition), { text: "line", note: "note", noteOpen: true, invocations: [] })
 assert.deepEqual([registry.get(draft), registry.get(stage)], [null, null])
 
 // (c) the server halts it (after a character): the Record slot waits on the same stream, the stopped node lands
-setBoxes({ text: "", note: "", aside: false })
-turn.act("go", "")
+updateComposition({ text: "", note: "", noteOpen: false })
+updateComposition({ text: "go", note: "", noteOpen: false })
+turn.act()
 last().emit({ kind: "stage", phase: "narrate" }, delta("abc"))
 playOut()
 const was = registry.get(log).nodes.size
@@ -110,39 +111,42 @@ assert.equal(registry.get(log).nodes.size, was + 1)
 assert.deepEqual([registry.get(draft), registry.get(stage), registry.get(error)], [null, null, null])
 
 // (d) record fails after the halt: its error comes down the stream, the ghost says so and the line comes back
-turn.act("lost", "")
+updateComposition({ text: "lost", note: "", noteOpen: false })
+turn.act()
 last().emit({ kind: "stage", phase: "narrate" }, delta("abc"))
 playOut()
 await turn.stop()
 last().emit({ kind: "error", message: "record failed" })
 assert.equal(registry.get(error)?.message, "record failed")
-assert.equal(boxes().text, "lost")
+assert.equal(registry.get(composition).text, "lost")
 dismiss()
-setBoxes({ text: "", note: "", aside: false })
+updateComposition({ text: "", note: "", noteOpen: false })
 
 // (e) a revision that fails: the revision stays, the revised line is back in the box
-setBoxes({ text: "typed", note: "", aside: false })
+updateComposition({ text: "typed", note: "", noteOpen: false })
 revise(L.get(registry.get(log), 1), "text")
-assert.equal(boxes().text, "hi")
-turn.act("hi again", "")
-setBoxes({ text: "", note: "", aside: false })
+assert.equal(registry.get(composition).text, "hi")
+updateComposition({ text: "hi again", note: "", noteOpen: false })
+turn.act()
+updateComposition({ text: "", note: "", noteOpen: false })
 assert.deepEqual(last().action, { kind: "act", parent: 0, input: { text: "hi again" } }) // beside the old one
 last().emit({ kind: "error", message: "boom" })
 assert.equal(registry.get(revising)?.node, 1)
-assert.equal(boxes().text, "hi again")
+assert.equal(registry.get(composition).text, "hi again")
 dismiss()
 cancelRevise()
-assert.equal(boxes().text, "typed") // the displaced draft back
-setBoxes({ text: "", note: "", aside: false })
+assert.equal(registry.get(composition).text, "typed") // the displaced draft back
+updateComposition({ text: "", note: "", noteOpen: false })
 
 // (f) another story while streaming: the stream is closed, the draft gone, nothing withdrawn, nothing more applied
 const size = registry.get(log).nodes.size
-turn.act("bye", "")
+updateComposition({ text: "bye", note: "", noteOpen: false })
+turn.act()
 const s = last()
 s.emit({ kind: "stage", phase: "narrate" }, delta("part"))
 turn.abandon()
 assert.ok(s.aborted)
-assert.deepEqual([registry.get(draft), registry.get(stage), boxes().text], [null, null, ""])
+assert.deepEqual([registry.get(draft), registry.get(stage), registry.get(composition).text], [null, null, ""])
 s.emit(delta("more"), { kind: "change", node: node(size, 1, "partmore", "bye"), head: size } as Wire)
 playOut()
 assert.deepEqual([registry.get(draft), registry.get(log).nodes.size], [null, size])
@@ -159,8 +163,9 @@ assert.equal(registry.get(revising), revision)
 turn.setField(1, [{ path: "hp", set: 5 }])
 last().emit({ kind: "change", node: node(1, 0, "hello", "hi"), head: registry.get(log).head } as Wire)
 assert.equal(registry.get(revising), revision)
-turn.act("revised", "")
-setBoxes({ text: "", note: "", aside: false })
+updateComposition({ text: "revised", note: "", noteOpen: false })
+turn.act()
+updateComposition({ text: "", note: "", noteOpen: false })
 assert.deepEqual(last().action, { kind: "act", parent: 0, input: { text: "revised" } })
 last().emit({ kind: "change", node: node(10, 0, "new", "revised"), head: 10 } as Wire)
 assert.equal(registry.get(revising), null)
@@ -186,15 +191,15 @@ last().emit(
     message: "boom",
   },
 )
-assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", "failed"])
+assert.deepEqual([registry.get(error)?.message, registry.get(composition).text], ["boom", "failed"])
 // a swipe's line is on its node already (no `fresh` from the server): its failure leaves the box alone
-setBoxes({ text: "", note: "", aside: false })
+updateComposition({ text: "", note: "", noteOpen: false })
 turn.attach()
 last().emit(
   { kind: "attach", phase: null, draft: { ...draftNow, input: { text: "rolled" } } },
   { kind: "error", message: "boom" },
 )
-assert.deepEqual([registry.get(error)?.message, boxes().text], ["boom", ""])
+assert.deepEqual([registry.get(error)?.message, registry.get(composition).text], ["boom", ""])
 
 // A stop belongs to the story whose streams it was sent on, even when its reply arrives after a switch.
 for (const result of ["withdrawn", "halted"] as const) {
@@ -208,10 +213,12 @@ for (const result of ["withdrawn", "halted"] as const) {
         answer = resolve
       }),
   })
-  delayed.act("A", "")
+  updateComposition({ text: "A", note: "", noteOpen: false })
+  delayed.act()
   const stopping = delayed.stop()
   delayed.abandon()
-  delayed.act("B", "")
+  updateComposition({ text: "B", note: "", noteOpen: false })
+  delayed.act()
   last().emit({ kind: "stage", phase: "narrate" })
   const before = registry.get(draft)
   answer(result)
@@ -225,13 +232,30 @@ for (const result of ["withdrawn", "halted"] as const) {
 }
 // Chip-only turns carry all selections, clear them on send, and restore them on failure.
 turn.abandon()
-setBoxes({ text: "", note: "", aside: false })
-registry.set(invoke, ["guide", "pack/style"])
-turn.act("", "")
+updateComposition({ text: "", note: "", noteOpen: false })
+updateComposition({ invocations: ["guide", "pack/style"].map(token) })
+updateComposition({ text: "", note: "", noteOpen: false })
+turn.act()
 assert.deepEqual(last().action, { kind: "act", input: { text: "", invoke: ["guide", "pack/style"] } })
-assert.deepEqual(registry.get(invoke), [])
+assert.deepEqual(
+  registry.get(composition).invocations.map((i) => i.resourceId),
+  [],
+)
 last().emit({ kind: "error", message: "unavailable" } as Wire)
-assert.deepEqual(registry.get(invoke), ["guide", "pack/style"])
+assert.deepEqual(
+  registry.get(composition).invocations.map((i) => i.resourceId),
+  ["guide", "pack/style"],
+)
 turn.abandon()
-registry.set(invoke, [])
+updateComposition({ invocations: [].map(token) })
+// A token-only sibling keeps its frozen labels visible while the new prose streams.
+const chip = {
+  ...node(100, null, "chip prose", ""),
+  input: { text: "", invoke: ["guide"] },
+  invocations: [token("guide")],
+}
+registry.set(log, L.of({ nodes: [chip], head: chip.id }))
+turn.swipe(chip.id)
+assert.deepEqual(registry.get(draft)?.invocations, chip.invocations)
+turn.abandon()
 console.log("ok")

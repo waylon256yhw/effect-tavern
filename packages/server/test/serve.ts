@@ -1,10 +1,12 @@
+import type { TimelineEvent } from "@effect-tavern/runtime/src/projection.ts"
+type Event = TimelineEvent | Extract<RuntimeEvent, { kind: "call" }>
 // The adapter on a scripted session over a real socket: an action goes in as JSON, its events come back as SSE in the
 // session's order, a bad body is a 400, a bad action is an `error` event, and `inspect` decides whether `call` events
 // carry the request. `greet` opens a new root, `checkout` moves head, DELETE /nodes/<id> drops a subtree and answers with the Change.
 // The turn is the story's (#116): closing the response stops nothing, GET /turn re-attaches, POST /stop stops, a busy
 // story answers 409; stories of one card and of two run side by side; a story route without its story is a 404.
 import { fake, fakeText } from "@effect-tavern/provider"
-import { facets, type Event } from "@effect-tavern/runtime/src/session.ts"
+import { facets, type Event as RuntimeEvent } from "@effect-tavern/runtime/src/session.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
 import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
 import assert from "node:assert/strict"
@@ -61,7 +63,7 @@ const run = async (inspect: boolean) => {
   const post = (v: unknown, signal?: AbortSignal) => fetch(base, { method: "POST", body: JSON.stringify(v), signal })
   try {
     assert.equal((await globalThis.fetch(`${base}/nodes`)).status, 404) // a story route names its story
-    assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(lib.session(story).snapshot()))
+    assert.deepEqual(await (await fetch(`${base}/nodes`)).json(), wired(lib.session(story).timeline()))
     const about = (await (await fetch(`${base}/card`)).json()) as Record<string, unknown>
     assert.equal(about["input"], "act") // undeclared = act
     // the card's projection: the openings whole, the fiction without its text, the guard and lore as counts
@@ -115,32 +117,50 @@ const run = async (inspect: boolean) => {
     const evs = sse(await r.text())
     assert.deepEqual(
       evs.map((e) => e.event),
-      ["stage", "delta", "delta", "call", "change", "change", "stage", "call", "change"],
+      ["stage", "delta", "delta", "change", "change", "stage", "change"],
     )
-    const calls = evs.filter((e) => e.event === "call").map((e) => e.data as Extract<Event, { kind: "call" }>)
+    assert.ok(!evs.some((e) => e.event === "call"))
+    const node = (evs.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
+    assert.equal(node.input.text, "hi")
+    assert.deepEqual(node, wired(lib.session(story).timelineNode(node.id))) // the wire carries the projection whole
+    assert.equal(lib.session(story).log.head, node.id)
+    const context = (await (await fetch(`${base}/context?node=${node.id}`)).json()) as any
+    assert.equal(context.worldState.world.scene.place, "P")
+    assert.deepEqual(context, wired(lib.session(story).activeContext(node.id)))
+    assert.ok(!("world" in node))
+    // the trace stays on the server, by node, stripped the same way as the stream; every call carries its duration
+    const calls = (await (await fetch(`${base}/nodes/${node.id}/trace`)).json()) as Extract<
+      RuntimeEvent,
+      { kind: "call" }
+    >[]
     assert.deepEqual(
       calls.map((c) => c.msgs.length > 0),
       [inspect, inspect],
     )
-    const node = (evs.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
-    assert.equal(node.turn.input.text, "hi")
-    assert.deepEqual(node, wired(lib.session(story).node(node.id))) // the wire carries the projection whole
-    assert.equal(lib.session(story).log.head, node.id)
-    const context = (await (await fetch(`${base}/context?node=${node.id}`)).json()) as any
-    assert.equal(context.state.world.scene.place, "P")
-    assert.deepEqual(context, wired(lib.session(story).activeContext(node.id)))
-    assert.ok(!("world" in node))
-    // the trace stays on the server, by node, stripped the same way as the stream; every call carries its duration
-    const trace = (await (await fetch(`${base}/calls`)).json()) as Record<string, Extract<Event, { kind: "call" }>[]>
-    assert.deepEqual(trace[node.turn.id], wired(calls))
-    assert.deepEqual(
-      calls.map((c) => typeof c.ms === "number" && c.ms >= 0),
-      [true, true],
-    )
+    assert.ok(calls.every((c) => c.ms >= 0))
+    if (!inspect) assert.ok(calls.every((c) => c.out === undefined))
+    assert.equal((await fetch(`${base}/calls`)).status, 404)
+    const detail = await (await fetch(`${base}/nodes/${node.id}/detail`)).json()
+    assert.deepEqual(detail, wired(lib.session(story).detail(node.id)))
+    for (const key of ["turn", "state", "checks", "changes", "delivered", "playerCatalog"])
+      assert.ok(!(key in node), key)
+    for (const e of evs.filter((e) => e.event === "change")) {
+      const n = (e.data as Extract<Event, { kind: "change" }>).node
+      if (n) assert.ok(!("turn" in n) && !("state" in n))
+    }
+    assert.equal((await fetch(`${base}/nodes/99999/detail`)).status, 404)
+    assert.equal((await fetch(`${base}/nodes/99999/trace`)).status, 404)
 
     // an option sent as the next act under its node (the client fills the box; there is no pick action)
-    const picked = sse(await (await post({ kind: "act", parent: node.turn.id, input: { text: "B" } })).text())
-    assert.equal((picked.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn.input.text, "B")
+    const picked = sse(await (await post({ kind: "act", parent: node.id, input: { text: "B" } })).text())
+    assert.equal((picked.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.input.text, "B")
+    const childId = (picked.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id
+    const adjusted = sse(
+      await (await post({ kind: "setField", node: node.id, effects: [{ path: "bond", set: 3 }] })).text(),
+    )
+    const update = adjusted.at(-1)!.data as Extract<Event, { kind: "change" }>
+    assert.ok(update.updated?.some((n) => n.id === childId))
+    assert.ok(update.updated?.every((n) => !("turn" in n) && !("state" in n)))
 
     // Closing the response stops nothing: the turn runs on into a normal node. While it runs, every action on the
     // story is a 409, a synchronous one and a node dropped too, and its row says where it is; GET /turn picks it up
@@ -174,18 +194,15 @@ const run = async (inspect: boolean) => {
       [attached[0]!.event, snap.phase, snap.draft.parent, snap.draft.input, snap.draft.text.length > 0],
       ["attach", "narrate", null, { text: "slow" }, true],
     )
-    const finished = (attached.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
-    assert.deepEqual(
-      [finished.input.text, finished.end, (finished.reply[0] as { text: string }).text.length],
-      ["slow", "end", 240],
-    )
+    const finished = (attached.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
+    assert.deepEqual([finished.input.text, finished.end, finished.prose.length], ["slow", "end", 240])
     assert.equal((await fetch(`${base}/turn`)).status, 204)
 
     // POST /stop after the first character: the prose halts and the same stream carries the `stopped` node to its end
     const cut = await until(await post({ kind: "act", parent: null, input: { text: "slow" } }), /event: delta/)
     assert.deepEqual(await (await fetch(`${base}/stop`, { method: "POST" })).json(), { stopped: "halted" })
-    const stopped = ((await rest(cut)).at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
-    const kept = (stopped.reply[0] as { text: string }).text
+    const stopped = ((await rest(cut)).at(-1)!.data as Extract<Event, { kind: "change" }>).node!
+    const kept = stopped.prose
     assert.deepEqual([stopped.input.text, stopped.end, kept.length > 0 && kept.length < 240], ["slow", "stopped", true])
     assert.deepEqual(await (await fetch(`${base}/stop`, { method: "POST" })).json(), { stopped: null })
     assert.equal(
@@ -197,9 +214,7 @@ const run = async (inspect: boolean) => {
     assert.equal(bad.status, 400)
     assert.equal((await post("{")).status, 400)
 
-    const err = sse(
-      await (await post({ kind: "setField", node: node.turn.id, effects: [{ path: "x", set: 1 }] })).text(),
-    )
+    const err = sse(await (await post({ kind: "setField", node: node.id, effects: [{ path: "x", set: 1 }] })).text())
     assert.deepEqual([err.length, err[0]!.event, /x/.test(err[0]!.data.message!)], [1, "error", true])
     assert.equal(err[0]!.data.code, undefined) // only the no-model failure carries a code
     // A parent that does not exist is a defect on the stream, not a new root (it once became its own parent and spun).
@@ -208,8 +223,8 @@ const run = async (inspect: boolean) => {
 
     // a new thread is a greeting root; dropping a root takes its subtree, the trace with it, and ids never come back
     const greeted = sse(await (await post({ kind: "greet" })).text())
-    const g = (greeted.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
-    assert.deepEqual([g.parent, g.input.text, (g.reply[0] as { text: string }).text], [null, "", "G"])
+    const g = (greeted.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
+    assert.deepEqual([g.parent, g.input.text, g.prose], [null, "", "G"])
     const noSuch = sse(await (await post({ kind: "greet", greeting: 3 })).text())
     assert.deepEqual([noSuch.length, noSuch[0]!.event], [1, "error"])
     const tree = [...lib.session(story).log.nodes.keys()]
@@ -219,7 +234,7 @@ const run = async (inspect: boolean) => {
     const under = sse(await (await post({ kind: "act", input: { text: "under head" } })).text())
     const u = (under.at(-1)!.data as Extract<Event, { kind: "change" }>).node!
     assert.deepEqual([u.parent, lib.session(story).log.head], [node.id + 1, u.id])
-    const hadTrace = Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length
+    assert.ok(lib.calls(story).get(node.id).length > 0)
     const c = (await (await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).json()) as {
       dropped: number[]
       head: number | null
@@ -228,7 +243,8 @@ const run = async (inspect: boolean) => {
       [c.dropped, c.head],
       [[node.id, node.id + 1, u.id], Math.max(...tree.filter((id) => id !== node.id && id !== node.id + 1))],
     ) // head was inside: the newest survivor
-    assert.ok(Object.keys((await (await fetch(`${base}/calls`)).json()) as object).length < hadTrace)
+    assert.equal(lib.calls(story).get(node.id).length, 0)
+    assert.equal((await fetch(`${base}/nodes/${node.id}/trace`)).status, 404)
     assert.equal((await fetch(`${base}/nodes/${node.id}`, { method: "DELETE" })).status, 404)
     const again = sse(await (await post({ kind: "act", parent: null, input: { text: "hi" } })).text())
     assert.equal((again.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id, u.id + 1) // one past every id ever handed out, the dropped tail's included
@@ -259,7 +275,12 @@ const run = async (inspect: boolean) => {
     assert.deepEqual(((await (await fetch(`${base}/nodes`)).json()) as { nodes: unknown[] }).nodes, [])
     const headOf = async (text: string) => {
       const got = sse(await (await post({ kind: "act", parent: null, input: { text } })).text())
-      return JSON.stringify((got.find((e) => e.event === "call")!.data as Extract<Event, { kind: "call" }>).msgs)
+      const id = (got.at(-1)!.data as Extract<Event, { kind: "change" }>).node!.id
+      const trace = (await (await fetch(`${base}/nodes/${id}/trace`)).json()) as Extract<
+        RuntimeEvent,
+        { kind: "call" }
+      >[]
+      return JSON.stringify(trace[0]!.msgs)
     }
     assert.equal((await headOf("who am i")).includes(monk.text), inspect)
     await persona("monk", { name: monk.name, text: "你是还俗的武僧。" })
@@ -529,9 +550,9 @@ await run(false)
     assert.ok(!/SECOND/.test(got))
     assert.deepEqual(await (await fetch(`${base}/stop`, { method: "POST", headers })).json(), { stopped: "halted" })
     for (let r = await reader.read(); !r.done; r = await reader.read()) got += new TextDecoder().decode(r.value)
-    const stopped = (sse(got).at(-1)!.data as Extract<Event, { kind: "change" }>).node!.turn
+    const stopped = (sse(got).at(-1)!.data as Extract<Event, { kind: "change" }>).node!
     assert.deepEqual(
-      [stopped.input.text, stopped.end, (stopped.reply[0] as { text: string }).text, stopped.violated],
+      [stopped.input.text, stopped.end, stopped.prose, guarded.session(story).log.nodes.get(stopped.id)!.violated],
       ["go", "stopped", "FIRST DRAFT", ["R"]],
     )
   } finally {
@@ -581,7 +602,7 @@ await run(false)
       )
     const ends = await Promise.all([a, b, c].map(act))
     assert.deepEqual(
-      ends.map((e) => [e.event, (e.data as Extract<Event, { kind: "change" }>).node?.turn.input.text]),
+      ends.map((e) => [e.event, (e.data as Extract<Event, { kind: "change" }>).node?.input.text]),
       [a, b, c].map((id) => ["change", `on ${id}`]),
     )
   } finally {
