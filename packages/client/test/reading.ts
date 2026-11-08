@@ -1,10 +1,10 @@
-// The Reading (src/reading.ts) on a faked wire: a story left keeps its boxes and pin in a record and gets them back,
+// The Reading (src/reading.ts) on a faked wire: a story left keeps its boxes and invoke in a record and gets them back,
 // while its log is read again every time (open, nodes, attach); the same story again asks nothing; a ninth record
 // drops the oldest; a deactivate with nothing in the slots is harmless; no story names none: slots and log empty, `current` null.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import assert from "node:assert/strict"
 import { createReading } from "../src/reading.ts"
-import { boxes, card, type CardView, log, pin, registry, setBoxes, stories } from "../src/store.ts"
+import { boxes, card, type CardView, log, invoke, registry, setBoxes, stories } from "../src/store.ts"
 
 const opened: number[] = []
 let nodes = 0
@@ -28,11 +28,11 @@ reading.deactivate() // nothing in the slots: harmless
 await reading.activate(1)
 assert.equal(registry.get(stories)?.current, 1)
 setBoxes({ text: "半句", note: "旁注", aside: true })
-registry.set(pin, "clue")
+registry.set(invoke, ["clue"])
 await reading.activate(2)
-assert.deepEqual([boxes(), registry.get(pin)], [line(""), null]) // B starts empty: A's line does not leak
+assert.deepEqual([boxes(), registry.get(invoke)], [line(""), []]) // B starts empty: A's line does not leak
 await reading.activate(1)
-assert.deepEqual([boxes(), registry.get(pin)], [{ text: "半句", note: "旁注", aside: true }, "clue"])
+assert.deepEqual([boxes(), registry.get(invoke)], [{ text: "半句", note: "旁注", aside: true }, ["clue"]])
 assert.deepEqual([nodes, attached, opened.filter((id) => id === 1).length], [3, 3, 2])
 assert.equal(registry.get(stories)?.current, 1)
 
@@ -101,10 +101,10 @@ for (const failure of ["open", "nodes", "card"] as const) {
   })
   await assert.rejects(r.activate(100), /offline/)
   setBoxes(line("typed after failure"))
-  registry.set(pin, "kept")
+  registry.set(invoke, ["kept"])
   fail = false
   await r.activate(100)
-  assert.deepEqual([opens, attaches, boxes().text, registry.get(pin)], [2, 1, "typed after failure", "kept"])
+  assert.deepEqual([opens, attaches, boxes().text, registry.get(invoke)], [2, 1, "typed after failure", ["kept"]])
   await r.activate(100)
   assert.equal(opens, 2)
   fail = true

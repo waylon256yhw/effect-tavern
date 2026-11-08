@@ -62,6 +62,8 @@ export type Ask =
     }
   | {
       stage: "narrate"
+      always?: readonly string[]
+      manual?: readonly string[]
       fiction: readonly Msg[]
       history: readonly Msg[]
       summarized: boolean // history[0] is the fold
@@ -100,8 +102,9 @@ const openLine = (open: readonly Told[]) => `Open: ${open.map((d) => `${d.id}=${
 
 // ───────── The input as one unit ─────────
 /** This turn's user message: the line when there is one, else the note itself (directed prose: the player writes to the
- *  narrator, not as anyone in the story). */
-const said = (i: Input) => usr(i.text || i.note || "")
+ *  narrator, not as anyone in the story). A chip-only turn continues the story: keep a nonempty user
+ *  boundary even if its invoked entries were removed before a rerun. */
+const said = (i: Input): Message => usr(i.text || i.note || "Continue the story.")
 /** The note as a system line, only beside a line; alone it is already the user message. */
 const noteOf = (i: Input) => (i.text && i.note ? [sys(`Player note: ${i.note}`)] : [])
 /** A thought (⦅ ⦆) in the line is a perception scope inside the fiction; every stage that reads the line hears what it is. */
@@ -119,7 +122,13 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
   const hatHead = spoken(w.hat?.narrate?.head)
   switch (a.stage) {
     case "lookup":
-      return [...frame, sys(`${a.question}\nIndex: ${a.index.join(", ")}`), ...thoughtOf(c), said(c.input)]
+      return [
+        ...frame,
+        sys(`${a.question}\nIndex: ${a.index.join(", ")}`),
+        ...noteOf(c.input),
+        ...thoughtOf(c),
+        said(c.input),
+      ]
     case "decide":
       return [
         ...frame,
@@ -144,6 +153,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
           [
             ...c.frame,
             ...a.fiction,
+            ...(a.always ?? []).filter(Boolean).map((text): Msg => ({ role: "system", text })),
             ...hatHead.filter((m) => m.role === "system"),
             ...hatHead.filter((m) => m.role !== "system"),
           ],
@@ -155,6 +165,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ),
         said(c.input),
         ...a.told.map(sys),
+        ...(a.manual ?? []).filter(Boolean).map(sys),
         ...(a.outcome.length ? [sys(`Outcome: ${a.outcome.join(", ")}`)] : []),
         ...(a.current ? [sys(a.current)] : []),
         ...a.must.map((d) => sys(`MUST reveal: ${d.text}`)),

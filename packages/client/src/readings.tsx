@@ -1,5 +1,5 @@
 // The Record's pieces: one renderer per reading element (src/record.ts projects them; this file only draws), the
-// full-page sheet they sit in on the phone, the pin button, the sibling actions a turn's row holds, the Status
+// full-page sheet they sit in on the phone, the sibling actions a turn's row holds, the Status
 // table, and the 读数 page they make up. The reader (App.tsx) and the inspector (inspector.tsx) draw with these.
 import { fold, type Shape, type TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
@@ -7,7 +7,7 @@ import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
 import { Menu, type Option } from "./controls.tsx"
-import { Back, Change, Close, Clue, Die, Edit, Pin, PinFill, Record, Reword, Swipe } from "./icons.tsx"
+import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe } from "./icons.tsx"
 import { close } from "./pages.ts"
 import {
   fresh,
@@ -32,7 +32,6 @@ import {
   latest,
   log,
   path,
-  pin,
   registry,
   working,
 } from "./store.ts"
@@ -56,24 +55,6 @@ export const SiblingKind = (props: { of: Node["turn"]["sibling"]; class?: string
     </Match>
   </Switch>
 )
-
-/** Arms (or disarms) an untold entry as the next act's pin. */
-export const PinButton = (props: { id: string }) => {
-  const pinned = read(pin)
-  const on = () => pinned() === props.id
-  return (
-    <button
-      class="icon"
-      aria-label={t("readings.pin")}
-      aria-pressed={on() ? "true" : "false"}
-      onClick={() => registry.set(pin, on() ? null : props.id)}
-    >
-      <Show when={on()} fallback={<Pin />}>
-        <PinFill />
-      </Show>
-    </button>
-  )
-}
 
 /** A structured answer as key → value rows; nested values as JSON. */
 export const KeyValues = (props: { of: Record<string, unknown> }) => (
@@ -340,23 +321,6 @@ export const Reading = (props: { el: Element }) => (
         <div class="clue">
           <Clue aria-hidden="true" />
           <p>{el().text}</p>
-          <Show when={el().pinnable}>
-            <PinButton id={el().id} />
-          </Show>
-        </div>
-      )}
-    </Match>
-    <Match when={is(props.el, "pin")}>
-      {(el) => (
-        <div class="clue">
-          <Pin aria-hidden="true" />
-          <p>{el().hook}</p>
-          <span class="badge" data-hit={el().told}>
-            {el().told ? "Told" : "Untold"}
-          </span>
-          <Show when={!el().told}>
-            <PinButton id={el().id} />
-          </Show>
         </div>
       )}
     </Match>
@@ -618,29 +582,6 @@ export const StatusTable = () => {
   )
 }
 
-/** The pinned entry, by its hook: on the node it was armed from, or an earlier one (a told entry leaves `readable`). */
-const Pinned = () => {
-  const pinned = read(pin)
-  const line = read(path)
-  const hookOf = (id: string) =>
-    line()
-      .flatMap((n) => n.readable)
-      .find((e) => e.id === id)?.hook ?? id
-  return (
-    <Show when={pinned()}>
-      {(p) => (
-        <section class="pinned">
-          <h2>{t("side.pinned")}</h2>
-          <p>
-            <Pin aria-hidden="true" />
-            <span>{hookOf(p())}</span>
-          </p>
-        </section>
-      )}
-    </Show>
-  )
-}
-
 /** The world products' values now: each folded along the reading line by its own fold (runtime product.ts `fold`),
  *  drawn by its shape, in the card's order; one no node has yet, or whose rows are still none, is absent (`fresh`). */
 const World = () => {
@@ -671,15 +612,12 @@ const World = () => {
   )
 }
 
-/** Does the card have a 读数 page at all: a shown field, a lore entry (a pin), or a world product. Without one the
+/** Does the card have a 读数 page at all: a shown field, a world product. Without one the
  *  page's key is not drawn (shell.tsx `Keys`). */
 export const hasReadings = (view: CardView | null | undefined) =>
-  !!view &&
-  (view.rules.fields.some((f) => !f.hidden) ||
-    view.lore.entries > 0 ||
-    view.layer.products.some((p) => kindOf(p) === "world"))
+  !!view && (view.rules.fields.some((f) => !f.hidden) || view.layer.products.some((p) => kindOf(p) === "world"))
 
-/** 读数, a page over the reader: the world now, as one column: the pin, Status, and the world products' folded values.
+/** 读数, a page over the reader: the world now, as one column: Status, and the world products' folded values.
  *  A turn's change is its Record pill's (`RecordSheet`), not this page's. */
 export const StatusPage = () => (
   <div class="status-page">
@@ -691,7 +629,6 @@ export const StatusPage = () => (
     </header>
     <div class="status-body">
       <div class="still">
-        <Pinned />
         <section class="status">
           <h2>{t("common.status")}</h2>
           <StatusTable />

@@ -26,8 +26,6 @@ export { default as Write } from "~icons/ph/feather" // the Writing workbench (s
 export { default as Clue } from "~icons/ph/magnifying-glass"
 export { default as Record } from "~icons/ph/notepad"
 export { default as Snippets } from "~icons/ph/plus"
-export { default as Pin } from "~icons/ph/push-pin"
-export { default as PinFill } from "~icons/ph/push-pin-fill"
 export { default as Stop } from "~icons/ph/stop"
 export { default as Close } from "~icons/ph/x"
 export { default as Settings } from "~icons/ph/gear-six"

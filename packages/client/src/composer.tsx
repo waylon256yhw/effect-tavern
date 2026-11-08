@@ -2,8 +2,7 @@
 // empty box), the box, Send / Stop. What serves the typing hangs on the box's top edge only while it is in use: the
 // format keys, a row of glyph chips over the text while the hand is in the box or words are; the note to the
 // narrator a note snippet opens (a word that goes with the line, or alone), its own box in a thin strip; the line
-// being revised, a strip naming its turn. The pin is not here: armed and shown in the Record (and the session's
-// pinned row), it rides on the next send (turn.ts). The session's own actions live beside the reading (side.tsx).
+// being revised, a strip naming its turn; entry chips carry this turn's invocations.
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { For, Show } from "solid-js"
 import { read } from "./bridge.ts"
@@ -18,6 +17,7 @@ import {
   card,
   compose,
   noted,
+  invoke,
   path,
   registry,
   revising,
@@ -51,6 +51,9 @@ export const Composer = () => {
   const toNarratorOn = read(aside)
   // Revising a landed line: the chip names the turn (a tap scrolls to it) and cancels; Keep sits beside Send.
   const revise = read(revising)
+  const selected = read(invoke)
+  const entries = () => line().at(-1)?.invocable ?? []
+  const available = () => entries().filter((e) => !selected().includes(e.id))
   const line = read(path)
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
@@ -63,7 +66,7 @@ export const Composer = () => {
   let noteBox: HTMLTextAreaElement | undefined
   let menu: HTMLDivElement | undefined
   /** What a send carries: the main box, and the note box when it is there. */
-  const filled = () => !!(text().trim() || (acting() && noteText().trim()))
+  const filled = () => selected().length > 0 || !!(text().trim() || (acting() && noteText().trim()))
   // The caret lands after what went in, and the hand with it: a note snippet puts the hand in the note's box, where
   // its words are (sent as they stand, or finished there), and the line's box, with the keys that serve it, waits for
   // a tap of its own.
@@ -210,8 +213,25 @@ export const Composer = () => {
         </Show>
         {/* the format keys: a row of glyph chips right over the text, there while the hand is in the box or words are
             (reader.css); at rest the box is one line */}
-        <Show when={keys().length > 0}>
+        <Show when={keys().length > 0 || selected().length > 0}>
           <div class="format" aria-label={t("composer.formatKeys")}>
+            <For each={selected()} keyed={(id) => id}>
+              {(id) => (
+                <button
+                  type="button"
+                  class="chip invocation"
+                  onPointerDown={keep}
+                  onClick={() =>
+                    registry.set(
+                      invoke,
+                      selected().filter((x) => x !== id()),
+                    )
+                  }
+                >
+                  {id()} <Close />
+                </button>
+              )}
+            </For>
             <For each={keys()} keyed={(k) => k.label}>
               {(k) => (
                 <button type="button" class="chip" onPointerDown={keep} onClick={() => insert(k())}>
@@ -222,7 +242,7 @@ export const Composer = () => {
           </div>
         </Show>
         <div class="row">
-          <Show when={quick().length > 0}>
+          <Show when={quick().length > 0 || available().length > 0}>
             <button
               type="button"
               class="icon"
@@ -255,6 +275,31 @@ export const Composer = () => {
               <Items of={inStory()} />
               <hr />
               <Items of={toNarrator()} />
+              <Show when={available().length > 0}>
+                <hr />
+                <For each={available()} keyed={(e) => e.id}>
+                  {(e) => (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="item"
+                      tabindex="-1"
+                      onPointerDown={keep}
+                      onClick={() => {
+                        registry.set(invoke, [...selected(), e().id])
+                        menu?.hidePopover()
+                        box?.focus()
+                      }}
+                    >
+                      <span class="name">{e().id}</span>
+                      <span class="hint">{e().hook}</span>
+                      <Show when={e().invoke === "manual"}>
+                        <span class="tag">{t("invoke.manual")}</span>
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </Show>
             </div>
           </Show>
           <textarea

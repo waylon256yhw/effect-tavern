@@ -11,6 +11,7 @@ export interface Disclosure {
 }
 export interface Entry<S, C> {
   id: string
+  invoke?: "always" | "auto" | "manual"
   layers: readonly string[]
   unlock?: (s: S) => number
   offer?: (s: S, ctx: C) => boolean
@@ -21,15 +22,15 @@ export const hook = (layer: string) => layer.split(/(?<=[.。!?！？])\s*/)[0]!
 
 export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
   const byId = new Map(entries.map((e) => [e.id, e]))
-  const deepest = (ds: readonly Disclosure[], id: string) =>
-    Math.max(0, ...ds.filter((d) => d.id === id).map((d) => d.layer))
-  const current = (e: Entry<S, C>, s: S, ds: readonly Disclosure[]) =>
-    Math.min(e.layers.length, Math.max(e.unlock?.(s) ?? 0, deepest(ds, e.id)))
-  const visible = (s: S, ds: readonly Disclosure[]) => entries.filter((e) => current(e, s, ds) >= 1)
-  /** Layers up to current this path hasn't seen, shallowest first. */
-  const unread = (e: Entry<S, C>, s: S, ds: readonly Disclosure[]): Disclosure[] => {
-    const seen = new Set(ds.map(key))
-    return Array.from({ length: current(e, s, ds) }, (_, i) => ({ id: e.id, layer: i + 1 })).filter(
+  const deepest = (told: readonly Disclosure[], id: string) =>
+    Math.max(0, ...told.filter((d) => d.id === id).map((d) => d.layer))
+  const current = (e: Entry<S, C>, s: S, told: readonly Disclosure[]) =>
+    Math.min(e.layers.length, Math.max(e.unlock?.(s) ?? 0, deepest(told, e.id)))
+  const visible = (s: S, told: readonly Disclosure[]) => entries.filter((e) => current(e, s, told) >= 1)
+  /** Layers up to current the window does not hold, shallowest first. */
+  const unread = (e: Entry<S, C>, s: S, told: readonly Disclosure[], held: readonly Disclosure[]): Disclosure[] => {
+    const seen = new Set(held.map(key))
+    return Array.from({ length: current(e, s, told) }, (_, i) => ({ id: e.id, layer: i + 1 })).filter(
       (d) => !seen.has(key(d)),
     )
   }
@@ -38,24 +39,24 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
     deepest,
     current,
     /** Hooks of visible entries. */
-    index: (s: S, ds: readonly Disclosure[]) => visible(s, ds).map((e) => ({ id: e.id, hook: hook(e.layers[0]!) })),
-    /** Visible entries with a layer up to current this path hasn't seen: the enum the lookup stage picks from. Empty →
+    index: (s: S, told: readonly Disclosure[]) => visible(s, told).map((e) => ({ id: e.id, hook: hook(e.layers[0]!) })),
+    /** Visible entries with a layer up to current the window does not hold: the enum the lookup stage picks from. Empty →
      *  no call. By unseen layers, not depth: a window fires current+1 over an unlocked layer nobody read, and that
      *  layer stays readable under it (by depth alone it was lost for good once a deeper one fired). */
-    readable: (s: S, ds: readonly Disclosure[]) =>
-      visible(s, ds)
-        .filter((e) => unread(e, s, ds).length > 0)
+    readable: (s: S, told: readonly Disclosure[], held: readonly Disclosure[]) =>
+      visible(s, told)
+        .filter((e) => unread(e, s, told, held).length > 0)
         .map((e) => e.id),
-    /** Layers up to current that this path hasn't seen yet; undefined when the entry isn't readable at all. */
-    read: (s: S, ds: readonly Disclosure[], id: string): Disclosure[] | undefined => {
+    /** Layers up to current that the window does not hold yet; undefined when the entry isn't readable at all. */
+    read: (s: S, told: readonly Disclosure[], held: readonly Disclosure[], id: string): Disclosure[] | undefined => {
       const e = byId.get(id)
-      return e && current(e, s, ds) > 0 ? unread(e, s, ds) : undefined
+      return e && current(e, s, told) > 0 ? unread(e, s, told, held) : undefined
     },
     /** Next layer of each visible entry whose window is open; never deeper than one step. Feeds the brief as `may`. */
-    offers: (s: S, ds: readonly Disclosure[], ctx: C) =>
-      visible(s, ds)
-        .filter((e) => e.offer?.(s, ctx) && current(e, s, ds) < e.layers.length)
-        .map((e) => ({ id: e.id, layer: current(e, s, ds) + 1, text: e.layers[current(e, s, ds)] })),
+    offers: (s: S, told: readonly Disclosure[], ctx: C) =>
+      visible(s, told)
+        .filter((e) => (e.invoke ?? "auto") === "auto" && e.offer?.(s, ctx) && current(e, s, told) < e.layers.length)
+        .map((e) => ({ id: e.id, layer: current(e, s, told) + 1, text: e.layers[current(e, s, told)] })),
     /** A disclosure's text; "" for an entry no longer here (a pack unmounted or deleted, a card's lore cut): old nodes
      *  still replay. Nothing keeps a copy of what was told. */
     text: (d: Disclosure) => byId.get(d.id)?.layers[d.layer - 1] ?? "",

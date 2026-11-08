@@ -264,6 +264,7 @@ export type Rpg = ReturnType<typeof makeCard>
 export const LoreEntry = Schema.Struct({
   id: Schema.String,
   layers: Schema.Array(Schema.String),
+  invoke: Schema.optionalKey(Schema.Literals(["auto", "manual"])),
   unlock: Schema.Union([Cond, Schema.Array(Cond)]),
   offer: Cond,
 })

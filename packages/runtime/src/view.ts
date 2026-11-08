@@ -90,18 +90,19 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     ...own.map((e) => ({
       id: e.id,
       layers: e.layers,
+      invoke: e.invoke,
       unlock: () => floors.get(e.id)!,
       offer: (x: Record<string, unknown>, ev: readonly string[]) => holds(e.offer, x, ev),
     })),
-    ...R.entries.map((e) => ({ id: e.id, layers: [e.text], unlock: () => 1 })),
+    ...R.entries.map((e) => ({ id: e.id, layers: [e.text], invoke: e.invoke, unlock: () => 1 })),
   ])
   const gated = {
     ...s,
     lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id) }])),
   }
-  const readable = L.readable(gated, [])
+  const readable = L.readable(gated, [], [])
   const index = L.index(gated, [])
-    .filter((e) => readable.includes(e.id))
+    .filter((e) => readable.includes(e.id) && (L.entries.find((x) => x.id === e.id)?.invoke ?? "auto") === "auto")
     .map((e) => `${e.id}=${e.hook}`)
   const windows = new Map(L.offers(gated, [], opened.events).map((d) => [d.id, d.layer]))
   const lore = [
@@ -137,6 +138,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
         : {
             stage,
             fiction: head(fiction, { state: s }),
+            always: R.entries.filter((e) => e.invoke === "always").map((e) => e.text),
             history: [],
             summarized: false,
             told: [],

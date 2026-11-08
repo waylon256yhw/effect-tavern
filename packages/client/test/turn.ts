@@ -14,6 +14,7 @@ import {
   draft,
   error,
   log,
+  invoke,
   registry,
   revise,
   revising,
@@ -222,4 +223,15 @@ for (const result of ["withdrawn", "halted"] as const) {
   assert.equal(registry.get(stage), "record")
   delayed.abandon()
 }
+// Chip-only turns carry all selections, clear them on send, and restore them on failure.
+turn.abandon()
+setBoxes({ text: "", note: "", aside: false })
+registry.set(invoke, ["guide", "pack/style"])
+turn.act("", "")
+assert.deepEqual(last().action, { kind: "act", input: { text: "", invoke: ["guide", "pack/style"] } })
+assert.deepEqual(registry.get(invoke), [])
+last().emit({ kind: "error", message: "unavailable" } as Wire)
+assert.deepEqual(registry.get(invoke), ["guide", "pack/style"])
+turn.abandon()
+registry.set(invoke, [])
 console.log("ok")

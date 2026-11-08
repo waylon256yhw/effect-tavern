@@ -5,7 +5,7 @@
 // section carries the Options container, whose rows fill
 // the composer and never send. The frame around it is the shell's (shell.tsx, #117): the sidebar of cards and
 // stories with the persona and writing rows, the reader's keys (Timeline, Inspector, 读数), and under 72rem the
-// phone's drawer and sheets. The pages (home, card, Timeline, Settings, Writing, 读数: the pin, Status, the world products;
+// phone's drawer and sheets. The pages (home, card, Timeline, Settings, Writing, 读数: Status, the world products;
 // Inspect) fill the stage card over the reader, which stays mounted under them so
 // a turn in flight keeps streaming. Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the
 // canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet menu a popover anchored to its button:
@@ -378,7 +378,7 @@ const Draft = (props: { d: Draft; phase: Phase | null; error: Failure | null }) 
 
 /** The player's line, and the word to the narrator when one rides with it (a note-only turn is that word alone). */
 const Said = (props: {
-  input: { text: string; note?: string }
+  input: { text: string; note?: string; invoke?: readonly string[] }
   node?: Node // a landed turn's: its line can be revised; the draft's keys are disabled
   revising?: "text" | "note" // the field of this line that is in the composer now: that bubble is marked
 }) => {
@@ -407,7 +407,7 @@ const Said = (props: {
   let block: HTMLDivElement | undefined
   onSettled(() => (block ? shrinkwrap(block) : undefined))
   return (
-    <Show when={props.input.text || props.input.note}>
+    <Show when={props.input.text || props.input.note || props.input.invoke?.length}>
       <div class="spoke" ref={(el) => (block = el)}>
         <Show when={props.input.text}>
           <Bubble field="text" text={props.input.text} />
@@ -415,6 +415,11 @@ const Said = (props: {
         <Show when={props.input.note}>
           <Bubble field="note" text={props.input.note!} />
         </Show>
+        <div class="invocations">
+          <For each={props.input.invoke ?? []} keyed={(id) => id}>
+            {(id) => <span class="chip">{id()}</span>}
+          </For>
+        </div>
         <div class="acts" role="toolbar" aria-label={t("app.lineActions")}>
           <button
             type="button"
@@ -559,7 +564,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
         <Show when={props.node.turn.end === "stopped"}>
           <span class="end">{t("app.stopped")}</span>
         </Show>
-        <Rewrite rerun={!!lineOf(props.node)} node={props.node.id} />
+        <Rewrite rerun={!!lineOf(props.node) || !!props.node.turn.input.invoke?.length} node={props.node.id} />
       </footer>
       <Show when={props.last && options()?.length}>
         <Options items={options()!} />

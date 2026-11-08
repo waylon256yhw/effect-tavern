@@ -831,7 +831,7 @@ const mount = (...mounts: string[]) => here({ mounts })
   assert.ok(!lookup.includes("The rest of it"), lookup)
   assert.deepEqual(n1.delivered, [{ id: "packA/x", layer: 1, text: "The first sentence. The rest of it." }])
   assert.deepEqual(
-    n1.readable.map((e) => e.id),
+    n1.invocable.map((e) => e.id),
     ["own"], // told: no longer readable; the card's entry still is
   )
   // the frame: the row's slot in the head, its tail fragment last in narrate alone

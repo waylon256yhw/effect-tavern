@@ -105,7 +105,6 @@ const en: Dict = {
   inspector: {
     all: "All",
     answer: "answer",
-    armed: " · armed for the next send",
     breakpoint: "breakpoint",
     changed: "{n} changed",
     checkFailed: "check failed",
@@ -134,9 +133,7 @@ const en: Dict = {
     state: "State",
     targets: "{n} targets",
     tokenLegend: "in / out / cache read / cache write",
-    toldState: "told",
     untold: "Untold",
-    untoldState: "untold",
   },
   lexicon: {
     noList: "No lexicon in the file: it needs an array, or an object with a lexicon key",
@@ -261,7 +258,6 @@ const en: Dict = {
     again: "Once more",
     aside: "Aside",
     none: "none",
-    pin: "Pin",
     rewordPlaceholder: "A word for the rewrite…",
     turnActions: "Actions on this turn",
   },
@@ -337,7 +333,6 @@ const en: Dict = {
     noStoryMatch: "No story matches",
     otherBusy: "A story of another card is running",
     pickPersona: "Pick a persona",
-    pinned: "Pinned",
     readings: "Readings",
     renameStory: "Rename story",
     resize: "Drag to resize the sidebar",
@@ -547,6 +542,12 @@ const en: Dict = {
     askInputThought: "Thought mark rule",
     restoreDefault: "Restore default",
     local: "This card",
+  },
+  invoke: {
+    manual: "Manual",
+    auto: "Auto",
+    always: "Always",
+    mode: "Invocation",
   },
 }
 export default en

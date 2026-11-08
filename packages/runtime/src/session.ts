@@ -20,8 +20,8 @@
 // Player actions on a node, each with its landing in the log tree (docs/card-reading-2.md §8 item 8): `swipe` and
 // `reword` (a sibling, from lookup / from narrate), `edit` (a sibling carrying the player's prose, check and record
 // rerun), `setField` (effects on the node, folded last), `demand` (a product on the node). An option is not an action
-// either: the client fills the box with it and the player sends it as an act. A pin is not an action on a node: it rides on an act's input (`Input.pin`), the entry is forced open as a
-// MUST for that turn, check verifies it, and what the path could still be told is the node's `readable` list. "Continue" is not a kind: with no output cap the model ends where
+// either: the client fills the box with it and the player sends it as an act. Entry invocations ride on that input.
+// "Continue" is not a kind: with no output cap the model ends where
 // it ends, and "go on" is an note turn. Stop has two meanings by stage: before the prose starts, the action is
 // interrupted and leaves nothing; once it streams, `stop` halts the prose where it is, check is skipped (the player cut
 // the draft, not the model), record runs, and the node is saved with `end: "stopped"`, so "go on" has a node to follow.
@@ -114,7 +114,7 @@ export const outcome = <E>(events: Stream.Stream<Event, E>): Effect.Effect<Turn,
     }),
   )
 /** The events an action causes, as a stream: the body runs forked, emitting as it goes; the stream ends when it does.
- *  A defect in the body (an invalid action found mid-turn, such as a pin with nothing to tell) fails the stream too;
+ *  A defect in the body (an invalid action found mid-turn, such as an unavailable invocation) fails the stream too;
  *  swallowing it would leave the stream open forever. */
 const emitting = (body: (emit: Emit) => Effect.Effect<unknown, ModelError>): Events =>
   Stream.callback<Event, ModelError>((q) =>
@@ -190,7 +190,7 @@ export const makeSession = ({
   policy?: Policy | (() => Policy)
 }) => {
   const rpg = makeCard(card.rules)
-  const cardLore = card.lore.map((e) => ({ id: e.id, layers: e.layers, ...gateOf(e.id, e.offer) }))
+  const cardLore = card.lore.map((e) => ({ id: e.id, layers: e.layers, invoke: e.invoke, ...gateOf(e.id, e.offer) }))
   /** The layer and the lookup index this request stands on: `resolve` once, from every session entry (`fresh`) until the
    *  next, so a snapshot's nodes read one index and a turn's stages one layer. A request landing mid-turn moves the turn
    *  onto the rows it read, which is no worse than each stage reading its own. The index is the card's lore and the
@@ -205,7 +205,7 @@ export const makeSession = ({
         const layers = e.layers.map((l) => expand(l, R.names))
         return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
       }),
-      ...R.entries.map((e) => ({ id: e.id, layers: [e.text], unlock: () => 1 })),
+      ...R.entries.map((e) => ({ id: e.id, layers: [e.text], invoke: e.invoke, unlock: () => 1 })),
     ])
     return (now = { R, I })
   }
@@ -271,7 +271,14 @@ export const makeSession = ({
         input,
         thought: wording("input.thought"),
       },
-      a,
+      a.stage === "narrate"
+        ? {
+            ...a,
+            always: layer()
+              .entries.filter((e) => e.invoke === "always")
+              .map((e) => e.text),
+          }
+        : a,
       {
         reasoningBack: M.reasoningBack,
         ttl: M.ttl,
@@ -311,11 +318,16 @@ export const makeSession = ({
 
   /** Ids the player or the lookup named, as the disclosures they deliver: every unseen layer up to a lore entry's current
    *  one, or the one layer of a recalled product row. Already-seen ones deliver nothing. */
-  const deliver = (s: Paths, seen: readonly Disclosure[], ids: readonly string[]): Disclosure[] => {
+  const deliver = (
+    s: Paths,
+    told: readonly Disclosure[],
+    seen: readonly Disclosure[],
+    ids: readonly string[],
+  ): Disclosure[] => {
     const seenKeys = new Set(seen.map(key))
     const I = L()
     return [...new Set(ids)]
-      .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (I.read(s, seen, id) ?? [])))
+      .flatMap((id) => (entryRef(id) ? [{ id, layer: 1 }] : (I.read(s, told, seen, id) ?? [])))
       .filter((d) => !seenKeys.has(key(d)))
   }
 
@@ -408,7 +420,7 @@ export const makeSession = ({
     Effect.gen(function* () {
       // no line and no note: nothing to run the narrator from (an act of nothing, or a sibling of an opening; an edit
       // of the prose alone starts at check and needs none)
-      if (from !== "check" && !input.text && !input.note)
+      if (from !== "check" && !input.text && !input.note && !input.invoke?.length)
         throw new Error(base ? `node ${base.id}: nothing to rerun` : "empty input")
       fresh()
       const path = chain(parent)
@@ -418,26 +430,34 @@ export const makeSession = ({
       const guard = card.guard.flatMap((g) => expand(g, layer().names) ?? [])
       const s0 = here.state
       const g0 = here.gated()
-      const seen = deliveredOn(path)
+      const seen = deliveredOn(path.slice(here.fold()))
+      const all = deliveredOn(path)
       // lookup: a structured pick over the literal enum of readable ids: lore entries with an unseen layer, plus the
       // items of recall products stored on the path and not yet delivered (model-written memory walks the same road as
       // lore). Nothing to pick → no call.
-      // The pin: the entry's deepest unseen layer, forced open below, so the lookup is not offered it as well; the
-      // unseen layers under it are read this turn, as an opened entry's always are (issue #9).
-      const readable = here.readable()
-      const pinned =
-        input.pin !== undefined && readable.some((e) => e.id === input.pin) ? deliver(g0, seen, [input.pin]) : []
-      if (input.pin !== undefined && !pinned.length) throw new Error(`${input.pin}: nothing to pin`)
-      const forced = pinned.slice(-1)
-      const untold = readable.filter((e) => e.id !== input.pin)
+      const invoked = [...new Set(input.invoke ?? [])]
+      const candidates = here.invocable()
+      for (const id of invoked)
+        if (!candidates.some((e) => e.id === id) && !base?.input.invoke?.includes(id))
+          throw new Error(`${id}: not invocable`)
+      const automatic = invoked.filter((id) => candidates.some((e) => e.id === id && e.invoke === "auto"))
+      const manual = invoked.flatMap((id) => {
+        const e = L().entries.find((e) => e.id === id && e.invoke === "manual")
+        return e ? [(L().read(g0, all, [], id) ?? []).map(L().text).filter(Boolean).join("\n\n")].filter(Boolean) : []
+      })
+      const selected = deliver(g0, all, seen, automatic)
+      const untold = here.readable().filter((e) => !invoked.includes(e.id))
       const idx = untold.map((e) => e.id)
+      // A chip-only turn supplies context, not a player line for lookup or action judgement.
+      const hasInput = !!(input.text || input.note)
       const looked =
         from !== "lookup"
           ? base!.read
           : deliver(
               g0,
+              all,
               seen,
-              idx.length
+              hasInput && idx.length
                 ? (yield* obj(
                     emit,
                     "lookup",
@@ -453,7 +473,7 @@ export const makeSession = ({
       // decide → settle, looping; the k-th decide sees the first k events
       let beats: Beat[] = from !== "lookup" ? [...base!.beats] : []
       let end: Turn["end"] = from !== "lookup" ? base!.end : "end"
-      if (card.rules.actions.length && from === "lookup") {
+      if (hasInput && card.rules.actions.length && from === "lookup") {
         for (;;) {
           const { s, events } = rpg.fold(s0, beats)
           if (rpg.over(s)) {
@@ -496,18 +516,14 @@ export const makeSession = ({
       }
       const { s: s1, events } = rpg.fold(s0, beats)
       // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate
-      // (derived.ts `gate`). Director only if the card has one and something is open. The pinned entry is open with its
-      // forced layer and MUST be told, director or not: check verifies it, a miss is the one correction rewrite, and an
-      // entry still unfired after that stays untold.
+      // (derived.ts `gate`). Director only if the card has one and something is open.
       const gateEvents = [...events, ...here.post]
       const { offered, disclosures, open } = here.gate({
         state: s1,
         events,
-        before: [...looked, ...pinned.slice(0, -1)],
-        forced,
+        before: [...looked, ...selected],
       })
       const openIds = [...new Set(open.map((d) => d.id))] // Literals(openIds) below: a duplicate must never reach it
-      const mustIds = forced.map((d) => d.id)
       const briefed: Brief =
         from !== "lookup"
           ? base!.brief
@@ -526,11 +542,7 @@ export const makeSession = ({
                 }),
               )
             : { must: [], may: openIds }
-      const brief: Brief = {
-        ...briefed,
-        must: [...new Set([...mustIds, ...briefed.must])],
-        may: briefed.may.filter((id) => !mustIds.includes(id)),
-      }
+      const brief = briefed
       // narrate, streamed, with truncation recovery and at most one correction rewrite
       const fed = here.known()
       const sum = here.summary()
@@ -590,6 +602,7 @@ export const makeSession = ({
             fiction: fictionAt(s1),
             history: narratorHistory(path, here.text, sum),
             summarized: sum !== undefined,
+            manual,
             told: disclosures.map(here.text).filter(Boolean), // a sibling's reused read may name an entry since gone
             outcome: events,
             current: fed.current, // feed products other than notes: where the scene stands, as data
@@ -853,7 +866,7 @@ const Id = Schema.Int
 const InputSchema = Schema.Struct({
   text: Schema.String,
   note: Schema.optionalKey(Schema.String),
-  pin: Schema.optionalKey(Schema.String),
+  invoke: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 export const Action = Schema.Union([
   Schema.Struct({

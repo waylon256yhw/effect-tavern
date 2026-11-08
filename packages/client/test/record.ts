@@ -31,7 +31,7 @@ const rules = {
   actions: [],
 } as any
 const node = (state: object, extra: object = {}) =>
-  ({ turn: { input: {}, fired: [], products: {} }, state, checks: [], delivered: [], readable: [], ...extra }) as any
+  ({ turn: { input: {}, fired: [], products: {} }, state, checks: [], delivered: [], invocable: [], ...extra }) as any
 
 assert.deepEqual(record(rules, node({ hp: 40, foe: 30, mood: "low" }), undefined), [])
 const els = record(
@@ -41,30 +41,29 @@ const els = record(
     {
       checks: [{ action: "strike", chance: 0.6, roll: 0.7, hit: false }],
       delivered: [{ id: "li", layer: 1, text: "a clue" }],
-      readable: [{ id: "li", hook: "more" }],
-      turn: { input: { text: "go", pin: "li" }, fired: [], products: { notes: "a fact" } },
+      invocable: [{ id: "li", hook: "more" }],
+      turn: { input: { text: "go", invoke: ["li"] }, fired: [], products: { notes: "a fact" } },
     },
   ),
-  node({ hp: 40, foe: 30, mood: "low" }, { readable: [{ id: "li", hook: "a hook" }] }),
+  node({ hp: 40, foe: 30, mood: "low" }, { invocable: [{ id: "li", hook: "a hook" }] }),
 )
 assert.deepEqual(els, [
   { kind: "meter", path: "hp", label: "体力", min: 0, max: 100, was: 40, now: 30, cuts: [], scale: false },
   { kind: "value", path: "foe", label: "foe", was: 30, now: 20 }, // bounded on one side only: not a meter
   { kind: "steps", path: "mood", label: "mood", options: ["low", "mid", "high"], was: 0, now: 2 },
   { kind: "check", check: { action: "strike", chance: 0.6, roll: 0.7, hit: false } },
-  { kind: "clue", id: "li", text: "a clue", pinnable: true },
-  { kind: "pin", id: "li", hook: "a hook", told: false }, // pinned, never fired: the row is where it can be pinned again; named by the parent's hook
+  { kind: "clue", id: "li", text: "a clue" },
 ]) // notes is context: not in the ledger
 assert.deepEqual(
   record(
     rules,
     node(
       { hp: 40, foe: 30, mood: "low" },
-      { turn: { input: { pin: "li" }, fired: [{ id: "li", layer: 2 }], products: {} } },
+      { turn: { input: { invoke: ["li"] }, fired: [{ id: "li", layer: 2 }], products: {} } },
     ),
     undefined,
   ),
-  [{ kind: "pin", id: "li", hook: "li", told: true }], // no parent to name it: the id
+  [], // no parent to name it: the id
 )
 // Kinds: read back (feed or recall) and replaced or merged by key → world; read back and appended → context; never
 // read back → theater. The fold default is product.ts's: append for a list, latest otherwise.
@@ -212,7 +211,7 @@ assert.equal(
 )
 assert.equal(marked(rules, node(s.state, { checks: [{ action: "x", chance: 1, roll: 0, hit: true }] }), g), true)
 assert.equal(marked(rules, node(s.state, { delivered: [{ id: "li", layer: 1, text: "c" }] }), g), true)
-assert.equal(marked(rules, node(s.state, { turn: { input: { pin: "li" }, fired: [], products: {} } }), g), true)
+assert.equal(marked(rules, node(s.state, { turn: { input: { invoke: ["li"] }, fired: [], products: {} } }), g), false)
 const scened = node(s.state, { turn: { input: {}, fired: [], products: { options: ["o"], scene: { place: "亭" } } } })
 assert.equal(marked(rules, scened, g, declared), true) // a declared product
 assert.equal(marked(rules, scened, g), false) // undeclared: not drawn, no dot
