@@ -82,7 +82,11 @@ export const decodeLocal = (u: unknown): Local => locked(decodeLocalRow(u))
 const words: readonly Ask[] = [
   {
     id: "lookup",
-    text: "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.",
+    text: 'Which index entries does the player\'s line ask about or need right now? Most lines need none: pick nothing rather than something near. Set "more" only when the entries you pick may point to others you need; in catalog mode, "search" finds hooks by words (empty means no search).',
+  },
+  {
+    id: "lookup.again",
+    text: `Given the entries read so far and any search results, pick only what is still missing for the player's line, or nothing if unsure. Set "more" only when the entries you pick may point to others you need; in catalog mode, "search" finds hooks by words (empty means no search).`,
   },
   {
     id: "direct",

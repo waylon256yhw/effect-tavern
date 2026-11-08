@@ -24,7 +24,11 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.\nIndex: li=李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
+          "content": "Ledger:\n → -; read -; fired -; "
+        },
+        {
+          "role": "system",
+          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: li=李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
         },
         {
           "role": "system",
@@ -60,7 +64,7 @@
         },
         {
           "role": "system",
-          "content": "Ledger:\n → -; fired -; "
+          "content": "Ledger:\n → -; read -; fired -; "
         },
         {
           "role": "system",
@@ -292,7 +296,11 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.\nIndex: yandao=盐道之争已经半年，镇上人都说县令是外省人不懂盐。"
+          "content": "Ledger:\n → -; read -; fired -; "
+        },
+        {
+          "role": "system",
+          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: yandao=盐道之争已经半年，镇上人都说县令是外省人不懂盐。"
         },
         {
           "role": "system",
@@ -604,7 +612,11 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.\nIndex: kokuhaku=理最近有心事：常常绞着胸前的吊坠出神，话到嘴边又咽回去。"
+          "content": "Ledger:\n → -; read -; fired -; "
+        },
+        {
+          "role": "system",
+          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: kokuhaku=理最近有心事：常常绞着胸前的吊坠出神，话到嘴边又咽回去。"
         },
         {
           "role": "system",
@@ -796,7 +808,11 @@
         },
         {
           "role": "system",
-          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near.\nIndex: li=李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
+          "content": "Ledger:\n → -; read -; fired -; "
+        },
+        {
+          "role": "system",
+          "content": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search).\nIndex: li=李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
         },
         {
           "role": "system",
@@ -832,7 +848,7 @@
         },
         {
           "role": "system",
-          "content": "Ledger:\n → -; fired -; "
+          "content": "Ledger:\n → -; read -; fired -; "
         },
         {
           "role": "system",
@@ -1079,7 +1095,11 @@
     "asks": [
       {
         "id": "lookup",
-        "text": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near."
+        "text": "Which index entries does the player's line ask about or need right now? Most lines need none: pick nothing rather than something near. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search)."
+      },
+      {
+        "id": "lookup.again",
+        "text": "Given the entries read so far and any search results, pick only what is still missing for the player's line, or nothing if unsure. Set \"more\" only when the entries you pick may point to others you need; in catalog mode, \"search\" finds hooks by words (empty means no search)."
       },
       {
         "id": "direct",

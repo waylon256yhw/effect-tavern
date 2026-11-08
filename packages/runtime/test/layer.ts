@@ -46,7 +46,8 @@ function here(r: Partial<Local> = {}): Local {
   const canned = { notes: "N", options: ["A", "B", "C", "D"], people: [], scene: { place: "P", present: [] } }
   const model = fake((o) => {
     const d = readStage(o)
-    if (d.phase === "lookup") return { text: JSON.stringify({ read: d.index.slice(0, 1).map((e) => e[0]) }) }
+    if (d.phase === "lookup")
+      return { text: JSON.stringify({ more: false, read: d.index.slice(0, 1).map((e) => e[0]) }) }
     if (d.phase === "narrate") return { text: "不是这样而是那样。".repeat(30) }
     const a = defaultAnswer(d, canned) as { text: string }
     if (d.phase !== "record") return a
@@ -792,7 +793,7 @@ const prose = { text: "hello world" }
 const model = () =>
   fake((o) => {
     const doc = readStage(o)
-    if (doc.phase === "lookup") return { text: JSON.stringify({ read: picks.shift() ?? [] }) }
+    if (doc.phase === "lookup") return { text: JSON.stringify({ more: false, read: picks.shift() ?? [] }) }
     return doc.phase === "narrate" ? prose : defaultAnswer(doc, canned)
   })
 const asked = (es: readonly Event[], phase: string) =>

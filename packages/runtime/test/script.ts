@@ -8,6 +8,8 @@ export interface StageDoc {
   phase: Phase
   open: string[] // Open: ids
   index: [id: string, hook: string][] // lookup's Index: entries
+  again: boolean // lookup has a Read: continuation
+  catalog: boolean // lookup index lists ids alone
   soFar: string[] // decide's So far: events
   rules: string[] // Rule: lines
   known: string[] // record's Known: items
@@ -28,14 +30,19 @@ export const readStage = (o: FakeCall): StageDoc => {
       .find((m) => m.includes("\nQuestions: "))
       ?.split("\nQuestions: ")[1]!
       .split("\n") ?? []
+  const index = after(lines, "Index: ") ?? ""
+  const catalog = !!index && !index.includes("=")
   return {
+    again: lines.some((l) => l.startsWith("Read: ")),
+    catalog,
     phase: ((o.responseFormat?.type === "json" && o.responseFormat.name) || "narrate") as Phase,
     open: (after(lines, "Open: ")?.split(" | ") ?? []).map((e) => head(e, "=")),
     // an entry is `id=hook`; a hook may hold ", ", so an entry starts only where an `id=` follows
-    index: (after(lines, "Index: ")?.split(/, (?=[^\s,=]+=)/) ?? []).map((e) => [
-      head(e, "="),
-      e.slice(e.indexOf("=") + 1),
-    ]),
+    index: !index
+      ? []
+      : catalog
+        ? index.split(", ").map((id) => [id, ""])
+        : index.split(/, (?=[^\s,=]+=)/).map((e) => [head(e, "="), e.slice(e.indexOf("=") + 1)]),
     soFar:
       after(lines, "So far: ")
         ?.split(",")
@@ -60,7 +67,7 @@ export const defaultAnswer = (doc: StageDoc, canned: Record<string, unknown> = {
   const json = (v: unknown) => ({ text: JSON.stringify(v) })
   switch (doc.phase) {
     case "lookup":
-      return json({ read: [] })
+      return json({ read: [], more: false, ...(doc.catalog ? { search: "" } : {}) })
     case "decide":
       return json({ next: "end" })
     case "direct":

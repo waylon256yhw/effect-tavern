@@ -43,7 +43,13 @@ export interface Told {
   text: string
 }
 export type Ask =
-  | { stage: "lookup"; question: string; index: readonly string[] } // entries as `id=hook`
+  | {
+      stage: "lookup"
+      question: string
+      ledger: readonly Msg[]
+      index: readonly string[] // id=hook in list mode; ids alone in catalog mode
+      steps?: readonly { read: readonly Told[]; found?: readonly string[]; question: string }[]
+    }
   | {
       stage: "decide"
       ledger: readonly Msg[]
@@ -124,10 +130,16 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
     case "lookup":
       return [
         ...frame,
+        ...a.ledger.map(toP(w)),
         sys(`${a.question}\nIndex: ${a.index.join(", ")}`),
         ...noteOf(c.input),
         ...thoughtOf(c),
         said(c.input),
+        ...(a.steps ?? []).flatMap((step) => [
+          sys(`Read: ${step.read.map((d) => `${d.id}=${d.text}`).join(" | ") || "-"}`),
+          ...(step.found ? [sys(`Found: ${step.found.join(", ") || "-"}`)] : []),
+          sys(step.question),
+        ]),
       ]
     case "decide":
       return [
