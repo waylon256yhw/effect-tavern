@@ -18,7 +18,7 @@ import { t } from "./i18n.ts"
 export type Id = number
 export interface Draft {
   parent: Id | null
-  input: { text: string; note?: string }
+  input: { text: string; note?: string; invoke?: readonly string[] }
   text: string
   products?: Record<string, string> // narrate blocks so far by id (`product-delta`), drawn where the node's 小剧场 lands
   prev?: string // the discarded first draft, shown greyed under the rewrite
@@ -65,7 +65,7 @@ export interface StoryRow {
   persona: string | null // the persona in force on it; none: the card's own (a new story takes the card's default)
   updated: number
   turns: number // the nodes with a player line or note: a greeting is none
-  last: { text: string; note?: string } | null // the last turn's input: the manager's preview; none with only the opening
+  last: { text: string; note?: string; invoke?: readonly string[] } | null // the last turn's input: the manager's preview; none with only the opening
 }
 export interface Persona {
   id: string
@@ -96,16 +96,20 @@ export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)
 export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
 export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)
 export const packs = Atom.make<readonly Layer[]>([]).pipe(Atom.keepAlive)
-export const pin = Atom.make<string | null>(null).pipe(Atom.keepAlive) // an untold entry the next act must tell (Input.pin), armed from a clue
+export const invoke = Atom.make<readonly string[]>([]).pipe(Atom.keepAlive)
 export const compose = Atom.make("") // the composer's main box: the line (participant mode) or the direction (author mode); an Options row writes here and never sends
 export const noted = Atom.make("") // the note box under the line: a word to the narrator that goes with this send (participant mode only)
 export const aside = Atom.make(false) // the note box is open (participant mode's deviation); clears after the send
 /** Participant mode: the main box is the character's line and a note may go with it. Author mode: every input is a
  *  direction, the main box is the note and there is no line. One mapping at the edges (send, revise, withdraw). */
 export const acting = (): boolean => card()?.input === "act" // tracked: the composer draws by it
-export const boxesOf = (i: { text: string; note?: string }): { text: string; note: string } =>
+export const boxesOf = (i: {
+  text: string
+  note?: string
+  invoke?: readonly string[]
+}): { text: string; note: string } =>
   acting() ? { text: i.text, note: i.note ?? "" } : { text: i.note ?? "", note: "" }
-export const inputOf = (text: string, note: string): { text: string; note?: string } =>
+export const inputOf = (text: string, note: string): { text: string; note?: string; invoke?: readonly string[] } =>
   acting() ? { text, ...(note && { note }) } : { text: "", note: text }
 /** What the composer's boxes hold: the line, the note, whether the note box is open. One write for the three. */
 export const boxes = (): { text: string; note: string; aside: boolean } => ({
@@ -127,6 +131,7 @@ export const revising = Atom.make<{
   node: Id
   field: "text" | "note"
   previous: { text: string; note: string; aside: boolean }
+  previousInvoke: readonly string[]
 } | null>(null)
 export const error = Atom.make<Failure | null>(null)
 /** The node whose 小剧场 was last asked for (`turn.demand`): a demand has no draft to carry its failure, so `error`
@@ -186,7 +191,11 @@ export const layer = Atom.make<"shelf" | "workspace">((get) => (get(focus) === n
 export const calls = Atom.make<ReadonlyMap<Id, readonly Call[]>>(new Map())
 
 /** The reading line: root → head. */
-export const path = Atom.make((get) => L.path(get(log)))
+const emptyPath: Node[] = []
+export const path = Atom.make((get) => {
+  const l = get(log)
+  return l.head === null ? emptyPath : L.path(l)
+})
 
 /** The last node on the reading line and the one before it (its parent): what the header's dot, the Status table and
  *  the desktop's inline Record read. */
@@ -422,6 +431,7 @@ export const withdraw = (): void => {
   if (!d?.fresh || registry.get(compose) || registry.get(noted)) return
   const b = boxesOf(d.input)
   setBoxes({ ...b, aside: !!b.note })
+  registry.set(invoke, d.input.invoke ?? [])
 }
 
 // Revise: the bubble puts the turn's input in the composer, line and note in their boxes (what was there is stashed,
@@ -429,7 +439,13 @@ export const withdraw = (): void => {
 // Revising ends when the node lands (`settle`), so a failed send puts the input back under the same revision.
 export const revise = (n: Node, field: "text" | "note"): void => {
   const previous = registry.get(revising)?.previous ?? boxes()
-  registry.set(revising, { node: n.id, field, previous })
+  registry.set(revising, {
+    node: n.id,
+    field,
+    previous,
+    previousInvoke: registry.get(revising)?.previousInvoke ?? registry.get(invoke),
+  })
+  registry.set(invoke, n.turn.input.invoke ?? [])
   const b = boxesOf(n.turn.input)
   setBoxes({ ...b, aside: acting() && (!!b.note || field === "note") })
 }
@@ -439,4 +455,5 @@ export const cancelRevise = (): void => {
   if (!r) return
   registry.set(revising, null)
   setBoxes(r.previous)
+  registry.set(invoke, r.previousInvoke)
 }

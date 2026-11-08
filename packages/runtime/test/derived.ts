@@ -43,7 +43,7 @@ const add = (path: readonly Turn[], t: Partial<Turn> = {}): Turn[] => [
     ...t,
   },
 ]
-const none = { events: [], before: [], forced: [] }
+const none = { events: [], before: [] }
 
 // ───────── Derived lore counters in the window (§8 item 4) ─────────
 // A recurring entry: offered when it has not reached the narrator for two turns and has been shown fewer than twice.
@@ -96,8 +96,13 @@ const none = { events: [], before: [], forced: [] }
   assert.deepEqual([D.at(v2).state.bond, untold(v2)], [3, ["li"]]) // the instant no longer holds; the lock stays open
   assert.equal((D.at(v2).gated().lore as Record<string, { floor: number }>).li!.floor, 2)
   const v3 = add(v2, { read: [{ id: "li", layer: 2 }] })
-  assert.deepEqual(untold(v3), [])
-  assert.deepEqual(D.at(v3).node().readable, []) // the projection carries the same list
+  assert.deepEqual(untold(v3), ["li"]) // layer 1 has left the window
+  assert.deepEqual(
+    D.at(v3)
+      .node()
+      .invocable.map((e) => e.id),
+    ["li"],
+  ) // the projection carries the same list
 }
 
 // ───────── A recall row enters readable only once its node is folded ─────────
@@ -109,6 +114,7 @@ const none = { events: [], before: [], forced: [] }
     D.at(path)
       .readable()
       .map((r) => r.id)
+      .filter((id) => id !== "li")
   const li = (note: string) => ({ products: { people: [{ name: "Li", note }] } })
   const r1 = add(add([], { read: [{ id: "li", layer: 1 }] }), li("N1")) // li told first; the row's node at index 1
   const id1 = `people@${r1[1]!.id}#0`
@@ -132,6 +138,38 @@ const none = { events: [], before: [], forced: [] }
   // A recall ref reads its text off the path; a ref to a node not on it is a defect.
   assert.equal(D.at(r3).text({ id: id2, layer: 1 }), "name=Li, note=N2")
   assert.throws(() => D.at(r1).text({ id: id2, layer: 1 }), /is not on the path/)
+}
+
+// Folding unloads context, but never resets story depth, counters or exhausted offers.
+{
+  const entry = { id: "echo", layers: ["ECHO LOWER", "ECHO DEEP"], unlock: { all: [] }, offer: { all: [] } } as const
+  const D = derivedOf({ ...full, lore: [entry] })
+  const a = add([], {
+    read: [{ id: "echo", layer: 1 }],
+    fired: [{ id: "echo", layer: 2 }],
+    products: { notes: "remember the event" },
+  })
+  const b = add(a)
+  assert.deepEqual(D.at(b).readable(), [])
+  const c = add(add(b))
+  assert.equal(D.at(c).fold(), 2)
+  assert.deepEqual(
+    D.at(c)
+      .readable()
+      .map((e) => e.id),
+    ["echo"],
+  )
+  assert.deepEqual(
+    D.at(c)
+      .node()
+      .invocable.map((e) => e.id),
+    ["echo"],
+  )
+  assert.equal((D.at(c).gated().lore as Record<string, { shown: number }>).echo!.shown, 1)
+  const gate = D.at(c).gate({ state: D.at(c).state, ...none })
+  assert.deepEqual(gate.offered, [])
+  assert.ok(D.at(c).summary()!.text.includes("remember the event"))
+  assert.ok(!D.at(c).summary()!.text.includes("ECHO"))
 }
 
 console.log("ok")

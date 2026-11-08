@@ -746,7 +746,7 @@
   color: var(--ink);
 }
 
-/* ── 读数 (readings.tsx `StatusPage`): a page over the reader, the world's standing slice at the left (the pin,
+/* ── 读数 (readings.tsx `StatusPage`): a page over the reader, the world's standing slice at the left (
    Status), this turn's change at the right (its Record, 小剧场). Each column bounded to 22–26rem and scrolling on its
    own; one column over the other when the stage card has no room for two ── */
 /* ── home (home.tsx): a placeholder until what it holds is settled, a mark and a title in the middle of the stage

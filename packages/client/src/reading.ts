@@ -1,8 +1,8 @@
 // A Reading (docs/shell-brief-2.md, #123): everything the client holds of one story. The slots are the atoms the
-// components draw (the log, the card, the calls, the draft and the typewriter's queue, the pin, the editor, the
+// components draw (the log, the card, the calls, the draft and the typewriter's queue, the invoke, the editor, the
 // composer's boxes) and the turn's streams; this module is the one list of which of them are a story's. One Reading is
 // in the slots, the rest are records: what the server does not hold of a story the player left (the half-typed line,
-// its note, the armed pin), by story id, bounded at the tab cap, the oldest dropped. Activate is the way in: it puts
+// its note, the armed invoke), by story id, bounded at the tab cap, the oldest dropped. Activate is the way in: it puts
 // the story's record back, then always reads the story afresh (open, nodes, card, its turn in flight); activate(null)
 // empties the slots and names no story (`stories.current` null: a card tab, an empty library); deactivate keeps
 // the record, stops reading the streams (the turn runs on, on the server) and empties the slots. A record never holds
@@ -14,7 +14,7 @@
 // before any read, so a switch away mid-read records the line, not the emptied boxes.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Node } from "@effect-tavern/runtime/src/session.ts"
-import { boxes, calls, editing, type Id, log, pin, registry, setBoxes, stories } from "./store.ts"
+import { boxes, calls, editing, type Id, log, invoke, registry, setBoxes, stories } from "./store.ts"
 import { turn } from "./turn.ts"
 import * as wire from "./wire.ts"
 import type { Listing } from "./wire.ts"
@@ -26,7 +26,7 @@ export interface Deps {
   attach: () => void
   abandon: () => void
 }
-type Kept = { boxes: ReturnType<typeof boxes>; pin: string | null }
+type Kept = { boxes: ReturnType<typeof boxes>; invoke: readonly string[] }
 const cap = 8 // the tab cap
 
 export const createReading = (d: Deps) => {
@@ -37,14 +37,14 @@ export const createReading = (d: Deps) => {
   const deactivate = (): void => {
     if (active != null) {
       records.delete(active)
-      records.set(active, { boxes: boxes(), pin: registry.get(pin) })
+      records.set(active, { boxes: boxes(), invoke: registry.get(invoke) })
       if (records.size > cap) records.delete(records.keys().next().value!)
     }
     active = undefined
     loaded = false
     d.abandon() // the streams, the draft and its queue, the revision, the error
     setBoxes({ text: "", note: "", aside: false })
-    registry.set(pin, null)
+    registry.set(invoke, [])
     registry.set(editing, null)
     registry.set(calls, new Map())
   }
@@ -59,10 +59,10 @@ export const createReading = (d: Deps) => {
       loaded = true
       return
     }
-    const r = records.get(id) // before any read: the reads touch neither the boxes nor the pin
+    const r = records.get(id) // before any read: the reads touch neither the boxes nor the invoke
     if (r) {
       setBoxes(r.boxes)
-      registry.set(pin, r.pin)
+      registry.set(invoke, r.invoke)
     }
     registry.set(stories, await d.openStory(id)) // `stories.current`: every request after names this story
     // A rejected read must not release the activation queue while its sibling can still write the slots.

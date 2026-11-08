@@ -31,7 +31,7 @@ type Turn = TurnOf<Beat>
 const held = Log.hold<Turn>()
 const chain = (id: number | null) => Log.chain(held.log, id)
 const eventsOf = (t: Turn) => t.beats.map((b) => `${b.decide}:${b.seed % 2 ? "hit" : "miss"}`)
-const summaries = makeSummaries<Beat>(L.text)
+const summaries = makeSummaries<Beat>()
 
 // ───────── Views ─────────
 type Stage = "direct" | "narrate" | "check" | "record"
@@ -226,7 +226,7 @@ const program = Effect.gen(function* () {
   assert.deepEqual([sum.from, sum.to], [turns[0].id, turns[2].id])
   const cur: Current = { input: { text: "next" }, beats: [], read: [], brief: { must: [], may: [] } }
   v = render(directed, path, "narrate", cur)
-  assert.ok(has(v, sum.text) && has(v, "NOTE#1") && has(v, lore.li[0]) && has(v, lore.li[1]))
+  assert.ok(has(v, sum.text) && has(v, "NOTE#1") && !has(v, lore.li[0]) && !has(v, lore.li[1]))
   for (const t of turns.slice(0, 3)) assert.ok(!has(v, prose(t)))
   assert.ok(has(v, prose(turns[3])) && has(v, prose(turns[4])))
   assert.deepEqual(

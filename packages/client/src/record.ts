@@ -32,8 +32,7 @@ export type Element =
     } // int with both bounds; cuts: the stage thresholds inside (min, max), sorted; scale: a point on an axis, not a stock
   | { kind: "value"; path: string; label: string; was: State[string]; now: State[string] } // any other change
   | { kind: "check"; check: Check }
-  | { kind: "clue"; id: string; text: string; pinnable: boolean } // pinnable: a deeper layer is still untold
-  | { kind: "pin"; id: string; hook: string; told: boolean } // the entry this act pinned, by its hook (the parent's readable list; told, it has left this node's); untold: check never saw it fire, it can be pinned again
+  | { kind: "clue"; id: string; text: string }
   | { kind: "product"; id: string; label: string; shape: Shape; value: unknown } // a world product's value this turn, drawn by its shape
 
 export const reading = (
@@ -106,7 +105,7 @@ export { kindOf }
  *  by presence. */
 export const fresh = (v: unknown) => v !== undefined && !(Array.isArray(v) && v.length === 0)
 
-/** A turn's ledger: what it changed (field rows, checks, clues delivered, the pin) and the world products' new values or
+/** A turn's ledger: what it changed (field rows, checks, clues delivered) and the world products' new values or
  *  rows. The model's chronicle (context) and the player's 小剧场 (theater) are not in it. */
 export const record = (
   rules: Rules,
@@ -117,16 +116,7 @@ export const record = (
 ): Element[] => {
   const out: Element[] = fields(rules, node, prev, whens)
   for (const check of node.checks) out.push({ kind: "check", check })
-  const untold = new Set(node.readable.map((r) => r.id))
-  for (const d of node.delivered) out.push({ kind: "clue", id: d.id, text: d.text, pinnable: untold.has(d.id) })
-  const p = node.turn.input.pin
-  if (p !== undefined)
-    out.push({
-      kind: "pin",
-      id: p,
-      hook: prev?.readable.find((r) => r.id === p)?.hook ?? p,
-      told: node.turn.fired.some((d) => d.id === p),
-    })
+  for (const d of node.delivered) out.push({ kind: "clue", id: d.id, text: d.text })
   for (const p of products) {
     const value = node.turn.products[p.id]
     if (kindOf(p) === "world" && fresh(value))

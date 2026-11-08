@@ -12,8 +12,8 @@ import { entryRef, fold, itemText, recallEntries, render, type Product } from ".
 import { tokens } from "./tokens.ts"
 
 type Turn = TurnOf<Beat>
-/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `readable` is what the
- *  path could still be told (hooks, not bodies): the client's untold list, where a pin is picked from. */
+/** A node as the client sees it: the turn plus what the path derives for it. No fragment bodies. `invocable` contains
+ *  the entries the player can request (hooks and tiers, never bodies). */
 export interface Node {
   id: number
   parent: number | null
@@ -22,7 +22,7 @@ export interface Node {
   events: readonly string[]
   checks: readonly Check[] // this turn's judged beats, in order; what the Record's check track draws
   delivered: readonly (Disclosure & { text: string })[]
-  readable: readonly { id: string; hook: string }[]
+  invocable: readonly { id: string; hook: string; invoke: "auto" | "manual" }[]
 }
 
 /** How many leading layers `unlock` holds for at one state: a single Cond is layer 1's, a list is one per layer. */
@@ -62,7 +62,7 @@ export const makeDerived = ({
     if (!t) throw new Error(`${d.id}: node ${ref.node} is not on the path`)
     return itemText((t.products[ref.product] as unknown[])[ref.index])
   }
-  const summaries = makeSummaries<Beat>((d, range) => textIn(range, d))
+  const summaries = makeSummaries<Beat>()
   // A turn's cost in the narrator's transcript (input, prose, the lore delivered with it), memoized: a turn is immutable.
   const costs = new WeakMap<Turn, number>()
   const costIn = (path: readonly Turn[]) => (t: Turn) => {
@@ -152,17 +152,23 @@ export const makeDerived = ({
     }
   }
   /** What the path could still be told: lore entries with an unseen layer under their current one, and recalled rows
-   *  not yet delivered. The lookup's enum, the node's `readable`, and where `Input.pin` picks from. */
-  const readableOn = (path: readonly Turn[]) => {
+   *  not currently held. Both the lookup index and the player menu come from these candidates. */
+  const candidatesOn = (path: readonly Turn[]) => {
     // ponytail: each call still scans the path (counters, floors, seen, recall), so a snapshot is O(nodes·depth) in cheap
     // scans; carry those folds parent → child in one id-order pass if a story outgrows it.
     const s = gated(path)
     const seen = deliveredOn(path)
-    const seenKeys = new Set(seen.map(key))
+    const held = deliveredOn(path.slice(foldOf(path)))
+    const seenKeys = new Set(held.map(key))
     const prefix = new Set(path.slice(0, foldOf(path)).map((t) => t.id))
     const I = L()
     const hooks = new Map(I.index(s, seen).map((e) => [e.id, e.hook]))
-    const readable = I.readable(s, seen).map((id) => ({ id, hook: hooks.get(id)! }))
+    const readable = I.entries.flatMap((e) => {
+      const invoke = e.invoke ?? "auto"
+      if (invoke === "always" || !hooks.has(e.id)) return []
+      if (invoke === "auto" && !I.read(s, seen, held, e.id)?.length) return []
+      return [{ id: e.id, hook: hooks.get(e.id)!, invoke }]
+    })
     // The product's fold decides which rows exist (a keyed table is the newest row per key: a person re-rowed with what
     // a later scene added is one entry); the seen filter runs after it, so reading the newest row never brings a
     // superseded one back as unread (the third live session re-read 李鹤's old row two turns later when it did). The
@@ -177,10 +183,10 @@ export const makeDerived = ({
         ),
       )
       .filter((e) => !seenKeys.has(`${e.id}#1`) && prefix.has(entryRef(e.id)!.node))
-      .map((e) => ({ id: e.id, hook: e.hook }))
+      .map((e) => ({ id: e.id, hook: e.hook, invoke: "auto" as const }))
     return [...readable, ...recall]
   }
-  // One delivery per layer per turn: a sibling's base.read already holds the pin's and the window's lower layers.
+  // One delivery per layer per turn: a sibling's base.read already holds the invoked and window's lower layers.
   const once = (ds: readonly Disclosure[]) => [...new Map(ds.map((d) => [key(d), d])).values()]
 
   /** The facts at the end of `path`, each computed when read. */
@@ -207,7 +213,8 @@ export const makeDerived = ({
         return last().post
       },
       gated: (extra?: readonly Disclosure[], s?: State) => gated(path, extra, s),
-      readable: () => readableOn(path),
+      readable: () => candidatesOn(path).filter((e) => e.invoke === "auto"),
+      invocable: () => candidatesOn(path),
       /** How many leading turns the fold covers. */
       fold: () => foldOf(path),
       summary: () => summaryOf(path),
@@ -228,37 +235,36 @@ export const makeDerived = ({
           events: settled.events,
           checks: settled.checks,
           delivered: deliveredIn(t).map((d) => ({ ...d, text: text(d) })),
-          readable: readableOn(path).map(({ id, hook }) => ({ id, hook })),
+          invocable: candidatesOn(path),
         }
       },
       /** The gate of the turn being made on this path: its settled state and beat events, what it read before the gate
-       *  (the lookup's and a pin's lower layers), and the pinned layer forced open. The window reads the turn's events
+       *  (lookup and player auto invocations). The window reads the turn's events
        *  plus what the turn before emitted after its own gate (readout events; a greeting's opening events): without
        *  that carry a readout-only card never opened a window at all (found by the yandao card: no beat events). */
       gate: ({
         state,
         events,
         before: given,
-        forced,
       }: {
         state: State
         events: readonly string[]
         before: readonly Disclosure[]
-        forced: readonly Disclosure[]
       }) => {
         const before = once(given)
         const g1 = gated(path, before, state)
         const ds1 = deliveredOn(path, before)
         const I = L()
         const offered = I.offers(g1, ds1, [...events, ...last().post]).map(({ id, layer }) => ({ id, layer }))
-        const unforced = offered.filter((d) => !forced.some((f) => f.id === d.id))
         // A window opens current+1; the unseen layers under it are read this turn, told like a lookup's (issue #9).
         // ponytail: a sibling's gate counts those lower layers as shown this turn (they are in base.read), the fresh
         // turn's did not, so a since/shown-gated window over unread layers can close on a reword; store the gate's own
         // deliveries on the turn if a card hits it.
-        const disclosures = once([...before, ...unforced.flatMap((d) => I.read(g1, ds1, d.id) ?? [])])
-        // The pinned entry is open with its forced layer and MUST be told, director or not.
-        const open: Disclosure[] = [...forced, ...unforced]
+        const disclosures = once([
+          ...before,
+          ...offered.flatMap((d) => I.read(g1, ds1, deliveredOn(path.slice(foldOf(path)), before), d.id) ?? []),
+        ])
+        const open: Disclosure[] = offered
         return { offered, disclosures, open }
       },
     }

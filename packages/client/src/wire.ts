@@ -1,7 +1,7 @@
 // The seam to packages/server: `GET /card`, `GET /nodes` (nodes and head) and the library (`/stories`, `/personas`,
 // `/cards/<id>/local`) are the snapshot, `POST /` is one action whose events come back as SSE. A story call (open, new, delete)
 // answers the listing with the story to be on (`current`, none on an empty library): the client names it on every
-// request after, and pages.ts lands on it (nodes, calls, the draft and the pin gone; a delete that leaves the open
+// request after, and pages.ts lands on it (nodes, calls, the draft and invocation chips gone; a delete that leaves the open
 // story open only replaces the listing). A new story is of a card (`POST /stories {card}`); a card's page is readable
 // before any story of it (`GET /cards/<id>`). The manager's search (`GET /stories/search`) and the exports
 // (`/stories/<id>/export.md|json`, plain links the browser downloads) are the manager's (stories.ts, side.tsx).

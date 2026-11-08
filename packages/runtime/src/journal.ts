@@ -8,7 +8,7 @@ import type { Disclosure } from "./lore.ts"
 export interface Input {
   text: string
   note?: string // this-turn-only instruction, never rendered for past turns
-  pin?: string // an untold entry (lore id or `<product>@<node>#<i>`) this turn MUST tell; check verifies, a miss stays untold
+  invoke?: readonly string[] // entries requested by the player this turn
 }
 export interface Brief {
   must: readonly string[]

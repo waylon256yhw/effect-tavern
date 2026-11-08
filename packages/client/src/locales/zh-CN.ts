@@ -104,7 +104,6 @@ const zh = {
   inspector: {
     all: "全部",
     answer: "答复",
-    armed: " · 下一次发送时启用",
     breakpoint: "断点",
     changed: "{n} 句改动",
     checkFailed: "检查未通过",
@@ -133,9 +132,7 @@ const zh = {
     state: "状态",
     targets: "{n} 个目标句",
     tokenLegend: "入 / 出 / 缓存读 / 缓存写",
-    toldState: "已揭示",
     untold: "未揭示",
-    untoldState: "未揭示",
   },
   lexicon: {
     noList: "文件里没有词表：需要一个数组，或带 lexicon 键的对象",
@@ -260,7 +257,6 @@ const zh = {
     again: "再来一次",
     aside: "小剧场",
     none: "无",
-    pin: "固定",
     rewordPlaceholder: "给重写的一句话…",
     turnActions: "这一轮的动作",
   },
@@ -335,7 +331,6 @@ const zh = {
     noStoryMatch: "没有匹配的故事",
     otherBusy: "其他卡片有进行中的故事",
     pickPersona: "选择人设",
-    pinned: "固定",
     readings: "读数",
     renameStory: "重命名故事",
     resize: "拖动调整侧栏宽度",
@@ -545,6 +540,12 @@ const zh = {
     askInputThought: "心声记号说明",
     restoreDefault: "恢复默认",
     local: "本卡",
+  },
+  invoke: {
+    manual: "手动",
+    auto: "自取",
+    always: "常驻",
+    mode: "调用",
   },
 } as const
 export default zh

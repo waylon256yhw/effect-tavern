@@ -57,8 +57,8 @@ assert.deepEqual(
   index(ch1, D(path(root))).map((x) => x.id),
   ["li"],
 )
-assert.equal(read(ch1, D(path(root)), "sect"), undefined)
-assert.equal(read(ch1, D(path(root)), "heir"), undefined) // chapter 1: heir still at layer 0
+assert.equal(read(ch1, D(path(root)), D(path(root)), "sect"), undefined)
+assert.equal(read(ch1, D(path(root)), D(path(root)), "heir"), undefined) // chapter 1: heir still at layer 0
 assert.ok(offers(ch1, D(path(root)), "sword throne").every((o) => o.id !== "sect" && o.id !== "heir"))
 
 // 2. Pull then push on one entry: read layer 1, then the duel offers layer 2, the narrator reveals it.
@@ -68,22 +68,26 @@ assert.equal(
   makeLore([{ id: "x", layers: ["甲在竹林。乙在镇上。"], unlock: () => 1 }]).index({}, [])[0]!.hook,
   "甲在竹林。",
 )
-const r1 = read(ch1, D(path(root)), "li")!
+const r1 = read(ch1, D(path(root)), D(path(root)), "li")!
 assert.deepEqual(r1, [{ id: "li", layer: 1 }])
 const t1 = add(root, ch1, r1) // lookup result appended to the log once
-assert.deepEqual(read(ch1, D(path(t1)), "li"), [], "already in context: nothing to resend")
-assert.deepEqual(L.readable(ch1, D(path(t1))), [], "nothing new to read → the lookup stage has no call to make")
+assert.deepEqual(read(ch1, D(path(t1)), D(path(t1)), "li"), [], "already in context: nothing to resend")
+assert.deepEqual(
+  L.readable(ch1, D(path(t1)), D(path(t1))),
+  [],
+  "nothing new to read → the lookup stage has no call to make",
+)
 assert.deepEqual(offers(ch1, D(path(t1)), "I draw my sword"), [{ id: "li", layer: 2, text: "B is Li." }])
 const t2 = add(t1, ch1, [], [{ id: "li", layer: 2 }])
 assert.equal(current(byId.get("li")!, ch1, D(path(t2))), 2)
-assert.deepEqual(read(ch1, D(path(t2)), "li"), [])
+assert.deepEqual(read(ch1, D(path(t2)), D(path(t2)), "li"), [])
 
 // 3. A fork that skipped the lookup but got the reveal reads only what it lacks; a fork before the reveal never sees layer 2.
 const f = add(root, ch1, [], [{ id: "li", layer: 2 }])
-assert.deepEqual(read(ch1, D(path(f)), "li")!.map(text), [
+assert.deepEqual(read(ch1, D(path(f)), D(path(f)), "li")!.map(text), [
   "Li is A's friend who vanished ten years ago. A crane tattoo marks his left shoulder.",
 ])
-assert.deepEqual(L.readable(ch1, D(path(f))), ["li"], "the layer the window jumped over is still readable")
+assert.deepEqual(L.readable(ch1, D(path(f)), D(path(f))), ["li"], "the layer the window jumped over is still readable")
 const g = add(t1, ch1)
 assert.equal(current(byId.get("li")!, ch1, D(path(g))), 1)
 assert.ok(offers(ch1, D(path(g)), "We talk by the fire").length === 0, "no window without the trigger")
@@ -91,7 +95,7 @@ assert.ok(offers(ch1, D(path(g)), "We talk by the fire").length === 0, "no windo
 // 4. Code floor + path: chapter 2 unlocks heir layer 1; offers go one layer at a time; knowledge stays if access drops.
 const ch2 = { chapter: 2 }
 const t3 = add(t2, ch2)
-assert.deepEqual(read(ch2, D(path(t3)), "heir"), [{ id: "heir", layer: 1 }])
+assert.deepEqual(read(ch2, D(path(t3)), D(path(t3)), "heir"), [{ id: "heir", layer: 1 }])
 const o = offers(ch2, D(path(t3)), "Who sits on the throne?")
 assert.deepEqual(o, [{ id: "heir", layer: 2, text: "The heir was hidden in the north." }])
 assert.ok(!JSON.stringify(o).includes("Li is the heir."), "never more than the next layer")

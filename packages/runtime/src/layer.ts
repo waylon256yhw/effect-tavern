@@ -23,7 +23,11 @@ import { decodeProducts, ProductPatch, validate, type Product } from "./product.
 
 export const Ask = Schema.Struct({ id: Schema.String, text: Schema.String })
 export type Ask = typeof Ask.Type
-export const PackEntry = Schema.Struct({ id: Schema.String, text: Schema.String }) // one layer; its first sentence is the hook (lore.ts `hook`)
+export const PackEntry = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  invoke: Schema.optionalKey(Schema.Literals(["always", "auto", "manual"])),
+}) // one layer; its first sentence is the hook (lore.ts `hook`)
 export type PackEntry = typeof PackEntry.Type
 export const Layer = Schema.Struct({
   id: Schema.String,
@@ -279,7 +283,7 @@ export interface Resolved {
   tail: Item<Fragment>[]
   asks: Record<string, Item<{ text: string }>> // every id: the highest on the chain that fills whole
   products: Item<Product>[] // `on` decided; the question filled, or `unasked` with its raw text when it does not fill
-  entries: Item<{ id: string; text: string }>[] // the lookup index's player-layer entries
+  entries: Item<PackEntry>[] // the lookup index's player-layer entries
   lexicon: Item<LexiconEntry>[] // no id, so no merge: every rank's stands, the highest first
   snippets: Item<Snippet>[]
   format: Item<Format>[]

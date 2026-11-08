@@ -53,7 +53,7 @@ const head = on.map((f) =>
 assert.equal(head.length, 8) // language, pov, style; town, sides, now, tense (局势 ≥ 6), blood (起点 血案)
 assert.deepEqual(sent("narrate").slice(0, 8), head)
 // lookup and record: the same document but for the last message (the session's note and prose; view's are empty)
-assert.deepEqual(sent("lookup").slice(0, -1), at("lookup").doc.map(text).slice(0, -1))
+assert.deepEqual(sent("lookup").slice(0, -1), at("lookup").doc.map(text))
 assert.match(sent("lookup").join("\n"), /Index: yandao=盐道之争已经半年/)
 const r = at("record")
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))

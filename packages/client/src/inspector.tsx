@@ -19,9 +19,9 @@ import {
   type Row,
   type Tray,
 } from "./inspect.ts"
-import { KeyValues, PinButton, Reading, Shaped } from "./readings.tsx"
+import { KeyValues, Reading, Shaped } from "./readings.tsx"
 import { channelOf, fields, lineOf, parentOf, versions, whens } from "./record.ts"
-import { calls, card, log, path, pin, registry, type Id } from "./store.ts"
+import { calls, card, log, path, registry, type Id } from "./store.ts"
 import { close, open } from "./pages.ts"
 import { t } from "./i18n.ts"
 
@@ -35,7 +35,7 @@ const CHANNEL = { act: "act", note: "note", both: "act + note", greeting: "greet
 // fired or missed, the readout answers), its time and tokens at the end; a two-draft turn folds each draft into a tray.
 // One row at a time opens into the request by cache region (tabs over one scroller that fills what the card has
 // left, so a long head never pushes the pipeline apart) and the answer. Right, the node: the input, the untold hooks
-// (pinned from here: this is the only place the list shows), the state against the parent, the products by their
+// (hooks and tiers only), the state against the parent, the products by their
 // declared shape. Without `inspect` on the server no call carries a request body: the rows keep their heads, time and
 // tokens, open to their answers (the brief stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
 // path, `[` `]` too, Escape goes back (pages.ts). src/inspect.ts projects; this draws.
@@ -341,7 +341,6 @@ export const Inspect = (props: { id: Id }) => {
   const line = read(path)
   const trace = read(calls)
   const view = read(card)
-  const pinned = read(pin)
   const node = () => all().nodes.get(props.id)
   const at = () => line().findIndex((x) => x.turn.id === props.id) // -1: a sibling off the reading line
   const parent = () => (node() ? parentOf(all(), node()!) : undefined)
@@ -464,7 +463,7 @@ export const Inspect = (props: { id: Id }) => {
           </button>
           <button role="tab" aria-selected={pane() === "node" ? "true" : "false"} onClick={() => setPane("node")}>
             {t("common.node")}
-            <Show when={node()?.readable.length}>{(n) => <span class="v">{n()}</span>}</Show>
+            <Show when={node()?.invocable.length}>{(n) => <span class="v">{n()}</span>}</Show>
           </button>
         </span>
       </header>
@@ -535,41 +534,29 @@ export const Inspect = (props: { id: Id }) => {
               </div>
               <div class="inwell">
                 <p class="line">{lineOf(x())}</p>
-                <Show when={(x().turn.input.text && x().turn.input.note) || x().turn.input.pin}>
+                <Show when={(x().turn.input.text && x().turn.input.note) || x().turn.input.invoke?.length}>
                   <div class="pills">
                     <Show when={x().turn.input.text && x().turn.input.note}>
                       <span class="pill">note: {x().turn.input.note}</span>
                     </Show>
-                    <Show when={x().turn.input.pin}>
-                      {(p) => (
-                        <span class={{ pill: true, ok: x().turn.fired.some((d) => d.id === p()) }}>
-                          pin: {p()} (
-                          {x().turn.fired.some((d) => d.id === p())
-                            ? t("inspector.toldState")
-                            : t("inspector.untoldState")}
-                          )
-                        </span>
-                      )}
-                    </Show>
+                    <For each={x().turn.input.invoke ?? []} keyed={(id) => id}>
+                      {(id) => <span class="pill">invoke: {id()}</span>}
+                    </For>
                   </div>
                 </Show>
               </div>
               <div class="sechead">
                 <span class="lbl">{t("inspector.untold")}</span>
               </div>
-              <Show when={x().readable.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
+              <Show when={x().invocable.length} fallback={<p class="dim">{t("inspector.nothingLeft")}</p>}>
                 <div class="hooks">
-                  <For each={x().readable} keyed={(r) => r.id}>
+                  <For each={x().invocable} keyed={(r) => r.id}>
                     {(r) => (
-                      <div class={{ hook: true, armed: pinned() === r().id }}>
+                      <div class="hook">
                         <span class="hb">
-                          <span class="hid">
-                            {r().id}
-                            {pinned() === r().id ? t("inspector.armed") : ""}
-                          </span>
+                          <span class="hid">{r().id}</span>
                           <span class="ht">{r().hook}</span>
                         </span>
-                        <PinButton id={r().id} />
                       </div>
                     )}
                   </For>

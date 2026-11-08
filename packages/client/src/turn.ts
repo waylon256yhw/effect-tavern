@@ -18,7 +18,7 @@ import {
   type Id,
   inputOf,
   log,
-  pin,
+  invoke,
   prose,
   registry,
   revising,
@@ -41,18 +41,25 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
   const go = (action: Action) => void streams.push(send(action))
   /** A draft under `parent`, then the action. `text`: an edit's draft is the player's prose, shown while check and
    *  record run over it. A fresh line (an act, a revised line) is nowhere else: a failed turn puts it back in the box. */
-  const start = (parent: Id | null, input: { text: string; note?: string }, action: Action, text = "") => {
+  const start = (
+    parent: Id | null,
+    input: { text: string; note?: string; invoke?: readonly string[] },
+    action: Action,
+    text = "",
+  ) => {
     registry.set(error, null)
     registry.set(demanded, null)
     registry.set(draft, { parent, input, text, fresh: action.kind === "act" || registry.get(revising) !== null })
     go(action)
   }
   const node = (id: Id) => L.get(registry.get(log), id)
-  /** The revised input (the pin kept, a cleared note gone) and the node it revises. */
+  /** The revised input (the invoke kept, a cleared note gone) and the node it revises. */
   const revised = (text: string, note: string) => {
     const n = node(registry.get(revising)!.node)
-    const { note: _, ...kept } = n.turn.input
-    return { n, input: { ...kept, ...inputOf(text, note) } }
+    const { note: _, invoke: __, ...kept } = n.turn.input
+    const selected = registry.get(invoke)
+    registry.set(invoke, [])
+    return { n, input: { ...kept, ...inputOf(text, note), ...(selected.length ? { invoke: selected } : {}) } }
   }
   return {
     /** The player's line (and note) as a new turn under head; revising, beside the revised one under the same parent. */
@@ -64,15 +71,15 @@ export const createTurn = ({ send, attach, stop }: Transport) => {
         const { n, input } = revised(text, note)
         return start(n.parent, input, { kind: "act", parent: n.parent, input })
       }
-      const pinned = registry.get(pin)
-      const input = { ...inputOf(text, note), ...(pinned ? { pin: pinned } : {}) }
-      registry.set(pin, null)
+      const selected = registry.get(invoke)
+      const input = { ...inputOf(text, note), ...(selected.length ? { invoke: selected } : {}) }
+      registry.set(invoke, [])
       start(registry.get(log).head, input, { kind: "act", input }) // under head: the server knows where that is
     },
     /** The story starts from an opening (none on the card: an empty line, the player's first words start it). The
      *  caller (the card page's Begin) then closes onto the reader: this module sits under pages.ts and moves no page. */
     greet: (index?: number): void => {
-      registry.set(pin, null) // the old story's pin and error do not carry into a new one
+      registry.set(invoke, []) // the old story's invoke and error do not carry into a new one
       registry.set(error, null)
       if (registry.get(card)?.greetings.length) go({ kind: "greet", ...(index !== undefined && { greeting: index }) })
     },

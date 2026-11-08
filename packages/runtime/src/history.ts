@@ -1,6 +1,6 @@
 // §17.2–17.3: history is a per-stage view over the path, never stored. Only the narrator sees the transcript;
 // the director sees a ledger of facts. Compression is a derived view too: a prefix range is replaced by the CODE
-// fold of its notes plus the lore text delivered in it, cached by range (ids are unique, so a range names a prefix)
+// fold of its notes, cached by range (ids are unique, so a range names a prefix)
 // and served only while the turns it covers are the ones it was folded from (an amend refolds it).
 // A fold is a function of the turns INSIDE its range and nothing else: a later turn (one that will some day retract
 // an earlier note) cannot reach back into a fold that does not contain it. That is what keeps the summary's cache
@@ -18,8 +18,7 @@ export interface Summary {
   to: number
   text: string
 }
-// `loreText` gets the range being folded: a recall row's text is looked up on the turns it was delivered along.
-export const makeSummaries = <B>(loreText: (d: Disclosure, range: readonly Turn<B>[]) => string) => {
+export const makeSummaries = <B>() => {
   // Keyed by range, kept with the turns it was folded from. Ids name a range but not its content: `Log.amend` (setField,
   // demand) replaces a node in place under the same id, as a new object. An entry is served only while every turn it
   // covers is still that same object; an amended one refolds the range and replaces the entry. Checking identity rather
@@ -35,7 +34,7 @@ export const makeSummaries = <B>(loreText: (d: Disclosure, range: readonly Turn<
       const k = `${range[0].id}-${range[range.length - 1].id}`
       const hit = table.get(k)
       if (hit && current(hit.over, range)) return hit.sum
-      const facts = range.flatMap((t) => [...notesOf(t), ...deliveredIn(t).map((d) => loreText(d, range))])
+      const facts = range.flatMap(notesOf)
       const s: Summary = { from: range[0].id, to: range[range.length - 1].id, text: `Summary: ${facts.join(" ")}` }
       table.set(k, { sum: s, over: range })
       return s

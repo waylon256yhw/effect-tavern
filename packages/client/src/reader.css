@@ -837,3 +837,16 @@ button:focus-visible {
   width: var(--icon);
   height: var(--icon);
 }
+
+.invocations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.invocations:empty {
+  display: none;
+}
+.format .invocation {
+  letter-spacing: normal;
+  text-indent: 0;
+}

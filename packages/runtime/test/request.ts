@@ -123,6 +123,7 @@ for (const s of stages.filter((s) => s !== "narrate")) {
 }
 assert.deepEqual(line.lookup.slice(3).map(text), [
   "Which entries?\nIndex: li=Li: A's friend., people@3#0=Li",
+  "Player note: 虚晃一招",
   "我拔剑。",
 ])
 assert.deepEqual(line.decide.slice(3).map(text), [
@@ -163,7 +164,8 @@ assert.deepEqual(line.record.slice(3).map(text), [
 
 // ───────── The input as one unit, with an audience per stage ─────────
 // A note beside a line reaches the director and the narrator only (README: note feeds narrator and director).
-for (const s of stages) assert.equal(/Player note:/.test(doc(line[s])), s === "direct" || s === "narrate", s)
+for (const s of stages)
+  assert.equal(/Player note:/.test(doc(line[s])), s === "lookup" || s === "direct" || s === "narrate", s)
 // A note alone is the user message itself wherever the line is read; record sees the prose alone, no label, no blank.
 const note = all({ text: "", note: "继续。" })
 for (const s of ["lookup", "decide", "direct"] as const) assert.equal(text(note[s].at(-1)!), "继续。", s)

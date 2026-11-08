@@ -471,7 +471,7 @@ const EntriesTab = (props: { pack: Layer; onSave: Save }) => {
       const text = (patch.text ?? now.text).trim()
       if (!text) return cur.filter((_, j) => j !== idx)
       const id = (patch.id ?? now.id).trim() || hook(text).slice(0, 16) || now.id
-      cur[idx] = { id, text }
+      cur[idx] = { ...now, ...patch, id, text }
       return cur
     })
   return (
@@ -561,6 +561,17 @@ const EntriesTab = (props: { pack: Layer; onSave: Save }) => {
                     onChange={(e) => updateEntry(x().i, { id: e.currentTarget.value })}
                     onKeyDown={leaveInput}
                   />
+                  <select
+                    aria-label={t("invoke.mode")}
+                    value={x().e.invoke ?? "auto"}
+                    onChange={(e) =>
+                      updateEntry(x().i, { invoke: e.currentTarget.value as "always" | "auto" | "manual" })
+                    }
+                  >
+                    <option value="always">{t("invoke.always")}</option>
+                    <option value="auto">{t("invoke.auto")}</option>
+                    <option value="manual">{t("invoke.manual")}</option>
+                  </select>
                   <span class="tag">{hook(x().e.text)}</span>
                   <span class="spacer" />
                   <button
