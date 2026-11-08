@@ -342,6 +342,49 @@ export const open = (asked: string) => {
       })
       q("delete from pack where id = 'base'").run()
     })
+  // Nodes written before Step 2/3 lack settlementStatus, changes, deliveries and opportunities: upgrade once on open.
+  const legacyNodes = q(
+    "select story, id, json from node where json_extract(json, '$.reply') is not null and json_extract(json, '$.settlementStatus') is null",
+  ).all() as Row[]
+  if (legacyNodes.length)
+    tx(() => {
+      for (const r of legacyNodes) {
+        const n = parse<Record<string, unknown>>(r)!
+        const changes: unknown[] = []
+        const products: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries((n["products"] as Record<string, unknown> | undefined) ?? {})) {
+          if (v && typeof v === "object" && !Array.isArray(v)) {
+            changes.push({ kind: "replace", product: k, value: v })
+          } else if (Array.isArray(v) && k !== "notes" && k !== "options") {
+            v.forEach((item, idx) => {
+              if (item && typeof item === "object" && !("$delete" in item))
+                changes.push({
+                  kind: "insert_entity",
+                  collection: k,
+                  entityId: `e_${r["id"] as number}_${idx + 1}`,
+                  data: item,
+                })
+            })
+          } else {
+            products[k] = v
+          }
+        }
+        const migrated = {
+          ...n,
+          products,
+          changes: n["changes"] ?? changes,
+          settlementStatus: n["settlementStatus"] ?? "committed",
+          settlementVersion: n["settlementVersion"] ?? 0,
+          deliveries: n["deliveries"] ?? [],
+          opportunities: n["opportunities"] ?? [],
+        }
+        q("update node set json = ? where story = ? and id = ?").run(
+          JSON.stringify(migrated),
+          r["story"] as number,
+          r["id"] as number,
+        )
+      }
+    })
   /** A table of named records: the json column holds the record without its id and name, the row's own columns. */
   const named = <T extends { id: string; name: string }>(table: string) => ({
     list: (): T[] =>

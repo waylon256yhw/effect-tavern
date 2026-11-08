@@ -541,6 +541,56 @@ data.close()
   rmSync(dir, { recursive: true, force: true })
 }
 
+// Nodes written before Step 2/3 (holding `reply` and `products` without `settlementStatus`/`changes`/`deliveries`/`opportunities`)
+// are upgraded once on open: world records/tables move to `changes`, chronicle/theater stay in `products`.
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-nodes-"))
+  const file = join(dir, "tavern.db")
+  const old = new DatabaseSync(file)
+  old.exec(`create table story (id integer primary key autoincrement, card text not null, title text, head integer,
+    next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
+    create table node (story integer not null references story (id) on delete cascade, id integer not null,
+    parent integer, json text not null, primary key (story, id));`)
+  old.prepare("insert into story (id, card, head, next, updated) values (1, 'wuxia', 0, 1, 1)").run()
+  old
+    .prepare("insert into node (story, id, parent, json) values (1, 0, null, ?)")
+    .run(
+      JSON.stringify({
+        id: 0,
+        parent: null,
+        input: { text: "hi" },
+        read: [],
+        beats: [],
+        answers: {},
+        end: "end",
+        brief: { must: [], may: [] },
+        reply: [{ type: "text", text: "prose" }],
+        fired: [],
+        violated: [],
+        products: {
+          notes: "N",
+          scene: { place: "亭", present: [] },
+          people: [{ name: "李鹤", note: "故人" }],
+        },
+      }),
+    )
+  old.close()
+  const opened = open(file)
+  const snap = opened.store<Record<string, unknown> & L.Noded>(1).read()!
+  const migrated = snap.nodes[0]!
+  assert.equal(migrated["settlementStatus"], "committed")
+  assert.equal(migrated["settlementVersion"], 0)
+  assert.deepEqual(migrated["deliveries"], [])
+  assert.deepEqual(migrated["opportunities"], [])
+  assert.deepEqual(migrated["products"], { notes: "N" })
+  assert.deepEqual(migrated["changes"], [
+    { kind: "replace", product: "scene", value: { place: "亭", present: [] } },
+    { kind: "insert_entity", collection: "people", entityId: "e_0_1", data: { name: "李鹤", note: "故人" } },
+  ])
+  opened.close()
+  rmSync(dir, { recursive: true, force: true })
+}
+
 // The lock: one process per library file. A lock naming a live process (here our parent) is not ours: open diverts to
 // a fresh library at <dir>/<pid>/; a lock naming a dead process is taken over, and on exit the lock goes.
 {

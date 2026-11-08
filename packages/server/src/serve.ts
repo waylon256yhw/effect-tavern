@@ -303,12 +303,18 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     // Everything below is one story's: the one the request names.
     if (asked === undefined || !lib.exists(asked)) return json(404, { error: `no story ${asked ?? ""}`.trim() })
     const story = asked
-    const s = lib.session(story)
-    const turn = lib.turn(story)
-    if (req.method === "GET" && req.url === "/card") return json(200, lib.view(lib.cardOf(story)!, story))
+    if (req.method === "GET" && req.url === "/card") return reply(() => lib.view(lib.cardOf(story)!, story), 404)
+    let s
+    let turn
+    try {
+      s = lib.session(story)
+      turn = lib.turn(story)
+    } catch (e) {
+      return bad(e)
+    }
     const contextAt = req.method === "GET" && /^\/context\?node=(root|\d+)$/.exec(req.url ?? "")
     if (contextAt) return reply(() => s.activeContext(contextAt[1] === "root" ? null : Number(contextAt[1])), 404)
-    if (req.method === "GET" && req.url === "/nodes") return json(200, s.timeline())
+    if (req.method === "GET" && req.url === "/nodes") return reply(() => s.timeline())
     const detailAt = req.method === "GET" && /^\/nodes\/(\d+)\/(detail|trace)$/.exec(req.url ?? "")
     if (detailAt)
       return reply(() => {

@@ -58,7 +58,13 @@ const call = (url: string, init: RequestInit = {}): Promise<Response> => {
 /** A body or its {error}: a non-2xx answer throws the server's reason. */
 const got = async <T>(res: Promise<Response>): Promise<T> => {
   const r = await res
-  const v = (await r.json()) as T & { error?: string }
+  const text = await r.text()
+  let v: (T & { error?: string }) | undefined
+  try {
+    v = JSON.parse(text) as T & { error?: string }
+  } catch {
+    throw new Error(!r.ok && text.trim() ? text.trim() : `HTTP ${r.status}`)
+  }
   if (!r.ok) throw new Error(v.error ?? `HTTP ${r.status}`)
   return v
 }
