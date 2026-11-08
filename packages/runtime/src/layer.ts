@@ -104,6 +104,10 @@ const words: readonly Ask[] = [
   // refused on the turn it was made: the prose ended on the question, the player had not answered, and the model took
   // the one option it could not rule out by the letter (#83). A card's option texts still have to cover that turn.
   {
+    id: "record.ops",
+    text: "In ops, report only products changed or added in this scene. Use set for values (record keys merge), upsert for new or changed keyed table rows, and delete to remove a keyed row. Omit unchanged products, keys and columns. If nothing changed, return ops: [].",
+  },
+  {
     id: "record.readout",
     text: "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.",
   },
@@ -174,7 +178,7 @@ const products = (input: "act" | "note"): readonly Product[] =>
       // seven items a turn, the prose paraphrased paragraph by paragraph, one item split in three on a quoted "我懂"
       // (a list's grammar admits that; a string's does not). The three ecosystem summaries read for #82 all make a
       // turn's summary one unit (docs/summary-reading.md).
-      text: "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing.",
+      text: "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
       shape: { kind: "text" },
       fold: "append",
       feed: true,

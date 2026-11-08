@@ -67,7 +67,7 @@ import { key, makeLore, type Disclosure, type Lore } from "./lore.ts"
 import { expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
-import { cap, entryRef, fold, shapeSchema, type Product } from "./product.ts"
+import { cap, entryRef, fold, shapeSchema, sparse, opSchemas, deltas, type Op, type Product } from "./product.ts"
 
 export type Turn = TurnOf<Beat>
 export const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const
@@ -349,19 +349,23 @@ export const makeSession = ({
   ) =>
     Effect.gen(function* () {
       if (!asked.length && !qs) return { products: {}, answers: undefined } // nothing to ask
-      const fed = derived.at(path).known()
+      const fed = derived.at(path).known(true)
+      const top = asked.filter((p) => !sparse(p))
+      const cross = asked.filter(sparse)
       const msgs = ask(state, scene.input, {
         stage: "record",
         known: fed.known,
         current: fed.current,
         asks: asked.map((p) => `${p.id}: ${p.text}`),
+        ops: cross.length ? wording("record.ops") : undefined,
         readout: wording("record.readout"),
         questions: qs?.lines,
         prose: proseOf(scene.reply),
       })
       // Built per call from data, so its static type is unknown: the shapes already decode what the model returns.
       const schema = Schema.Struct({
-        ...Object.fromEntries(asked.map((p) => [p.id, shapeSchema(p.shape)])),
+        ...Object.fromEntries(top.map((p) => [p.id, shapeSchema(p.shape)])),
+        ...(cross.length ? { ops: Schema.Array(Schema.Union(cross.flatMap(opSchemas))) } : {}),
         ...(qs ? { answers: qs.schema } : {}),
       }) as unknown as Schema.Codec<Record<string, unknown>>
       const out = yield* obj(emit, "record", schema, msgs, 4096)
@@ -376,7 +380,16 @@ export const makeSession = ({
           ? (v as string[]).filter((x) => !((have[p.id] as string[] | undefined) ?? []).includes(x))
           : v
       return {
-        products: Object.fromEntries(asked.map((p) => [p.id, cap(p.shape, fresh(p, out[p.id]))])),
+        products: {
+          ...Object.fromEntries(top.map((p) => [p.id, cap(p.shape, fresh(p, out[p.id]))])),
+          ...Object.fromEntries(
+            Object.entries(deltas(cross, (out.ops as Op[] | undefined) ?? [])).map(([id, v]) => {
+              const p = cross.find((p) => p.id === id)!
+              const value = typeof p.fold === "object" ? v : cap(p.shape, fresh(p, v))
+              return [id, value]
+            }),
+          ),
+        },
         answers: out.answers as Record<string, string> | undefined,
       }
     })

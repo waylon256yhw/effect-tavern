@@ -60,6 +60,15 @@ export const makeDerived = ({
     if (!ref) return L().text(d)
     const t = path.find((x) => x.id === ref.node)
     if (!t) throw new Error(`${d.id}: node ${ref.node} is not on the path`)
+    const p = products().find((p) => p.id === ref.product)
+    if (p?.shape.kind === "table" && typeof p.fold === "object") {
+      return (
+        recallEntries(
+          p,
+          path.slice(0, path.indexOf(t) + 1).map((t) => ({ id: t.id, v: t.products[p.id] })),
+        ).find((e) => e.id === d.id)?.text ?? ""
+      )
+    }
     return itemText((t.products[ref.product] as unknown[])[ref.index])
   }
   const summaries = makeSummaries<Beat>()
@@ -78,13 +87,13 @@ export const makeDerived = ({
   /** The one summary every view of this path folds to (narrator, ledger), the same cached object. */
   const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
-  const known = (path: readonly Turn[]) => {
-    const feed = products().filter((p) => p.feed && p.on)
+  const known = (path: readonly Turn[], recall = false) => {
+    const feed = products().filter((p) => (p.feed || (recall && p.recall)) && p.on)
     const cur = fold(
       feed,
       path.map((t) => t.products),
     )
-    const rest = feed.filter((p) => p.id !== "notes" && cur[p.id] !== undefined)
+    const rest = feed.filter((p) => p.id !== "notes" && cur[p.id] !== undefined && render(p.shape, cur[p.id]) !== "")
     return {
       known: `Known: ${path.flatMap(notesOf).join("; ")}`,
       current: rest.length
@@ -240,7 +249,7 @@ export const makeDerived = ({
       /** How many leading turns the fold covers. */
       fold: () => foldOf(path),
       summary: () => summaryOf(path),
-      known: () => known(path),
+      known: (recall = false) => known(path, recall),
       ledger: () => ledger(path, (t) => along()[path.indexOf(t)]!.events, summaryOf(path)),
       text,
       /** A candidate turn settled on top of the path (setField's adjusted node, demand's `pre`). */

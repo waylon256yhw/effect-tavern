@@ -15,6 +15,7 @@ export interface StageDoc {
   known: string[] // record's Known: items
   questions: { id: string; options: string[] }[] // record's readout questions, option ids
   asked: string[] // record's product asks
+  ops?: { product: string; op: "set" | "upsert" }[]
   targets: [id: string, sentence: string][] // polish's <target> marks
 }
 
@@ -32,7 +33,27 @@ export const readStage = (o: FakeCall): StageDoc => {
       .split("\n") ?? []
   const index = after(lines, "Index: ") ?? ""
   const catalog = !!index && !index.includes("=")
+  type JsonSchema = {
+    properties?: Record<string, JsonSchema>
+    items?: JsonSchema
+    anyOf?: JsonSchema[]
+    oneOf?: JsonSchema[]
+    const?: string
+    enum?: string[]
+  }
+  const schema = (o.responseFormat?.type === "json" ? o.responseFormat.schema : undefined) as JsonSchema | undefined
+  const item = schema?.properties?.ops?.items
+  const branches = item?.anyOf ?? item?.oneOf ?? (item ? [item] : [])
+  const literal = (s?: JsonSchema) => s?.const ?? s?.enum?.[0]
+  const ops: StageDoc["ops"] = item
+    ? branches.flatMap((b) => {
+        const op = literal(b.properties?.op)
+        const product = literal(b.properties?.product)
+        return product && (op === "set" || op === "upsert") ? [{ product, op }] : []
+      })
+    : undefined
   return {
+    ops,
     again: lines.some((l) => l.startsWith("Read: ")),
     catalog,
     phase: ((o.responseFormat?.type === "json" && o.responseFormat.name) || "narrate") as Phase,
@@ -77,7 +98,14 @@ export const defaultAnswer = (doc: StageDoc, canned: Record<string, unknown> = {
     case "polish":
       return json(Object.fromEntries(doc.targets))
     case "record": {
-      const products = Object.fromEntries(doc.asked.map((id) => [id, canned[id]]))
+      const cross = new Set(doc.ops?.map((o) => o.product))
+      const products = Object.fromEntries(doc.asked.filter((id) => !cross.has(id)).map((id) => [id, canned[id]]))
+      if (doc.ops)
+        products.ops = doc.ops.flatMap<unknown>(({ product, op }) => {
+          const value = canned[product]
+          if (value === undefined || value === "" || (Array.isArray(value) && !value.length)) return []
+          return op === "upsert" ? (value as unknown[]).map((row) => ({ op, product, row })) : [{ op, product, value }]
+        })
       const answers = Object.fromEntries(doc.questions.map((q) => [q.id, q.options[0]]))
       return json(doc.questions.length ? { ...products, answers } : products)
     }

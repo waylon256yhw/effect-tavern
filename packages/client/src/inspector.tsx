@@ -98,10 +98,17 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
   const missed = () => props.node.turn.brief.must.filter((id) => !fired().includes(id))
   const violated = () => (out().violated as string[] | undefined) ?? []
   const products = () =>
-    Object.entries(out())
-      .filter(([k]) => k !== "answers")
-      .map(([k, v]) => (Array.isArray(v) ? `${k} (${v.length})` : k))
-      .join(" · ")
+    [
+      ...new Set([
+        ...Object.entries(out())
+          .filter(
+            ([k, v]) =>
+              k !== "answers" && k !== "ops" && v !== undefined && v !== "" && !(Array.isArray(v) && !v.length),
+          )
+          .map(([k, v]) => (Array.isArray(v) ? `${k} (${v.length})` : k)),
+        ...((out().ops as { product: string }[] | undefined) ?? []).map((o) => o.product),
+      ]),
+    ].join(" · ")
   // polish: the sentences sent (the marks in the request, when the trace carries it) against the ones that came back changed
   const sent = createMemo(
     () =>

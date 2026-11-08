@@ -9,7 +9,7 @@ import type { Turn } from "../src/session.ts"
 import { prose, split, splitter } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
-import { readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "./script.ts"
 
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside" | "asides" | "lt"> = []
@@ -67,7 +67,7 @@ function script(o: FakeCall): { text: string; cut?: boolean; delay?: number } {
         people: /^Player's line: (ask about|names) li/im.test(want) ? [{ name: "Li", note: `N#${n}` }] : [],
         inner: `INNER#${n}`,
       }
-      const products = Object.fromEntries(doc.asked.map((id) => [id, canned[id]]))
+      const products = JSON.parse(defaultAnswer(doc, canned).text)
       out = JSON.stringify(doc.questions.length ? { ...products, answers } : products)
       break
     }
@@ -173,8 +173,8 @@ const program = Effect.gen(function* () {
   )
   assert.deepEqual(events.at(-1), { kind: "change", node: C.node(c0.id), head: c0.id })
   // Products: the default `inner` stays off; `options` (switched on by the card) is capped by code to four; the feed
-  // record `scene` is stored whole; `people` is an empty table this turn.
-  assert.deepEqual(Object.keys(c0.products).sort(), ["notes", "options", "people", "scene"])
+  // record `scene` is stored whole; unchanged `people` is absent this turn.
+  assert.deepEqual(Object.keys(c0.products).sort(), ["notes", "options", "scene"])
   assert.deepEqual(c0.products.options, ["O1", "O2", "O3", "O4"])
   assert.deepEqual(c0.products.scene, { place: "P#1", present: [{ name: "B", mood: "calm" }] })
   assert.ok(

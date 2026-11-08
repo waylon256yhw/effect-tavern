@@ -113,7 +113,13 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
                   {(r) => (
                     <tr>
                       <For each={tbl().columns} keyed={(c) => c.key}>
-                        {(c) => <td>{cell(r()[c().key])}</td>}
+                        {(c) => (
+                          <td>
+                            <Show when={r().$delete === true} fallback={cell(r()[c().key])}>
+                              <del>{cell(r()[c().key])}</del>
+                            </Show>
+                          </td>
+                        )}
                       </For>
                     </tr>
                   )}
@@ -126,7 +132,10 @@ export const Shaped = (props: { shape: Shape; value: unknown }) => {
       <Match when={rec()}>
         {(r) => (
           <dl class="kv">
-            <For each={r().keys} keyed={(k) => k.key}>
+            <For
+              each={r().keys.filter((k) => (props.value as Record<string, unknown> | undefined)?.[k.key] !== undefined)}
+              keyed={(k) => k.key}
+            >
               {(k) => (
                 <>
                   <dt>{k().key}</dt>
@@ -541,7 +550,7 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
       <Sheet
         dialog={(el) => (dlg = el)}
         onClose={() => setShown(false)}
-        heading={heading(view()?.heading, props.node) ?? t("common.turnN", { n: props.n })}
+        heading={heading(view()?.heading, props.node, all()) ?? t("common.turnN", { n: props.n })}
       >
         <Show when={shown()}>
           <TurnRecord node={props.node} prev={prev()} />
