@@ -19,6 +19,7 @@ export const ModelEntry = Schema.Struct({
   contextTokens: Schema.optionalKey(Schema.Number), // the narrate model's sets the fold budget (runtime history.ts `policyFor`)
   capabilities: Schema.optionalKey(
     Schema.Struct({
+      tools: Schema.optionalKey(Schema.Boolean),
       prefill: Schema.optionalKey(Schema.Boolean),
       structured: Schema.optionalKey(Schema.Literals(["schema", "tool", "json"])),
       reasoningBack: Schema.optionalKey(Schema.Boolean),

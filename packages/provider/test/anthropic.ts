@@ -11,6 +11,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { Effect, Schema, Stream } from "effect"
 import { breakpoint, object, stream, text, type Message, type Model } from "../src/call.ts"
+import { runStageTools, stageTool } from "../src/stage.ts"
 import { capabilities, compile, listModels, type Connection, type Trace } from "../src/connection.ts"
 
 const deckledKey = (): string | undefined => {
@@ -64,7 +65,7 @@ const program = Effect.gen(function* () {
   // 1. model listing goes through the format's auth headers, not the SDK
   const models = (yield* Effect.promise(() => listModels(conn))).map((m) => m.id)
   assert.ok(models.includes(conn.model), `listed: ${models.join(",")}`)
-  assert.deepEqual(capabilities(conn), { prefill: false, structured: "schema", reasoningBack: false })
+  assert.deepEqual(capabilities(conn), { tools: true, prefill: false, structured: "schema", reasoningBack: false })
 
   // 2. structured stage: a forced shape, decoded through Effect Schema
   const Decide = Schema.Struct({ next: Schema.Literals(["strike", "end"]), p: Schema.Number })
@@ -125,6 +126,27 @@ const program = Effect.gen(function* () {
     maxOutputTokens: 400,
   }).pipe(Stream.take(2), Stream.runCollect)
   assert.equal(cut.length, 2)
+
+  // 7. native multi-step tools: the model must obtain a host-only value before completing.
+  const stage = yield* runStageTools(
+    m,
+    [user("Call read_secret first, then pass its returned secret to finish. Do not guess it.")],
+    {
+      tools: {
+        read_secret: stageTool(Schema.Struct({}), "Read the secret", async () => ({ ok: true, value: "river-729" })),
+        finish: stageTool(Schema.Struct({ secret: Schema.String }), "Finish with the secret", async ({ secret }) =>
+          secret === "river-729"
+            ? { ok: true, value: secret }
+            : { ok: false, code: "wrong_secret", message: "Read the secret first" },
+        ),
+      },
+      completion: { tool: "finish" },
+      budget: { maxSteps: 4, maxOutputTokens: 300, timeoutMs: 30000 },
+      call: { effort: "off" },
+    },
+  )
+  assert.equal(stage.status, "completed")
+  assert.ok(stage.trace.some((s) => s.calls.some((c) => c.name === "read_secret" && c.result.ok)))
 
   console.log(`anthropic ok (${traces.length} requests, all ${[...new Set(traces.map((t) => t.status))].join("/")})`)
 })

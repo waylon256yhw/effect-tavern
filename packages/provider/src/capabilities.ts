@@ -4,6 +4,8 @@
 import type { Format } from "./url.ts"
 
 export interface Capabilities {
+  /** Native function calling; structured JSON output alone does not satisfy this. */
+  tools: boolean
   /** Accepts a trailing assistant message and continues it (truncation recovery). */
   prefill: boolean
   /** `schema`: native JSON-schema output. `tool`: a forced tool. `json`: json_object only, schema goes in the prompt. */
@@ -17,9 +19,9 @@ export interface Capabilities {
 // Anthropic binds a thinking block to the exact content before it ("Invalid signature … bound to a different
 // conversation", verified live): a re-rendered history (ours) can never replay it. Off unless the prefix is frozen.
 export const DEFAULTS: Record<Format, Capabilities> = {
-  anthropic: { prefill: false, structured: "schema", reasoningBack: false },
-  "openai-compatible": { prefill: true, structured: "schema", reasoningBack: true },
-  gemini: { prefill: true, structured: "schema", reasoningBack: true },
+  anthropic: { tools: true, prefill: false, structured: "schema", reasoningBack: false },
+  "openai-compatible": { tools: true, prefill: true, structured: "schema", reasoningBack: true },
+  gemini: { tools: true, prefill: true, structured: "schema", reasoningBack: true },
 }
 
 /** A connection's capabilities: its overrides over its format's defaults. Takes only the two fields it reads, so this

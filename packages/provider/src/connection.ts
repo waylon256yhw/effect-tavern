@@ -144,6 +144,7 @@ export const bind = (c: Connection, o?: CompileOptions): Model => {
   return {
     format: c.format,
     model: compile(c, o),
+    tools: caps.tools,
     prefill: caps.prefill,
     reasoningBack: caps.reasoningBack,
     ...(c.effort !== undefined && { effort: c.effort }),

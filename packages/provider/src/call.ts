@@ -1,5 +1,5 @@
-// The three calls the harness makes, as Effects. Interrupting the fiber aborts the HTTP request.
-// Structured stages: `object`. Narrate: `text` (one shot) or `stream`. Nothing here loops or picks tools.
+// Single model calls as Effects. Interrupting the fiber aborts the HTTP request.
+// Structured stages: `object`. Narrate: `text` or `stream`. Native tool stages live in stage.ts.
 import {
   Output,
   generateText,
@@ -90,7 +90,7 @@ export const wire = (format: Format, messages: readonly Message[], prefill?: boo
   )
 }
 
-const settings = (format: Format, o: CallOptions) => ({
+export const settings = (format: Format, o: CallOptions) => ({
   allowSystemInMessages: true, // the head and mid-history lore are system messages in the message list; ai 7 refuses them by default
   maxOutputTokens: o.maxOutputTokens,
   // Claude has no sampling knobs any more: current models ignore temperature (ai-sdk warns and drops it) and the
@@ -105,7 +105,7 @@ export interface Usage {
   cacheRead: number
   cacheWrite: number
 }
-const usage = (u: LanguageModelUsage): Usage => ({
+export const usage = (u: LanguageModelUsage): Usage => ({
   input: u.inputTokens ?? 0,
   output: u.outputTokens ?? 0,
   cacheRead: u.inputTokenDetails.cacheReadTokens ?? 0,
@@ -125,6 +125,8 @@ const fail = (wrapped: unknown) => {
 export interface Model {
   format: Format
   model: LanguageModel
+  /** Explicitly false disables native tool stages; absence uses the format baseline. */
+  tools?: boolean
   /** The connection's `capabilities.prefill`; false rejects a request ending in an assistant message at the wire. */
   prefill: boolean
   /** The connection's `capabilities.reasoningBack`: past turns' reasoning parts are sent back. */
