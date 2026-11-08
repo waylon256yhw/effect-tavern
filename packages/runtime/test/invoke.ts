@@ -4,7 +4,7 @@ import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { narratorHistory } from "../src/history.ts"
 import { chat, full } from "./cards/index.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "../support/script.ts"
 import { decodeLayer, type Rows } from "../src/layer.ts"
 import { decodeCard } from "../src/card.ts"
 

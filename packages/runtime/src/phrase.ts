@@ -1,8 +1,8 @@
 // Declared rules as phrases: a condition, an effect, a chance, in the words a player reads on the card page (and an
 // author edits by, later, in the workbench). The declarations are unsettled: no state, no before and after (that is
 // record.ts). Paths show by their field label, events by their name. Pure: no Solid, no DOM.
-import type { Chance, Effect_, Rules } from "@effect-tavern/runtime/src/card.ts"
-import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
+import type { Chance, Effect_, Rules } from "./card.ts"
+import type { Cond } from "./cond.ts"
 
 export type Label = (path: string) => string
 /** Field labels by path, from the rules; a path with no field shows as itself. */

@@ -1,8 +1,8 @@
 // The developer's session: every card of the shelf (the YAML files in CARDS, by default the runtime's templates in
-// packages/runtime/test/cards, then the library's `card` table) on the local Anthropic connection, or on a scripted
+// packages/runtime/cards, then the library's `card` table) on the local Anthropic connection, or on a scripted
 // model (MODEL=fake) that answers every stage well enough to drive the client; served in inspector mode. The library
 // (data.ts) is `tavern.db` under DATA, by default .dev/ at the repo root, so Vite re-evaluating this module after a
-// runtime/server edit, or a restart, keeps the stories; a second process on the same DATA gets a library of its own
+// runtime/server edit, or a restart, keeps the stories; a second process on the same DATA fails fast on the lock
 // (data.ts `lock`). No card is bound: each request names its story and the story its card. An empty story opens on no
 // greeting: the player picks one on the card page (a greet is a root, and one picked on the server would stay as an
 // orphan root beside the player's). Which model runs each stage is the library's routing (the settings page);
@@ -17,8 +17,8 @@ import {
   type FakeCall,
   type Model,
 } from "@effect-tavern/provider"
-import { cardNames, loadCard, player, readCard } from "@effect-tavern/runtime/test/cards/index.ts"
-import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
+import { cardNames, loadCard, player, readCard } from "@effect-tavern/runtime/support/cards.ts"
+import { defaultAnswer, readStage } from "@effect-tavern/runtime/support/script.ts"
 import { mkdirSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -110,7 +110,7 @@ const files = at
   : await Promise.all(cardNames.map(loadCard))
 export const { handler } = tavern({
   data,
-  cards: shelf(files, data),
+  cards: shelf(files),
   overlay: player.harness,
   model,
   pinned: scripted, // MODEL=fake scripts every stage, whatever the routing says

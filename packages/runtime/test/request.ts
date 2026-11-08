@@ -6,7 +6,7 @@ import type { FakeCall, Message } from "@effect-tavern/provider"
 import assert from "node:assert/strict"
 import type { Hat, Msg } from "../src/fragment.ts"
 import { request, type Ask, type Common } from "../src/request.ts"
-import { readStage } from "./script.ts"
+import { readStage } from "../support/script.ts"
 
 const frame: Msg[] = [
   { role: "system", text: "Write in Chinese." },
@@ -311,7 +311,7 @@ for (const s of stages)
   )
 
 // ───────── The scripted narrator reads what this module writes ─────────
-// test/script.ts parses the data lines back for every scripted model; a change to a line above fails here first.
+// support/script.ts parses the data lines back for every scripted model; a change to a line above fails here first.
 const read = (s: Ask["stage"], ms: Message[] = line[s]) =>
   readStage({ prompt: ms, responseFormat: s === "narrate" ? undefined : { type: "json", name: s } } as FakeCall)
 assert.equal(read("narrate").phase, "narrate")

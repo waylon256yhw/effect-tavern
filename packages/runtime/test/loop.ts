@@ -9,7 +9,7 @@ import type { Turn } from "../src/session.ts"
 import { prose, split, splitter } from "../src/journal.ts"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
-import { defaultAnswer, lookupAnswer, readStage } from "./script.ts"
+import { defaultAnswer, lookupAnswer, readStage } from "../support/script.ts"
 
 // ───────── Scripted model ─────────
 const narrations: Array<"plain" | "fire" | "kill" | "cut" | "long" | "slop" | "aside" | "asides" | "lt"> = []

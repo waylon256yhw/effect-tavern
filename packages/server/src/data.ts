@@ -226,9 +226,9 @@ const alive = (pid: number) => {
   }
 }
 /** One process per library: `<file>.lock` holds the owner's pid. A dead owner's lock is taken over (and our own, when
- *  Vite re-evaluates the module in the same process); while the owner lives, this process opens a fresh library of its
- *  own at `<dir>/<pid>/<name>` instead, never the owner's (an agent has no business in the owner's stories). */
-const lock = (file: string): string => {
+ *  Vite re-evaluates the module in the same process); while the owner lives, opening fails. Explicit isolateOnBusy opts into a fresh library
+ *  at `<dir>/<pid>/<name>` for automated work; it never opens the owner's stories. */
+const lock = (file: string, isolateOnBusy: boolean): string => {
   const path = `${file}.lock`
   for (;;) {
     try {
@@ -240,10 +240,12 @@ const lock = (file: string): string => {
     const pid = Number(readFileSync(path, "utf8"))
     if (pid === process.pid) return file
     if (alive(pid)) {
+      if (!isolateOnBusy)
+        throw new Error(`${file} is open in process ${pid}; use a separate DATA directory or connect to that server`)
       const own = join(dirname(file), String(process.pid), basename(file))
-      console.log(`${file} is open in process ${pid}: this one opens its own library, ${own}`)
+      console.error(`${file} is open in process ${pid}: this one opens its own library, ${own}`)
       mkdirSync(dirname(own), { recursive: true })
-      return lock(own)
+      return lock(own, false)
     }
     rmSync(path, { force: true })
   }
@@ -261,8 +263,8 @@ const lock = (file: string): string => {
   return file
 }
 
-export const open = (asked: string) => {
-  const file = asked === ":memory:" ? asked : lock(asked)
+export const open = (asked: string, { isolateOnBusy = false } = {}) => {
+  const file = asked === ":memory:" ? asked : lock(asked, isolateOnBusy)
   const db = new DatabaseSync(file)
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on;")
   db.exec(schema)

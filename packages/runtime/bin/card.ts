@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 // `card check <card>` and `card view <card>` (issue #28): the command tree and its I/O only. Linting is src/lint.ts,
-// rendering src/view.ts; a card is loaded by name through test/cards/index.ts, with the test player layer.
+// rendering src/view.ts; a card is loaded by name through support/cards.ts, with the example player layer.
 import { BunServices } from "@effect/platform-bun"
 import { Console, Effect, Exit, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { lint } from "../src/lint.ts"
 import { fields, openings, stages, view } from "../src/view.ts"
-import { loadCard, player, readCard } from "../test/cards/index.ts"
+import { loadCard, player, readCard } from "../support/cards.ts"
 
 const card = Argument.String("card").pipe(
   Argument.withDescription("a template card by name (wuxia, yandao, ri, banxing), or a path to a .yaml card"),

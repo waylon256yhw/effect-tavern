@@ -552,28 +552,26 @@ data.close()
     create table node (story integer not null references story (id) on delete cascade, id integer not null,
     parent integer, json text not null, primary key (story, id));`)
   old.prepare("insert into story (id, card, head, next, updated) values (1, 'wuxia', 0, 1, 1)").run()
-  old
-    .prepare("insert into node (story, id, parent, json) values (1, 0, null, ?)")
-    .run(
-      JSON.stringify({
-        id: 0,
-        parent: null,
-        input: { text: "hi" },
-        read: [],
-        beats: [],
-        answers: {},
-        end: "end",
-        brief: { must: [], may: [] },
-        reply: [{ type: "text", text: "prose" }],
-        fired: [],
-        violated: [],
-        products: {
-          notes: "N",
-          scene: { place: "亭", present: [] },
-          people: [{ name: "李鹤", note: "故人" }],
-        },
-      }),
-    )
+  old.prepare("insert into node (story, id, parent, json) values (1, 0, null, ?)").run(
+    JSON.stringify({
+      id: 0,
+      parent: null,
+      input: { text: "hi" },
+      read: [],
+      beats: [],
+      answers: {},
+      end: "end",
+      brief: { must: [], may: [] },
+      reply: [{ type: "text", text: "prose" }],
+      fired: [],
+      violated: [],
+      products: {
+        notes: "N",
+        scene: { place: "亭", present: [] },
+        people: [{ name: "李鹤", note: "故人" }],
+      },
+    }),
+  )
   old.close()
   const opened = open(file)
   const snap = opened.store<Record<string, unknown> & L.Noded>(1).read()!
@@ -591,13 +589,17 @@ data.close()
   rmSync(dir, { recursive: true, force: true })
 }
 
-// The lock: one process per library file. A lock naming a live process (here our parent) is not ours: open diverts to
-// a fresh library at <dir>/<pid>/; a lock naming a dead process is taken over, and on exit the lock goes.
+// The lock: one process per library file. A lock naming a live process (here our parent) is not ours: opening fails or isolates into
+// a fresh library only with explicit isolateOnBusy; a dead owner is taken over, and on exit the lock goes.
 {
   const dir = mkdtempSync(join(tmpdir(), "tavern-lock-"))
   const file = join(dir, "tavern.db")
   writeFileSync(`${file}.lock`, String(process.ppid))
-  const other = open(file)
+  assert.throws(
+    () => open(file),
+    (e: Error) => e.message.includes(file) && e.message.includes(String(process.ppid)),
+  )
+  const other = open(file, { isolateOnBusy: true })
   assert.equal(other.file, join(dir, String(process.pid), "tavern.db"))
   assert.equal(readFileSync(`${other.file}.lock`, "utf8"), String(process.pid))
   assert.equal(readFileSync(`${file}.lock`, "utf8"), String(process.ppid)) // the owner's lock untouched

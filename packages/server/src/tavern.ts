@@ -2,35 +2,27 @@
 // key, behind the HTTP handler. No card is bound: a story names its own (library.ts). The environment is the caller's:
 // dev.ts reads it (CARDS, DATA, MODEL, HAT, the local key), loads the card files and opens the store; a test passes
 // `open(":memory:")` and a shelf of its own.
-import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
+import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import { facets } from "@effect-tavern/runtime/src/session.ts"
 import type { Data } from "./data.ts"
 import { library, type Cards } from "./library.ts"
 import { handle } from "./serve.ts"
 
-/** The cards an install knows: `files` (a directory of YAML, dev.ts) first, then the library's `card` table; the first
- *  id wins. A table card is decoded when a story of it opens. */
-export const shelf = (files: readonly Card[], data: Data): Cards => ({
+/** The file templates. The library merges installed definitions over this source. */
+export const shelf = (files: readonly Card[]): Cards => ({
   list: () =>
-    [...files, ...data.cards.list()]
-      .filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i)
-      .map((c) =>
-        // a YAML card is decoded already: its line and its facets ride on its row; the table stored them on `put`
-        "rules" in c
-          ? {
-              id: c.id,
-              title: c.title ?? c.id,
-              ...(c.summary ? { summary: c.summary } : {}),
-              facets: facets(c),
-            }
-          : c,
-      ),
+    files
+      .filter((c, i) => files.findIndex((x) => x.id === c.id) === i)
+      .map((c) => ({
+        id: c.id,
+        title: c.title ?? c.id,
+        ...(c.summary ? { summary: c.summary } : {}),
+        facets: facets(c),
+      })),
   get: (id) => {
-    const file = files.find((c) => c.id === id)
-    if (file) return file
-    const json = data.cards.get(id)
-    if (json === undefined) throw new Error(`no card ${id}`)
-    return decodeCard({ ...(json as object), id })
+    const card = files.find((c) => c.id === id)
+    if (!card) throw new Error(`no card ${id}`)
+    return card
   },
 })
 

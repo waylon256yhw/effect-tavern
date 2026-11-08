@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Card } from "../src/card.ts"
 import { makeSession } from "../src/session.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "../support/script.ts"
 import { fields, openings, view } from "../src/view.ts"
 import { cardNames, loadCard, player } from "./cards/index.ts"
 

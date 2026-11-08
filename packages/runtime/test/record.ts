@@ -8,7 +8,7 @@ import { holds } from "../src/cond.ts"
 import type { Product } from "../src/product.ts"
 import * as Log from "../src/log.ts"
 import { chat } from "./cards/index.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "../support/script.ts"
 
 const people: Product = {
   id: "people",

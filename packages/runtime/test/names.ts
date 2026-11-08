@@ -9,7 +9,7 @@ import { decodeLayer, decodeLocal, resolve, type Layer, type Rows } from "../src
 import { expand, holes, Names } from "../src/names.ts"
 import { makeSession, type Event } from "../src/session.ts"
 import { chat, plain } from "./cards/index.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "../support/script.ts"
 
 // ───────── The pure functions ─────────
 assert.equal(expand("{{char}} 与 {{ user }}，{{char}}", { char: "依瑞丝", user: "阿青" }), "依瑞丝 与 阿青，依瑞丝")

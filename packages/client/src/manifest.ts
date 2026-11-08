@@ -1,7 +1,7 @@
 // The card page's derivations from the card's projection (store.ts CardView): the chip row, and an opening's line in
 // the list. Pure: no Solid, no DOM.
 import type { Greeting } from "@effect-tavern/runtime/src/card.ts"
-import { effect, labels } from "./phrase.ts"
+import { effect, labels } from "@effect-tavern/runtime/src/phrase.ts"
 import type { CardView } from "./store.ts"
 import { t } from "./i18n.ts"
 import { plain } from "./markdown.ts"

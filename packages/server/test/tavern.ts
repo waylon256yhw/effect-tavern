@@ -10,7 +10,7 @@ import { shelf, tavern } from "../src/tavern.ts"
 const empty = open(":memory:")
 const fresh = tavern({
   data: empty,
-  cards: shelf([chat], empty),
+  cards: shelf([chat]),
   overlay: player.harness,
   seed: { key: "sk-ant-api-x" },
 })
@@ -29,7 +29,7 @@ assert.deepEqual(fresh.lib.stories.list(), []) // and no story made for it
 const data = open(":memory:")
 const own = { id: "mine", name: "Mine", enabled: true, defaultFormat: "anthropic" as const, endpoints: {}, models: [] }
 data.providers.put(own)
-tavern({ data, cards: shelf([chat], data), overlay: player.harness, seed: { key: "sk-ant-api-x" } })
+tavern({ data, cards: shelf([chat]), overlay: player.harness, seed: { key: "sk-ant-api-x" } })
 assert.deepEqual([data.providers.list(), data.secrets.list(), data.routing.read()], [[own], [], undefined])
 
 // the environment binds no card: dev.ts reads CARDS (a directory), never CARD

@@ -1,0 +1,44 @@
+/// <reference types="bun" />
+// The four template cards by name, and the player layers the live scripts, the tests and the server share. A card is one
+// YAML file in ../cards (`<name>.yaml`, prose in block scalars), parsed by Bun and decoded by `decodeCard`.
+import { readFileSync } from "node:fs"
+import { decodeCard, type Card } from "../src/card.ts"
+import type { Rows } from "../src/layer.ts"
+
+// a compiled binary (server `bun run compile`) embeds this directory as cards/ beside its entry
+const dir = new URL(import.meta.url.includes("$bunfs") ? "cards/" : "../cards/", import.meta.url)
+/** A card file: YAML, decoded through the Card schema. A missing file fails naming it (ENOENT, with the path). */
+export const readCard = (path: string | URL): Card => decodeCard(Bun.YAML.parse(readFileSync(path, "utf8")))
+
+// The minimal player: language only, options on (the card declares nothing about options).
+const language = { id: "language", text: "使用自然、舒展的现代中文写作。", mode: "yield" as const }
+export const plain: Rows = {
+  harness: { id: "harness", name: "内置", fragments: [language], products: [{ id: "options", on: true }] },
+}
+
+// The player's rows: language, and the writing switches every player sets once (fragment.ts `Writing`): the player is 你,
+// the narrator restates their line before the reaction and writes nothing they did not give. Without the last, Haiku
+// wrote the player's answer to the confession for them (docs/provider-reading.md §10). A card with no player in the
+// fiction (yandao) fills the `pov` slot itself and the compiled one yields to it (layer.ts). `options` is
+// this player's toggle: the dev and live sessions run with it, a card declares nothing about it. The lexicon is a sample
+// pack for the polish stage (src/polish.ts), a dozen stock phrases of Chinese web fiction; the runtime's own is empty.
+export const lexicon = [
+  { pattern: "指节*白", hint: "套路微表情" },
+  { pattern: "喉结*滚动", hint: "套路微表情" },
+  { pattern: "嘴角*勾起", hint: "套路微表情" },
+  { pattern: "眼底*闪过一丝", hint: "套路微表情" },
+  { pattern: "不易察觉", hint: "叙述者替读者察觉" },
+  { pattern: "深吸一口气", hint: "填充动作" },
+  { pattern: "绷紧的弦", hint: "陈词比喻" },
+  { pattern: "石子*湖", hint: "陈词比喻" },
+  { pattern: "空气*凝固", hint: "陈词比喻" },
+  { pattern: "漏了一拍", hint: "陈词比喻" },
+  { pattern: "仿佛*静止", hint: "陈词比喻" },
+  { pattern: "不是*而是", hint: "先否定再肯定的八股句式" },
+]
+export const player: Rows = {
+  harness: { ...plain.harness!, switches: { pov: "second", echo: true, agency: "strict" }, lexicon },
+}
+
+export const cardNames = ["wuxia", "yandao", "banxing", "ri"]
+export const loadCard = async (name: string): Promise<Card> => readCard(new URL(`${name}.yaml`, dir))

@@ -8,7 +8,7 @@ type Event = TimelineEvent | Extract<RuntimeEvent, { kind: "call" }>
 import { fake, fakeText } from "@effect-tavern/provider"
 import { facets, type Event as RuntimeEvent } from "@effect-tavern/runtime/src/session.ts"
 import { chat, plain as player } from "@effect-tavern/runtime/test/cards/index.ts"
-import { defaultAnswer, readStage } from "@effect-tavern/runtime/test/script.ts"
+import { defaultAnswer, readStage } from "@effect-tavern/runtime/support/script.ts"
 import assert from "node:assert/strict"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { createServer, request } from "node:http"
@@ -35,10 +35,10 @@ const scripted = {
 }
 const model = () => scripted
 const shared = open(":memory:")
-const chats = shelf([chat], open(":memory:")) // a shelf of one, for the taverns whose card does not matter
+const chats = shelf([chat]) // a shelf of one, for the taverns whose card does not matter
 const lib = library({
   data: shared,
-  cards: shelf([{ ...chat, greetings: [{ text: "G" }], lexicon: [{ pattern: "CARD-BAN" }] }], shared),
+  cards: shelf([{ ...chat, greetings: [{ text: "G" }], lexicon: [{ pattern: "CARD-BAN" }] }]),
   overlay: player.harness,
   model,
 })
@@ -529,7 +529,7 @@ await run(false)
   const data = open(":memory:")
   const { lib: guarded, handler } = tavern({
     data,
-    cards: shelf([{ ...chat, guard: ["R"] }], data),
+    cards: shelf([{ ...chat, guard: ["R"] }]),
     overlay: player.harness,
     model: () => drafts,
   })
@@ -570,7 +570,7 @@ await run(false)
     const doc = readStage(o)
     return doc.phase === "narrate" ? { text: "hello world ".repeat(5), delay: 20 } : defaultAnswer(doc, canned)
   })
-  const { handler } = tavern({ data, cards: shelf([chat, two], data), overlay: player.harness, model: () => slowly })
+  const { handler } = tavern({ data, cards: shelf([chat, two]), overlay: player.harness, model: () => slowly })
   const server = createServer(handler).listen(0)
   const base = `http://localhost:${(server.address() as AddressInfo).port}`
   const on = (id: number, init: RequestInit = {}) => ({ ...init, headers: { "x-tavern-story": String(id) } })

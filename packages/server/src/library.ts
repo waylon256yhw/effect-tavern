@@ -35,12 +35,22 @@ import {
   type Secret,
   type Trace,
 } from "@effect-tavern/provider"
-import type { Card } from "@effect-tavern/runtime/src/card.ts"
-import { empty, overlaid, overlayOf, type Layer, type Local, type Rows } from "@effect-tavern/runtime/src/layer.ts"
+import { decodeCard, makeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
+import {
+  decodeLayer,
+  decodeLocal,
+  empty,
+  overlaid,
+  overlayOf,
+  type Layer,
+  type Local,
+  type Rows,
+} from "@effect-tavern/runtime/src/layer.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import {
   cardView,
+  facets,
   makeSession,
   phases,
   type Facets,
@@ -48,11 +58,14 @@ import {
   type Session,
   type Turn as Logged,
 } from "@effect-tavern/runtime/src/session.ts"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema, Stream } from "effect"
+import type { TimelineEvent } from "@effect-tavern/runtime/src/projection.ts"
 import type { Data } from "./data.ts"
 import type { Exported } from "./export.ts"
 import { names } from "./names.ts"
-import { makeTurn, type Turn } from "./turn.ts"
+import { Busy, makeTurn, type Call, type Out, type Turn } from "./turn.ts"
+
+export type PublicEvent = TimelineEvent | { kind: "error"; message: string; code?: string; phase: Phase }
 
 /** The model test asks for this many output tokens: the least a gateway accepts (CommandCode refuses `max_tokens` under
  *  16), still a fraction of a cent on any model. */
@@ -87,7 +100,7 @@ export interface Cards {
 const RESERVED = ["harness"]
 export const library = ({
   data,
-  cards,
+  cards: source,
   overlay: given,
   model: env,
   pinned = false,
@@ -98,6 +111,14 @@ export const library = ({
   model?: (phase: Phase) => Model
   pinned?: boolean
 }) => {
+  // Installed cards override templates, including when the caller supplies a file-only shelf.
+  const cards: Cards = {
+    list: () => [...new Map([...source.list(), ...data.cards.list()].map((c) => [c.id, c])).values()],
+    get: (id) => {
+      const raw = data.cards.get(id)
+      return raw === undefined ? source.get(id) : decodeCard({ ...(raw as object), id })
+    },
+  }
   const routing = (): Routing => (data.routing.read() as Routing | undefined) ?? {}
   const providerOf = (id: string): Provider => {
     const p = data.providers.list().find((x) => x.id === id)
@@ -229,14 +250,14 @@ export const library = ({
       if (next !== l) data.locals.put(next)
     }
   }
-  // ponytail: a session stays open for the life of the process once a request names its story; evict when that matters
-  const sessions = new Map<Id, { session: Session; turn: Turn }>()
+  const sessions = new Map<Id, { session: Session; turn: Turn; stale?: boolean }>()
   const row = (id: Id) => data.stories.get(id)
   const exists = (id: Id) => row(id) !== undefined
   /** A story's session and its turn, opened on its first request on the story's card, the same ones after. */
   const open = (id: Id) => {
     const had = sessions.get(id)
-    if (had) return had
+    if (had && (!had.stale || had.turn.busy !== null)) return had
+    if (had) sessions.delete(id)
     const r = row(id)
     if (!r) throw new Error(`no story ${id}`)
     const card = cards.get(r.card)
@@ -254,6 +275,29 @@ export const library = ({
     return opened
   }
   const session = (id: Id): Session => open(id).session
+  // Capture the session which produced the stream, even when its card is replaced before consumption.
+  const events = (s: Session, stream: Stream.Stream<Out>): Stream.Stream<PublicEvent> =>
+    stream.pipe(
+      Stream.filter((e) => e.kind !== "call"),
+      Stream.map((e): PublicEvent => {
+        if (e.kind === "error") {
+          const error = Cause.squash(e.cause)
+          return {
+            kind: "error",
+            phase: e.phase,
+            message: error instanceof Error ? error.message : String(error),
+            ...(error instanceof NoModel && { code: error.code }),
+          }
+        }
+        if (e.kind !== "change") return e
+        const { invalidated, node, ...change } = e
+        return {
+          ...change,
+          ...(node && { node: s.projectTimeline(node) }),
+          ...(invalidated?.length && { updated: invalidated.map((id) => s.timelineNode(id)) }),
+        }
+      }),
+    )
   return {
     /** The model a stage runs on and the fold policy, as every session reads them on its next request. */
     model,
@@ -261,13 +305,40 @@ export const library = ({
     session,
     /** A story's turn in flight (turn.ts), beside its session. */
     turn: (id: Id): Turn => open(id).turn,
+    submit: (id: Id, action: unknown) => {
+      const { session, turn } = open(id)
+      return events(session, turn.start(action))
+    },
+    attach: (id: Id) => {
+      const had = sessions.get(id)
+      const { session, turn } = had ?? open(id)
+      const at = turn.attach()
+      if (had?.stale && had.turn.busy === null) sessions.delete(id)
+      return at && { ...at, events: events(session, at.events) }
+    },
+    stop: (id: Id) => open(id).turn.stop(),
+    drop: (id: Id, node: Id) => open(id).turn.drop(node),
+    trace: (id: Id, node: Id, inspect = false) => {
+      if (!session(id).log.nodes.has(node)) throw new Error(`no node ${node}`)
+      return data
+        .calls(id)
+        .get(node)
+        .map((v) => {
+          const c = v as Call
+          return inspect ? c : { ...c, msgs: [], out: undefined }
+        })
+    },
     exists,
     /** The card a story is of. */
     cardOf: (id: Id): string | undefined => row(id)?.card,
     /** The player on a card, whole; written whole, in force from the next request. Never a missing row to the wire. */
     locals: {
       read: localOf,
-      write: (l: Local) => data.locals.put(l),
+      write: (value: unknown) => {
+        const l = decodeLocal(value)
+        cards.get(l.card)
+        data.locals.put(l)
+      },
     },
     calls: (id: Id) => data.calls(id),
     stories: {
@@ -291,7 +362,7 @@ export const library = ({
       /** Refused (throws) while a turn runs on the story: its writes would land on nothing. */
       del: (id: Id) => {
         if (!exists(id)) throw new Error(`no story ${id}`)
-        if (sessions.get(id)?.turn.busy) throw new Error(`story ${id} is busy`)
+        if (sessions.get(id)?.turn.busy) throw new Busy()
         data.stories.del(id)
         sessions.delete(id)
       },
@@ -343,7 +414,8 @@ export const library = ({
       /** The harness keeps only what differs from the code's defaults, nothing at all when nothing does: a left-out item is
        *  its default again. A pack's id may not be a rank's name: `from` says which row an item came from; nor `base`, which
        *  `open` folds into the overlay (data.ts). */
-      put: (r: Layer) => {
+      put: (value: unknown) => {
+        const r = decodeLayer(value)
         if (r.id === "harness") {
           const o = overlayOf("act", r)
           if (empty(o)) data.packs.del("harness")
@@ -455,7 +527,21 @@ export const library = ({
     /** The model-name table in force (names.ts). */
     names: () => names(data),
     /** Every card the install knows, by id and title (`Cards`). */
-    cards: () => cards.list(),
+    cards: {
+      list: () => cards.list(),
+      put: (value: unknown) => {
+        const card = decodeCard(value)
+        // Validate executable rules before replacing the installed definition.
+        makeCard(card.rules)
+        const flags = facets(card)
+        data.cards.put(card, flags)
+        for (const [id, cached] of sessions) {
+          if (row(id)?.card !== card.id) continue
+          if (cached.turn.busy !== null) cached.stale = true
+          else sessions.delete(id)
+        }
+      },
+    },
     personas: {
       ...data.personas,
       /** Gone from the table, and from every story and card default it was picked on: the card's own persona is back in

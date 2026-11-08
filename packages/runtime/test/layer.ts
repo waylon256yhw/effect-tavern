@@ -25,7 +25,7 @@ import {
 import { kindOf } from "../src/product.ts"
 import { cardView, makeSession, type Event } from "../src/session.ts"
 import { cardNames, chat, loadCard } from "./cards/index.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "../support/script.ts"
 
 const collect = (s: Stream.Stream<Event, unknown>) =>
   Effect.runPromise(Stream.runCollect(s)).then((c) => [...c] as Event[])

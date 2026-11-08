@@ -13,7 +13,14 @@ import type { InvocationToken } from "@effect-tavern/runtime/src/projection.ts"
 import type { Input } from "@effect-tavern/runtime/src/journal.ts"
 import { textOf } from "@effect-tavern/runtime/src/journal.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
-import { perform, type Action, type Event, type Phase, type Session } from "@effect-tavern/runtime/src/session.ts"
+import {
+  decodeAction,
+  perform,
+  type Action,
+  type Event,
+  type Phase,
+  type Session,
+} from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect"
 
 export interface Draft {
@@ -76,6 +83,13 @@ interface Run {
   subs: Set<Queue.Queue<Out, Cause.Done>>
 }
 
+export class Busy extends Error {
+  readonly code = "busy"
+  constructor() {
+    super("story is busy: a turn is in flight")
+  }
+}
+
 export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) => void) => {
   let run: Run | undefined
   let failed: { phase: Phase; draft: Draft | null; cause: Cause.Cause<unknown> } | undefined
@@ -111,14 +125,26 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
       r.draft = { ...r.draft, products: { ...r.draft.products, [id]: (r.draft.products?.[id] ?? "") + text } }
     }
   }
+  const skip = (node: Id): Event => {
+    const r = run
+    if (!r || r.phase !== "record" || r.node !== node)
+      throw new Error("this settlement is not the active record attempt")
+    const event: Event = { kind: "change", ...s.skipRecord(node) }
+    for (const q of r.subs) Queue.offerUnsafe(q, event)
+    return event
+  }
   return {
     /** The phase of the turn in flight, or null. */
     get busy(): Phase | null {
       return run?.phase ?? null
     },
-    /** Starts `a` and answers its events from the first; the caller checks `busy` first (a second turn throws). */
-    start: (a: Action): Stream.Stream<Out> => {
-      if (run) throw new Error("a turn is in flight")
+    /** Decodes and submits an action; a busy turn accepts only its pending record skip. */
+    start: (raw: unknown): Stream.Stream<Out> => {
+      const a = decodeAction(raw)
+      if (run) {
+        if (a.kind === "skipRecord") return Stream.make(skip(a.node))
+        throw new Busy()
+      }
       failed = undefined
       const r: Run = {
         phase: first[a.kind] ?? "record",
@@ -157,13 +183,10 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
       )
       return events
     },
-    skip: (node: Id): Event => {
-      const r = run
-      if (!r || r.phase !== "record" || r.node !== node)
-        throw new Error("this settlement is not the active record attempt")
-      const event: Event = { kind: "change", ...s.skipRecord(node) }
-      for (const q of r.subs) Queue.offerUnsafe(q, event)
-      return event
+    skip,
+    drop: (node: Id) => {
+      if (run) throw new Busy()
+      return s.drop(node)
     },
     /** "withdrawn" before the first character (nothing is saved, the story is free at once), "halted" after it (the
      *  turn goes on into a `stopped` node, on the same streams), null when nothing runs. */

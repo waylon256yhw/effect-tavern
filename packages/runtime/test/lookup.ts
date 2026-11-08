@@ -5,7 +5,7 @@ import { makeSession, outcome, type Event } from "../src/session.ts"
 import { contextLookup, freeze, revision, residentOn, type Resource } from "../src/context.ts"
 import type { Card } from "../src/card.ts"
 import { chat } from "./cards/index.ts"
-import { defaultAnswer, readStage } from "./script.ts"
+import { defaultAnswer, readStage } from "../support/script.ts"
 
 const lore = (id: string, body = `${id} body`): Card["lore"][number] => ({
   id,
