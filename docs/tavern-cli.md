@@ -73,3 +73,23 @@ show 默认打印阅读文本。`story delete` 是正式命令，`story drop` �
 `card install` 先通过 checkCard，再调用 library.cards.put；失败不会安装。
 安装期间的回合仍使用原卡；如果无人订阅的回合失败，缓存保留到下一次 attach 消费错误，
 随后才加载新卡。不会因读取节点或再次装卡而丢失该错误。
+
+## 制卡工坊（阶段二后端）
+
+宿主使用 `routing.stages.author`，未配置时依次回退到 `routing.default` 和环境模型。三条命令与 install 共用本地直连和 `--url` 连接方式，只返回候选或诊断，不自动安装。
+
+```sh
+bun run tavern card compile my-card.yaml --select fiction.setting --select 'lore.letter.layers[1]' --intent '交情达到 8 时提起信件' -o candidate.yaml
+bun run tavern card sort my-card.yaml notes.md -o candidate.yaml
+bun run tavern card review my-card.yaml --json --url http://localhost:7777
+```
+
+`compile` 返回包含机制增量与绑定的整卡候选，新建的正文和判据槽留空。结构错误最多回喂修正一次，回喂前过滤 `empty-text`。诊断打印到 stderr。规则变化且旁边存在 `<card>.scenario.yaml` 时，使用已有的零 token 场景执行器回归，并在 stderr 报告 PASS/FAIL；失败仍保留候选。
+
+`sort` 按空行拆分源稿，再按下标逐字复制整段；一个槽接收多段时，按源稿顺序以两个换行连接。compile 和 sort 未指定 `-o` / `--output` 时将 YAML 输出到 stdout。`review --json` 输出诊断数组，人类可读的警告打印到 stderr；review 只读，宿主过滤掉不存在的卡片路径。
+
+HTTP 客户端调用 `POST /api/author/compile {card, select, intent}`、`/api/author/sort {card, source, paragraphs?}` 和 `/api/author/review {card}`，分别得到 `{candidate, diagnostics}`、`{candidate, placements}` 和 `{diagnostics}`。传入 `paragraphs` 可保留作者手动划选的段落边界。
+
+草稿在 SQLite 中一卡一行：`GET /api/cards/:id/draft` 返回 `{card, draft}`，有草稿时返回完整草稿，否则返回完整已安装卡。`PUT` 接收 `{card}`，卡片 id 必须与 URL 一致，允许判据未完成；`DELETE` 放弃草稿。草稿重启后仍保留，不影响运行中的故事。安装成功即清草稿；HTTP 与库直接调用都校验初始状态并拒绝所有 lint error，包括空白作者文本。安装失败保留已安装卡和草稿。
+
+模型输出契约位于 `runtime/support/workshop.ts`：compile 接收 `fields`、`actions`、`readouts`、`products`、`over`、`cap`、`slots` 和必填的 `bindings`。fiction/lore 绑定为 `{to, when}`，开场白绑定为 `{to, do}`。`roll: {judged: true}` 创建空 `judge`；输出 schema 没有正文、判据或展示标签字段。Sort 为 `{paragraphs: number[], to: string}[]`，目标是 `frame.<id>`、`fiction.<new-id>`、`greetings[n]` 或 `lore.<id>.layers[n]`。Review 固定使用 `rule: "review:consistency"` 和 `level: "warn"`。解码丢弃未声明字段；模型夹带的文本不会进入候选，已有作者文本保持原样。

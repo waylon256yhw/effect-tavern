@@ -280,6 +280,25 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
     if (req.method === "PUT" && req.url === "/routing")
       return reply(async () => (lib.routing.write(await read(RoutingBody)), lib.routing.read()))
     if (req.method === "GET" && req.url === "/cards") return json(200, lib.cards.list())
+    const authorAt = req.method === "POST" && /^\/author\/(compile|sort|review)$/.exec(req.url ?? "")
+    if (authorAt)
+      return reply(async () => lib.author[authorAt[1] as "compile" | "sort" | "review"](await read((u) => u)))
+    const draftAt = /^\/cards\/([^/]+)\/draft$/.exec(req.url ?? "")
+    if (draftAt) {
+      const id = decodeURIComponent(draftAt[1]!)
+      if (req.method === "GET") return reply(() => lib.drafts.get(id), 404)
+      if (req.method === "PUT")
+        return reply(async () => {
+          const { card } = await read(Schema.decodeUnknownSync(Schema.Struct({ card: Schema.Unknown })))
+          lib.drafts.put(id, card)
+          return lib.drafts.get(id)
+        })
+      if (req.method === "DELETE")
+        return reply(() => {
+          lib.drafts.del(id)
+          return { deleted: true }
+        })
+    }
     const localAt = /^\/cards\/([^/]+)\/local$/.exec(req.url ?? "")
     if (localAt && (req.method === "GET" || req.method === "PUT")) {
       const card = decodeURIComponent(localAt[1]!)

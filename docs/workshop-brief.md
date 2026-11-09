@@ -1,6 +1,6 @@
 # 制卡工坊（Workshop）：三个受锁的 AI 操作，长在卡页的编辑态上
 
-状态（2026-11-09）：设计定稿，未开工。前置：Phase 1 全部落地（`docs/headless-cli-brief.md`、`docs/card-cli.md`、`docs/tavern-cli.md`）。追踪见 Issue #155 阶段二。
+状态（2026-11-09）：后端 Step 2.1、2.2、2.4 已实现；Step 2.3 编辑态待实现。前置：Phase 1 全部落地（`docs/headless-cli-brief.md`、`docs/card-cli.md`、`docs/tavern-cli.md`）。追踪见 Issue #155 阶段二。
 
 ## 1. 它是什么
 
@@ -49,7 +49,7 @@ Phase 1 已经给了每一环，工坊不新建平行机制：
 | 入库 | `library.cards.put` / `PUT /cards/:id` / `tavern card install` | 候选不直接入库；作者采纳后页面保存草稿，install 时才 put。`cards.put` 今天不 lint，Step 2.2 补上（见 §3） |
 | 模型 | `library.routing`、`provider.object` | 三个操作用一个新路由键 `author`（缺省落 `default`）；都是单次 `object()`，compile 多一次回喂。不用 `runStageTools`：没有工具，没有事务 |
 | 双模 | `tavern` 宿主的本地 / `--url` | 三个操作住在宿主（需要模型），不住离线 `card` 命令；`--url` 模式走三条 POST 路由 |
-| 测试 | aimock（`bun run verify`，不花钱） | 每个操作一组 fixture：正常、越界（模型试图输出正文 → schema 拒绝）、回喂修正 |
+| 测试 | aimock（`bun run verify`，不花钱） | 每个操作一组 fixture：正常、越界（模型夹带正文 → schema 丢弃，候选保持作者文本）、回喂修正 |
 
 ## 5. 接口
 
@@ -99,18 +99,18 @@ DELETE /cards/:id/draft                                       → 放弃草稿�
 ## 7. 落地步骤
 
 ### Step 2.1 锁（runtime，不接模型）
-- [ ] `lint.ts`：`empty-text` 规则；四张模板与 `card init` 脚手架必须仍然 0 error（脚手架的占位句保留，它们不是空串）。
-- [ ] `runtime/support/author.ts`：`applyCompile(card, output): Card` 与 `applySort(card, source, placements): Card` 两个纯函数，加模型侧 schema（`CompileOutput`、`SortOutput`、`ReviewOutput`）。`test/author.ts` 断言两条不同的不变式：
+- [x] `lint.ts`：`empty-text` 规则；四张模板与 `card init` 脚手架必须仍然 0 error（脚手架的占位句保留，它们不是空串）。
+- [x] `runtime/support/workshop.ts`：`applyCompile(card, output): Card` 与 `applySort(card, source, placements): Card` 两个纯函数，加模型侧 schema（`CompileOutput`、`SortOutput`、`ReviewOutput`）。`test/author.ts` 断言两条不同的不变式：
   - `applyCompile`：永远不改任何已有 `text`；它创建的每个 `text` 都是 `""`；只写封闭词汇与标识符键。
   - `applySort`：永远不改卡上已有的非空条目；只追加新的 `fiction` / `greetings` 条目或新的 `lore` 层，或填入 `text` 为 `undefined` / `""` 的 `frame` 槽位；写入的每个 `text` 严格等于 `source` 对应下标的段落（多段按原序以 `\n\n` 连接）；下标越界或重复抛错；`to` 指向新 `lore.<id>` 时初始化 `unlock: { all: [] }`、`offer: { any: [] }`，层只能追加到末尾（`layers[1]` 不能先于 `layers[0]` 出现）。
-- [ ] 标识符 pattern 先只加在模型侧 schema；对 `Card` schema 的收紧另开一条 lint `bad-identifier`（warn）看模板反应再决定。
+- [x] 标识符 pattern 先只加在模型侧 schema；对 `Card` schema 的收紧另开一条 lint `bad-identifier`（warn）看模板反应再决定。
 
 ### Step 2.2 三个操作（server 宿主）
-- [ ] `library.cards.put` 加 `rpg.validate(rpg.initial)` 与 `lint` 无 error 校验，error 抛出；`test/library.ts` 断言带 `empty-text` 的卡被 HTTP 与直接调用同样拒绝。
-- [ ] `library.author.{compile,sort,review}`：`object()` 一次，compile 过滤 `empty-text` 后最多回喂一次；路由键 `author`。
-- [ ] `serve.ts` 三条 POST + `draft` 表与 `GET/PUT/DELETE /cards/:id/draft`（GET 回退到完整已安装卡，put 成功即清草稿）；`tavern card compile|sort|review` 本地与 `--url` 两模。
-- [ ] aimock fixtures：每操作三组；`test/cli.ts` 加 `--url` 往返。
-- [ ] `docs/tavern-cli.md` 补三条命令。
+- [x] `library.cards.put` 加 `rpg.validate(rpg.initial)` 与 `lint` 无 error 校验，error 抛出；`server/test/author.ts` 断言带 `empty-text` 的卡被 HTTP 与直接调用同样拒绝。
+- [x] `library.author.{compile,sort,review}`：`object()` 一次，compile 过滤 `empty-text` 后最多回喂一次；路由键 `author`。
+- [x] `serve.ts` 三条 POST + `draft` 表与 `GET/PUT/DELETE /cards/:id/draft`（GET 回退到完整已安装卡，put 成功即清草稿）；`tavern card compile|sort|review` 本地与 `--url` 两模。
+- [x] aimock fixtures：每操作三组；`server/test/author.ts` 覆盖 CLI 本地与 `--url` 往返。
+- [x] `docs/tavern-cli.md` 补三条命令。
 
 ### Step 2.3 编辑态（client，#121 的编辑那一轮）
 - [ ] 卡页编辑态：按声明露出；文稿流直接写；划选拆段；结构区的判据输入框。
@@ -119,6 +119,6 @@ DELETE /cards/:id/draft                                       → 放弃草稿�
 - [ ] #31 卸载器的碎片进 sort 的入口。
 
 ### Step 2.4 把立场写给外部 agent
-- [ ] `card-author` skill 的"Semantic side"一节加一段：工坊三操作的边界即外部 agent 写卡时的边界（可以编规则与接线，不写正文与判据）。CLI 是中立工具，锁不住拿 Claude Code 改 YAML 的作者，这一段是对他们说话的唯一地方。
+- [x] `card-author` skill 的"Semantic side"一节加一段：工坊三操作的边界即外部 agent 写卡时的边界（可以编规则与接线，不写正文与判据）。CLI 是中立工具，锁不住拿 Claude Code 改 YAML 的作者，这一段是对他们说话的唯一地方。
 
 验收北极星：没有浏览器的环境里，作者写好三段散文与一句机制意图，`tavern card compile` 给出一份只多了字段、读数、条件与空判据槽的候选；`card check` 报出的唯一 error 是 `empty-text`；作者填完判据，`card test` 跑过旧场景，`card install` 入库。整个过程模型没有产出一个进卡的汉字。

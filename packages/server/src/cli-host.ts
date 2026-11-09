@@ -11,6 +11,7 @@ import { openHost } from "./host.ts"
 export type CliEvent = PublicEvent | { kind: "attach"; phase: string | null; draft: Draft | null }
 type Emit = (event: CliEvent) => void
 export interface CliHost {
+  author: Library["author"]
   install(card: Card): Promise<void>
   list(): Promise<ReturnType<Library["stories"]["list"]>>
   create(card: string): Promise<number>
@@ -60,6 +61,7 @@ export const connect = async (url?: string, fakeModel?: boolean): Promise<CliHos
     const drain = (stream: Stream.Stream<PublicEvent>, emit: Emit) =>
       Effect.runPromise(Stream.runForEach(stream, (e) => Effect.sync(() => emit(e))))
     return {
+      author: lib.author,
       install: async (card) => {
         lib.cards.put(card)
       },
@@ -107,6 +109,11 @@ export const connect = async (url?: string, fakeModel?: boolean): Promise<CliHos
   const json = async <T>(path: string, method = "GET", body?: unknown, story?: number): Promise<T> =>
     (await request(path, method, body, story)).json() as Promise<T>
   return {
+    author: {
+      compile: (input) => json("/author/compile", "POST", input),
+      sort: (input) => json("/author/sort", "POST", input),
+      review: (input) => json("/author/review", "POST", input),
+    },
     install: async (card) => {
       await request(`/cards/${encodeURIComponent(card.id)}`, "PUT", card)
     },

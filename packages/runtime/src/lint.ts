@@ -9,6 +9,8 @@ import { hook } from "./lore.ts"
 import { HOLE, unfilled } from "./names.ts"
 import { type Entry, scan } from "./polish.ts"
 
+export const identifier = /^[\p{L}\p{N}_:.\-{}]+$/u
+
 export interface Diagnostic {
   rule: string
   level: "error" | "warn"
@@ -208,6 +210,52 @@ const named = (card: Card): [string, string][] => [
 const HOOK = 40 // ponytail: characters; a hook is the player's own words for the thing, one short sentence
 
 const rules: Rule[] = [
+  (card) => {
+    const out: Diagnostic[] = []
+    const visit = (v: unknown, path: string, key = "") => {
+      if (typeof v === "string" && ["id", "path", "event", "options", "key"].includes(key) && !identifier.test(v))
+        out.push({
+          rule: "bad-identifier",
+          level: "warn",
+          path,
+          message: "identifier must be a token without whitespace",
+        })
+      if (Array.isArray(v)) v.forEach((x, i) => visit(x, `${path}[${i}]`, key))
+      else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => visit(x, path ? `${path}.${k}` : k, k))
+    }
+    visit(card, "")
+    return out
+  },
+  (card) => {
+    const texts: [string, string | undefined][] = [
+      ...card.frame.map((f): [string, string | undefined] => [`frame.${f.id}.text`, f.text]),
+      ...card.fiction.map((f): [string, string] => [`fiction.${f.id}.text`, f.text ?? ""]),
+      ...(card.asks ?? []).map((f): [string, string | undefined] => [`asks.${f.id}.text`, f.text]),
+      ...card.greetings.map((g, i): [string, string] => [`greetings[${i}].text`, g.text]),
+      ...card.guard.map((t, i): [string, string] => [`guard[${i}]`, t]),
+      ...card.lore.flatMap((e) => e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t])),
+      ...card.rules.actions.flatMap((a): [string, string][] => [
+        [`rules.actions.${a.id}.text`, a.text],
+        ...(a.roll && typeof a.roll === "object" && "judge" in a.roll
+          ? [[`rules.actions.${a.id}.roll.judge`, a.roll.judge] as [string, string]]
+          : []),
+      ]),
+      ...(card.rules.readouts ?? []).flatMap((q): [string, string][] => [
+        [`rules.readouts.${q.id}.text`, q.text],
+        ...q.options.map((o): [string, string] => [`rules.readouts.${q.id}.options.${o.id}.text`, o.text]),
+      ]),
+      ...(card.products ?? []).map((p): [string, string | undefined] => [`products.${p.id}.text`, p.text]),
+    ]
+    return texts
+      .filter(([, t]) => t !== undefined && !t.trim())
+      .map(([path]) => ({
+        rule: "empty-text",
+        level: "error",
+        path,
+        message: "author text is empty",
+        hint: "The author writes this slot; the workshop never fills it.",
+      }))
+  },
   // `lore` is the gate's derived counters, not a card field.
   (card) =>
     card.rules.fields

@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
+import { runScenario } from "@effect-tavern/runtime/support/scenario.ts"
 import { Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { authorCommands, runCli } from "@effect-tavern/runtime/bin/card.ts"
 import { checkCard } from "@effect-tavern/runtime/support/author.ts"
 import { decodeCard } from "@effect-tavern/runtime/src/card.ts"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { connect, type CliHost } from "../src/cli-host.ts"
 import { start } from "../src/start.ts"
@@ -34,6 +35,66 @@ const install = Command.make("install", { file: Argument.String("file"), url, js
     })
     console.log(json ? JSON.stringify({ id: card.id, installed: true }) : `Installed ${card.id}`)
   }),
+)
+const output = Flag.String("output").pipe(Flag.withAlias("o"), Flag.optional)
+const load = (file: string) => decodeCard(Bun.YAML.parse(readFileSync(file, "utf8")))
+const save = (card: unknown, output: Option.Option<string>) => {
+  const yaml = Bun.YAML.stringify(card)
+  if (Option.isSome(output)) writeFileSync(output.value, yaml)
+  else console.log(yaml)
+}
+const compile = Command.make(
+  "compile",
+  {
+    file: Argument.String("file"),
+    url,
+    output,
+    select: Flag.String("select").pipe(Flag.atLeast(1)),
+    intent: Flag.String("intent"),
+  },
+  ({ file, url, output, select, intent }) =>
+    task(() =>
+      withHost(url, async (host) => {
+        const card = load(file)
+        const result = await host.author.compile({ card, select, intent })
+        const scenario = file.replace(/\.ya?ml$/, "") + ".scenario.yaml"
+        if (existsSync(scenario) && JSON.stringify(card.rules) !== JSON.stringify(result.candidate.rules)) {
+          try {
+            const steps = await runScenario(result.candidate, Bun.YAML.parse(readFileSync(scenario, "utf8")))
+            console.error(`scenario: PASS ${steps.length} step(s)`)
+          } catch (e) {
+            console.error(`scenario: FAIL ${String(e)}`)
+          }
+        }
+        for (const d of result.diagnostics) console.error(`${d.level} ${d.rule} ${d.path}: ${d.message}`)
+        save(result.candidate, output)
+      }),
+    ),
+)
+const sort = Command.make(
+  "sort",
+  {
+    file: Argument.String("file"),
+    source: Argument.String("source"),
+    url,
+    output,
+  },
+  ({ file, source, url, output }) =>
+    task(() =>
+      withHost(url, async (host) => {
+        const result = await host.author.sort({ card: load(file), source: readFileSync(source, "utf8") })
+        save(result.candidate, output)
+      }),
+    ),
+)
+const review = Command.make("review", { file: Argument.String("file"), url, json }, ({ file, url, json }) =>
+  task(() =>
+    withHost(url, async (host) => {
+      const { diagnostics } = await host.author.review({ card: load(file) })
+      if (json) console.log(JSON.stringify(diagnostics))
+      else for (const d of diagnostics) console.error(`${d.level} ${d.rule} ${d.path}: ${d.message}`)
+    }),
+  ),
 )
 const storyId = Argument.Int("id")
 const remove = (name: "delete" | "drop") =>
@@ -132,7 +193,7 @@ const serving = Command.make(
 )
 const cli = Command.make("tavern").pipe(
   Command.withSubcommands([
-    Command.make("card").pipe(Command.withSubcommands([...authorCommands, install])),
+    Command.make("card").pipe(Command.withSubcommands([...authorCommands, install, compile, sort, review])),
     story,
     playing,
     serving,

@@ -167,7 +167,9 @@ greeting: the state its `do` leaves, the bands that hold, the lore windows open 
 
 ## Semantic side: open, to decide with the owner
 
-Questions, not rules. Nothing here is settled.
+Workshop's boundary also applies when you edit YAML directly: compile rules and wiring from the author's selected prose and mechanism intent; leave new prose and rubric slots empty for the author. Preserve existing prose, Action/Readout/option text and Chance.judge verbatim. Sort copies whole source paragraphs in source order; review returns path-addressed warnings. The CLI is a neutral tool, so direct file edits must uphold these same boundaries. Use `tavern card compile|sort|review` for candidates, fill `empty-text` diagnostics with the author's own words, then check, test and install. See `docs/workshop-brief.md` for the three operations.
+
+The questions below remain open within that boundary.
 
 - Affordance: must every readout-driven band end with what the player can do this scene to move the field? Is the
   pei-cool text after b52f7db5 the sample, or is the rule narrower?

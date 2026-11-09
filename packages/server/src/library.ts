@@ -35,6 +35,8 @@ import {
   type Secret,
   type Trace,
 } from "@effect-tavern/provider"
+import { author } from "./author.ts"
+import { lint } from "@effect-tavern/runtime/src/lint.ts"
 import { decodeCard, makeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
 import {
   decodeLayer,
@@ -73,9 +75,11 @@ const PROBE_TOKENS = 16
 const Pair = Schema.Struct({ provider: Schema.String, model: Schema.String })
 export const Routing = Schema.Struct({
   default: Schema.optionalKey(Pair),
-  stages: Schema.optionalKey(Schema.Struct(Object.fromEntries(phases.map((p) => [p, Schema.optionalKey(Pair)])))),
+  stages: Schema.optionalKey(
+    Schema.Struct(Object.fromEntries([...phases, "author"].map((p) => [p, Schema.optionalKey(Pair)]))),
+  ),
 })
-export type Routing = { default?: typeof Pair.Type; stages?: Partial<Record<Phase, typeof Pair.Type>> }
+export type Routing = { default?: typeof Pair.Type; stages?: Partial<Record<Phase | "author", typeof Pair.Type>> }
 /** No pair for the stage and no environment model. Its `code` rides the stream's `error` event (serve.ts), so the client
  *  offers its way into Settings → 默认模型 without reading the message. */
 export class NoModel extends Error {
@@ -133,12 +137,12 @@ export const library = ({
     if (!m) throw new Error(`provider "${p.name}": no model ${pair.model}`)
     return bind(connection(p, m, secretOf(p)))
   }
-  const model = (phase: Phase): Model => {
+  const model = (phase: Phase | "author"): Model => {
     const r = pinned ? {} : routing()
     const pair = r.stages?.[phase] ?? r.default
     if (pair) return resolve(pair)
     if (!env) throw new NoModel()
-    return env(phase)
+    return env(phase === "author" ? "record" : phase)
   }
   /** The fold policy off the narrate pair's model entry (the one stage that reads the unfolded tail), never throwing:
    *  `GET /nodes` folds before any model is needed, on a fresh install too. No pair, no entry, or pinned → 8000. */
@@ -301,6 +305,19 @@ export const library = ({
   return {
     /** The model a stage runs on and the fold policy, as every session reads them on its next request. */
     model,
+    author: author(() => model("author")),
+    drafts: {
+      get: (id: string) => {
+        const draft = data.drafts.get(id)
+        return { card: draft ?? cards.get(id), draft: draft !== undefined }
+      },
+      put: (id: string, value: unknown) => {
+        const card = decodeCard(value)
+        if (card.id !== id) throw new Error("card id does not match URL")
+        data.drafts.put(card)
+      },
+      del: data.drafts.del,
+    },
     policy,
     session,
     /** A story's turn in flight (turn.ts), beside its session. */
@@ -532,9 +549,13 @@ export const library = ({
       put: (value: unknown) => {
         const card = decodeCard(value)
         // Validate executable rules before replacing the installed definition.
-        makeCard(card.rules)
+        const rpg = makeCard(card.rules)
+        rpg.validate(rpg.initial)
+        const errors = lint(card).filter((d) => d.level === "error")
+        if (errors.length) throw new Error(errors.map((d) => `${d.level} ${d.rule} ${d.path}: ${d.message}`).join("\n"))
         const flags = facets(card)
         data.cards.put(card, flags)
+        data.drafts.del(card.id)
         for (const [id, cached] of sessions) {
           if (row(id)?.card !== card.id) continue
           if (cached.turn.busy !== null || cached.turn.pendingFailure) cached.stale = true

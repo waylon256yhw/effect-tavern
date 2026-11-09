@@ -41,6 +41,7 @@ create table if not exists secret (id text primary key, name text not null, json
 create table if not exists provider (id text primary key, name text not null, json text not null);
 create table if not exists routing (id integer primary key check (id = 1), json text not null);
 create table if not exists names (id integer primary key check (id = 1), etag text, json text not null);
+create table if not exists draft (id text primary key, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null, summary text, facets text);
 create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
@@ -442,6 +443,13 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
       },
       write: (t: { etag: string | null; names: Names }) =>
         void q("insert or replace into names (id, etag, json) values (1, ?, ?)").run(t.etag, JSON.stringify(t.names)),
+    },
+    drafts: {
+      get: (id: string): Card | undefined =>
+        parse<Card>(q("select json from draft where id = ?").get(id) as Row | undefined),
+      put: (card: Card) =>
+        void q("insert or replace into draft (id, json) values (?, ?)").run(card.id, JSON.stringify(card)),
+      del: (id: string) => void q("delete from draft where id = ?").run(id),
     },
     cards: {
       /** The library's cards by id and title, with the summary and facets `put` stored beside the json (a row written

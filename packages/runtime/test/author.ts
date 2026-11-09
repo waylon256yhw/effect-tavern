@@ -191,3 +191,121 @@ try {
   rmSync(dir, { recursive: true, force: true })
 }
 console.log("author: ok")
+
+// Workshop boundaries: no generated prose, existing rubric preserved, sort copies bytes.
+const { applyCompile, applySort, CompileOutput, SortOutput, ReviewOutput } = await import("../support/workshop.ts")
+const { Schema } = await import("effect")
+const base = decodeCard(Bun.YAML.parse(scaffold("workshop", "chat")))
+const wiring = {
+  fields: [{ path: "bond", type: "int" as const, initial: 0, min: 0, max: 10 }],
+  actions: [{ id: "close", do: [{ path: "bond", add: 1 }] }],
+  readouts: [{ id: "warmth", options: [{ id: "yes", do: [{ path: "bond", add: 1 }] }] }],
+  bindings: [{ to: "fiction.setting.when", when: { path: "bond", op: "gte" as const, value: 1 } }],
+}
+const candidate = applyCompile(base, wiring)
+assert.equal(candidate.fiction[0]!.text, base.fiction[0]!.text)
+assert.equal(candidate.rules.actions[0]!.text, "")
+assert.equal(candidate.rules.readouts![0]!.options[0]!.text, "")
+assert.ok(
+  checkCard(Bun.YAML.stringify(candidate))
+    .diagnostics.filter((d) => d.level === "error")
+    .every((d) => d.rule === "empty-text"),
+)
+const authored = {
+  ...candidate,
+  rules: {
+    ...candidate.rules,
+    actions: [{ ...candidate.rules.actions[0]!, text: "Author rubric", roll: { judge: "Author odds" } }],
+  },
+}
+assert.equal(applyCompile(authored, wiring).rules.actions[0]!.text, "Author rubric")
+assert.deepEqual(applyCompile(authored, wiring).rules.actions[0]!.roll, { judge: "Author odds" })
+const decodeCompile = Schema.decodeUnknownSync(CompileOutput)
+assert.equal(
+  applyCompile(base, decodeCompile({ ...wiring, actions: [{ ...wiring.actions[0]!, text: "injected" }] })).rules
+    .actions[0]!.text,
+  "",
+)
+assert.throws(() => decodeCompile({ ...wiring, fields: [{ ...wiring.fields[0]!, path: "two words" }] }))
+assert.deepEqual(decodeCompile({ bindings: [], text: "injected" }), { bindings: [] })
+assert.equal(
+  applySort(
+    base,
+    ["Author paragraph"],
+    Schema.decodeUnknownSync(SortOutput)([{ paragraphs: [0], to: "fiction.new", text: "injected" }]),
+  ).fiction.at(-1)!.text,
+  "Author paragraph",
+)
+assert.throws(() =>
+  Schema.decodeUnknownSync(ReviewOutput)([{ rule: "review:consistency", level: "error", path: "$", message: "x" }]),
+)
+const source = ["  First paragraph.\nSame paragraph.  ", "第二段。", "Third."]
+const sorted = applySort(base, source, [
+  { paragraphs: [2, 0], to: "fiction.new" },
+  { paragraphs: [1], to: "lore.letter.layers[0]" },
+])
+assert.equal(sorted.fiction.at(-1)!.text, source[0] + "\n\n" + source[2])
+assert.equal(sorted.lore[0]!.layers[0], source[1])
+assert.deepEqual(sorted.lore[0]!.unlock, { all: [] })
+assert.deepEqual(sorted.lore[0]!.offer, { any: [] })
+assert.deepEqual(base, decodeCard(Bun.YAML.parse(scaffold("workshop", "chat"))))
+for (const placements of [
+  [{ paragraphs: [3], to: "fiction.new" }],
+  [{ paragraphs: [0, 0], to: "fiction.new" }],
+  [{ paragraphs: [0], to: "fiction.setting" }],
+  [{ paragraphs: [0], to: "lore.new.layers[1]" }],
+  [{ paragraphs: [0], to: "greetings[0]" }],
+  [{ paragraphs: [0], to: "frame.persona" }],
+])
+  assert.throws(() => applySort(base, source, placements))
+assert.equal(
+  applySort({ ...base, frame: [{ id: "voice" }] }, source, [{ paragraphs: [0], to: "frame.voice" }]).frame[0]!.text,
+  source[0],
+)
+const emptyEverywhere = {
+  ...candidate,
+  frame: [{ id: "voice", text: " " }],
+  fiction: [{ id: "new", text: "" }],
+  asks: [{ id: "ask", text: "" }],
+  greetings: [{ text: "" }],
+  guard: [""],
+  lore: [{ id: "l", layers: [""], unlock: { all: [] }, offer: { any: [] } }],
+  products: [{ id: "custom", text: "", shape: { kind: "text" }, role: "theater" }],
+  rules: { ...candidate.rules, actions: [{ id: "a", text: "", roll: { judge: "" } }] },
+}
+assert.equal(
+  checkCard(Bun.YAML.stringify(emptyEverywhere)).diagnostics.filter((d) => d.rule === "empty-text").length,
+  11,
+)
+// Every binding family and every newly created rubric stays on the mechanical side.
+const layered = {
+  ...base,
+  lore: [{ id: "letter", layers: ["Hook.", "Secret."], unlock: { all: [] }, offer: { any: [] } }],
+}
+const linked = applyCompile(layered, {
+  bindings: [
+    { to: "lore.letter.unlock[1]", when: { path: "bond", is: 2 } },
+    { to: "lore.letter.offer", when: { event: "letter:open" } },
+    { to: "greetings[0].do", do: [{ event: "letter:open" }] },
+  ],
+  slots: ["fiction.unwritten", "greetings[1]", "lore.unwritten.layers[0]"],
+  actions: [{ id: "judge", roll: { judged: true } }],
+  products: [{ id: "custom", role: "theater", shape: { kind: "text" } }],
+})
+assert.deepEqual(linked.lore[0]!.layers, layered.lore[0]!.layers)
+assert.deepEqual(linked.lore[0]!.unlock, [{ all: [] }, { path: "bond", is: 2 }])
+assert.deepEqual(linked.lore[0]!.offer, { event: "letter:open" })
+assert.deepEqual(linked.greetings[0]!.do, [{ event: "letter:open" }])
+assert.equal(linked.greetings[0]!.text, base.greetings[0]!.text)
+assert.equal(linked.fiction.at(-1)!.text, "")
+assert.equal(linked.greetings[1]!.text, "")
+assert.equal(linked.lore[1]!.layers[0], "")
+assert.equal(linked.products![0]!.text, "")
+assert.deepEqual(linked.rules.actions[0]!.roll, { judge: "" })
+assert.throws(() =>
+  decodeCompile({
+    bindings: [],
+    products: [{ id: "p", role: "theater", shape: { kind: "table", columns: [{ key: "two words", type: "text" }] } }],
+  }),
+)
+assert.throws(() => applyCompile(base, { bindings: [{ to: "fiction.missing.when", when: { all: [] } }] }))

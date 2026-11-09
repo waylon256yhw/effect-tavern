@@ -7,7 +7,7 @@
   },
   "type": "module",
   "scripts": {
-    "verify": "bun check && bun test/data.ts && bun test/export.ts && bun test/tavern.ts && bun test/library.ts && bun test/serve.ts && bun test/headless.ts && bun test/cli.ts",
+    "verify": "bun check && bun test/data.ts && bun test/export.ts && bun test/tavern.ts && bun test/library.ts && bun test/serve.ts && bun test/headless.ts && bun test/cli.ts && bun test/author.ts",
     "start": "bun src/main.ts",
     "names": "bun src/names.ts",
     "compile": "bun build --compile src/main.ts --asset ../client/dist --asset ../runtime/cards --outfile dist/tavern && rm -f .*.bun-build",
