@@ -98,17 +98,19 @@ flowchart TD
 - [x] **补充跨入口一致性测试**：在 `packages/server/test/` 中断言直接调用 `library` 与通过 HTTP 调用在非法动作拒绝、并发冲突、事件投影脱敏及卡片热更新重算上行为一致。
 
 #### Step 1.3：完成创作最小闭环（`card init | check | view | test`）
-- [ ] **`card init`**：
+- [x] **`card init`**：
   - 支持按双坐标（是否有 `persona`、默认通道 `act | note`）或原型模板初始化最小可运行 `.yaml` 卡片文件。
-- [ ] **`card check [--json]`**：
+- [x] **`card check [--json]`**：
   - 将 YAML 解析 / [`decodeCard`](../packages/runtime/src/card.ts) 阶段的结构错误统一转换为 [`Diagnostic`](../packages/runtime/src/lint.ts)（`rule: "schema"`），与 [`lint(card)`](../packages/runtime/src/lint.ts) 静态语义诊断合并输出。
   - 支持 `--json` 机器可读输出（含 `diagnostics`、字段 `drawn` 视图规格、开场预览与各节 Token 估算），作为未来 Workshop 前端的直接数据源。
-- [ ] **`card view [--json]`（可解释性增强）**：
+- [x] **`card view [--json]`（可解释性增强）**：
   - 接入 `phrase.ts` 替代原始 `JSON.stringify(c)` 显示条件、效果与检定概率。
   - 结合当前 `state`、事件与玩家层 [`resolve`](../packages/runtime/src/layer.ts) 结果，解释为什么某段 `fiction` 未激活、为什么某条 `lore` 处于当前层或未开窗、以及哪个槽位由哪一层（`from`）生效。
-- [ ] **`card test`（确定性场景验证）**：
+- [x] **`card test`（确定性场景验证）**：
   - 定义极简的场景测试描述格式（指定 `greeting`、可选 `seed`、几步玩家输入与脚本化模型回答，断言目标 `state`、触发的 `events`、打开的 `windows` 或产出的 `products`）。
   - 复用脚本化模型驱动器在毫秒级完成离线回归校验。
+
+实现与边界说明见 [离线制卡工具](card-cli.md)。
 
 #### Step 1.4：接上持久化游玩与服务管理（`install | play | story | serve`）
 - [ ] **`card install <file>`**：校验候选卡片文件（先跑 `decodeCard` + `lint` 无 error），通过后写入本地库 `card` 表并触发空闲 Session 缓存刷新。

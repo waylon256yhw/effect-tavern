@@ -5,22 +5,26 @@
 // total is printed is `request()` itself, so what prints is what the call would send.
 import type { Message } from "@effect-tavern/provider"
 import { drawn, makeCard, type Card, type State } from "./card.ts"
-import { holds, reads, type Cond } from "./cond.ts"
+import { holds, lookup, reads, type Cond } from "./cond.ts"
 import { head, type Fragment } from "./fragment.ts"
 import { resolve, type Rows } from "./layer.ts"
 import { hook, makeLore } from "./lore.ts"
 import { expand, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
+import { cond, effect, labels } from "./phrase.ts"
+import { deliveryText, freeze, loreResource } from "./context.ts"
 import { floorAt } from "./derived.ts"
 
 import { initialWorld } from "./world.ts"
 import { tokens } from "./tokens.ts"
 
-export const stages = ["narrate", "record", "lookup"] as const
+export const stages = ["narrate", "direct", "record", "lookup"] as const
 export type Stage = (typeof stages)[number]
 export interface Options {
   state?: Record<string, string> // field path → value as typed (`--state bond=10`), set after the greeting
   greeting?: number // index into `greetings`; its `do` settles first
+  events?: readonly string[]
+  pin?: string
   stage?: Stage
 }
 export interface Section {
@@ -41,7 +45,6 @@ export interface View {
 
 const textOf = (m: Message) =>
   typeof m.content === "string" ? m.content : m.content.map((p) => ("text" in p ? p.text : "")).join("")
-const when = (c?: Cond) => (c ? ` when ${JSON.stringify(c)}` : "")
 const indent = (t: string) => t.replace(/^/gm, "    ")
 
 export const view = (card: Card, rows: Rows, o: Options = {}): View => {
@@ -53,7 +56,15 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const opened = rpg.apply(rpg.initial, g?.do ?? [])
   const types = new Map(card.rules.fields.map((f) => [f.path, f.type]))
   const coerce = (path: string, v: string) =>
-    types.get(path) === "boolean" ? v === "true" : types.get(path) === "enum" || !types.has(path) ? v : Number(v)
+    types.get(path) === "boolean"
+      ? v === "true"
+        ? true
+        : v === "false"
+          ? false
+          : v
+      : types.get(path) === "enum" || !types.has(path)
+        ? v
+        : Number(v)
   const s = rpg.apply(
     opened.s,
     Object.entries(o.state ?? {}).map(([path, v]) => ({ path, set: coerce(path, v) })),
@@ -63,11 +74,12 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const R = resolve(card, rows)
   const world = initialWorld(R.products)
   const context = { fields: s, world }
+  const events = [...opened.events, ...(o.events ?? [])]
   const fiction = fill(card.fiction, R.names)
   const layers = [...R.frame, ...R.tail]
   const frag = (zone: string, f: Fragment) => {
     const on = head([f], { state: context })
-    const name = `[${zone}] ${f.id}${f.label ? ` ${f.label}` : ""}${when(f.when)}`
+    const name = `[${zone}] ${f.id}${f.label ? ` ${f.label}` : ""}${f.when ? ` when ${cond(f.when, labels(card.rules))}` : ""}${"from" in f ? ` (from ${String(f.from)})` : ""}`
     if (!f.text) return { tokens: 0, text: `${name}  (slot, empty)` }
     if (!on.length) return { tokens: 0, text: `${name}  (off)` }
     const t = tokens(on[0]!.text)
@@ -88,25 +100,24 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     ]),
   )
   // the index as the session builds it (session.ts `current`): the card's entries expanded, one with an unfilled hole left
-  // out, then the player layer's entries, one layer each and always unlocked
+  // out. Pack resources stay separate from story disclosure, as in derived.ts.
   const own = card.lore.flatMap((e) => {
     const layers = e.layers.map((l) => expand(l, R.names))
     return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
   })
-  const L = makeLore<Record<string, unknown>, readonly string[]>([
-    ...own.map((e) => ({
+  const L = makeLore<Record<string, unknown>, readonly string[]>(
+    own.map((e) => ({
       ...e,
       unlock: () => floors.get(e.id)!,
       offer: (x: Record<string, unknown>, ev: readonly string[]) => holds(e.offer, x, ev),
     })),
-    ...R.entries.map((e) => ({ ...e, layers: [e.text], unlock: () => 1 })),
-  ])
+  )
   const gated = {
     ...context,
     lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id) }])),
   }
   const readable = L.readable(gated, [], [])
-  const windows = new Map(L.offers(gated, [], opened.events).map((d) => [d.id, d.layer]))
+  const windows = new Map(L.offers(gated, [], events).map((d) => [d.id, d.layer]))
   const lore = [
     ...own.map((e) => {
       const at = L.current(
@@ -118,6 +129,44 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
       return `${e.id}  layer ${at}/${e.layers.length}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}`
     }),
     ...R.entries.map((e) => `${e.id}  (${e.from})  in the index\n    ${hook(e.text)}`),
+  ]
+
+  const resources = [
+    ...L.entries.flatMap((e) => {
+      const depth = L.current(e, gated, [])
+      return depth ? [loreResource(e, depth)] : []
+    }),
+    ...R.entries.map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)),
+  ]
+  // Bare ids refer to card lore; pack ids use the runtime's pack:<row>/<entry> identity.
+  const pin = o.pin?.includes(":") ? o.pin : o.pin ? `card:${o.pin}` : undefined
+  const pinned = resources.find((r) => r.resourceId === pin)
+  if (pin && !pinned?.access.player) throw new Error(`pin ${o.pin}: entry is not available to the player`)
+  const injected = resources
+    .filter((r) => (r.activation === "always" && r.access.model) || r === pinned)
+    .map((r) => deliveryText(freeze(r)))
+  const offered = L.offers(gated, [], events)
+  const explain = (path: string, c: Cond, ev: readonly string[] = []): string[] => [
+    `${path}: ${holds(c, gated, ev)} — ${cond(c, labels(card.rules))}${"path" in c ? ` (current ${c.path}=${String(lookup(gated, c.path))})` : ""}`,
+    ...("all" in c ? c.all : "any" in c ? c.any : "not" in c ? [c.not] : []).flatMap((child, i) =>
+      explain(`${path}.${i}`, child, ev),
+    ),
+  ]
+  // Explain declared predicates consistently; unconditional entries have no gate to diagnose.
+  const whens = (zone: string, entries: readonly { id: string; when?: Cond }[]) =>
+    entries.flatMap((e) => (e.when ? explain(`${zone}.${e.id}.when`, e.when) : []))
+  const gates = [
+    ...whens("frame", R.frame),
+    ...whens("tail", R.tail),
+    ...whens("fiction", fiction),
+    ...whens("actions", card.rules.actions),
+    ...whens("readouts", card.rules.readouts ?? []),
+    ...whens("products", R.products),
+    ...(card.rules.over ? explain("rules.over", card.rules.over) : []),
+    ...card.lore.flatMap((e) => [
+      ...(Array.isArray(e.unlock) ? e.unlock : [e.unlock]).flatMap((c, i) => explain(`lore.${e.id}.unlock.${i}`, c)),
+      ...explain(`lore.${e.id}.offer`, e.offer, events),
+    ]),
   ]
 
   // ───────── record ─────────
@@ -139,31 +188,38 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
 
   // ───────── the document ─────────
   const ask: Ask =
-    stage === "lookup"
-      ? { stage, question: R.asks["lookup"]!.text, context: [], ledger: [] }
-      : stage === "record"
-        ? {
-            stage,
-            known: "Known: ",
-            asks,
-            tools: R.asks["record.tools"]!.text,
-            readout: R.asks["record.readout"]!.text,
-            questions,
-            prose: "",
-          }
-        : {
-            stage,
-            fiction: head(fiction, { state: context }),
-            history: [],
-            summarized: false,
-            told: L.entries
-              .filter((e) => e.activation === "always" && (e.access?.model ?? true))
-              .flatMap((e) => e.layers.slice(0, L.current(e, gated, []))),
-            outcome: [],
-            must: [],
-            may: [],
-            blocks: { question: R.asks["narrate.blocks"]!.text, asks: penned },
-          }
+    stage === "direct"
+      ? {
+          stage,
+          question: R.asks["direct"]!.text,
+          ledger: [],
+          rules: card.guard.map((g) => expand(g, R.names)).filter((g): g is string => g !== undefined),
+          open: offered.map((d) => ({ id: d.id, text: d.text! })),
+          events,
+        }
+      : stage === "lookup"
+        ? { stage, question: R.asks["lookup"]!.text, context: injected, ledger: [] }
+        : stage === "record"
+          ? {
+              stage,
+              known: "Known: ",
+              asks,
+              tools: R.asks["record.tools"]!.text,
+              readout: R.asks["record.readout"]!.text,
+              questions,
+              prose: "",
+            }
+          : {
+              stage,
+              fiction: head(fiction, { state: context }),
+              history: [],
+              summarized: false,
+              told: injected,
+              outcome: events,
+              must: [],
+              may: offered.map((d) => ({ id: d.id, text: d.text! })),
+              blocks: { question: R.asks["narrate.blocks"]!.text, asks: penned },
+            }
   const doc = request(
     {
       frame: head(R.frame, { state: context }),
@@ -184,10 +240,13 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     return [
       `${q.id} moves ${moved.join(", ") || "nothing"}`,
       ...(active.length
-        ? active.map((f) => `  band ${f.id}${f.label ? ` ${f.label}` : ""}${when(f.when)}\n${indent(f.text ?? "")}`)
+        ? active.map(
+            (f) =>
+              `  band ${f.id}${f.label ? ` ${f.label}` : ""}${f.when ? ` when ${cond(f.when, labels(card.rules))}` : ""}\n${indent(f.text ?? "")}`,
+          )
         : [`  (no band on ${moved.join(", ")} holds)`]),
       `  readout: ${q.text}`,
-      ...q.options.map((x) => `    ${x.id}: ${x.text}  → ${JSON.stringify(x.do)}`),
+      ...q.options.map((x) => `    ${x.id}: ${x.text}  → ${x.do.map((e) => effect(e, labels(card.rules))).join(", ")}`),
     ].join("\n")
   })
 
@@ -204,12 +263,17 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
       text: [...asks, ...(questions ?? [])].join("\n"),
     },
     { name: "bands ↔ readouts", tokens: 0, text: bands.join("\n\n") },
+    { name: "gates", tokens: 0, text: gates.join("\n") },
     { name: "narrate blocks", tokens: tokens(penned.join("\n")), text: penned.join("\n") },
   ]
   const text = [
     `${card.id} at ${JSON.stringify(s)}${g ? `, after greeting ${o.greeting}` : ""}`,
     ...sections.map((x) => `\n── ${x.name}${x.tokens ? `  ~${x.tokens} tokens` : ""} ──\n${x.text || "(none)"}`),
     `\n── ${stage} document: ${doc.length} messages, ~${total} tokens ──`,
+    ...doc.map(
+      (m, i) =>
+        `[${i}] ${m.role}${m.providerOptions?.anthropic?.cacheControl ? " [cache breakpoint]" : ""}\n${textOf(m)}`,
+    ),
   ].join("\n")
   return {
     state: s,

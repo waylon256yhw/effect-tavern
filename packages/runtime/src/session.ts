@@ -180,7 +180,9 @@ export const makeSession = ({
   store,
   hat,
   policy: P = policyFor(),
+  seed = 0,
 }: {
+  seed?: number // initial deterministic beat seed for offline scenarios
   card: Card
   rows: () => Rows // the player's rows on this card, read on every request (library.ts)
   /** The model each stage runs on (provider `bind`), asked on every call like `hat`: the library's routing, in force
@@ -232,7 +234,7 @@ export const makeSession = ({
       )
   const chain = (id: number | null) => Log.chain(held.log, id)
   const turnOf = (id: number) => Log.get(held.log, id)
-  let seeds = [...held.log.nodes.values()].reduce((n, t) => t.beats.reduce((n, b) => Math.max(n, b.seed), n), 0)
+  let seeds = [...held.log.nodes.values()].reduce((n, t) => t.beats.reduce((n, b) => Math.max(n, b.seed), n), seed)
   let policy: Policy | undefined // one read for a synchronous snapshot; never retained across requests
   const policyOf = () => (typeof P === "function" ? P() : P)
 

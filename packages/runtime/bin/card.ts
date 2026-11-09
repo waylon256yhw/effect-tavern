@@ -1,46 +1,91 @@
 #!/usr/bin/env bun
-// `card check <card>` and `card view <card>` (issue #28): the command tree and its I/O only. Linting is src/lint.ts,
-// rendering src/view.ts; a card is loaded by name through support/cards.ts, with the example player layer.
+// Offline authoring command tree and I/O; pure preview lives in src/view.ts.
 import { BunServices } from "@effect/platform-bun"
-import { Console, Effect, Exit, Option } from "effect"
+import { Cause, Console, Effect, Exit, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
-import { lint } from "../src/lint.ts"
-import { fields, openings, stages, view } from "../src/view.ts"
-import { loadCard, player, readCard } from "../support/cards.ts"
+import { readFileSync, writeFileSync } from "node:fs"
+import { checkCard, scaffold, templates } from "../support/author.ts"
+import { runScenario } from "../support/scenario.ts"
+import { stages, view } from "../src/view.ts"
+import { loadCard, player, readCard, cardNames } from "../support/cards.ts"
 
 const card = Argument.String("card").pipe(
   Argument.withDescription("a template card by name (wuxia, yandao, ri, banxing), or a path to a .yaml card"),
 )
 const load = (name: string) =>
   Effect.tryPromise({
-    try: async () => (name.endsWith(".yaml") ? readCard(name) : loadCard(name)),
+    try: async () => (cardNames.includes(name) ? loadCard(name) : readCard(name)),
     catch: (e) => (e as Error).message,
   })
 
-const check = Command.make("check", { card }, ({ card: name }) =>
+const json = Flag.Boolean("json").pipe(Flag.withDefault(false))
+const attempt = <A>(f: () => A) => Effect.try({ try: f, catch: (e) => String(e) })
+const check = Command.make("check", { card, json }, ({ card: name, json }) =>
   Effect.gen(function* () {
-    const c = yield* load(name)
-    const ds = lint(c)
-    for (const d of ds)
-      yield* Console.log(`${d.level} ${d.rule} ${d.path}: ${d.message}${d.hint ? `\n    hint: ${d.hint}` : ""}`)
-    for (const line of fields(c)) yield* Console.log(line)
-    for (const line of openings(c, player)) yield* Console.log(line)
-    const v = view(c, player)
-    for (const s of v.sections.filter((s) => s.tokens)) yield* Console.log(`${s.name} ~${s.tokens} tokens`)
-    yield* Console.log(`narrate document ~${v.total} tokens`)
-    const errors = ds.filter((d) => d.level === "error").length
-    if (errors) return yield* Effect.fail(`${errors} error(s)`)
+    const report = yield* attempt(() =>
+      readFileSync(cardNames.includes(name) ? new URL(`../cards/${name}.yaml`, import.meta.url) : name, "utf8"),
+    ).pipe(
+      Effect.match({
+        onSuccess: checkCard,
+        onFailure: (message): ReturnType<typeof checkCard> => ({
+          diagnostics: [{ rule: "io", level: "error", path: name, message }],
+          fields: [],
+          fieldLines: [],
+          greetings: [],
+          sections: [],
+          total: 0,
+        }),
+      }),
+    )
+    if (json) yield* Console.log(JSON.stringify(report))
+    else {
+      for (const d of report.diagnostics)
+        yield* Console.log(`${d.level} ${d.rule} ${d.path}: ${d.message}${d.hint ? `\n    hint: ${d.hint}` : ""}`)
+      for (const line of [...report.fieldLines, ...report.greetings]) yield* Console.log(line)
+      for (const section of report.sections.filter((s) => s.tokens))
+        yield* Console.log(`${section.name} ~${section.tokens} tokens`)
+      yield* Console.log(`narrate document ~${report.total} tokens`)
+    }
+    if (report.diagnostics.some((d) => d.level === "error")) process.exitCode = 1
   }),
-).pipe(
-  Command.withDescription(
-    "Lint a card, show what each greeting puts in play, and estimate its tokens per section; exit 1 on any error",
-  ),
+)
+const init = Command.make(
+  "init",
+  {
+    id: Argument.String("id"),
+    template: Flag.Literals("template", templates).pipe(Flag.withDefault("chat")),
+  },
+  ({ id, template }) =>
+    Effect.gen(function* () {
+      yield* attempt(() => writeFileSync(`${id}.yaml`, scaffold(id, template), { flag: "wx" }))
+      yield* Console.log(`Created ${id}.yaml`)
+    }),
+)
+const test = Command.make(
+  "test",
+  {
+    card,
+    scenario: Argument.String("scenario").pipe(Argument.optional),
+  },
+  ({ card: name, scenario }) =>
+    Effect.gen(function* () {
+      const c = yield* load(name)
+      const value = yield* attempt(() =>
+        Option.isSome(scenario) ? Bun.YAML.parse(readFileSync(scenario.value, "utf8")) : undefined,
+      )
+      const results = yield* Effect.tryPromise({ try: () => runScenario(c, value), catch: (e) => String(e) })
+      yield* Console.log(`PASS ${results.length} step(s), zero model tokens`)
+    }),
 )
 
 const show = Command.make(
   "view",
   {
     card,
+    json,
+    events: Flag.String("events").pipe(Flag.optional),
+    pin: Flag.String("pin").pipe(Flag.optional),
+    persona: Flag.String("persona").pipe(Flag.optional),
     state: Flag.KeyValuePair("state").pipe(
       Flag.withDescription("field=value, set after the greeting; repeat the flag for more fields"),
       Flag.optional,
@@ -48,21 +93,31 @@ const show = Command.make(
     greeting: Flag.Int("greeting").pipe(Flag.withDescription("apply greetings[n].do first (0-based)"), Flag.optional),
     stage: Flag.Literals("stage", stages).pipe(Flag.withDefault("narrate")),
   },
-  ({ card: name, state, greeting, stage }) =>
+  ({ card: name, state, greeting, stage, events, pin, persona, json }) =>
     Effect.gen(function* () {
       const c = yield* load(name)
       const v = yield* Effect.try({
         try: () =>
-          view(c, player, { state: Option.getOrUndefined(state), greeting: Option.getOrUndefined(greeting), stage }),
+          view(
+            c,
+            { ...player, ...(Option.isSome(persona) ? { persona: { name: "你", text: persona.value } } : {}) },
+            {
+              state: Option.getOrUndefined(state),
+              greeting: Option.getOrUndefined(greeting),
+              stage,
+              events: Option.getOrUndefined(events)?.split(",").filter(Boolean),
+              pin: Option.getOrUndefined(pin),
+            },
+          ),
         catch: (e) => (e as Error).message,
       })
-      yield* Console.log(v.text)
+      yield* Console.log(json ? JSON.stringify(v) : v.text)
     }),
 ).pipe(Command.withDescription("Print the stage's document at a state, sectioned, with token estimates"))
 
 const cli = Command.make("card").pipe(
-  Command.withDescription("Card toolchain: check and view"),
-  Command.withSubcommands([check, show]),
+  Command.withDescription("Card toolchain: init, check, view and test"),
+  Command.withSubcommands([init, check, show, test]),
 )
 
 const exit = await Effect.runPromiseExit(
@@ -71,4 +126,7 @@ const exit = await Effect.runPromiseExit(
     Effect.provide(BunServices.layer),
   ),
 )
-if (Exit.isFailure(exit)) process.exitCode = 1
+if (Exit.isFailure(exit)) {
+  if (Cause.hasDies(exit.cause)) console.error(Cause.pretty(exit.cause))
+  process.exitCode = 1
+}
