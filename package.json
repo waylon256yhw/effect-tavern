@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "cd packages/client && bun --bun vp dev",
-    "verify": "pnpm -r verify"
+    "verify": "pnpm -r verify",
+    "tavern": "bun packages/server/bin/tavern.ts"
   },
   "devDependencies": {
     "eslint-plugin-solid": "0.18.1",

@@ -115,18 +115,26 @@ const show = Command.make(
     }),
 ).pipe(Command.withDescription("Print the stage's document at a state, sectioned, with token estimates"))
 
+export const authorCommands = [init, check, show, test]
+
 const cli = Command.make("card").pipe(
   Command.withDescription("Card toolchain: init, check, view and test"),
-  Command.withSubcommands([init, check, show, test]),
+  Command.withSubcommands(authorCommands),
 )
 
-const exit = await Effect.runPromiseExit(
-  Command.runWith(cli, { version: "0.0.0" })(process.argv.slice(2)).pipe(
-    Effect.tapError((e) => (typeof e === "string" ? Console.error(e) : Effect.void)), // CliErrors render themselves
-    Effect.provide(BunServices.layer),
-  ),
-)
-if (Exit.isFailure(exit)) {
-  if (Cause.hasDies(exit.cause)) console.error(Cause.pretty(exit.cause))
-  process.exitCode = 1
+export const runCli = async <Name extends string, Input, ContextInput, E>(
+  command: Command.Command<Name, Input, ContextInput, E>,
+  args = process.argv.slice(2),
+) => {
+  const exit = await Effect.runPromiseExit(
+    Command.runWith(command, { version: "0.0.0" })(args).pipe(
+      Effect.tapError((e) => (typeof e === "string" ? Console.error(e) : Effect.void)),
+      Effect.provide(BunServices.layer),
+    ),
+  )
+  if (Exit.isFailure(exit)) {
+    if (Cause.hasDies(exit.cause)) console.error(Cause.pretty(exit.cause))
+    process.exitCode = 1
+  }
 }
+if (import.meta.main) await runCli(cli)

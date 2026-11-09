@@ -1,12 +1,12 @@
 # Roadmap：Headless CLI 宿主、制卡工具链与无头运行闭环
 
-归档状态（2026-11-08）：Step 1.1、1.2 已实现；Step 1.3 起仍为计划（追踪见 Issue #155）。
+归档状态（2026-11-09）：Phase 1（Step 1.1–1.4）已全部实现；Phase 2、3 仍为计划（追踪见 Issue #155）。
 
 当前可用入口：`bun packages/server/src/headless.ts`；在 `packages/server` 执行 `bun run compile:headless` 可生成独立二进制。无头入口默认使用当前目录的 `.tavern/tavern.db`，支持 `DATA`、`CARDS`、`HOST`、`PORT`；`MODEL=fake` 显式启用脚本模型，否则使用库内配置的模型路由，不自动读取本机开发者凭据。HTTP 挂载于 `/api`，不提供静态前端。
 
-模板位于 `packages/runtime/cards/`，文件加载与示例玩家配置位于 `packages/runtime/support/cards.ts`，脚本回答辅助位于 `packages/runtime/support/script.ts`。`library.cards.put` 校验并保存完整候选卡，安装定义优先于同 ID 模板；完整的 lint 安装命令仍属于 Step 1.4。运行中更新卡会标记旧 Session 过期，回合完成后的下一次访问重新加载。
+CLI 入口：`bun run tavern`，支持 `card init|check|view|test|install`、`play`、`story` 和 `serve`；宿主命令支持本地直连与显式 `--url` 远程模式。模板位于 `packages/runtime/cards/`，文件加载与示例玩家配置位于 `packages/runtime/support/cards.ts`，脚本回答辅助位于 `packages/runtime/support/script.ts`。`card install` 通过 `checkCard` 校验后调用 `library.cards.put` 保存完整候选卡，安装定义优先于同 ID 模板。运行中更新卡会标记旧 Session 过期，回合完成后重新加载；无人订阅的失败保留到下一次 attach 消费后再加载新卡。
 
-验证：`vp check`、`vp run verify`；独立二进制在临时目录中建局、脚本模型游玩、重启恢复的冒烟测试。跨入口测试见 `packages/server/test/headless.ts`。
+验证：`vp check`、`vp run verify`；覆盖离线制卡、CLI 本地/远程模式、占库保护、SSE、失败保留，以及独立二进制建局、脚本模型游玩与重启恢复。相关测试见 `packages/runtime/test/author.ts`、`packages/server/test/cli.ts`、`packages/server/test/library.ts` 和 `packages/server/test/headless.ts`。
 
 ## 1. 背景与目标
 
@@ -113,13 +113,15 @@ flowchart TD
 实现与边界说明见 [离线制卡工具](card-cli.md)。
 
 #### Step 1.4：接上持久化游玩与服务管理（`install | play | story | serve`）
-- [ ] **`card install <file>`**：校验候选卡片文件（先跑 `decodeCard` + `lint` 无 error），通过后写入本地库 `card` 表并触发空闲 Session 缓存刷新。
-- [ ] **`play` & `story`**：
+- [x] **`card install <file>`**：校验候选卡片文件（先跑 `decodeCard` + `lint` 无 error），通过后写入本地库 `card` 表并触发空闲 Session 缓存刷新。
+- [x] **`play` & `story`**：
   - `story list | new | show | export | delete`：在终端管理故事与分支。
   - `play`：在终端启动或继续一局故事（支持 `--model fake` 零成本试跑与真实模型路由，支持流式输出正文、执行动作、查看当前 `context` 与 `detail`）。
-- [ ] **`serve`**：
+- [x] **`serve`**：
   - 启动 Headless 服务（当指定静态目录或存在 `client/dist` 时可选挂载前端）。
   - CLI 运行命令支持本地直连库模式与显式 `--url <http://...>` 远程连接模式；输出遵循“普通结果支持 `--json`、流式事件支持 `--jsonl`、日志走 `stderr`”的规范。
+
+实现与双模使用说明见 [CLI 宿主](tavern-cli.md)。
 
 ---
 

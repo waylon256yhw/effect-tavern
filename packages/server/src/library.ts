@@ -256,7 +256,7 @@ export const library = ({
   /** A story's session and its turn, opened on its first request on the story's card, the same ones after. */
   const open = (id: Id) => {
     const had = sessions.get(id)
-    if (had && (!had.stale || had.turn.busy !== null)) return had
+    if (had && (!had.stale || had.turn.busy !== null || had.turn.pendingFailure)) return had
     if (had) sessions.delete(id)
     const r = row(id)
     if (!r) throw new Error(`no story ${id}`)
@@ -537,7 +537,7 @@ export const library = ({
         data.cards.put(card, flags)
         for (const [id, cached] of sessions) {
           if (row(id)?.card !== card.id) continue
-          if (cached.turn.busy !== null) cached.stale = true
+          if (cached.turn.busy !== null || cached.turn.pendingFailure) cached.stale = true
           else sessions.delete(id)
         }
       },

@@ -13,7 +13,7 @@
 // Turn per row, appended by the store's write. `call`: a node's `call` events (the Inspector's trace), appended when the
 // node lands or is amended, gone with the node, and kept for a story's last `traced` nodes only. The runtime never sees SQL: `store(story)` is log.ts's Store, whose
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
-// A library file has one process: `open` locks it, and a second process opens a fresh library of its own (`lock`).
+// A library file has one process: `open` locks it; a second process fails unless isolateOnBusy is explicit.
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
 // for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`), and so does a `base` row (`foldIn`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
@@ -241,7 +241,9 @@ const lock = (file: string, isolateOnBusy: boolean): string => {
     if (pid === process.pid) return file
     if (alive(pid)) {
       if (!isolateOnBusy)
-        throw new Error(`${file} is open in process ${pid}; use a separate DATA directory or connect to that server`)
+        throw new Error(
+          `${file} is open in process ${pid}; use --url to connect to that server or a separate DATA directory`,
+        )
       const own = join(dirname(file), String(process.pid), basename(file))
       console.error(`${file} is open in process ${pid}: this one opens its own library, ${own}`)
       mkdirSync(dirname(own), { recursive: true })

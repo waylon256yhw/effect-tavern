@@ -292,6 +292,14 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         return lib.locals.read(card)
       })
     }
+    const installAt = req.method === "PUT" && /^\/cards\/([^/]+)$/.exec(req.url ?? "")
+    if (installAt)
+      return reply(async () => {
+        const card = (await read((u) => u)) as { id?: string }
+        if (card.id !== decodeURIComponent(installAt[1]!)) throw new Error("card id does not match URL")
+        lib.cards.put(card)
+        return lib.cards.list()
+      })
     const cardAt = req.method === "GET" && /^\/cards\/([^/]+)$/.exec(req.url ?? "")
     if (cardAt) return reply(() => lib.view(decodeURIComponent(cardAt[1]!)), 404)
     // Everything below is one story's: the one the request names.

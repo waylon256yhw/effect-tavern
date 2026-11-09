@@ -150,13 +150,20 @@ const over = (data: Data, m: () => Model = model) =>
   // a failure nobody heard: kept for one attach with its draft, then gone
   const bad = Effect.runFork(Stream.runDrain(t.start({ kind: "act", input: { text: "lost" } })))
   await Effect.runPromise(Fiber.interrupt(bad)) // gone before narrate is through, so before record fails
+  const beforeReload = lib.session(p)
+  lib.cards.put(chat) // mark the in-flight session stale before its unheard failure
   while (t.busy) await new Promise((f) => setTimeout(f, 5))
-  const failed = t.attach()
+  assert.equal(t.pendingFailure, true)
+  assert.equal(lib.session(p), beforeReload) // reads must not discard the pending error
+  lib.cards.put(chat) // replacing again after failure must preserve it too
+  assert.equal(lib.session(p), beforeReload)
+  const failed = lib.attach(p)
+  assert.notEqual(lib.session(p), beforeReload) // consumed: the next access reloads the card
   assert.equal(failed?.draft, null) // prose is already persisted; it is no longer an unsaved draft
   const failedNode = lib.session(p).log.head!
   assert.equal(lib.session(p).log.nodes.get(failedNode)!.settlementStatus, "failed")
   lib.session(p).skipRecord(failedNode)
-  const told = await run(failed!.events)
+  const told = await Effect.runPromise(Stream.runCollect(failed!.events))
   assert.deepEqual(
     told.map((e) => e.kind),
     ["error"],

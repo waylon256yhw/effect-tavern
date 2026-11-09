@@ -138,6 +138,9 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
     get busy(): Phase | null {
       return run?.phase ?? null
     },
+    get pendingFailure(): boolean {
+      return failed !== undefined
+    },
     /** Decodes and submits an action; a busy turn accepts only its pending record skip. */
     start: (raw: unknown): Stream.Stream<Out> => {
       const a = decodeAction(raw)
