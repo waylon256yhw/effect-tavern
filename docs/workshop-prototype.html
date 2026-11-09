@@ -1,0 +1,1486 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>制卡工坊 · 交互原型 v2</title>
+<style>
+:root{color-scheme:light;
+  --ink:#000;--ink2:#2b2b2b;--ink3:#707070;--ink4:#a0a0a0;
+  --line:#d4d4d4;--line2:#e6e6e6;--fill:#f1f1f1;--bg:#ececec;--paper:#fff;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.2,.7,.1,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--sans);background:#dcdcdc;color:var(--ink);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+button:disabled{cursor:default;opacity:.32}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink3)}
+.sp{flex:1}
+:focus-visible{outline:2px solid #000;outline-offset:2px}
+
+/* ---------- prototype controls (outside the stage) ---------- */
+.proto{display:flex;align-items:center;gap:8px 22px;padding:10px 16px 8px;font-size:12px;color:#555;flex-wrap:wrap}
+.proto .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.proto .lab{color:#777;margin-right:2px}
+.pb{border:1px solid #bdbdbd;border-radius:8px;padding:5px 10px;font-size:12px;line-height:1.3;text-align:left}
+.pb small{display:block;color:#888;font-size:10.5px}
+.pb.on{background:#000;color:#fff;border-color:#000}
+.pb.on small{color:#b5b5b5}
+.pb.jp{padding:4px 9px;border-radius:999px;display:inline-flex;gap:5px;align-items:center}
+.pb.jp i{font-style:normal;font-family:var(--mono);font-size:11px;opacity:.6}
+.proto .scale{margin-left:auto;color:#888}
+.proto .br{flex-basis:100%;height:0}
+.wrap{display:flex;justify-content:center;padding:0 16px 16px}
+.frame{position:relative;flex:none}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0;background:var(--bg);border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.1);font-size:13.5px}
+
+/* ---------- overview ---------- */
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;transition:opacity .35s ease,transform .42s var(--ease);transform-origin:50% 50%}
+.ov.receding{opacity:.3;transform:scale(.985)}
+.ov-h{height:78px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px 0 20px}
+.ov-title{min-width:0;flex:1}
+.tline{display:flex;align-items:baseline;gap:12px;min-width:0}
+.card-title{font:600 19px/1.2 var(--sans);border:0;background:transparent;padding:2px 0;outline:none;width:9em;color:var(--ink);flex:none}
+.card-title:focus,.card-sum:focus{box-shadow:0 1px 0 #000}
+.card-meta{font-size:12px;color:var(--ink4);white-space:nowrap}
+.card-sum{display:block;font:13px/1.4 var(--sans);color:var(--ink2);border:0;background:transparent;padding:3px 0;margin-top:3px;outline:none;width:100%;max-width:480px}
+.card-sum::placeholder{color:var(--ink4)}
+.hint{font-size:12px;color:var(--ink4);margin-right:4px;white-space:nowrap}
+.btn{height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--paper);font-size:13px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.btn:hover:not(:disabled){border-color:#9a9a9a}
+.btn.primary{background:#000;color:#fff;border-color:#000}
+.btn.primary:hover:not(:disabled){background:#2a2a2a}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink3)}
+.btn.ghost:hover:not(:disabled){color:#000;border-color:var(--line)}
+.btn.sm{height:26px;padding:0 10px;font-size:12px}
+
+.canvas{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 12px 12px;position:relative;user-select:none;-webkit-user-select:none}
+.row{display:flex;min-height:0;min-width:0;transition:flex-grow .3s var(--ease)}
+.canvas.resizing .row,.canvas.resizing .cap{transition:none}
+.gx{width:8px;flex:none;cursor:col-resize;position:relative;touch-action:none}
+.gy{height:8px;flex:none;cursor:row-resize;position:relative;touch-action:none}
+.gx::after,.gy::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:2px;background:transparent;transition:background .15s}
+.gx::after{width:3px;height:40px;max-height:60%}
+.gy::after{height:3px;width:44px}
+.gx:hover::after,.gy:hover::after,.gx.active::after,.gy.active::after,.gx:focus-visible::after,.gy:focus-visible::after{background:#000}
+.gx:focus-visible,.gy:focus-visible{outline:none}
+.glabel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000;color:#fff;font:11px/1 var(--mono);padding:4px 7px;border-radius:5px;white-space:nowrap;pointer-events:none;z-index:5}
+
+.cap{flex-basis:0;min-width:0;min-height:0;position:relative;background:var(--paper);border:1px solid var(--line);border-radius:22px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:flex-grow .3s var(--ease),border-radius .25s var(--ease),border-color .15s,opacity .15s}
+.cap:hover{border-color:#8f8f8f}
+.cap:focus-visible{outline:2px solid #000;outline-offset:2px}
+.cap.lifting{opacity:.3}
+.canvas.moving .cap{cursor:grabbing}
+.cap .g{width:22px;height:22px;border-radius:7px;background:var(--fill);display:inline-flex;align-items:center;justify-content:center;font:13px/1 var(--mono);flex:none;color:#000}
+.cap-pill{display:none;align-items:center;gap:8px;height:100%;padding:0 14px 0 10px;font-size:13px;min-width:0}
+.cap-pill b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cap-pill .mono{margin-left:auto;color:var(--ink3);font-size:12px;white-space:nowrap}
+.cap-full{display:flex;flex-direction:column;gap:12px;padding:14px 16px 12px;height:100%;min-height:0}
+.cap-h{display:flex;align-items:center;gap:8px;min-width:0}
+.cap-h b{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cap-h .tp{font-size:12px;color:var(--ink4);white-space:nowrap}
+.cap-h .x{margin-left:auto;width:22px;height:22px;border-radius:6px;color:var(--ink3);font-size:15px;line-height:1;opacity:0;flex:none}
+.cap:hover .cap-h .x,.cap:focus-within .cap-h .x{opacity:1}
+.cap-h .x:hover{background:var(--fill);color:#000}
+.cap-m{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--ink3)}
+.mt b{font-size:22px;font-weight:500;color:#000;margin-right:4px;letter-spacing:-.02em}
+.cap-prev{list-style:none;margin:0;padding:0;flex:1;min-height:0;overflow:hidden;font-size:12.5px;color:var(--ink2);-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)}
+.cap-prev li{display:flex;gap:10px;line-height:1.95;border-top:1px solid var(--line2);min-width:0}
+.cap-prev li span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cap-prev li em{font-style:normal;margin-left:auto;color:var(--ink4);font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.cap-diag{flex:1;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(#000 82%,transparent);mask-image:linear-gradient(#000 82%,transparent)}
+.cap-f{display:flex;justify-content:space-between;font-size:11px;color:var(--ink4);flex:none}
+.cap-f .open{opacity:0;color:#000}
+.cap:hover .cap-f .open{opacity:1}
+.dim{position:absolute;right:10px;bottom:8px;font-size:10.5px;background:#000;color:#fff;padding:2px 6px;border-radius:4px;display:none;pointer-events:none}
+.canvas.resizing .dim{display:block}
+.cap[data-size="xs"] .cap-full{display:none}
+.cap[data-size="xs"] .cap-pill{display:flex}
+.cap[data-size="s"] .cap-prev,.cap[data-size="s"] .cap-diag,.cap[data-size="s"] .cap-f{display:none}
+.cap[data-size="s"] .cap-full{gap:8px}
+.cap[data-size="s"] .mt b{font-size:18px}
+.cap[data-size="m"] .cap-diag{display:none}
+.cap[data-size="l"] .cap-prev{display:none}
+.cap[data-size="l"] .cap-full{padding:16px 20px 14px;gap:14px}
+
+.drop{position:absolute;border:1.5px dashed #000;background:rgba(0,0,0,.05);border-radius:16px;pointer-events:none;transition:left .1s,top .1s,width .1s,height .1s,opacity .1s;z-index:20}
+.dragghost{position:fixed;left:0;top:0;z-index:1000;pointer-events:none;background:#000;color:#fff;border-radius:999px;padding:6px 12px;font-size:12px;white-space:nowrap;font-family:var(--sans)}
+.dragghost em{font-style:normal;color:#aaa;margin-left:8px}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;border:1.5px dashed var(--line);border-radius:24px;color:var(--ink2)}
+.empty p{margin:0}
+.empty .btn{margin-top:14px}
+
+/* sheets: add + slice */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.12);z-index:30;animation:fade .2s ease both}
+.addsheet{position:absolute;top:10px;right:10px;bottom:10px;width:340px;background:#fff;border-radius:16px;border:1px solid var(--line);z-index:31;display:flex;flex-direction:column;animation:slidein .28s var(--ease) both}
+.addsheet header{display:flex;align-items:center;padding:16px 16px 4px 20px;font-weight:600;font-size:15px;flex:none}
+.addsheet .note{margin:0 20px 10px;font-size:12px;color:var(--ink3);line-height:1.6}
+.addsheet ul.types{list-style:none;margin:0;padding:0 8px 8px;overflow:auto;flex:1}
+.types li{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:12px;border-radius:10px}
+.types li:hover{background:#f7f7f7}
+.types li .g{width:26px;height:26px;border-radius:8px;background:var(--fill);display:flex;align-items:center;justify-content:center;font:13px var(--mono)}
+.types li b{font-size:13.5px;font-weight:600}
+.types li p{margin:3px 0 0;font-size:12px;color:var(--ink3);line-height:1.55}
+.types li.mounted b,.types li.mounted p{color:var(--ink4)}
+.tag{font-size:11px;color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:1px 7px;white-space:nowrap;line-height:1.5}
+.tag.solid{background:#000;color:#fff;border-color:#000}
+.slice{width:430px}
+.sl-ctrl{padding:4px 20px 14px;border-bottom:1px solid var(--line2);display:flex;flex-direction:column;gap:6px;flex:none}
+.slr{display:grid;grid-template-columns:64px 1fr 40px;align-items:center;gap:10px;font-size:12.5px}
+.slr input[type=range]{accent-color:#000;width:100%}
+.slr b{text-align:right;font-weight:600}
+.slr select{font:inherit;border:1px solid var(--line2);border-radius:6px;padding:3px 6px;background:#fff;grid-column:2/4}
+.slr .stn{grid-column:2/4;font-size:11px;color:var(--ink3);margin-top:-4px}
+.sl-out{flex:1;min-height:0;overflow:auto;padding:6px 20px 20px}
+.sl-sec{padding:12px 0;border-bottom:1px solid var(--line2)}
+.sl-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:6px}
+.sl-h .g{width:20px;height:20px;border-radius:6px;background:var(--fill);display:inline-flex;align-items:center;justify-content:center;font:12px var(--mono);font-weight:400}
+.sl-h em{font-style:normal;margin-left:auto;font:11px var(--mono);color:var(--ink3);font-weight:400}
+.sl-sec ul{list-style:none;margin:0;padding:0 0 0 28px;font-size:12.5px;color:var(--ink2)}
+.sl-sec li{display:flex;gap:10px;line-height:1.85}
+.sl-sec li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sl-sec li em{font-style:normal;margin-left:auto;color:var(--ink4);font-size:11.5px;white-space:nowrap}
+.sl-sec li.off{color:var(--ink4)}
+.sl-sec p{margin:0 0 0 28px;font-size:12px;color:var(--ink3);line-height:1.7}
+.sl-total{display:flex;justify-content:space-between;padding:12px 0;font-size:13px;font-weight:600}
+.iss{display:flex;gap:8px;width:100%;text-align:left;padding:7px 0;border-bottom:1px solid var(--line2);font-size:12.5px;line-height:1.5}
+.iss:hover span{text-decoration:underline}
+.iss i{font-style:normal;flex:none;width:34px;font-size:11px;color:var(--ink3);padding-top:1px}
+.iss i.e{color:#000;font-weight:600}
+.iss em{font-style:normal;margin-left:auto;color:var(--ink4);font-size:11.5px;white-space:nowrap}
+
+.toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#000;color:#fff;border-radius:999px;padding:8px 8px 8px 16px;font-size:12.5px;display:flex;align-items:center;gap:12px;z-index:60;animation:rise .25s var(--ease) both;white-space:nowrap}
+.toast:not(:has(button)){padding-right:16px}
+.toast button{background:#fff;color:#000;border-radius:999px;padding:4px 10px;font-size:12px}
+
+.zoom{position:absolute;background:#fff;border:1px solid var(--line);z-index:50;overflow:hidden;pointer-events:none}
+.zoom-h{display:flex;align-items:center;gap:8px;padding:14px 16px;font-weight:600;font-size:14px;white-space:nowrap}
+.zoom-h .g{width:22px;height:22px;border-radius:7px;background:var(--fill);display:inline-flex;align-items:center;justify-content:center;font:13px var(--mono)}
+
+/* ---------- capsule diagrams (l) ---------- */
+.dg-bars{display:flex;gap:4px;align-items:flex-start}
+.dg-bars .bar{min-width:0}
+.dg-bars .bar i{display:block;height:8px;border-radius:4px;background:#000}
+.dg-bars .bar span{display:block;font-size:11px;color:var(--ink3);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-excerpt{font-size:13px;line-height:1.8;color:var(--ink2);margin:14px 0 0;max-width:40em;white-space:pre-line}
+.dg-pov{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);margin-bottom:12px;min-width:0}
+.dg-pov span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-open{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.dg-open .oc{border-left:2px solid var(--line);padding-left:10px;font-size:12px;line-height:1.65;color:var(--ink2)}
+.dg-open .oc.def{border-left-color:#000}
+.dg-open .oc b{display:block;font-size:12.5px;color:#000}
+.dg-open .oc p{margin:4px 0 0;white-space:pre-line}
+.trk{position:relative;height:34px;border-radius:8px;background:var(--fill)}
+.trk .sg{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;padding:0 8px;overflow:hidden;font-size:11.5px;white-space:nowrap;border-right:1px solid #fff;text-align:left}
+.trk .sg:first-child{border-radius:8px 0 0 8px}
+.trk .sg.last{border-radius:0 8px 8px 0;border-right:0}
+.trk .sg b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.trk .im{position:absolute;bottom:-17px;transform:translateX(-50%);font-size:10px;color:var(--ink3);white-space:nowrap}
+.trk .im::before{content:"▲";font-size:7px;margin-right:2px;vertical-align:1px}
+.dg-state .lab{font-size:12px;margin-bottom:8px;color:var(--ink3)}
+.dg-reads{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:28px;font-size:11.5px;color:var(--ink3)}
+.dg-reads b{font:600 11.5px var(--mono);color:#000;margin-left:3px}
+.dg-state .others{margin-top:12px;font-size:12px}
+.dg-state .others div{display:flex;gap:10px;border-top:1px solid var(--line2);line-height:2}
+.dg-state .others em{font-style:normal;color:var(--ink4);font-family:var(--mono);font-size:11px;margin-left:auto}
+.dg-sec{display:flex;flex-direction:column;font-size:12.5px}
+.dg-sec .sr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:7px 0;border-top:1px solid var(--line2)}
+.dg-sec .sr:first-child{border-top:0;padding-top:0}
+.dg-sec .st{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-sec .steps{grid-column:1/-1;display:flex;align-items:center;min-width:0}
+.dg-sec .steps i{white-space:nowrap;flex:none;font:10.5px var(--mono);border:1px solid #000;border-radius:4px;padding:1px 5px;background:#fff}
+.dg-sec .steps .ln{flex:none;width:14px;height:1px;background:#000}
+.dg-singles{margin-top:12px;padding-top:10px;border-top:1px solid #000;font-size:12px;line-height:1.9;color:var(--ink2)}
+.dg-singles h5{margin:0 0 2px;font-size:11px;font-weight:500;color:var(--ink4)}
+.dg-singles span{display:inline-block;margin-right:12px;white-space:nowrap}
+.dg-check{width:100%;border-collapse:collapse;font-size:12px}
+.dg-check td{padding:5px 0;border-top:1px solid var(--line2);white-space:nowrap}
+.dg-check tr:first-child td{border-top:0}
+.dg-check td.a{color:var(--ink3);padding:0 10px;font-size:11px}
+.dg-check td.p{width:44%}
+.dg-ends{margin-top:12px;padding-top:8px;border-top:1px solid #000;font-size:11.5px;color:var(--ink3);line-height:1.8}
+.dg-ends b{color:#000;font-weight:600}
+.pbar{display:flex;align-items:center;gap:6px;min-width:0}
+.pbar i{display:block;height:6px;background:#000;border-radius:3px;flex:none}
+.pbar span{font:11px var(--mono);color:var(--ink3);white-space:nowrap}
+.pbar.ai i{width:44px;background:repeating-linear-gradient(90deg,#000 0 2px,transparent 2px 5px);opacity:.6}
+.pbar small{font-size:10.5px;color:var(--ink4);white-space:nowrap}
+.dg-ledger{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:18px;font-size:12px}
+.dg-ledger h5{margin:0 0 4px;font-size:11px;font-weight:500;color:var(--ink4)}
+.dg-ledger .sl div{display:flex;gap:8px;line-height:1.95;border-top:1px solid var(--line2)}
+.dg-ledger .sl em{font-style:normal;margin-left:auto;color:var(--ink4);white-space:nowrap}
+.dg-ledger .sl div.off{color:var(--ink4)}
+.dg-ledger dl{margin:0 0 8px;display:grid;grid-template-columns:auto 1fr;gap:0 12px;line-height:1.9}
+.dg-ledger dt{color:var(--ink3)}
+.dg-ledger dd{margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-ledger .np div{display:flex;gap:8px;border-top:1px solid var(--line2);line-height:1.9}
+.dg-ledger .np em{font-style:normal;color:var(--ink3);margin-left:auto;white-space:nowrap}
+.dg-guard{display:flex;flex-direction:column;gap:12px;font-size:12px;line-height:1.7}
+.dg-guard h5{margin:0;font-size:11px;font-weight:500;color:var(--ink4)}
+.dg-guard ol{margin:0;padding-left:16px;color:var(--ink2)}
+.dg-guard ol li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-guard .lx{display:flex;gap:6px;color:var(--ink2);white-space:nowrap;overflow:hidden}
+.dg-guard .lx s{color:var(--ink4)}
+.dg-guard .nm{display:flex;flex-wrap:wrap;gap:4px 12px;font-family:var(--mono);font-size:11.5px}
+
+/* ---------- detail (layer 2) ---------- */
+.dv{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--paper);border-radius:16px}
+.dv-enter .dv-h,.dv-enter .dv-b{animation:fade .24s ease both}
+.dv-h{height:58px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px 0 12px;border-bottom:1px solid var(--line2)}
+.back{padding:0 12px 0 9px}
+.back span{font-size:17px;line-height:1;margin-top:-2px}
+.minimap{width:52px;height:34px;display:flex;flex-direction:column;gap:2px;flex:none}
+.minimap .mr{display:flex;gap:2px;min-height:0}
+.minimap button{flex-basis:0;min-width:0;background:#dcdcdc;border-radius:3px}
+.minimap button:hover{background:#9c9c9c}
+.minimap button.on{background:#000}
+.crumb{display:flex;align-items:center;gap:8px;min-width:0}
+.crumb .cc{color:var(--ink3);font-size:13px;white-space:nowrap}
+.crumb .cc::after{content:"/";margin-left:8px;color:var(--ink4)}
+.crumb .g{width:24px;height:24px;border-radius:7px;background:var(--fill);display:inline-flex;align-items:center;justify-content:center;font:13px var(--mono);flex:none}
+.crumb input{font:600 16px var(--sans);border:1px solid transparent;border-radius:6px;padding:3px 6px;background:transparent;color:#000}
+.crumb input:hover{border-color:var(--line2)}
+.crumb input:focus{outline:none;border-color:#000}
+.crumb .cnt{font-size:12px;color:var(--ink3);white-space:nowrap}
+.dv-h .tk{font-size:11.5px;color:var(--ink4);white-space:nowrap}
+.dv-b{flex:1;min-height:0;position:relative}
+.dv-b>div{height:100%}
+
+.dv input:not([type=range]),.dv textarea,.dv select{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 7px;min-width:0}
+.dv textarea{resize:none;line-height:1.7;display:block}
+.dv input:not([type=range]):hover,.dv textarea:hover,.dv select:hover{border-color:var(--line2)}
+.dv input:not([type=range]):focus,.dv textarea:focus,.dv select:focus{outline:none;border-color:#000;background:#fff}
+.dv select{-webkit-appearance:none;appearance:none;padding-right:18px;background-image:linear-gradient(45deg,transparent 50%,#777 50%),linear-gradient(135deg,#777 50%,transparent 50%);background-position:calc(100% - 9px) 52%,calc(100% - 5px) 52%;background-size:4px 4px;background-repeat:no-repeat}
+.dv input[type=number]{-moz-appearance:textfield}
+.dv input[type=number]::-webkit-inner-spin-button,.dv input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.boxed{border-color:var(--line2) !important;background:#fafafa}
+.boxed:focus{background:#fff}
+.fld{display:block;margin-bottom:14px}
+.fld>input,.fld>textarea{width:100%;border-color:var(--line2);background:#fafafa}
+.lbl{display:block;font-size:11.5px;color:var(--ink3);margin-bottom:5px}
+.lbl2{font-size:11.5px;color:var(--ink3);white-space:nowrap}
+.title-in{font:600 22px/1.3 var(--sans) !important;padding:2px 6px !important;margin-left:-6px;width:100%}
+.title-in.md{font-size:17px !important;width:auto;flex:0 1 220px}
+.title-in.sm{font-size:15px !important}
+.num{width:58px;text-align:right}
+.num.s{width:46px}
+.add-line{display:block;width:100%;text-align:left;padding:9px 12px;color:var(--ink3);font-size:12.5px;border-radius:8px}
+.add-line:hover{background:var(--fill);color:#000}
+.add-line.sm{padding:5px 7px;width:auto}
+.xx{width:22px;height:22px;border-radius:6px;color:var(--ink4);font-size:15px;line-height:1;flex:none}
+.xx:hover{background:var(--fill);color:#000}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;flex:none;background:#fff}
+.seg button{padding:3px 10px;border-radius:6px;font-size:12px;color:var(--ink3);white-space:nowrap}
+.seg button:hover:not(.on){color:#000}
+.seg button.on{background:#000;color:#fff}
+.seg.sm button{padding:2px 8px;font-size:11.5px}
+.tog{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 11px 4px 9px;color:var(--ink3);white-space:nowrap;display:inline-flex;align-items:center;gap:6px;background:#fff}
+.tog::before{content:"";width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor}
+.tog.on{background:#000;color:#fff;border-color:#000}
+.tog.on::before{background:#fff;border-color:#fff}
+.pane-h{font-size:12px;color:var(--ink3);padding:16px 14px 8px}
+.side{border-right:1px solid var(--line2);background:#fafafa;overflow:auto;padding-bottom:12px}
+.scroll{overflow:auto}
+.empty-in{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;color:var(--ink3);text-align:center;padding:40px}
+.empty-in p{margin:0;max-width:30em;line-height:1.7}
+.fhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.fhead .title-in{flex:1 1 200px;width:auto}
+.inl{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink3);white-space:nowrap}
+.inl input,.inl select{border-color:var(--line2) !important;color:#000}
+.sec-h{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin-bottom:8px;flex-wrap:wrap}
+.sec-h .mono{font-weight:400;color:var(--ink4);font-size:12px}
+.sec-h .sub{font-weight:400;font-size:12px;color:var(--ink3)}
+.note2{font-size:12px;color:var(--ink3);line-height:1.7;margin:0 0 12px}
+.chip{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:999px;padding:1px 3px 1px 4px;font-size:12px;background:#fff}
+.chip input,.chip select{padding:2px 4px !important;font-size:12px !important}
+.chip input.d,.chip input.v{width:44px;font-family:var(--mono) !important;text-align:right}
+.chip input.k{width:58px}
+.chip select{padding-right:16px !important;max-width:84px}
+.chip .xx{width:18px;height:18px;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+
+/* 1 prose */
+.dv-prose{display:grid;grid-template-columns:232px 1fr}
+.toc{display:flex;flex-direction:column}
+.toc ol{list-style:none;margin:0;padding:0 8px}
+.toc li{display:grid;grid-template-columns:20px 1fr auto;gap:6px;align-items:baseline;padding:8px;border-radius:8px;cursor:pointer;font-size:13px}
+.toc li:hover{background:#f0f0f0}
+.toc li.on{background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.toc li .no{color:var(--ink4);font-size:11.5px}
+.toc li .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toc li.on .tt{font-weight:600}
+.toc li .cnt{font-size:11px;color:var(--ink4)}
+.toc .toc-f{margin-top:auto;padding:12px 16px 0;font-size:11.5px;color:var(--ink3);line-height:1.6}
+.sheet{display:flex;flex-direction:column;min-height:0;padding:22px 40px 0 44px}
+.sheet .page{display:flex;flex-direction:column;flex:1;min-height:0}
+.sheet .in-r{animation:inR .22s var(--ease) both}
+.sheet .in-l{animation:inL .22s var(--ease) both}
+.sheet-note{font-size:12px;color:var(--ink4);margin:4px 0 6px}
+.prose{flex:1;min-height:0;font-size:15px !important;line-height:1.95 !important;max-width:42em;color:var(--ink2);padding:10px 6px 24px !important;margin-left:-6px;overflow:auto;border:0 !important;background:transparent !important}
+.pager{height:54px;flex:none;border-top:1px solid var(--line2);display:flex;align-items:center;gap:8px;margin:0 -40px 0 -44px;padding:0 20px 0 38px}
+.pager .pos{font-size:12px;color:var(--ink3);margin:0 6px}
+.btn.out{border-color:#000}
+
+/* 2 opening + pov */
+.dv-open{display:grid;grid-template-columns:292px 1fr}
+.pov{padding:0 16px 20px}
+.pov .pane-h{padding-left:0}
+.chan{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.chan-opt{display:grid;grid-template-columns:16px 1fr;gap:2px 8px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:#fff}
+.chan-opt::before{content:"";width:10px;height:10px;border-radius:50%;border:1.5px solid #000;margin-top:4px;grid-row:1/3}
+.chan-opt b{font-size:13.5px}
+.chan-opt span{font-size:11.5px;color:var(--ink3);line-height:1.55}
+.chan-opt.on{border-color:#000;box-shadow:inset 0 0 0 1px #000}
+.chan-opt.on::before{background:#000;box-shadow:inset 0 0 0 2px #fff}
+details.fold{border-top:1px solid var(--line2)}
+details.fold summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:12px 0;font-size:13px;font-weight:600}
+details.fold summary::-webkit-details-marker{display:none}
+details.fold summary::before{content:"›";font-weight:400;color:var(--ink3);transition:transform .15s;display:inline-block;width:8px}
+details.fold[open] summary::before{transform:rotate(90deg)}
+details.fold summary em{font-style:normal;font-weight:400;font-size:11.5px;color:var(--ink4);margin-left:auto}
+details.fold summary em.set{color:#000}
+details.fold textarea{width:100%;margin-bottom:12px;font-size:13px}
+.pov .dir-note{font-size:11.5px;color:var(--ink3);line-height:1.6;margin:-4px 0 10px}
+.ocols{overflow:auto}
+.cols{display:flex;gap:14px;padding:20px;align-items:stretch;min-height:100%;width:max-content}
+.ocol{width:330px;flex:none;border:1px solid var(--line);border-radius:16px;padding:14px 16px 12px;display:flex;flex-direction:column;background:#fff}
+.ocol.def{border-color:#000;box-shadow:inset 0 0 0 1px #000}
+.ocol header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ocol header .title-in{flex:1}
+.otext{flex:1;min-height:240px;width:100%;font-size:14px !important;line-height:1.9 !important;color:var(--ink2);border-color:var(--line2) !important;background:#fafafa;padding:10px 12px !important}
+.otext:focus{background:#fff}
+.radio{font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--ink3);white-space:nowrap}
+.radio.on{background:#000;color:#fff;border-color:#000}
+.ocol .ov-ini{margin-top:12px}
+.ocol footer{display:flex;gap:4px;padding-top:10px;margin-top:12px;border-top:1px solid var(--line2)}
+.ocol.add{border-style:dashed;align-items:center;justify-content:center;color:var(--ink3);background:transparent;width:180px}
+.ocol.add:hover{color:#000;border-color:#000}
+
+/* 3 lore */
+.dv-lore{display:grid;grid-template-columns:300px 1fr}
+.llist{display:flex;flex-direction:column;padding-bottom:8px}
+.ltools{padding:12px 12px 8px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:#fafafa;z-index:2}
+.ltools .search{width:100%;border-color:var(--line) !important;border-radius:8px !important;padding:6px 10px !important;background:#fff !important}
+.fchips{display:flex;gap:2px;flex-wrap:wrap}
+.fchips button{font-size:11.5px;padding:3px 8px;border-radius:999px;color:var(--ink3)}
+.fchips button:hover{color:#000}
+.fchips button.on{background:#000;color:#fff}
+.fchips button .mono{font-size:10.5px;margin-left:3px;opacity:.7}
+.lit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;width:calc(100% - 16px);margin:0 8px;text-align:left;padding:9px 10px;border-radius:8px;border-bottom:1px solid var(--line2)}
+.lit:hover{background:#f0f0f0}
+.lit.on{background:#fff;box-shadow:inset 0 0 0 1px var(--line);border-bottom-color:transparent}
+.lit .nm{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lit.on .nm{font-weight:600}
+.lit .hk{grid-column:1/-1;font-size:11.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lit .tag{align-self:center}
+.llist-sep{font-size:11px;color:var(--ink4);padding:12px 18px 4px}
+.lmain{padding:22px 32px 32px}
+.hook{width:100%;font-size:14px !important;border-color:var(--line2) !important;background:#fafafa;padding:8px 10px !important}
+.meta3{display:flex;gap:16px 26px;flex-wrap:wrap;margin:14px 0 20px;align-items:flex-end}
+.meta3 .win{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:12px;color:var(--ink3)}
+.meta3 .win input{border-color:var(--line2) !important;width:40px;text-align:center}
+.body-ta{width:100%;font-size:14.5px !important;line-height:1.9 !important;border-color:var(--line2) !important;background:#fafafa;padding:10px 12px !important;min-height:150px}
+.deepen{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:1.5px dashed #000;border-radius:14px;padding:14px 18px;margin-top:6px}
+.deepen b{font-size:14px;white-space:nowrap}
+.deepen span{font-size:12px;color:var(--ink3);line-height:1.5}
+.deepen:hover{background:#fafafa}
+.sim{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:10px 14px;border:1px solid var(--line2);border-radius:12px;background:#fafafa;margin-bottom:12px;flex-wrap:wrap}
+.sim .lbl{margin:0 6px 0 0}
+.sim input[type=range]{width:180px;accent-color:#000}
+.sim .simv{width:28px;font-weight:600}
+.ladder{list-style:none;margin:0;padding:0;position:relative}
+.ly{display:grid;grid-template-columns:34px 1fr 64px;gap:14px;padding:14px 0;border-top:1px solid var(--line2);position:relative}
+.ly:first-child{border-top:0}
+.lnum{width:28px;height:28px;border-radius:50%;border:1.5px solid #000;display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff;position:relative;z-index:1;transition:background .2s,color .2s}
+.ly:not(:last-child)::before{content:"";position:absolute;left:14px;top:42px;bottom:-14px;width:1.5px;background:var(--line)}
+.ly.open .lnum{background:#000;color:#fff}
+.ly.open:has(+ .ly.open)::before{background:#000}
+.cond{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;font-size:13px}
+.cond .lbl{margin:0 4px 0 0}
+.cond select,.cond input{border-color:var(--line2) !important}
+.cond .free{font-size:11.5px;color:var(--ink4)}
+.ly textarea{width:100%;border-color:var(--line2) !important;background:#fafafa;font-size:13.5px;line-height:1.8}
+.lside{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.lstate{font-size:11.5px;color:var(--ink4);white-space:nowrap}
+.ly.open .lstate{color:#000;font-weight:600}
+
+/* 4 state */
+.dv-state{display:grid;grid-template-columns:236px 1fr}
+.frow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;width:calc(100% - 16px);margin:0 8px;text-align:left;padding:9px 10px;border-radius:8px;font-size:13px}
+.frow:hover{background:#f0f0f0}
+.frow.on{background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.frow.on .fn{font-weight:600}
+.frow .fn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow .ft{font-size:11.5px;color:var(--ink3)}
+.frow .fs{grid-column:1/-1;font-size:11.5px}
+.fmain{padding:22px 32px 32px}
+.trk-wrap{margin:30px 0 8px}
+.trk.big{height:58px;border-radius:10px}
+.trk.big .sg{font-size:13px;padding:0 12px;cursor:pointer}
+.trk.big .sg:first-child{border-radius:10px 0 0 10px}
+.trk.big .sg.last{border-radius:0 10px 10px 0}
+.trk.big .sg em{font-style:normal;font-size:11px;opacity:.7;margin-top:2px}
+.trk.big .sg.on{box-shadow:inset 0 -4px 0 #000}
+.trk.big .sg.on.dark{box-shadow:inset 0 -4px 0 #fff}
+.th{position:absolute;top:-8px;bottom:-8px;width:16px;margin-left:-8px;cursor:ew-resize;z-index:3;touch-action:none}
+.th::before{content:"";position:absolute;left:7px;top:0;bottom:0;width:2px;background:#000;border-radius:1px}
+.th::after{content:attr(data-v);position:absolute;top:-19px;left:50%;transform:translateX(-50%);font:10.5px/1 var(--mono);background:#000;color:#fff;padding:3px 5px;border-radius:4px}
+.th:hover::before,.th.active::before{width:4px;left:6px}
+.trk.big .im{bottom:-22px;font-size:11px}
+.trk-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--ink4);margin-top:28px}
+.stage-ed{margin-top:16px}
+.st-h{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.pg{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:2px;font-size:12px}
+.pg button{width:24px;height:24px;border-radius:6px;font-size:15px}
+.pg button:hover:not(:disabled){background:var(--fill)}
+.pg span{padding:0 4px;color:var(--ink3)}
+.stage-prose{width:100%;font-size:14.5px !important;line-height:1.9 !important;border-color:var(--line2) !important;background:#fafafa;padding:12px 14px !important;min-height:150px}
+.stage-prose:focus{background:#fff}
+.reads{border-top:1px solid #000;margin-top:24px;padding-top:16px}
+.reads .q{width:100%;font-size:14px;font-weight:500;border-color:var(--line2) !important;background:#fafafa;padding:8px 10px !important;margin-bottom:6px}
+.rlines{list-style:none;margin:0;padding:0}
+.rlines li{display:grid;grid-template-columns:18px minmax(0,1fr) auto 84px 110px 22px;align-items:center;gap:8px;border-bottom:1px solid var(--line2);padding:2px 0}
+.rno{font-size:11px;color:var(--ink4)}
+.rf{font-size:12px;color:var(--ink3);white-space:nowrap}
+.rlines .num{width:100%}
+.dbar{position:relative;height:12px}
+.dbar::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:#000}
+.dbar i{position:absolute;top:2px;height:8px}
+.dbar i.pos{background:#000;border-radius:0 3px 3px 0}
+.dbar i.neg{border:1px solid #000;border-right:0;border-radius:3px 0 0 3px;background:#fff}
+.enum p{margin:0 0 12px;max-width:36em;line-height:1.7}
+.lines{list-style:none;margin:0;padding:0;counter-reset:l;max-width:360px}
+.lines li{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line2)}
+.lines li::before{counter-increment:l;content:counter(l);font:11px var(--mono);color:var(--ink4);width:16px;flex:none}
+.lines li input{flex:1}
+
+/* 5 check */
+.dv-check{overflow:auto}
+.endband{padding:16px 24px 10px;border-bottom:1px solid var(--line2);background:#fafafa}
+.endgrid{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:28px}
+.ends{list-style:none;margin:0;padding:0;border-top:1px solid #000}
+.ends li{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line2);padding:3px 0;font-size:12.5px}
+.ends li select,.ends li input{border-color:transparent}
+.ends .en{width:96px;font-weight:600}
+.ends .et{flex:1;color:var(--ink2)}
+.maxt{font-size:12.5px}
+.maxt .row1{display:flex;align-items:center;gap:8px;margin:2px 0 8px}
+.maxt input{border-color:var(--line2) !important;width:56px;text-align:right}
+.maxt p{margin:0;font-size:11.5px;color:var(--ink3);line-height:1.6}
+.actlist{padding:16px 24px 28px}
+.act{border-bottom:1px solid var(--line2);padding:12px 0 12px;display:flex;flex-direction:column;gap:7px}
+.actlist .sec-h{border-bottom:1px solid #000;padding-bottom:8px;margin-bottom:0}
+.a1{display:grid;grid-template-columns:140px minmax(0,1fr) auto 22px;gap:10px;align-items:center}
+.a1 .an{font-weight:600;font-size:14.5px}
+.a1 .ad{color:var(--ink3)}
+.a1 .show{display:flex;align-items:center;gap:6px}
+.a2,.a3{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;padding-left:7px}
+.a2 select,.a2 input,.a3 select,.a3 input{border-color:var(--line2) !important}
+.a2 .mode.rule{flex:4;min-width:200px}.a2 .mode.rule input{width:100%}
+.a2 .mode{display:flex;align-items:center;gap:5px;min-width:0}
+.rate{width:150px;flex:none}
+.rollbtn{font-size:12px;border:1px solid var(--line);border-radius:6px;padding:3px 8px;background:#fff;white-space:nowrap}
+.rollbtn:hover{border-color:#000}
+.res{font:11.5px var(--mono);color:var(--ink3);white-space:nowrap}
+.res.ok{color:#000;font-weight:600}
+.a3 .sep{width:1px;height:16px;background:var(--line);margin:0 6px}
+.cond-in{display:inline-flex;align-items:center;gap:4px}
+
+/* 6 theater + ledger */
+.dv-ledger{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr)}
+.dv-ledger>section{min-height:0;overflow:auto;padding:18px 24px 24px}
+.dv-ledger>section+section{border-left:1px solid var(--line2)}
+.dv-ledger .lt{background:#fafafa}
+.bi{border:1px solid var(--line2);border-radius:12px;padding:10px 12px;background:#fff;margin-bottom:8px}
+.bi-h{display:flex;align-items:center;gap:8px}
+.bi-h b{font-size:13.5px}
+.bi-h span{font-size:11.5px;color:var(--ink3)}
+.bi input{width:100%;margin-top:6px;border-color:var(--line2) !important;font-size:12.5px}
+.bi.off b{color:var(--ink3)}
+.slot{border:1px solid var(--line2);border-radius:12px;padding:8px 12px 10px;background:#fff;margin-bottom:8px}
+.slot-h{display:flex;align-items:center;gap:8px}
+.slot-h .title-in{flex:1}
+.slot textarea{width:100%;border-color:var(--line2) !important;background:#fafafa;font-size:12.5px;margin-top:6px}
+.sub-h{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);margin:16px 0 6px}
+.togs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.kv{list-style:none;margin:0;padding:0;border-top:1px solid #000}
+.kv li{display:grid;grid-template-columns:90px 1fr 22px;gap:4px;align-items:center;border-bottom:1px solid var(--line2);padding:2px 0}
+.kv li .k{color:var(--ink3);font-size:12.5px}
+.kv li .v{font-weight:500}
+table.npc{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+table.npc th{text-align:left;font-weight:500;font-size:11.5px;color:var(--ink3);padding:6px;border-bottom:1px solid #000}
+table.npc td{border-bottom:1px solid var(--line2);padding:2px}
+table.npc td input,table.npc td select{width:100%}
+table.npc td.nm input{font-weight:600}
+table.npc tr.gone td{color:var(--ink4)}
+
+/* 7 guard */
+.dv-guard{display:flex;flex-direction:column}
+.g-intro{padding:12px 24px;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--ink3);flex:none}
+.g-cols{flex:1;min-height:0;display:grid;grid-template-columns:1.05fr 1.2fr .8fr}
+.g-cols>section{min-height:0;overflow:auto;padding:16px 20px 24px}
+.g-cols>section+section{border-left:1px solid var(--line2)}
+.glist{list-style:none;margin:0;padding:0;border-top:1px solid #000}
+.glist li{display:grid;grid-template-columns:18px minmax(0,1fr) auto 22px;gap:6px;align-items:start;border-bottom:1px solid var(--line2);padding:4px 0}
+.glist li .gno{font:11px var(--mono);color:var(--ink4);padding-top:8px}
+.glist li textarea{font-size:13px;line-height:1.6;width:100%}
+.glist li.off textarea{color:var(--ink4);text-decoration:line-through}
+.sw{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-top:6px;color:var(--ink3);white-space:nowrap}
+.sw.on{background:#000;border-color:#000;color:#fff}
+.glist li .xx{margin-top:5px}
+.lexh{display:grid;grid-template-columns:minmax(0,.85fr) 16px minmax(0,1.15fr) 22px;gap:4px;font-size:11px;color:var(--ink4);padding:0 0 4px}
+.lex{list-style:none;margin:0;padding:0;border-top:1px solid #000}
+.lex li{display:grid;grid-template-columns:minmax(0,.85fr) 16px minmax(0,1.15fr) 22px;gap:4px;align-items:center;border-bottom:1px solid var(--line2);padding:2px 0}
+.lex li .bad{text-decoration:line-through;text-decoration-color:var(--ink4);font-weight:500}
+.lex li .to{color:var(--ink4);font-size:12px;text-align:center}
+.lex li input:not(.bad){color:var(--ink2);font-size:12.5px}
+.audit{margin-top:18px}
+.audit textarea{width:100%;border-color:var(--line2) !important;background:#fafafa;font-size:12.5px}
+.hl{font-size:12.5px;line-height:1.8;color:var(--ink2);padding:8px 10px;border-radius:10px;background:#fff;border:1px solid var(--line2);margin-top:6px}
+.hl mark{background:none;color:#000;font-weight:600;text-decoration:line-through;text-decoration-thickness:2px}
+.hl u{text-decoration:underline dotted;text-underline-offset:3px;color:#000}
+.audit .verdict{font-size:11.5px;color:var(--ink3);margin-top:6px}
+.audit .verdict b{color:#000}
+.names{list-style:none;margin:0;padding:0;border-top:1px solid #000}
+.names li{display:grid;grid-template-columns:auto 1fr 28px 22px;gap:4px;align-items:center;border-bottom:1px solid var(--line2);padding:2px 0}
+.names .key{display:flex;align-items:center;font:12.5px var(--mono);color:var(--ink3)}
+.names .key input{font-family:var(--mono) !important;color:#000;padding:4px 3px !important}
+.names .use{font:11px var(--mono);color:var(--ink4);text-align:right}
+.names li>input{font-weight:500}
+
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes slidein{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@keyframes rise{from{transform:translate(-50%,10px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+@keyframes inR{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
+@keyframes inL{from{transform:translateX(-18px);opacity:0}to{transform:none;opacity:1}}
+.dv-prose,.dv-state,.dv-lore,.dv-open{grid-template-rows:minmax(0,1fr)}
+
+/* ---------- mobile container ---------- */
+.stage.m .ov-h{height:auto;padding:14px 14px 10px;flex-wrap:wrap}
+.stage.m .ov-title{flex:1 1 100%}
+.stage.m .card-meta,.stage.m .hint{display:none}
+.stage.m .canvas{padding:0 10px 10px}
+.stage.m .dv-h{gap:8px;padding:0 10px 0 8px}
+.stage.m .minimap,.stage.m .dv-h .tk,.stage.m .crumb .cc,.stage.m .crumb .cnt{display:none}
+.stage.m .dv-prose,.stage.m .dv-state,.stage.m .dv-lore,.stage.m .dv-ledger,.stage.m .dv-open{display:flex;flex-direction:column;overflow:auto}
+.stage.m .side{flex:none;border-right:0;border-bottom:1px solid var(--line2)}
+.stage.m .toc,.stage.m .fside{display:flex;flex-direction:row;overflow-x:auto;padding:8px;gap:4px}
+.stage.m .toc .pane-h,.stage.m .toc .toc-f,.stage.m .fside .pane-h{display:none}
+.stage.m .toc ol{display:flex;padding:0;gap:4px}
+.stage.m .toc li{white-space:nowrap;grid-template-columns:auto auto;flex:none}
+.stage.m .toc li .cnt{display:none}
+.stage.m .frow{width:auto;margin:0;flex:none;white-space:nowrap}
+.stage.m .side .add-line{width:auto;white-space:nowrap;flex:none}
+.stage.m .sheet{padding:16px 18px 0;flex:1;min-height:520px}
+.stage.m .pager{margin:0 -18px;padding:0 8px;overflow-x:auto}
+.stage.m .fmain,.stage.m .lmain{padding:16px 16px 24px}
+.stage.m .llist{max-height:260px}
+.stage.m .ly{grid-template-columns:30px 1fr}
+.stage.m .lside{grid-column:2;flex-direction:row;align-items:center}
+.stage.m .rlines li{grid-template-columns:16px 1fr 64px 22px}
+.stage.m .rlines .rf,.stage.m .rlines .dbar{display:none}
+.stage.m .endgrid{grid-template-columns:1fr}
+.stage.m .endband,.stage.m .actlist{padding:14px}
+.stage.m .a1{grid-template-columns:1fr 22px}
+.stage.m .a1 .ad,.stage.m .a1 .show{grid-column:1/-1}
+.stage.m .ends li{flex-wrap:wrap}
+.stage.m .dv-ledger>section{overflow:visible}
+.stage.m .dv-ledger>section+section{border-left:0;border-top:1px solid var(--line2)}
+.stage.m table.npc{width:520px}
+.stage.m .npcwrap{overflow-x:auto}
+.stage.m .g-cols{display:flex;flex-direction:column;overflow:auto}
+.stage.m .g-cols>section{overflow:visible}
+.stage.m .g-cols>section+section{border-left:0;border-top:1px solid var(--line2)}
+.stage.m .pov{padding:0 14px 8px}
+.stage.m .ocols{overflow:visible}
+.stage.m .cols{padding:14px}
+.stage.m .ocol{width:300px}
+.stage.m .addsheet{left:10px;width:auto}
+
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<div class="proto" id="proto">
+  <div class="grp"><span class="lab">样例卡</span><span id="cardBtns" class="grp"></span></div>
+  <div class="grp"><span class="lab">容器</span><span id="sizeBtns" class="grp"></span></div>
+  <span class="scale mono" id="scaleLabel"></span>
+  <span class="br"></span>
+  <div class="grp"><span class="lab">直接跳看组件内页</span><span id="jumpBtns" class="grp"></span></div>
+</div>
+<div class="wrap"><div class="frame" id="frame"><div class="stage" id="stage"></div></div></div>
+<script>
+/* ===================== utilities ===================== */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>Number(n).toLocaleString('en-US');
+const RM=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clone=o=>JSON.parse(JSON.stringify(o));
+function textLen(o){if(typeof o==='string')return o.length;if(Array.isArray(o))return o.reduce((a,x)=>a+textLen(x),0);if(o&&typeof o==='object')return Object.values(o).reduce((a,x)=>a+textLen(x),0);return 0}
+const tokOf=s=>Math.round(textLen(s)*0.72);
+const toks=c=>tokOf(c.data);
+const sgn=d=>(+d>0?'+':+d<0?'−':'±')+Math.abs(+d||0);
+function setPath(o,p,v){const k=p.split('.');for(let i=0;i<k.length-1;i++)o=o[k[i]];o[k[k.length-1]]=v}
+function shade(k,n){const l=n<=1?80:92-(k/(n-1))*70;return{bg:`hsl(0 0% ${l}%)`,fg:l<56?'#fff':'#000',dark:l<56}}
+
+const SIZES={d:[1024,754],w:[1260,840],m:[390,844]};
+const ORDER=['prose','opening','lore','state','check','ledger','guard'];
+const MAXC=7;
+const S={card:'b',size:'d',view:'ov',open:null,sel:{},scale:1,busy:false,pv:{}};
+let uid=100;
+
+/* ===================== sample data ===================== */
+const stg=(name,from,text)=>({name,from,text});
+const L1=(text)=>[{field:'',v:0,text}];
+const E=(name,hook,who,life,text,extra={})=>Object.assign({name,hook,who,life,win:3,hint:'',layers:L1(text)},extra);
+
+const CARDS={
+/* ---------- 极简卡 ---------- */
+a:{key:'a',title:'雨夜便利店',kind:'极简卡',summary:'凌晨两点的便利店，每位推门进来的客人都带着一点没说出口的心事。',comps:{
+  a1:{id:'a1',type:'prose',title:'故事设定',data:{chapters:[
+    {t:'故事设定',text:'这是一个发生在城市边缘的安静故事。凌晨的雨下个不停，街口那家 24 小时便利店是附近唯一亮着灯的地方。\n\n玩家是今晚的夜班店员，刚接班不久。店里只有冷柜的嗡鸣、关东煮的热气和偶尔推门进来的客人。每一位客人都带着一点心事，但不会主动说出来。\n\n叙述保持克制、细腻，用环境和小动作推动情绪，不制造戏剧冲突。每次回复控制在 150 字以内，结尾把选择留给玩家。'}]}},
+  a2:{id:'a2',type:'opening',title:'开场与视角',data:{channel:'in',persona:'今晚的夜班店员，二十出头，刚接班不久。',style:'',list:[
+    {name:'凌晨两点的收银台',def:true,init:[],text:'凌晨 2:07，便利店。\n\n雨水一道道划过玻璃门。自动门“叮”地一声打开，一个浑身湿透的人站在门口，没有进来，也没有离开。\n\n“……请问，这里可以借把伞吗？”'}]}}
+ },
+ layout:{rows:[{h:1,items:[{id:'a1',w:.62},{id:'a2',w:.38}]}]}},
+
+/* ---------- 阶段式角色卡 ---------- */
+b:{key:'b',title:'林栖',kind:'阶段式角色卡',summary:'旧港书店的店主，礼貌、安静，和每个人都保持着一本书的距离。',comps:{
+  b1:{id:'b1',type:'prose',title:'角色设定',data:{chapters:[
+    {t:'身份与外貌',text:'林栖，二十七岁，旧港区一家二手书店“栖木书房”的店主。身形清瘦，常穿洗得发白的灰色针织衫，左手总戴着一只旧皮表带的手表。说话前习惯先推一下眼镜。\n\n书店开在一条坡道的尽头，木地板踩上去会响，靠窗的位置放着一把她自己修好的旧扶手椅。'},
+    {t:'性格内核',text:'表面温和、礼貌，实则与人保持着精确的距离。她记得每位常客买过什么书，却从不问对方的私事——因为她不希望别人问起她的。\n\n对书有近乎固执的珍惜，看到有人折书角会忍不住皱眉。紧张时会去整理本来就很整齐的书架。'},
+    {t:'说话方式',text:'句子短，语气轻，很少用感叹号。喜欢用书里的句子回答问题，但从不说出处。\n\n生气时不会提高音量，而是变得格外客气。被夸奖时会转移话题，通常转到天气或者某本书上。'},
+    {t:'与玩家的关系',text:'玩家是最近搬到附近的新住户，第一次走进书店是在一个下雨的傍晚。林栖对玩家的第一印象是“一个会把伞好好收起来的人”。'},
+    {t:'书店的日常',text:'书店早上十点开门，晚上七点打烊。周三下午林栖会去旧港的拍卖行收书，店门口挂一块“出门收书”的木牌。\n\n店里没有收银机，只有一本手写账簿和一只铁皮饼干盒。'}]}},
+  b2:{id:'b2',type:'opening',title:'开场与视角',data:{channel:'in',persona:'最近搬到旧港区的新住户，白天在城里上班，晚上常在附近散步。',style:'句子短，留白多；少用形容词堆叠，多写手和物件的动作。',list:[
+    {name:'闭店前的最后一位客人',def:true,init:[{k:'好感度',v:'20'},{k:'心情',v:'平静'}],text:'傍晚 6:50，栖木书房。\n\n店里的灯已经关了一半。林栖正踮脚把一本书塞回最高一层，听见门铃响，回过头。\n\n“快打烊了……不过你可以慢慢看，我还要整理一会儿。”'},
+    {name:'雨中借伞',def:false,init:[{k:'好感度',v:'25'}],text:'午后 3:15，书店门口的屋檐下。\n\n雨突然下大了。你在屋檐下躲雨，门从里面推开，一把黑色长柄伞递到你面前。\n\n“还的时候……放门口的伞架就行。”'},
+    {name:'旧书里的信',def:false,init:[{k:'好感度',v:'15'},{k:'心情',v:'低落'}],text:'夜晚 9:40，你的公寓。\n\n你翻开前几天在栖木书房买的旧书，一个泛黄的信封从书页间滑落。收信人一栏写着“小栖”。\n\n第二天，林栖看见信封时，表情凝固了一瞬。'}]}},
+  b3:{id:'b3',type:'lore',title:'暗线与词条',data:{entries:[
+    E('那封没寄出的信','一封写着“小栖”的旧信，林栖不愿多谈。','ai','window','',{layers:[
+      {field:'好感度',v:30,text:'林栖承认信是写给她的，但只说“是很久以前的事了”，不提写信人。'},
+      {field:'好感度',v:60,text:'写信人是她的父亲。信是出海前一晚留下的，她一直没敢拆开。'},
+      {field:'好感度',v:90,text:'书店打烊后，她和玩家一起拆开了信。信里只有一句话，和一组旧港外海的坐标。'}]}),
+    E('左手的旧伤','林栖从不摘下左手的旧手表。','ai','turn','',{hint:'当玩家注意到她的手表时',layers:[
+      {field:'好感度',v:45,text:'手表下有一道旧疤。她说是小时候被渔网划的。'},
+      {field:'信任',v:65,text:'那是父亲失踪那晚，她在码头找人时被铁链划伤的。'}]}),
+    E('书店的真正主人','账簿上的店主签名不是“林”姓。','both','window','',{layers:[
+      {field:'好感度',v:20,text:'旧账簿第一页的店主签名是“沈”。'},
+      {field:'好感度',v:55,text:'书店原本属于父亲的一位老友，父亲只是替他照看。'},
+      {field:'好感度',v:85,text:'那位老友，就住在信中坐标所指的小岛上。'}]}),
+    E('父亲的失踪','三年前一次出海后，林栖的父亲再没回来。','ai','window','三年前，林栖的父亲在一次出海后失踪。书店原本由父亲照看，她辞去城里的工作回来接手，一直相信父亲会回来。这件事她从未对任何人完整讲过。',{hint:'当玩家问起她的家人时'}),
+    E('窗边的扶手椅','窗边那把修过的旧扶手椅，林栖不让别人坐。','player','turn','椅子是父亲留下的，扶手上有一道烟斗烫出的焦痕。林栖每天会把它擦一遍，但自己从来不坐。'),
+    E('旧港区','书店所在的老街区，坡道多，海风大。','both','perm','旧港区是城市最早的港口，现在只剩几家渔具店、一间拍卖行和栖木书房。傍晚六点以后，坡道上的路灯会一盏一盏亮起来。'),
+    E('铁皮饼干盒','收银台下的铁皮盒，林栖用它代替收银机。','player','turn','')]}},
+  b4:{id:'b4',type:'state',title:'好感与心情',data:{fields:[
+    {name:'好感度',kind:'range',min:0,max:100,init:20,visible:false,stages:[
+      stg('陌生',0,'她把玩家当作普通的客人：礼貌、简短，只谈论书和天气，不主动延长对话。被问到私事时，会用一句客气话轻轻岔开。称呼玩家为“客人”。'),
+      stg('熟悉',20,'她放松了一些，偶尔会开个小玩笑，记得玩家上次说过的话，也会提前留一本她觉得玩家会喜欢的书。仍然不谈自己的过去。'),
+      stg('在意',45,'她开始不自觉地多说几句，话说到一半会停顿。玩家几天不来，她会装作随口问起。紧张时会在玩家面前反复整理书架，偶尔说出“我爸以前……”又立刻打住。'),
+      stg('依赖',70,'她变得坦率，会直接表达不安，会请玩家帮忙看店。愿意谈起父亲，但只说好的回忆。会用很轻的语气叫玩家的名字。'),
+      stg('交心',90,'她安静而确定。会把那封没寄出的信拿给玩家看，允许玩家坐那把扶手椅。“这把椅子，以前只有我爸坐。……你坐吧。”')],
+     q:'这一幕里，林栖对玩家的态度如何变化？',reads:[{label:'明显疏远',d:-5},{label:'如常',d:0},{label:'略微拉近',d:3},{label:'心动突破',d:8}]},
+    {name:'信任',kind:'range',min:0,max:100,init:10,visible:false,stages:[
+      stg('戒备',0,'回答留有余地，不透露住址、作息和家里的事。'),
+      stg('观察',30,''),
+      stg('信赖',65,'不再设防，会把书店的备用钥匙交给玩家。')],
+     q:'玩家这一幕是否守住了她的边界？',reads:[{label:'越界追问',d:-8},{label:'无事发生',d:0},{label:'体贴地停在边界外',d:4}]},
+    {name:'心情',kind:'enum',opts:['平静','愉快','烦躁','低落'],init:'平静',visible:false,stages:[],
+     q:'这一幕结束时，她的心情更接近哪一种？',reads:[{label:'没什么起伏',to:'平静'},{label:'被逗笑或被理解',to:'愉快'},{label:'被打扰或被冒犯',to:'烦躁'},{label:'想起父亲',to:'低落'}]}]}}
+ },
+ layout:{rows:[{h:.56,items:[{id:'b1',w:.56},{id:'b4',w:.44}]},{h:.44,items:[{id:'b2',w:.4},{id:'b3',w:.6}]}]}},
+
+/* ---------- 复杂机制卡 ---------- */
+c:{key:'c',title:'雾港档案',kind:'复杂机制卡',summary:'浓雾里的港口城市，一具无名尸体和一张没有目的地的船票。',comps:{
+  c1:{id:'c1',type:'prose',title:'世界背景',data:{chapters:[
+    {t:'雾港概览',text:'雾港是一座建在河口三角洲上的港口城市，一年中有两百多天被浓雾笼罩。城市以白塔钟楼为中心，向东是繁忙的码头区，向西是旧城与灯塔街，北面高地上坐落着海关大楼和富人居住的山手区。\n\n雾在黄昏后最浓，能见度常常不足十步。本地人相信“雾里说的话会被海听见”，因此夜里很少有人高声交谈。'},
+    {t:'三方势力',text:'港务署：以港务长莫兰为首，掌管海关与码头调度，表面上维持秩序，实际上与走私有千丝万缕的联系。\n\n灰帆会：码头工人的互助组织，近年被怀疑卷入多起失踪案。成员在左袖缝一块灰色帆布。\n\n潮汐商会：控制城中大部分贸易的商人联合体，最近在高价收购一种来历不明的船票。'},
+    {t:'时代与技术',text:'城市刚刚接通电报线，但只有海关大楼和商会拥有电报机。街道照明依赖煤气灯和雾灯油。交通以马车、渡船和少量蒸汽汽船为主。枪械受管制，普通市民很少持有。'},
+    {t:'叙事基调',text:'{{user}} 受{{雇主}}委托，调查三天前发现于第七码头的无名尸体。\n\n以冷静的第三人称描写推进，重环境细节与人物的微小反应。每回合结束时给出 2–3 个可以采取的具体行动，但不替 {{user}} 做决定。涉及检定的行动先请求检定，再根据结果叙述。'}]}},
+  c2:{id:'c2',type:'lore',title:'暗线与词条',data:{entries:[
+    E('无名船票','死者手里攥着的船票：没有目的地，也没有日期。','both','window','',{hint:'玩家检查死者遗物时',layers:[
+      {field:'线索',v:0,text:'船票背面印着一枚灯塔图案，票根被人撕去了一半。'},
+      {field:'线索',v:5,text:'灯塔图案与灯塔街尽头那座废弃灯塔的旧铭牌一致。潮汐商会正在高价收购同款船票。'},
+      {field:'线索',v:9,text:'船票是“雾船”的登船凭证——每逢浓雾的第十三声钟响，会有一艘不挂旗的船停靠第七码头。'}]}),
+    E('守夜人','传说每晚在钟楼上看着整座城的人。','ai','turn','',{layers:[
+      {field:'线索',v:4,text:'钟楼看守说，每晚十点后确实有人上楼，但他从没看清那人的脸。'},
+      {field:'线索',v:8,text:'守夜人是死者的兄弟。他敲响第十三声钟，是在给雾船报信。'}]}),
+    E('灯塔街','旧城区最长的街，尽头是废弃的灯塔。','both','window','旧城区最长的一条街，尽头是废弃的灯塔。报童艾琳常在这里出没。'),
+    E('第七码头','码头区最偏僻的泊位，尸体在这里被发现。','both','perm','码头区最偏僻的泊位，三天前在这里发现了一具无名尸体。夜间由灰帆会的人看守。'),
+    E('鸦羽酒馆','水手和情报贩子的聚集地。','both','window','码头区的老酒馆。老板从不记客人的名字，但记得每个人点过什么酒。'),
+    E('海关大楼','港务署所在地，二层档案室保存着进出港记录。','player','turn','高地上最显眼的建筑。二层档案室保存着所有进出港记录，夜间有两名守卫。'),
+    E('白塔钟楼','城中心的钟楼，每晚十点敲十三下。','ai','perm','城市中心的钟楼，每晚十点敲十三下——多出来的那一下没人能解释。'),
+    E('维克多·岑','鸦羽酒馆跑腿的前船员，左手缺一根小指。','ai','window','前船员，现在在鸦羽酒馆做些跑腿生意。说话带北方口音。他知道船票的来历，但要价很高。'),
+    E('老顾','灯塔街典当行老板，什么都收。','ai','window','灯塔街典当行的老板，什么都收，也什么都知道一点。欠玩家一个人情。'),
+    E('港务长莫兰','港务署负责人，礼貌得近乎冷淡。','ai','window','四十多岁，礼貌得近乎冷淡。他不希望尸体的事被追查下去。'),
+    E('艾琳','十二岁的报童，消息灵通。','player','turn','用一份报纸的价钱就能买到她听来的消息，真假参半。'),
+    E('灰帆会','码头工人的互助会，左袖缝一块灰帆布。','ai','window','对外人极度排斥。近年被怀疑卷入多起失踪案。'),
+    E('黄铜罗盘','死者身上的罗盘，指针总指向西北海面。','player','turn','指针始终指向西北海面，而不是北方。')]}},
+  c3:{id:'c3',type:'check',title:'行动与检定',data:{
+    ends:[
+      {field:'线索',op:'≥',v:10,name:'真相',text:'在第十三声钟响时登上雾船，揭开失踪案的源头。'},
+      {field:'理智',op:'≤',v:0,name:'雾中迷失',text:'调查者走进浓雾，再也没有回来。'},
+      {field:'嫌疑度',op:'≥',v:10,name:'被捕',text:'被港务署以谋杀嫌疑扣押，案件被草草了结。'}],
+    maxOn:true,maxTurns:40,
+    actions:[
+      {n:'搜查现场',desc:'仔细翻找当前地点的痕迹',show:'always',cond:{field:'线索',op:'≥',v:0},mode:'linear',p:60,lin:{field:'理智',lo:20,hi:85},ai:'',ok:[{k:'线索',d:1}],fail:[{k:'理智',d:-2}]},
+      {n:'跟踪',desc:'远远跟着某个人，看他去哪里',show:'always',cond:{field:'线索',op:'≥',v:0},mode:'fixed',p:55,lin:{field:'理智',lo:20,hi:80},ai:'',ok:[{k:'线索',d:1}],fail:[{k:'嫌疑度',d:1}]},
+      {n:'说服',desc:'用理由或交换让对方开口',show:'always',cond:{field:'线索',op:'≥',v:0},mode:'ai',p:50,lin:{field:'理智',lo:20,hi:80},ai:'看玩家给出的理由是否触及对方的利益或恐惧；空泛的请求判失败。',ok:[{k:'线索',d:1}],fail:[{k:'嫌疑度',d:1}]},
+      {n:'撬锁',desc:'在没人注意时打开一扇锁着的门',show:'cond',cond:{field:'嫌疑度',op:'≤',v:6},mode:'fixed',p:45,lin:{field:'理智',lo:20,hi:80},ai:'',ok:[{k:'线索',d:1}],fail:[{k:'嫌疑度',d:2}]},
+      {n:'翻阅档案',desc:'在海关档案室查进出港记录',show:'cond',cond:{field:'线索',op:'≥',v:3},mode:'linear',p:60,lin:{field:'线索',lo:30,hi:90},ai:'',ok:[{k:'线索',d:2}],fail:[{k:'理智',d:-1}]},
+      {n:'稳住心神',desc:'在恐惧涌上来时让自己镇定',show:'cond',cond:{field:'理智',op:'≤',v:44},mode:'linear',p:50,lin:{field:'理智',lo:10,hi:95},ai:'',ok:[{k:'理智',d:3}],fail:[{k:'理智',d:-6}]},
+      {n:'贿赂',desc:'花两枚银币换取通行或消息',show:'always',cond:{field:'线索',op:'≥',v:0},mode:'fixed',p:70,lin:{field:'理智',lo:20,hi:80},ai:'',ok:[{k:'嫌疑度',d:-1}],fail:[{k:'嫌疑度',d:1}]}]}},
+  c4:{id:'c4',type:'ledger',title:'小剧场与世界账本',data:{
+    inner:{on:true,note:'用括号写一句调查者此刻没说出口的念头，不超过 30 字。'},
+    suggest:{on:true,note:'给出 2–3 个具体行动，至少一个指向还没去过的地点。'},
+    slots:[
+      {name:'雾港晚报',trig:'auto',text:'每回合结尾附一则不超过 60 字的街头小报短讯，内容与本回合事件有微妙关联，但不能直接泄露线索。'},
+      {name:'艾琳的街头八卦',trig:'click',text:'玩家点开时，以报童艾琳的口吻讲一段她最近听来的传闻，真假参半。'},
+      {name:'番外：钟楼上的人',trig:'click',text:'以守夜人的视角写一段 200 字以内的独白。只在玩家主动点开时生成，不影响正文。'}],
+    feed:true,lookup:true,
+    scene:[{k:'日期',v:'第 3 天'},{k:'时段',v:'黄昏'},{k:'天气',v:'浓雾'},{k:'潮位',v:'涨潮'},{k:'当前地点',v:'第七码头'},{k:'银币',v:'7'}],
+    npcs:[
+      {n:'维克多·岑',loc:'鸦羽酒馆',att:'戒备',st:'在场',note:'知道无名船票的来历'},
+      {n:'老顾',loc:'典当行',att:'友善',st:'在场',note:'欠玩家一个人情'},
+      {n:'莫兰',loc:'海关大楼',att:'敌对',st:'在场',note:'已注意到玩家'},
+      {n:'守夜人',loc:'白塔钟楼',att:'未知',st:'失踪',note:'第 2 天夜里之后再无消息'},
+      {n:'艾琳',loc:'灯塔街',att:'中立',st:'在场',note:''}]}},
+  c5:{id:'c5',type:'state',title:'调查者状态',data:{fields:[
+    {name:'理智',kind:'range',min:0,max:100,init:80,visible:true,stages:[
+      stg('崩溃',0,'叙述变得破碎、跳跃，混入幻觉。调查者的部分行动会被幻觉替代，场景描写不再可靠。'),
+      stg('恍惚',20,'时常停顿，描写里出现不确定的细节。每个场景插入一处可疑的错觉，但不点破。'),
+      stg('动摇',45,'紧张，注意力被细小声响牵动。描写中加入不安的身体反应：手心出汗、反复回头。'),
+      stg('清醒',70,'冷静、准确，正常描述场景与线索。')],
+     q:'这一幕中，调查者目睹或经历的事情有多冲击？',reads:[{label:'喘了口气',d:3},{label:'如常',d:0},{label:'不安',d:-3},{label:'直面异常',d:-8}]},
+    {name:'嫌疑度',kind:'range',min:0,max:10,init:1,visible:true,stages:[
+      stg('无人在意',0,'NPC 正常对待调查者。'),
+      stg('被盯上',4,'港务署的人开始远远尾随。交涉类行动更难成功。'),
+      stg('通缉',8,'街头贴出画像。进入海关大楼会被当场扣押。')],
+     q:'这一幕里，调查者的行为有多引人注意？',reads:[{label:'低调',d:-1},{label:'如常',d:0},{label:'引起议论',d:1},{label:'当众出格',d:3}]},
+    {name:'线索',kind:'range',min:0,max:12,init:4,visible:true,stages:[
+      stg('迷雾',0,'调查者只掌握零散的事实，叙述中多用疑问。'),
+      stg('拼图',5,'几条线索开始互相印证，叙述可以暗示它们之间的关联。'),
+      stg('真相边缘',9,'')],
+     q:'这一幕是否获得了新的线索？',reads:[{label:'没有',d:0},{label:'一条',d:1},{label:'关键证据',d:2}]}]}},
+  c6:{id:'c6',type:'guard',title:'事后护栏与禁词',data:{
+    rules:[
+      {t:'严禁替玩家扮演的 {{user}} 说话、思考或做决定。',on:true},
+      {t:'未揭晓真相前，不得出现“守夜人就是……”一类的身份断言。',on:true},
+      {t:'一次回复里最多给出一条新线索。',on:true},
+      {t:'检定结果出来之前，不得描写行动的成败。',on:true},
+      {t:'不要用总结句收尾，例如“这一夜注定不平凡”。',on:true},
+      {t:'不要连续两回合以天气描写开头。',on:false}],
+    lex:[
+      {bad:'不禁',good:'直接写动作或身体反应'},
+      {bad:'嘴角勾起一抹弧度',good:'换成具体的表情，或者干脆不写'},
+      {bad:'空气仿佛凝固了',good:'用一个具体的声音或停顿代替'},
+      {bad:'眸子 / 眸光',good:'用“眼睛”，或省略'},
+      {bad:'一丝丝',good:'删掉，或换成可感知的细节'},
+      {bad:'仿佛……一般',good:'每段最多一个比喻'}],
+    names:[{key:'user',val:'调查员'},{key:'雇主',val:'潮汐商会'},{key:'城',val:'雾港'},{key:'酒馆老板',val:'鸦羽酒馆的老板'}],
+    sample:'雾里，{{酒馆老板}}擦着杯子，嘴角勾起一抹弧度。{{user}}不禁后退半步，空气仿佛凝固了一般。'}}
+ },
+ layout:{rows:[{h:.53,items:[{id:'c1',w:.3},{id:'c2',w:.42},{id:'c3',w:.28}]},{h:.47,items:[{id:'c4',w:.46},{id:'c5',w:.3},{id:'c6',w:.24}]}]}}
+};
+
+/* ===================== shared helpers ===================== */
+const card=()=>CARDS[S.card];
+const curComp=()=>card().comps[S.open];
+function sel(c){return S.sel[c.id]||(S.sel[c.id]={chap:0,dir:0,field:0,stage:0,cur:0,sims:{},who:'全部',q:'',rolls:{}})}
+function compsOf(t,c=card()){return Object.values(c.comps).filter(x=>x.type===t)}
+function stateFields(c=card()){return compsOf('state',c).flatMap(x=>x.data.fields)}
+function rangeFields(c){const r=stateFields(c).filter(f=>f.kind==='range').map(f=>f.name);return r.length?r:['好感度']}
+function fieldByName(n,c){return stateFields(c).find(f=>f.name===n)}
+function pvMap(c=card()){return S.pv[c.key]||(S.pv[c.key]={})}
+function pv(n,c=card()){const m=pvMap(c);if(m[n]!==undefined)return m[n];const f=fieldByName(n,c);return f?f.init:0}
+function optList(cur,list){return list.concat(cur&&!list.includes(cur)?[cur]:[]).map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`).join('')}
+function stageAt(f,v){let k=0;f.stages.forEach((s,i)=>{if(+v>=s.from)k=i});return k}
+function condOk(cd,c){const v=+pv(cd.field,c);return cd.op==='≤'?v<=+cd.v:v>=+cd.v}
+function rateOf(a,c){
+  if(a.mode==='fixed')return Math.max(0,Math.min(1,(+a.p||0)/100));
+  if(a.mode==='linear'){const f=fieldByName(a.lin.field,c);const v=+pv(a.lin.field,c);const lo=f?+f.min:0,hi=f?+f.max:100;const t=hi>lo?(v-lo)/(hi-lo):0;return Math.max(0,Math.min(1,((+a.lin.lo)+((+a.lin.hi)-(+a.lin.lo))*t)/100))}
+  return null}
+function rateHTML(a,c,w=64){const r=rateOf(a,c);if(r===null)return `<div class="pbar ai"><i></i><span>AI 评判</span></div>`;
+  return `<div class="pbar"><i style="width:${Math.max(2,Math.round(r*w))}px"></i><span>${Math.round(r*100)}%</span>${a.mode==='linear'?`<small>按${esc(a.lin.field)} ${esc(pv(a.lin.field,c))}</small>`:''}</div>`}
+const fxText=l=>l.map(x=>`${x.k} ${sgn(x.d)}`).join('，');
+function emptyIn(msg,act,label){return `<div class="empty-in"><p>${msg}</p>${act?`<button class="btn primary" data-act="${act}">${label}</button>`:''}</div>`}
+function pct(f,v){return (v-f.min)/(f.max-f.min+1)*100}
+function stRange(f,k){const a=f.stages[k].from;const b=k<f.stages.length-1?f.stages[k+1].from-1:f.max;return[a,b]}
+function trackInner(f,sk,big){
+  const n=f.stages.length;
+  return f.stages.map((st,k)=>{const[a,b]=stRange(f,k);const sh=shade(k,n);const tag=big?'button':'div';
+    return `<${tag} class="sg ${k===sk?'on':''} ${sh.dark?'dark':''} ${k===n-1?'last':''}" ${big?`data-act="stage" data-i="${k}"`:''} style="left:${pct(f,a)}%;width:${pct(f,b+1)-pct(f,a)}%;background:${sh.bg};color:${sh.fg}"><b>${esc(st.name)}</b>${big?`<em class="mono">${a}–${b}</em>`:''}</${tag}>`}).join('')
+   +(big?f.stages.slice(1).map((st,k)=>`<span class="th" data-th="${k+1}" data-v="${st.from}" style="left:${pct(f,st.from)}%" role="slider" aria-label="阶段阈值" aria-valuenow="${st.from}"></span>`).join(''):'')
+   +`<span class="im mono" style="left:${pct(f,+f.init+.5)}%">初始 ${esc(f.init)}</span>`;
+}
+function layoutTrack(trk,f){
+  const segs=$$('.sg',trk),ths=$$('.th',trk);
+  f.stages.forEach((st,k)=>{const[a,b]=stRange(f,k);const s=segs[k];if(!s)return;s.style.left=pct(f,a)+'%';s.style.width=(pct(f,b+1)-pct(f,a))+'%';const em=$('em',s);if(em)em.textContent=`${a}–${b}`});
+  ths.forEach(t=>{const k=+t.dataset.th;t.style.left=pct(f,f.stages[k].from)+'%';t.dataset.v=f.stages[k].from;t.setAttribute('aria-valuenow',f.stages[k].from)});
+}
+function dbarInner(d,mx){const w=Math.min(50,Math.abs(+d||0)/mx*50);return +d>=0?`<i class="pos" style="left:50%;width:${w}%"></i>`:`<i class="neg" style="right:50%;width:${w}%"></i>`}
+
+const CHAN={in:{name:'剧内角色',short:'剧内',desc:'玩家作为故事里的一个人说话、行动'},director:{name:'场外导演',short:'导演',desc:'玩家没有实体角色，输入都是给叙述者的幕后指示'}};
+const WHO={ai:{name:'AI 自动检索',short:'AI 检索'},player:{name:'玩家手动点亮',short:'玩家点亮'},both:{name:'双方皆可',short:'双方皆可'}};
+const LIFE={turn:'仅本轮有效',window:'滑窗保留',perm:'永久常驻'};
+const kw=s=>Math.max(1.6,[...String(s)].reduce((a,c)=>a+(c.charCodeAt(0)>255?1:.62),0)+.7);
+const ATTS=['友善','中立','戒备','敌对','未知'], STS=['在场','离开','失踪','死亡'];
+
+/* ===================== the 7 component types ===================== */
+const TYPES={
+
+/* ---------- 1 设定文稿 ---------- */
+prose:{name:'设定文稿',glyph:'¶',itemName:'章节',unit:'章',
+  desc:'每轮常驻发送给 AI 的基础设定与人物散文，按章节组织。只在特定时候才需要的内容，请放进“暗线与词条”。',
+  blank:()=>({chapters:[{t:'新章节',text:''}]}),
+  count:c=>c.data.chapters.length,
+  pill:c=>`${c.data.chapters.length} 章`,
+  metrics:c=>{const ch=c.data.chapters;return[[ch.length,'章'],[fmt(textLen(ch.map(x=>x.text))),'字'],[fmt(tokOf(ch.map(x=>x.text))),'tokens/轮']]},
+  preview:c=>c.data.chapters.map(x=>`<li><span>${esc(x.t)}</span><em>${x.text.length}</em></li>`),
+  diagram:c=>{const ch=c.data.chapters;const tot=Math.max(1,ch.reduce((a,x)=>a+x.text.length,0));
+    return `<div class="dg-bars">${ch.map(x=>`<div class="bar" style="flex:${Math.max(x.text.length,tot*.06)} 1 0"><i></i><span>${esc(x.t)}</span></div>`).join('')}</div><p class="dg-excerpt">${esc(ch[0]?.text||'')}</p>`},
+  detail(c,s){const d=c.data;s.chap=Math.max(0,Math.min(s.chap,d.chapters.length-1));const i=s.chap,ch=d.chapters[i],n=d.chapters.length;
+    const all=d.chapters.map(x=>x.text);const anim=s.dir>0?'in-r':s.dir<0?'in-l':'';s.dir=0;
+    return `<div class="dv-prose">
+    <nav class="toc side scroll"><div class="pane-h">章节</div>
+      <ol>${d.chapters.map((x,j)=>`<li class="${j===i?'on':''}" data-act="chap" data-i="${j}"><span class="no mono">${j+1}</span><span class="tt" data-mirror="chapters.${j}.t">${esc(x.t||'未命名')}</span><span class="cnt mono" data-len="chapters.${j}.text">${x.text.length}</span></li>`).join('')}</ol>
+      <button class="add-line" data-act="addItem" style="margin:4px 8px;width:calc(100% - 16px)">+ 新章节</button>
+      <div class="toc-f">合计 ${fmt(textLen(all))} 字<br>全部常驻，每轮约 ${fmt(tokOf(all))} tokens</div>
+    </nav>
+    <section class="sheet"><div class="page ${anim}">
+      <input class="title-in" data-k="chapters.${i}.t" value="${esc(ch.t)}" placeholder="章节标题" aria-label="章节标题">
+      <div class="sheet-note">本章每轮常驻发送给 AI。</div>
+      <textarea class="prose" data-k="chapters.${i}.text" placeholder="写下这一章的设定……">${esc(ch.text)}</textarea>
+    </div>
+    <footer class="pager">
+      <button class="btn" data-act="chap" data-i="${i-1}" ${i===0?'disabled':''}>‹ 上一章</button>
+      <span class="pos mono">${i+1} / ${n}</span>
+      <button class="btn" data-act="chap" data-i="${i+1}" ${i===n-1?'disabled':''}>下一章 ›</button>
+      <span class="sp"></span>
+      <span class="muted mono" style="font-size:11.5px;margin-right:6px"><span data-len="chapters.${i}.text">${ch.text.length}</span> 字</span>
+      <button class="btn out" data-act="toLore" title="把这一章从常驻设定里剥离，改为按需调取">移入暗线与词条 ↗</button>
+      <button class="btn ghost" data-act="dupChap">复制本章</button>
+      <button class="btn ghost" data-act="delChap" ${n===1?'disabled':''}>删除</button>
+    </footer></section></div>`},
+  act(a,el,c,s){const d=c.data,n=d.chapters.length;
+    switch(a){
+      case 'chap':{const i=+el.dataset.i;if(i<0||i>=n||i===s.chap)return;s.dir=i>s.chap?1:-1;s.chap=i;return true}
+      case 'addItem':d.chapters.push({t:'新章节',text:''});s.dir=1;s.chap=d.chapters.length-1;return true;
+      case 'dupChap':{const x=clone(d.chapters[s.chap]);x.t+='（副本）';d.chapters.splice(s.chap+1,0,x);s.chap++;s.dir=1;return true}
+      case 'delChap':if(n>1){d.chapters.splice(s.chap,1);s.chap=Math.max(0,s.chap-1);s.dir=-1;return true}return;
+      case 'toLore':{const cc=card();const ch=d.chapters[s.chap];let lore=compsOf('lore',cc)[0];
+        if(!lore){if(Object.keys(cc.comps).length>=MAXC){toast('组件已满，无法挂载“暗线与词条”');return}lore=addCompSilent('lore')}
+        const first=(ch.text.match(/^[^。！？\n]*[。！？]?/)||[''])[0].trim();
+        lore.data.entries.unshift({name:ch.t,hook:(first||ch.t).slice(0,48),who:'ai',life:'window',win:3,hint:'',layers:[{field:'',v:0,text:ch.text}]});
+        if(n>1){d.chapters.splice(s.chap,1);s.chap=Math.max(0,s.chap-1)}else d.chapters[0]={t:'新章节',text:''};
+        s.dir=-1;rerenderDetail();const lid=lore.id;
+        toast(`“${esc(ch.t)}”已移入暗线与词条，改为按需调取`,'去查看',()=>{const ls=sel(lore);ls.cur=0;ls.who='全部';ls.q='';S.open=lid;renderDetail(true)});return}
+    }}
+},
+
+/* ---------- 2 开场与视角 ---------- */
+opening:{name:'开场与视角',glyph:'▷',itemName:'开场',unit:'个开场',
+  desc:'玩家进入时看到的第一幕；以及玩家以什么身份、通过什么通道参与这个故事。',
+  blank:()=>({channel:'in',persona:'',style:'',list:[{name:'新开场',def:true,init:[],text:''}]}),
+  count:c=>c.data.list.length,
+  pill:c=>`${c.data.list.length} 幕，${CHAN[c.data.channel].short}`,
+  metrics:c=>[[c.data.list.length,'个开场'],[CHAN[c.data.channel].short,'视角']],
+  preview:c=>[`<li><span>${CHAN[c.data.channel].name}</span><em>${c.data.persona?'有身份描述':'身份跟随全局'}</em></li>`,...c.data.list.map(x=>`<li><span>${esc(x.name)}</span><em>${x.def?'默认':x.text.length+' 字'}</em></li>`)],
+  diagram:c=>{const d=c.data;return `<div class="dg-pov"><span class="tag solid">${CHAN[d.channel].name}</span><span>${esc(d.persona||'玩家身份跟随全局偏好')}</span></div>
+    <div class="dg-open">${d.list.slice(0,3).map(x=>`<div class="oc ${x.def?'def':''}"><b>${esc(x.name)}</b><p>${esc(x.text.slice(0,72))}</p></div>`).join('')}</div>`},
+  detail(c){const d=c.data;const fnames=stateFields().map(f=>f.name);
+    const fold=(k,title)=>`<details class="fold" ${d[k]?'open':''}><summary>${title}<em class="${d[k]?'set':''}" data-fold="${k}">${d[k]?'已填写':'跟随全局偏好'}</em></summary>
+      ${k==='persona'&&d.channel==='director'?'<p class="dir-note">场外导演模式下玩家没有实体，这段描述只作为“导演是谁”的背景，不会成为故事里的角色。</p>':''}
+      <textarea class="boxed" rows="4" data-k="${k}" placeholder="留空则跟随玩家的全局偏好">${esc(d[k])}</textarea></details>`;
+    return `<div class="dv-open">
+    <aside class="side scroll pov"><div class="pane-h">视角与交互通道，整张卡通用</div>
+      <span class="lbl">玩家的输入通道</span>
+      <div class="chan">${Object.entries(CHAN).map(([k,v])=>`<button class="chan-opt ${d.channel===k?'on':''}" data-act="chan" data-v="${k}" aria-pressed="${d.channel===k}"><b>${v.name}</b><span>${v.desc}</span></button>`).join('')}</div>
+      ${fold('persona','默认玩家身份描述')}${fold('style','卡片专属文风补充')}
+    </aside>
+    <section class="ocols scroll"><div class="cols">${d.list.map((o,j)=>`<article class="ocol ${o.def?'def':''}">
+      <header><input class="title-in sm" data-k="list.${j}.name" value="${esc(o.name)}" aria-label="开场短标题"><button class="radio ${o.def?'on':''}" data-act="def" data-i="${j}">${o.def?'默认开场':'设为默认'}</button></header>
+      <textarea class="otext" data-k="list.${j}.text" placeholder="写下玩家进入时看到的完整开场：时间、地点、第一眼看到的人和第一句话，都写在这里。" aria-label="开场正文">${esc(o.text)}</textarea>
+      <div class="ov-ini"><span class="lbl">从这里开始时，覆写这些初始状态</span><div class="chips">${o.init.map((p,m)=>`<span class="chip">${fnames.length?`<select data-k="list.${j}.init.${m}.k" aria-label="状态">${optList(p.k,fnames)}</select>`:`<input class="k" data-k="list.${j}.init.${m}.k" value="${esc(p.k)}" aria-label="状态">`}<input class="v" data-k="list.${j}.init.${m}.v" value="${esc(p.v)}" aria-label="初始值"><button class="xx" data-act="delInit" data-i="${j}" data-m="${m}" aria-label="删除">×</button></span>`).join('')}<button class="add-line sm" data-act="addInit" data-i="${j}">+ 覆写</button></div></div>
+      <footer><span class="lbl2 mono"><span data-len="list.${j}.text">${o.text.length}</span> 字</span><span class="sp"></span><button class="btn ghost sm" data-act="dup" data-i="${j}">复制</button><button class="btn ghost sm" data-act="del" data-i="${j}" ${d.list.length<2?'disabled':''}>删除</button></footer>
+    </article>`).join('')}<button class="ocol add" data-act="addItem">+ 新开场</button></div></section></div>`},
+  act(a,el,c){const d=c.data,l=d.list,j=+el.dataset.i;
+    switch(a){
+      case 'chan':d.channel=el.dataset.v;return true;
+      case 'def':l.forEach((x,k)=>x.def=k===j);return true;
+      case 'dup':{const x=clone(l[j]);x.name+='（副本）';x.def=false;l.splice(j+1,0,x);return true}
+      case 'del':if(l.length>1){const wasDef=l[j].def;l.splice(j,1);if(wasDef)l[0].def=true;return true}return;
+      case 'addInit':l[j].init.push({k:stateFields()[0]?.name||'',v:''});return true;
+      case 'delInit':l[j].init.splice(+el.dataset.m,1);return true;
+      case 'addItem':l.push({name:'新开场',def:!l.length,init:[],text:''});setTimeout(()=>{const sc=$('.ocols',stage);if(sc)sc.scrollTo({left:sc.scrollWidth,behavior:RM()?'auto':'smooth'})},30);return true;
+    }},
+  onInput(el,c,s,body){const k=el.dataset.k;if(k==='persona'||k==='style'){const em=$(`[data-fold="${k}"]`,body);em.textContent=el.value?'已填写':'跟随全局偏好';em.classList.toggle('set',!!el.value)}}
+},
+
+/* ---------- 3 暗线与词条 ---------- */
+lore:{name:'暗线与词条',glyph:'§',itemName:'词条',unit:'条',
+  desc:'按需翻阅的设定条目。每条靠一句首句索引被 AI 或玩家调取；“加深一层”就会长成按条件逐层揭示的暗线。',
+  blank:()=>({entries:[]}),
+  count:c=>c.data.entries.length,
+  pill:c=>{const e=c.data.entries;return `${e.length} 条，${e.filter(x=>x.layers.length>1).length} 暗线`},
+  metrics:c=>{const e=c.data.entries;return[[e.length,'条'],[e.filter(x=>x.layers.length>1).length,'条暗线'],[e.filter(x=>x.life==='perm').length,'条永久常驻']]},
+  preview:c=>c.data.entries.map(x=>`<li><span>${esc(x.name)}</span><em>${x.layers.length>1?x.layers.length+' 层暗线':WHO[x.who].short}</em></li>`),
+  diagram:c=>{const e=c.data.entries;const multi=e.filter(x=>x.layers.length>1),single=e.filter(x=>x.layers.length===1);
+    return (multi.length?`<div class="dg-sec">${multi.map(x=>`<div class="sr"><span class="st">${esc(x.name)}</span><span class="tag solid">${x.layers.length} 层</span><span class="steps">${x.layers.map((L,m)=>`${m?'<span class="ln"></span>':''}<i>${esc(L.field)} ${L.v}</i>`).join('')}</span></div>`).join('')}</div>`:'')
+      +(single.length?`<div class="dg-singles"><h5>单层词条 ${single.length}</h5>${single.map(x=>`<span>${esc(x.name)}</span>`).join('')}</div>`:'')},
+  listHTML(c,s){const d=c.data,q=(s.q||'').trim(),i=s.cur;
+    const list=d.entries.map((e,j)=>({e,j})).filter(({e})=>(s.who==='全部'||e.who===s.who)&&(!q||[e.name,e.hook].some(x=>(x||'').includes(q))));
+    const row=({e,j})=>`<button class="lit ${j===i?'on':''}" data-act="pick" data-i="${j}"><span class="nm" data-mirror="entries.${j}.name">${esc(e.name)}</span><span class="tag ${e.layers.length>1?'solid':''}">${e.layers.length>1?e.layers.length+' 层暗线':'单层词条'}</span><span class="hk" data-mirror="entries.${j}.hook">${esc(e.hook||'还没有首句索引')}</span></button>`;
+    const multi=list.filter(x=>x.e.layers.length>1),single=list.filter(x=>x.e.layers.length===1);
+    return (multi.length?`<div class="llist-sep">暗线 ${multi.length}</div>${multi.map(row).join('')}`:'')
+      +(single.length?`<div class="llist-sep">单层词条 ${single.length}</div>${single.map(row).join('')}`:'')
+      +(list.length?'':'<p class="note2" style="padding:16px 18px">没有符合条件的条目。换个关键词，或切回“全部”。</p>')},
+  detail(c,s){const d=c.data;if(!d.entries.length)return emptyIn('还没有条目。写下一个地点、人物或物品，再给它一句首句索引；需要逐层揭示时，点“加深一层”。','addItem','+ 新词条');
+    s.cur=Math.max(0,Math.min(s.cur,d.entries.length-1));
+    const cnt=k=>k==='全部'?d.entries.length:d.entries.filter(x=>x.who===k).length;
+    return `<div class="dv-lore">
+    <aside class="side llist scroll"><div class="ltools"><input class="search" data-q placeholder="搜索名称或首句索引" value="${esc(s.q)}" aria-label="搜索条目">
+      <div class="fchips">${['全部',...Object.keys(WHO)].map(k=>`<button class="${s.who===k?'on':''}" data-act="who" data-v="${k}">${k==='全部'?'全部':WHO[k].short}<span class="mono">${cnt(k)}</span></button>`).join('')}</div></div>
+      <div data-llist>${this.listHTML(c,s)}</div>
+      <button class="add-line" data-act="addItem" style="margin:6px 8px;width:calc(100% - 16px)">+ 新词条</button></aside>
+    <section class="lmain scroll">${this.entry(c,s)}</section></div>`},
+  entry(c,s){const i=s.cur,e=c.data.entries[i],P=`entries.${i}`,multi=e.layers.length>1;
+    return `<div class="fhead"><input class="title-in" data-k="${P}.name" value="${esc(e.name)}" aria-label="条目名称"><span class="tag ${multi?'solid':''}">${multi?e.layers.length+' 层暗线':'单层词条'}</span><button class="btn ghost" data-act="dupE">复制</button><button class="btn ghost" data-act="delE">删除</button></div>
+    <span class="lbl">首句索引，常驻在目录里；AI 和玩家靠这一句决定要不要翻开</span>
+    <input class="hook" data-k="${P}.hook" value="${esc(e.hook)}" placeholder="一句话说明这一条是什么">
+    <div class="meta3">
+      <div><span class="lbl">谁能调取</span><div class="seg">${Object.entries(WHO).map(([k,v])=>`<button class="${e.who===k?'on':''}" data-act="setWho" data-v="${k}">${v.name}</button>`).join('')}</div></div>
+      <div><span class="lbl">驻留周期</span><div style="display:flex;align-items:center"><div class="seg">${Object.entries(LIFE).map(([k,v])=>`<button class="${e.life===k?'on':''}" data-act="life" data-v="${k}">${v}</button>`).join('')}</div>${e.life==='window'?`<span class="win"><input type="number" data-num data-k="${P}.win" value="${e.win}" aria-label="保留轮数"> 轮</span>`:''}</div></div>
+    </div>
+    <label class="fld"><span class="lbl">主动提示窗口（可选）</span><input class="boxed" data-k="${P}.hint" value="${esc(e.hint)}" placeholder="满足什么情况时，AI 可以在叙述里主动带出这一条，例如：当玩家走进灯塔街时"></label>
+    ${multi?this.ladder(e,i,s):`<label class="fld"><span class="lbl">词条正文</span><textarea class="body-ta" rows="7" data-k="${P}.layers.0.text" placeholder="被翻开时，AI 读到的完整内容">${esc(e.layers[0].text)}</textarea></label>
+      <button class="deepen" data-act="deepen"><b>+ 加深一层</b><span>转为渐进秘密：再写一层只有满足条件才会揭示的内容。现在的正文会成为第 1 层。</span></button>`}`},
+  simMax(e){return Math.max(10,...e.layers.map(L=>fieldByName(L.field)?.max??100))},
+  ladder(e,i,s){const P=`entries.${i}`,fields=rangeFields(),mx=this.simMax(e);const sim=s.sims[i]??Math.round(mx*.6);
+    return `<div class="sim"><span class="lbl">揭示预演</span><span>当相关数值达到</span><input type="range" min="0" max="${mx}" value="${sim}" data-sim aria-label="模拟数值"><span class="mono simv">${sim}</span><span class="muted simr"></span></div>
+    <ol class="ladder">${e.layers.map((L,m)=>`<li class="ly"><div class="lnum mono">${m+1}</div><div class="lbody">
+      <div class="cond"><span class="lbl">解锁门槛</span><select data-k="${P}.layers.${m}.field" aria-label="状态">${optList(L.field||fields[0],fields)}</select><span>≥</span><input class="num s mono" type="number" data-num data-k="${P}.layers.${m}.v" value="${L.v}" aria-label="阈值">${m===0&&+L.v===0?'<span class="free">门槛为 0，随条目一起可见</span>':''}</div>
+      <textarea rows="2" data-k="${P}.layers.${m}.text" placeholder="这一层揭示的内容">${esc(L.text)}</textarea></div>
+      <div class="lside"><span class="lstate"></span><button class="xx" data-act="delLayer" data-m="${m}" aria-label="删除这一层">×</button></div></li>`).join('')}</ol>
+    <button class="add-line" data-act="deepen">+ 再加深一层</button>`},
+  act(a,el,c,s,body){const d=c.data,e=d.entries[s.cur];
+    switch(a){
+      case 'pick':s.cur=+el.dataset.i;return true;
+      case 'who':s.who=el.dataset.v;return true;
+      case 'setWho':e.who=el.dataset.v;return true;
+      case 'life':e.life=el.dataset.v;return true;
+      case 'deepen':{const f0=rangeFields()[0];if(e.layers.length===1){e.layers[0].field=e.layers[0].field||f0;e.layers[0].v=0}
+        const last=e.layers[e.layers.length-1];const mx=fieldByName(last.field)?.max??100;e.layers.push({field:last.field,v:Math.min(mx,(+last.v||0)+Math.max(1,Math.round(mx/4))),text:''});
+        setTimeout(()=>{const m=$('.lmain',stage);if(m)m.scrollTo({top:m.scrollHeight,behavior:RM()?'auto':'smooth'});const ta=$$('.ladder textarea',stage).pop();ta&&ta.focus({preventScroll:true})},40);return true}
+      case 'delLayer':if(e.layers.length>1){e.layers.splice(+el.dataset.m,1);return true}return;
+      case 'dupE':{const x=clone(e);x.name+='（副本）';d.entries.splice(s.cur+1,0,x);s.cur++;return true}
+      case 'delE':d.entries.splice(s.cur,1);s.cur=Math.max(0,s.cur-1);return true;
+      case 'addItem':d.entries.unshift(E('新词条','','ai','window',''));s.cur=0;s.who='全部';s.q='';delete s.sims[0];return true;
+    }},
+  onInput(el,c,s,body){
+    if(el.matches('[data-q]')){s.q=el.value;$('[data-llist]',body).innerHTML=this.listHTML(c,s);return}
+    if(el.matches('[data-sim]')){s.sims[s.cur]=+el.value;$('.simv',body).textContent=el.value}
+    this.after(body,c,s)},
+  after(body,c,s){const e=c.data.entries[s.cur];if(!e||e.layers.length<2)return;const sim=s.sims[s.cur]??Math.round(this.simMax(e)*.6);let open=true,n=0;
+    $$('.ly',body).forEach((li,m)=>{const L=e.layers[m];if(!L)return;open=open&&(+L.v<=sim);li.classList.toggle('open',open);$('.lstate',li).textContent=open?'已揭示':'未揭示';if(open)n++});
+    const r=$('.simr',body);if(r)r.textContent=n?`揭示到第 ${n} / ${e.layers.length} 层`:'一层都还没揭示'}
+},
+
+/* ---------- 4 状态与阶段 ---------- */
+state:{name:'状态与阶段',glyph:'◐',itemName:'字段',unit:'个字段',
+  desc:'好感度、理智等数值；数值落在不同区间时的表现描写；以及每回合结束后数值如何升降的判据。',
+  blank:()=>({fields:[{name:'好感度',kind:'range',min:0,max:100,init:0,visible:false,stages:[stg('疏远',0,''),stg('亲近',50,'')],q:'',reads:[{label:'疏远',d:-3},{label:'如常',d:0},{label:'拉近',d:3}]}]}),
+  count:c=>c.data.fields.length,
+  pill:c=>{const f=c.data.fields[0];return f?`${f.name} ${f.kind==='range'?f.stages.length:f.opts.length} 段`:'空'},
+  metrics:c=>{const f=c.data.fields;return[[f.length,'个字段'],[f.reduce((a,x)=>a+x.stages.length,0),'个阶段'],[f.reduce((a,x)=>a+(x.reads||[]).length,0),'档判据']]},
+  preview:c=>c.data.fields.map(f=>`<li><span>${esc(f.name)}</span><em>${f.kind==='range'?`${f.min}–${f.max}，${f.stages.length} 段，${(f.reads||[]).length} 档判据`:`枚举 ${f.opts.length} 项`}</em></li>`),
+  diagram:c=>{const fs=c.data.fields;const f=fs.find(x=>x.kind==='range'&&x.stages.length);if(!f)return '';
+    return `<div class="dg-state"><div class="lab">${esc(f.name)}</div><div class="trk">${trackInner(f,-1,false)}</div>
+    <div class="dg-reads"><span>每回合判据</span>${(f.reads||[]).map(r=>`<span>${esc(r.label)}<b>${sgn(r.d)}</b></span>`).join('')}</div>
+    <div class="others">${fs.filter(x=>x!==f).map(x=>`<div><span>${esc(x.name)}</span><em>${x.kind==='range'?`${x.min}–${x.max}，${x.stages.length} 段`:esc(x.opts.join(' / '))}</em></div>`).join('')}</div></div>`},
+  detail(c,s){const d=c.data;if(!d.fields.length)return emptyIn('还没有状态字段。添加一个“好感度”或“理智”，为不同数值区间写下表现，再定好每回合怎么升降。','addItem','+ 新字段');
+    s.field=Math.min(s.field,d.fields.length-1);const i=s.field,f=d.fields[i];
+    return `<div class="dv-state">
+    <aside class="side fside scroll"><div class="pane-h">字段</div>
+      ${d.fields.map((x,j)=>`<button class="frow ${j===i?'on':''}" data-act="field" data-i="${j}"><span class="fn" data-mirror="fields.${j}.name">${esc(x.name)}</span><span class="ft mono">${x.kind==='range'?`${x.min}–${x.max}`:'枚举'}</span><span class="fs muted">${x.kind==='range'?x.stages.length+' 个阶段':x.opts.length+' 个取值'}，${(x.reads||[]).length} 档判据${x.visible?'，玩家可见':''}</span></button>`).join('')}
+      <button class="add-line" data-act="addItem" style="margin:4px 8px;width:calc(100% - 16px)">+ 新字段</button></aside>
+    <section class="fmain scroll">
+      <div class="fhead">
+        <input class="title-in" data-k="fields.${i}.name" value="${esc(f.name)}" aria-label="字段名">
+        ${f.kind==='range'?`<label class="inl">范围 <input class="num mono" type="number" data-num data-k="fields.${i}.min" value="${f.min}"> – <input class="num mono" type="number" data-num data-k="fields.${i}.max" value="${f.max}"></label>
+        <label class="inl">初始 <input class="num mono" type="number" data-num data-k="fields.${i}.init" value="${f.init}"></label>`
+        :`<label class="inl">初始 <select data-k="fields.${i}.init">${optList(f.init,f.opts)}</select></label>`}
+        <button class="tog ${f.visible?'on':''}" data-act="vis" aria-pressed="${f.visible}">${f.visible?'玩家可见':'仅 AI 可见'}</button>
+        <button class="btn ghost" data-act="delField">删除字段</button>
+      </div>
+      ${f.kind==='range'?this.rangeBody(f,i,s):this.enumBody(f,i)}
+      ${this.readsBody(f,i)}
+    </section></div>`},
+  rangeBody(f,i,s){if(!f.stages.length)return emptyIn('这个字段还没有阶段。','splitStage','+ 添加阶段');
+    s.stage=Math.min(s.stage,f.stages.length-1);const k=s.stage,st=f.stages[k],P=`fields.${i}.stages.${k}`;const[a,b]=stRange(f,k);
+    return `<div class="trk-wrap"><div class="trk big" data-track>${trackInner(f,k,true)}</div>
+      <div class="trk-scale mono"><span>${f.min}</span><span>拖动黑色分界线调整阈值，点击区段编辑该阶段</span><span>${f.max}</span></div></div>
+    <div class="stage-ed">
+      <div class="st-h"><div class="pg"><button data-act="stage" data-i="${k-1}" ${k===0?'disabled':''} aria-label="上一阶段">‹</button><span class="mono">${k+1} / ${f.stages.length}</span><button data-act="stage" data-i="${k+1}" ${k===f.stages.length-1?'disabled':''} aria-label="下一阶段">›</button></div>
+        <input class="title-in md" data-k="${P}.name" value="${esc(st.name)}" aria-label="阶段名"><span class="mono muted" data-strange>${a}–${b}</span><span class="sp"></span>
+        <button class="btn ghost" data-act="splitStage" ${b-a<2?'disabled':''}>拆分此阶段</button>
+        <button class="btn ghost" data-act="delStage" ${f.stages.length<2?'disabled':''}>${k===0?'并入下一阶段':'并入上一阶段'}</button></div>
+      <textarea class="stage-prose" rows="6" data-k="${P}.text" placeholder="写下这一阶段的状态与表现：怎么看待玩家，怎么说话、做什么，又在回避什么。" aria-label="阶段描写">${esc(st.text)}</textarea>
+    </div>`},
+  enumBody(f,i){return `<div class="enum"><p class="muted">枚举字段没有数值区间。每回合结束时，AI 按下方判据在这些取值之间切换，并把当前取值写进下一轮的上下文。</p>
+    <ol class="lines">${f.opts.map((o,m)=>`<li><input data-k="fields.${i}.opts.${m}" value="${esc(o)}"><button class="xx" data-act="delOpt" data-m="${m}" aria-label="删除">×</button></li>`).join('')}</ol>
+    <button class="add-line sm" data-act="addOpt">+ 添加取值</button></div>`},
+  readsBody(f,i){const R=f.reads||[];const mx=Math.max(5,...R.map(r=>Math.abs(+r.d||0)));
+    return `<div class="reads"><div class="sec-h">回合后升降判据<span class="sub">每回合结束时，AI 回答这个问题并选出一档，“${esc(f.name)}”随之变化</span></div>
+    <input class="q" data-k="fields.${i}.q" value="${esc(f.q)}" placeholder="例如：这一幕里，她对玩家的态度如何变化？" aria-label="总提问">
+    <ol class="rlines">${R.map((r,m)=>`<li><span class="rno mono">${m+1}</span><input data-k="fields.${i}.reads.${m}.label" value="${esc(r.label)}" placeholder="档位描述" aria-label="档位描述"><span class="rf">→ ${esc(f.name)}</span>${f.kind==='range'
+      ?`<input class="num mono" type="number" data-num data-k="fields.${i}.reads.${m}.d" value="${r.d}" aria-label="变化量"><span class="dbar" data-dbar="${m}">${dbarInner(r.d,mx)}</span>`
+      :`<select data-k="fields.${i}.reads.${m}.to" aria-label="切换到">${optList(r.to,f.opts)}</select><span></span>`}<button class="xx" data-act="delRead" data-m="${m}" aria-label="删除">×</button></li>`).join('')}</ol>
+    <button class="add-line sm" data-act="addRead">+ 添加档位</button></div>`},
+  act(a,el,c,s){const d=c.data,f=d.fields[s.field];
+    switch(a){
+      case 'field':s.field=+el.dataset.i;s.stage=0;return true;
+      case 'stage':{const k=+el.dataset.i;if(k<0||k>=f.stages.length)return;s.stage=k;return true}
+      case 'vis':f.visible=!f.visible;return true;
+      case 'delField':d.fields.splice(s.field,1);s.field=Math.max(0,s.field-1);s.stage=0;return true;
+      case 'addItem':d.fields.push({name:'新字段',kind:'range',min:0,max:100,init:0,visible:false,stages:[stg('低',0,''),stg('高',50,'')],q:'',reads:[{label:'下降',d:-3},{label:'不变',d:0},{label:'上升',d:3}]});s.field=d.fields.length-1;s.stage=0;return true;
+      case 'splitStage':{if(!f.stages.length){f.stages.push(stg('新阶段',f.min,''));s.stage=0;return true}
+        const k=s.stage,[lo,hi]=stRange(f,k);const mid=Math.ceil((lo+hi+1)/2);f.stages.splice(k+1,0,stg('新阶段',mid,''));s.stage=k+1;return true}
+      case 'delStage':{const k=s.stage;if(f.stages.length<2)return;if(k===0){f.stages[1].from=f.min;f.stages.splice(0,1);s.stage=0}else{f.stages.splice(k,1);s.stage=k-1}return true}
+      case 'addOpt':f.opts.push('');return true;
+      case 'delOpt':f.opts.splice(+el.dataset.m,1);return true;
+      case 'addRead':(f.reads=f.reads||[]).push(f.kind==='range'?{label:'',d:0}:{label:'',to:f.opts[0]});return true;
+      case 'delRead':f.reads.splice(+el.dataset.m,1);return true;
+    }},
+  onInput(el,c,s,body){const k=el.dataset.k||'';const f=c.data.fields[s.field];if(!f)return;
+    if(/reads\.\d+\.d$/.test(k)){const mx=Math.max(5,...f.reads.map(r=>Math.abs(+r.d||0)));f.reads.forEach((r,m)=>{const b=$(`[data-dbar="${m}"]`,body);if(b)b.innerHTML=dbarInner(r.d,mx)});return}
+    if(f.kind!=='range')return;const trk=$('[data-track]',body);if(!trk)return;
+    if(/\.(min|max|init)$/.test(k)||/stages\.\d+\.name$/.test(k))trk.innerHTML=trackInner(f,s.stage,true)},
+  after(body,c,s){const f=c.data.fields[s.field];const trk=$('[data-track]',body);if(!trk||!f)return;
+    trk.addEventListener('pointerdown',e=>{const th=e.target.closest('.th');if(!th)return;e.preventDefault();e.stopPropagation();
+      const k=+th.dataset.th,st=f.stages;const r=trk.getBoundingClientRect();th.setPointerCapture(e.pointerId);th.classList.add('active');
+      const mv=ev=>{let v=Math.round(f.min+(ev.clientX-r.left)/r.width*(f.max-f.min+1));const lo=st[k-1].from+1,hi=(st[k+1]?st[k+1].from:f.max+1)-1;v=Math.max(lo,Math.min(hi,v));
+        if(v===st[k].from)return;st[k].from=v;layoutTrack(trk,f);const[a,b]=stRange(f,s.stage);const sr=$('[data-strange]',body);if(sr)sr.textContent=`${a}–${b}`};
+      const up=()=>{th.classList.remove('active');th.removeEventListener('pointermove',mv);th.removeEventListener('pointerup',up);th.removeEventListener('pointercancel',up)};
+      th.addEventListener('pointermove',mv);th.addEventListener('pointerup',up);th.addEventListener('pointercancel',up)})}
+},
+
+/* ---------- 5 行动与检定 ---------- */
+check:{name:'行动与检定',glyph:'%',itemName:'行动',unit:'项行动',
+  desc:'玩家可以选择的行动：什么时候出现、成功率怎么算、成败各改变哪些状态；以及整张卡的结局条件与回合上限。',
+  blank:()=>({ends:[],maxOn:false,maxTurns:30,actions:[]}),
+  count:c=>c.data.actions.length,
+  pill:c=>`${c.data.actions.length} 项，${c.data.ends.length} 结局`,
+  metrics:c=>{const d=c.data;return[[d.actions.length,'项行动'],[d.ends.length,'个结局'],[d.maxOn?d.maxTurns:'∞','回合上限']]},
+  preview:c=>c.data.actions.map(a=>`<li><span>${esc(a.n)}</span><em>${a.mode==='ai'?'AI 评判':Math.round(rateOf(a)*100)+'%'}${a.show==='cond'?'，条件出现':''}</em></li>`),
+  diagram:c=>{const d=c.data;return `<table class="dg-check">${d.actions.map(a=>`<tr><td>${esc(a.n)}</td><td class="a">${a.mode==='fixed'?'固定':a.mode==='linear'?'随'+esc(a.lin.field):'AI'}</td><td class="p">${rateHTML(a,undefined,50)}</td></tr>`).join('')}</table>
+    ${d.ends.length?`<div class="dg-ends">${d.ends.map(e=>`<b>${esc(e.name)}</b> ${esc(e.field)} ${e.op} ${e.v}`).join('　')}</div>`:''}`},
+  detail(c,s){const d=c.data;const rf=rangeFields(),af=stateFields().map(f=>f.name);
+    const condSel=(P,cd)=>`<span class="cond-in"><select data-k="${P}.field" aria-label="状态">${optList(cd.field,rf)}</select><select data-k="${P}.op" aria-label="比较">${optList(cd.op,['≥','≤'])}</select><input class="num s mono" type="number" data-num data-k="${P}.v" value="${cd.v}" aria-label="阈值"></span>`;
+    const fx=(j,w)=>d.actions[j][w].map((x,m)=>`<span class="chip"><select data-k="actions.${j}.${w}.${m}.k" aria-label="状态">${optList(x.k,rf)}</select><input class="d mono" type="number" data-num data-k="actions.${j}.${w}.${m}.d" value="${x.d}" aria-label="变化量"><button class="xx" data-act="delFx" data-i="${j}" data-w="${w}" data-m="${m}" aria-label="删除">×</button></span>`).join('')+`<button class="add-line sm" data-act="addFx" data-i="${j}" data-w="${w}">+</button>`;
+    return `<div class="dv-check scroll">
+    <section class="endband"><div class="sec-h">终局与回合上限<span class="sub">任一结局条件满足时，叙述者在当回合收束故事</span></div>
+      <div class="endgrid">
+        <div><ol class="ends">${d.ends.map((e,j)=>`<li><span class="lbl2">当</span>${condSel(`ends.${j}`,e)}<span class="lbl2">时，收束为</span><input class="en" data-k="ends.${j}.name" value="${esc(e.name)}" aria-label="结局名"><input class="et" data-k="ends.${j}.text" value="${esc(e.text)}" placeholder="结局走向，一句话" aria-label="结局描述"><button class="xx" data-act="delEnd" data-i="${j}" aria-label="删除">×</button></li>`).join('')}</ol>
+          <button class="add-line sm" data-act="addEnd">+ 结局条件</button></div>
+        <div class="maxt"><span class="lbl">最大回合数（可选）</span><div class="row1"><button class="tog ${d.maxOn?'on':''}" data-act="maxOn" aria-pressed="${d.maxOn}">${d.maxOn?'已开启':'不限回合'}</button>${d.maxOn?`<input class="mono" type="number" data-num data-k="maxTurns" value="${d.maxTurns}" aria-label="回合上限"> 回合`:''}</div>
+          <p>${d.maxOn?'到达上限时，叙述者在下一回合收束到最接近的结局。':'故事只在满足结局条件时结束。'}</p></div>
+      </div></section>
+    <section class="actlist"><div class="sec-h">行动检定表<span class="mono">${d.actions.length}</span><span class="sub">成功率随右上“切片预览”里的状态值实时变化</span><span class="sp"></span>${d.actions.length?'<button class="rollbtn" data-act="rollAll">全部试掷</button>':''}</div>
+      ${d.actions.length?'':`<div class="empty-in" style="height:auto;padding:40px"><p>还没有行动。添加“搜查”“说服”这样的常用行动，并决定它们的成功率怎么算。</p></div>`}
+      ${d.actions.map((a,j)=>{const P=`actions.${j}`;const r=s.rolls[j];return `<article class="act">
+        <div class="a1"><input class="an" data-k="${P}.n" value="${esc(a.n)}" placeholder="行动名称" aria-label="行动名称"><input class="ad" data-k="${P}.desc" value="${esc(a.desc)}" placeholder="一句话描述" aria-label="行动描述">
+          <div class="show"><span class="lbl2">浮现</span><div class="seg sm"><button class="${a.show==='always'?'on':''}" data-act="show" data-i="${j}" data-v="always">常驻可选</button><button class="${a.show==='cond'?'on':''}" data-act="show" data-i="${j}" data-v="cond">满足条件时</button></div>${a.show==='cond'?condSel(`${P}.cond`,a.cond):''}</div>
+          <button class="xx" data-act="delAct" data-i="${j}" aria-label="删除行动">×</button></div>
+        <div class="a2"><span class="lbl2">成功率</span><div class="seg sm"><button class="${a.mode==='fixed'?'on':''}" data-act="mode" data-i="${j}" data-v="fixed">固定概率</button><button class="${a.mode==='linear'?'on':''}" data-act="mode" data-i="${j}" data-v="linear">随状态变化</button><button class="${a.mode==='ai'?'on':''}" data-act="mode" data-i="${j}" data-v="ai">AI 评判</button></div>
+          <div class="mode ${a.mode==='ai'?'rule':''}">${a.mode==='fixed'?`<input class="num s mono" type="number" data-num data-k="${P}.p" value="${a.p}" aria-label="概率"> %`
+            :a.mode==='linear'?`随<select data-k="${P}.lin.field" aria-label="状态">${optList(a.lin.field,rf)}</select>从最低时 <input class="num s mono" type="number" data-num data-k="${P}.lin.lo" value="${a.lin.lo}"> % 到最高时 <input class="num s mono" type="number" data-num data-k="${P}.lin.hi" value="${a.lin.hi}"> %`
+            :`<input style="flex:1" data-k="${P}.ai" value="${esc(a.ai)}" placeholder="AI 依据什么判据评判成败" aria-label="评判判据">`}</div>
+          <span class="sp"></span><div class="rate" data-prob="${j}">${rateHTML(a)}</div><button class="rollbtn" data-act="roll" data-i="${j}">试掷</button></div>
+        <div class="a3"><span class="lbl2">成功时</span>${fx(j,'ok')}<span class="sep"></span><span class="lbl2">失败时</span>${fx(j,'fail')}<span class="sp"></span><span class="res ${r?.ok?'ok':''}" data-res="${j}">${esc(r?.t||'')}</span></div>
+      </article>`}).join('')}
+      <button class="add-line" data-act="addItem">+ 新行动</button>
+    </section></div>`},
+  roll(a){const r=rateOf(a);if(r===null){const ok=Math.random()<.5;return{ok,t:`模拟 AI 评判：${ok?'成功':'失败'}，${fxText(ok?a.ok:a.fail)||'无变化'}`}}
+    const x=1+Math.floor(Math.random()*100),p=Math.round(r*100),ok=x<=p;return{ok,t:`掷出 ${x} ${ok?'≤':'>'} ${p}，${ok?'成功':'失败'}：${fxText(ok?a.ok:a.fail)||'无变化'}`}},
+  act(a,el,c,s,body){const d=c.data,j=+el.dataset.i,A=d.actions[j];
+    switch(a){
+      case 'show':A.show=el.dataset.v;return true;
+      case 'mode':A.mode=el.dataset.v;delete s.rolls[j];return true;
+      case 'addFx':A[el.dataset.w].push({k:rangeFields()[0],d:el.dataset.w==='ok'?1:-1});return true;
+      case 'delFx':A[el.dataset.w].splice(+el.dataset.m,1);return true;
+      case 'roll':{const r=this.roll(A);s.rolls[j]=r;const e2=$(`[data-res="${j}"]`,body);e2.textContent=r.t;e2.classList.toggle('ok',r.ok);if(!RM())e2.animate([{opacity:0},{opacity:1}],{duration:200});return}
+      case 'rollAll':d.actions.forEach((x,k)=>{const r=this.roll(x);s.rolls[k]=r;const e2=$(`[data-res="${k}"]`,body);if(e2){e2.textContent=r.t;e2.classList.toggle('ok',r.ok)}});return;
+      case 'delAct':d.actions.splice(j,1);s.rolls={};return true;
+      case 'addItem':{const f=rangeFields()[0];d.actions.push({n:'新行动',desc:'',show:'always',cond:{field:f,op:'≥',v:0},mode:'fixed',p:50,lin:{field:f,lo:20,hi:80},ai:'',ok:[],fail:[]});
+        setTimeout(()=>{const m=$('.dv-check',stage);if(m)m.scrollTo({top:m.scrollHeight,behavior:RM()?'auto':'smooth'})},30);return true}
+      case 'addEnd':d.ends.push({field:rangeFields()[0],op:'≥',v:100,name:'新结局',text:''});return true;
+      case 'delEnd':d.ends.splice(j,1);return true;
+      case 'maxOn':d.maxOn=!d.maxOn;return true;
+    }},
+  onInput(el,c,s,body){c.data.actions.forEach((a,j)=>{const td=$(`[data-prob="${j}"]`,body);if(td)td.innerHTML=rateHTML(a)})}
+},
+
+/* ---------- 6 小剧场与世界账本 ---------- */
+ledger:{name:'小剧场与世界账本',glyph:'▦',itemName:'人物',unit:'项',
+  desc:'左边是每回合附带的心声与小剧场栏位；右边是 AI 每回合改写的场景与人物账本。',
+  blank:()=>({inner:{on:false,note:''},suggest:{on:false,note:''},slots:[],feed:true,lookup:false,scene:[{k:'时间',v:''},{k:'地点',v:''}],npcs:[]}),
+  count:c=>c.data.slots.length+c.data.scene.length+c.data.npcs.length,
+  pill:c=>`${c.data.npcs.length} 人，${c.data.slots.length} 栏`,
+  metrics:c=>{const d=c.data;return[[d.slots.length+(d.inner.on?1:0)+(d.suggest.on?1:0),'个附属栏位'],[d.scene.length,'项场景'],[d.npcs.length,'位人物']]},
+  preview:c=>{const d=c.data;return [...d.slots.map(x=>`<li><span>${esc(x.name)}</span><em>${x.trig==='auto'?'每回合':'按需'}</em></li>`),...d.scene.map(g=>`<li><span>${esc(g.k)}</span><em>${esc(g.v)}</em></li>`)]},
+  diagram:c=>{const d=c.data;return `<div class="dg-ledger"><div class="sl"><h5>回合附属</h5>
+      <div class="${d.inner.on?'':'off'}"><span>角色内心独白</span><em>${d.inner.on?'开':'关'}</em></div><div class="${d.suggest.on?'':'off'}"><span>下轮行动建议</span><em>${d.suggest.on?'开':'关'}</em></div>
+      ${d.slots.map(x=>`<div><span>${esc(x.name)}</span><em>${x.trig==='auto'?'每回合':'按需'}</em></div>`).join('')}</div>
+    <div><h5>世界账本${d.feed?'，每轮回喂':''}</h5><dl>${d.scene.map(g=>`<dt>${esc(g.k)}</dt><dd>${esc(g.v)}</dd>`).join('')}</dl>
+      <div class="np">${d.npcs.map(n=>`<div><span>${esc(n.n)}</span><em>${esc(n.st==='在场'?n.loc+'，'+n.att:n.st)}</em></div>`).join('')}</div></div></div>`},
+  detail(c){const d=c.data;
+    const bi=(k,name,desc)=>{const x=d[k];return `<div class="bi ${x.on?'':'off'}"><div class="bi-h"><b>${name}</b><span>${desc}</span><span class="sp"></span><button class="tog ${x.on?'on':''}" data-act="bi" data-v="${k}" aria-pressed="${x.on}">${x.on?'开启':'关闭'}</button></div>${x.on?`<input data-k="${k}.note" value="${esc(x.note)}" placeholder="微调：长度、格式、口吻">`:''}</div>`};
+    return `<div class="dv-ledger">
+    <section class="lt"><div class="sec-h">回合附属：小剧场与心声</div>
+      <p class="note2">附在每回合正文之后的额外内容。它们不推动剧情，只增加读感；也不会写进世界账本。</p>
+      ${bi('inner','角色内心独白','回复末尾附一段没说出口的心声')}${bi('suggest','下轮行动建议','给玩家几个可以接着做的事')}
+      <div class="sub-h">自定义栏位<span class="mono">${d.slots.length}</span><span class="sp"></span><button class="btn sm" data-act="addSlot">+ 栏位</button></div>
+      ${d.slots.map((x,j)=>`<div class="slot"><div class="slot-h"><input class="title-in sm" data-k="slots.${j}.name" value="${esc(x.name)}" aria-label="栏位名"><div class="seg sm"><button class="${x.trig==='auto'?'on':''}" data-act="trig" data-i="${j}" data-v="auto">每回合自动</button><button class="${x.trig==='click'?'on':''}" data-act="trig" data-i="${j}" data-v="click">玩家按需点开</button></div><button class="xx" data-act="delSlot" data-i="${j}" aria-label="删除">×</button></div>
+        <textarea rows="2" data-k="slots.${j}.text" placeholder="这一栏写什么、用谁的口吻、多长">${esc(x.text)}</textarea></div>`).join('')}
+      ${d.slots.length?'':'<p class="note2">例如每回合结尾的“八卦小报”“旁观者吐槽”，或玩家点开才生成的“番外小剧场”。</p>'}
+    </section>
+    <section><div class="sec-h">动态世界账本</div>
+      <div class="togs"><button class="tog ${d.feed?'on':''}" data-act="feed" aria-pressed="${d.feed}">每轮回喂给当前上下文</button><button class="tog ${d.lookup?'on':''}" data-act="lookup" aria-pressed="${d.lookup}">允许 AI 回溯历史记录</button></div>
+      <p class="note2">账本由 AI 在每回合结束后改写。${d.feed?'回喂开启：当前这张表会拼进下一轮上下文。':'回喂关闭：账本只做记录，不进入上下文。'}${d.lookup?'回溯开启：AI 可以像查字典一样翻看过去各回合的账本。':''}</p>
+      <div class="sub-h">当前场景<span class="mono">${d.scene.length}</span><span class="sp"></span><button class="btn sm" data-act="addG">+ 键</button></div>
+      <ul class="kv">${d.scene.map((g,j)=>`<li><input class="k" data-k="scene.${j}.k" value="${esc(g.k)}" aria-label="键"><input class="v" data-k="scene.${j}.v" value="${esc(g.v)}" aria-label="值"><button class="xx" data-act="delG" data-i="${j}" aria-label="删除">×</button></li>`).join('')}</ul>
+      <div class="sub-h">在场人物<span class="mono">${d.npcs.length}</span><span class="sp"></span><button class="btn sm" data-act="addItem">+ 人物</button></div>
+      <div class="npcwrap"><table class="npc"><colgroup><col style="width:19%"><col style="width:19%"><col style="width:14%"><col style="width:14%"><col><col style="width:28px"></colgroup>
+      <thead><tr><th>名字</th><th>位置</th><th>态度</th><th>状态</th><th>备注</th><th></th></tr></thead>
+      <tbody>${d.npcs.map((n,j)=>`<tr class="${n.st==='在场'?'':'gone'}"><td class="nm"><input data-k="npcs.${j}.n" value="${esc(n.n)}" aria-label="名字"></td><td><input data-k="npcs.${j}.loc" value="${esc(n.loc)}" aria-label="位置"></td>
+        <td><select data-k="npcs.${j}.att" aria-label="态度">${optList(n.att,ATTS)}</select></td><td><select data-k="npcs.${j}.st" data-st aria-label="状态">${optList(n.st,STS)}</select></td>
+        <td><input data-k="npcs.${j}.note" value="${esc(n.note)}" placeholder="—" aria-label="备注"></td><td><button class="xx" data-act="delN" data-i="${j}" aria-label="删除">×</button></td></tr>`).join('')}</tbody></table></div>
+      ${d.npcs.length?'':'<p class="note2" style="margin-top:12px">还没有人物。添加一个，AI 会在剧情推进时更新他们的位置和态度。</p>'}
+    </section></div>`},
+  act(a,el,c){const d=c.data,j=+el.dataset.i;
+    switch(a){
+      case 'bi':d[el.dataset.v].on=!d[el.dataset.v].on;return true;
+      case 'feed':d.feed=!d.feed;return true;
+      case 'lookup':d.lookup=!d.lookup;return true;
+      case 'addSlot':d.slots.push({name:'新栏位',trig:'auto',text:''});return true;
+      case 'delSlot':d.slots.splice(j,1);return true;
+      case 'trig':d.slots[j].trig=el.dataset.v;return true;
+      case 'addG':d.scene.push({k:'新键',v:''});return true;
+      case 'delG':d.scene.splice(j,1);return true;
+      case 'delN':d.npcs.splice(j,1);return true;
+      case 'addItem':d.npcs.push({n:'新人物',loc:'',att:'中立',st:'在场',note:''});return true;
+    }},
+  onInput(el){if('st' in el.dataset)el.closest('tr').classList.toggle('gone',el.value!=='在场')}
+},
+
+/* ---------- 7 事后护栏与禁词 ---------- */
+guard:{name:'事后护栏与禁词',glyph:'⊘',itemName:'规则',unit:'条',
+  desc:'不写进正面设定，只在每轮正文生成后执行的审校：行为禁令、禁用词替换，以及 {{占位符}} 的默认称呼。',
+  blank:()=>({rules:[{t:'严禁替玩家扮演的角色说话或做决定。',on:true}],lex:[],names:[{key:'user',val:'你'}],sample:''}),
+  count:c=>c.data.rules.length+c.data.lex.length+c.data.names.length,
+  pill:c=>`${c.data.rules.filter(r=>r.on).length} 条禁令`,
+  metrics:c=>{const d=c.data;return[[d.rules.filter(r=>r.on).length,'条禁令'],[d.lex.length,'组替换'],[d.names.length,'个代称']]},
+  preview:c=>c.data.rules.map(r=>`<li><span>${esc(r.t)}</span><em>${r.on?'':'停用'}</em></li>`),
+  diagram:c=>{const d=c.data;return `<div class="dg-guard"><div><h5>行为禁令</h5><ol>${d.rules.filter(r=>r.on).slice(0,3).map(r=>`<li>${esc(r.t)}</li>`).join('')}</ol></div>
+    <div><h5>禁用词</h5>${d.lex.slice(0,3).map(x=>`<div class="lx"><s>${esc(x.bad)}</s><span>→ ${esc(x.good)}</span></div>`).join('')}</div>
+    <div><h5>代称</h5><div class="nm">${d.names.map(n=>`<span>{{${esc(n.key)}}} ${esc(n.val)}</span>`).join('')}</div></div></div>`},
+  usage(key){const s=JSON.stringify(Object.values(card().comps).filter(x=>x.type!=='guard').map(x=>x.data));return (s.split('{{'+key+'}}').length-1)},
+  detail(c){const d=c.data;
+    return `<div class="dv-guard">
+    <div class="g-intro">这些规则不会写进正面设定，避免反向提醒；它们只在每轮正文生成之后审校，命中时由后台自动重写那一段。</div>
+    <div class="g-cols">
+      <section><div class="sec-h">事后行为禁令<span class="mono">${d.rules.filter(r=>r.on).length} / ${d.rules.length}</span></div>
+        <ol class="glist">${d.rules.map((r,j)=>`<li class="${r.on?'':'off'}"><span class="gno">${j+1}</span><textarea rows="2" data-k="rules.${j}.t" aria-label="规则">${esc(r.t)}</textarea><button class="sw ${r.on?'on':''}" data-act="ruleOn" data-i="${j}" aria-pressed="${r.on}">${r.on?'启用':'停用'}</button><button class="xx" data-act="delRule" data-i="${j}" aria-label="删除">×</button></li>`).join('')}</ol>
+        <button class="add-line sm" data-act="addItem">+ 规则</button></section>
+      <section><div class="sec-h">禁用词与修辞替换<span class="mono">${d.lex.length}</span></div>
+        <div class="lexh"><span>禁用陈词滥调、高频口癖</span><span></span><span>期望的润色方向</span><span></span></div>
+        <ul class="lex">${d.lex.map((x,j)=>`<li><input class="bad" data-k="lex.${j}.bad" value="${esc(x.bad)}" aria-label="禁用词"><span class="to">→</span><input data-k="lex.${j}.good" value="${esc(x.good)}" aria-label="替代方向"><button class="xx" data-act="delLex" data-i="${j}" aria-label="删除">×</button></li>`).join('')}</ul>
+        <button class="add-line sm" data-act="addLex">+ 替换</button>
+        <div class="audit"><span class="lbl">试审一段：贴一段生成结果，看会命中什么</span><textarea rows="3" data-audit aria-label="试审文本">${esc(d.sample)}</textarea><div class="hl" data-auditout></div><div class="verdict" data-verdict></div></div></section>
+      <section><div class="sec-h">代称默认值<span class="mono">${d.names.length}</span></div>
+        <p class="note2">卡片文本里的 {{key}} 会替换成右侧的默认称呼，玩家开局时可以改写。右侧数字是它在本卡其他组件中出现的次数。</p>
+        <ul class="names">${d.names.map((n,j)=>`<li><span class="key">{{<input data-k="names.${j}.key" data-autow value="${esc(n.key)}" aria-label="占位符" style="width:${kw(n.key)}em">}}</span><input data-k="names.${j}.val" value="${esc(n.val)}" aria-label="默认称呼"><span class="use">×${this.usage(n.key)}</span><button class="xx" data-act="delName" data-i="${j}" aria-label="删除">×</button></li>`).join('')}</ul>
+        <button class="add-line sm" data-act="addName">+ 代称</button></section>
+    </div></div>`},
+  act(a,el,c){const d=c.data,j=+el.dataset.i;
+    switch(a){
+      case 'ruleOn':d.rules[j].on=!d.rules[j].on;return true;
+      case 'delRule':d.rules.splice(j,1);return true;
+      case 'addItem':d.rules.push({t:'',on:true});setTimeout(()=>{const t=$$('.glist textarea',stage).pop();t&&t.focus()},30);return true;
+      case 'addLex':d.lex.push({bad:'',good:''});return true;
+      case 'delLex':d.lex.splice(j,1);return true;
+      case 'addName':d.names.push({key:'',val:''});return true;
+      case 'delName':d.names.splice(j,1);return true;
+    }},
+  onInput(el,c,s,body){if('autow' in el.dataset)el.style.width=kw(el.value)+'em';if(el.matches('[data-audit]'))c.data.sample=el.value;this.after(body,c)},
+  after(body,c){const ta=$('[data-audit]',body);if(!ta)return;const d=c.data;
+    const pats=d.lex.flatMap(x=>x.bad.split(/[\/／]/)).map(x=>x.trim()).filter(Boolean)
+      .map(p=>esc(p).replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/……|\\\.\\\.\\\./g,'[^。！？]{0,16}?'));
+    let h=esc(ta.value),hits=0;
+    if(pats.length){const re=new RegExp('('+pats.join('|')+')','g');h=h.replace(re,m=>{hits++;return `<mark>${m}</mark>`})}
+    const map=Object.fromEntries(d.names.filter(n=>n.key).map(n=>[n.key,n.val]));
+    h=h.replace(/\{\{([^}]+)\}\}/g,(m,k)=>map[k]!==undefined?`<u title="{{${k}}}">${esc(map[k])}</u>`:m);
+    $('[data-auditout]',body).innerHTML=h||'<span class="muted">（空）</span>';
+    $('[data-verdict]',body).innerHTML=hits?`命中 <b>${hits}</b> 处禁用表达，这一段会在后台按右侧方向重写。下划线为代称替换结果。`:'没有命中禁用表达。下划线为代称替换结果。'}
+}
+};
+
+/* ===================== layout model ===================== */
+function mlayoutOf(c){if(!c.mlayout){const ids=c.layout.rows.flatMap(r=>r.items.map(i=>i.id));c.mlayout={rows:ids.map(id=>({h:1/ids.length,items:[{id,w:1}]}))}}return c.mlayout}
+const L=()=>S.size==='m'?mlayoutOf(card()):card().layout;
+function norm(arr,k){const s=arr.reduce((a,x)=>a+x[k],0)||1;arr.forEach(x=>x[k]=x[k]/s)}
+function findPos(Lo,id){for(let r=0;r<Lo.rows.length;r++){const i=Lo.rows[r].items.findIndex(x=>x.id===id);if(i>=0)return[r,i]}return null}
+function lRemove(Lo,id){const p=findPos(Lo,id);if(!p)return;const[r,i]=p;Lo.rows[r].items.splice(i,1);if(!Lo.rows[r].items.length){Lo.rows.splice(r,1);norm(Lo.rows,'h')}else norm(Lo.rows[r].items,'w')}
+function lInsertItem(Lo,r,i,id){const it=Lo.rows[r].items,n=it.length;it.forEach(x=>x.w*=n/(n+1));it.splice(i,0,{id,w:1/(n+1)})}
+function lInsertRow(Lo,r,id){const n=Lo.rows.length;Lo.rows.forEach(x=>x.h*=n/(n+1));Lo.rows.splice(r,0,{h:n?1/(n+1):1,items:[{id,w:1}]})}
+function moveComp(src,tgt,zone){const Lo=L();
+  if(zone==='swap'){const a=findPos(Lo,src),b=findPos(Lo,tgt);const A=Lo.rows[a[0]].items[a[1]],B=Lo.rows[b[0]].items[b[1]];[A.id,B.id]=[B.id,A.id];return}
+  lRemove(Lo,src);const[r,i]=findPos(Lo,tgt);
+  if(zone==='left')lInsertItem(Lo,r,i,src);else if(zone==='right')lInsertItem(Lo,r,i+1,src);else if(zone==='top')lInsertRow(Lo,r,src);else lInsertRow(Lo,r+1,src)}
+function sizeOf(w,h){if(h<92||w<150)return 'xs';if(h<168||w<236)return 's';if(w>=380&&h>=250)return 'l';return 'm'}
+const DENS={xs:'胶囊',s:'指标',m:'摘要',l:'结构图'};
+function applySize(cap){const w=cap.offsetWidth,h=cap.offsetHeight;const z=sizeOf(w,h);if(cap.dataset.size!==z)cap.dataset.size=z;cap.style.borderRadius=(z==='xs'?Math.min(h,w)/2:22)+'px';const d=$('.dim',cap);if(d)d.textContent=`${w} × ${h}  ${DENS[z]}`}
+const ro=new ResizeObserver(es=>es.forEach(e=>applySize(e.target)));
+
+/* ===================== rendering ===================== */
+const stage=$('#stage'),frame=$('#frame');
+function fit(){const[w,h]=SIZES[S.size];const aw=window.innerWidth-32,ah=window.innerHeight-$('#proto').offsetHeight-18;
+  let k=Math.min(1,aw/w);if(ah>380)k=Math.min(k,ah/h);k=Math.max(.3,k);S.scale=k;
+  frame.style.width=w*k+'px';frame.style.height=h*k+'px';stage.style.width=w+'px';stage.style.height=h+'px';stage.style.transform=`scale(${k})`;
+  stage.classList.toggle('m',S.size==='m');$('#scaleLabel').textContent=k<.999?`按 ${Math.round(k*100)}% 缩放显示`:'实际尺寸'}
+
+function renderProto(){
+  $('#cardBtns').innerHTML=Object.values(CARDS).map(c=>`<button class="pb ${S.card===c.key?'on':''}" data-card="${c.key}">${esc(c.title)}<small>${c.kind}，${Object.keys(c.comps).length} 个组件</small></button>`).join('');
+  $('#sizeBtns').innerHTML=Object.entries(SIZES).map(([k,[w,h]])=>`<button class="pb ${S.size===k?'on':''}" data-size="${k}">${w} × ${h}<small>${k==='d'?'默认':k==='w'?'左栏收起':'手机参考'}</small></button>`).join('');
+  const openT=S.view==='dv'&&curComp()?curComp().type:null;
+  $('#jumpBtns').innerHTML=ORDER.map((t,i)=>`<button class="pb jp ${openT===t?'on':''}" data-jump="${t}"><i>${TYPES[t].glyph}</i>${TYPES[t].name}</button>`).join('')}
+
+function capHTML(it){const comp=card().comps[it.id],T=TYPES[comp.type];
+  return `<div class="cap" data-id="${it.id}" style="flex:${it.w} 1 0px" tabindex="0" role="button" aria-label="打开 ${esc(comp.title)}">
+    <div class="cap-pill"><span class="g">${T.glyph}</span><b>${esc(comp.title)}</b><span class="mono">${T.pill(comp)}</span></div>
+    <div class="cap-full">
+      <div class="cap-h"><span class="g">${T.glyph}</span><b>${esc(comp.title)}</b>${comp.title!==T.name?`<span class="tp">${T.name}</span>`:''}<button class="x" data-ov="remove" data-id="${it.id}" aria-label="移除 ${esc(comp.title)}" title="移除组件">×</button></div>
+      <div class="cap-m">${T.metrics(comp).map(([v,l])=>`<span class="mt"><b class="mono">${v}</b>${l}</span>`).join('')}</div>
+      <ul class="cap-prev">${T.preview(comp).join('')}</ul>
+      <div class="cap-diag">${T.diagram(comp)}</div>
+      <div class="cap-f mono"><span>约 ${fmt(toks(comp))} tokens</span><span class="open">点击打开</span></div>
+    </div><span class="dim mono"></span></div>`}
+
+function canvasHTML(){const Lo=L();
+  if(!Lo.rows.length)return `<div class="empty"><p>这张卡还没有组件。</p><p class="muted">先添加一份“设定文稿”，写下故事发生在哪里、谁在这里。</p><button class="btn primary" data-ov="add">添加组件</button></div>`;
+  return Lo.rows.map((row,r)=>`<div class="row" style="flex:${row.h} 1 0px" data-r="${r}">${row.items.map((it,i)=>capHTML(it)+(i<row.items.length-1?`<div class="gx" data-r="${r}" data-i="${i}" tabindex="0" role="separator" aria-orientation="vertical" aria-label="调整宽度"></div>`:'')).join('')}</div>`
+    +(r<Lo.rows.length-1?`<div class="gy" data-r="${r}" tabindex="0" role="separator" aria-orientation="horizontal" aria-label="调整高度"></div>`:'')).join('')}
+
+function cardTok(c){return Object.values(c.comps).reduce((a,x)=>a+toks(x),0)}
+function renderOverview(){
+  ro.disconnect();const c=card();const n=Object.keys(c.comps).length;
+  stage.innerHTML=`<div class="ov">
+    <header class="ov-h">
+      <div class="ov-title">
+        <div class="tline"><input class="card-title" data-cardtitle value="${esc(c.title)}" aria-label="卡片名称" style="width:${Math.max(3,c.title.length+1)}em"><span class="card-meta" data-cardmeta>${c.kind}，${n} 个组件，约 ${fmt(cardTok(c))} tokens</span></div>
+        <input class="card-sum" data-cardsum value="${esc(c.summary)}" placeholder="写一句话简介：玩家在卡片列表里最先看到它" aria-label="一句话简介">
+      </div>
+      <span class="hint">拖动组件移动或并排，拖动缝隙调整大小</span>
+      <button class="btn" data-ov="eq" ${n<2?'disabled':''}>均分</button>
+      <button class="btn" data-ov="slice" ${n?'':'disabled'}>切片预览</button>
+      <button class="btn primary" data-ov="add" ${n>=MAXC?'disabled':''}>添加组件</button>
+    </header>
+    <div class="canvas">${canvasHTML()}</div></div>`;
+  $$('.cap',stage).forEach(cp=>{applySize(cp);ro.observe(cp)});
+  renderProto();
+}
+
+function minimapHTML(){return L().rows.map(r=>`<div class="mr" style="flex:${r.h} 1 0px">${r.items.map(it=>`<button class="${it.id===S.open?'on':''}" style="flex:${it.w} 1 0px" data-dv="jump" data-id="${it.id}" title="${esc(card().comps[it.id].title)}" aria-label="切换到 ${esc(card().comps[it.id].title)}"></button>`).join('')}</div>`).join('')}
+
+function renderDetail(enter){
+  ro.disconnect();const c=card(),comp=curComp(),T=TYPES[comp.type],s=sel(comp);
+  stage.innerHTML=`<div class="dv ${enter?'dv-enter':''}">
+    <header class="dv-h">
+      <button class="btn back" data-dv="back" aria-label="返回总览"><span>‹</span>总览</button>
+      <div class="minimap">${minimapHTML()}</div>
+      <div class="crumb"><span class="cc">${esc(c.title)}</span><span class="g">${T.glyph}</span><input data-comptitle value="${esc(comp.title)}" aria-label="组件名称" style="width:${Math.max(4,comp.title.length+1.6)}em"><span class="cnt mono">${T.count(comp)} ${T.unit}${comp.title!==T.name?'，'+T.name:''}</span></div>
+      <span class="sp"></span>
+      <span class="tk mono">约 ${fmt(toks(comp))} tokens</span>
+      <button class="btn primary" data-act="addItem">+ 新${T.itemName}</button>
+    </header>
+    <div class="dv-b">${T.detail(comp,s)}</div></div>`;
+  const body=$('.dv-b',stage);T.after&&T.after(body,comp,s);
+  renderProto();
+}
+function rerenderDetail(){const sc=$$('.dv .scroll',stage).map(e=>[e.scrollTop,e.scrollLeft]);renderDetail(false);$$('.dv .scroll',stage).forEach((e,i)=>{if(sc[i]){e.scrollTop=sc[i][0];e.scrollLeft=sc[i][1]}})}
+function render(){fit();S.view==='dv'?renderDetail(false):renderOverview()}
+
+/* ===================== slice preview ===================== */
+function sliceOut(){const c=card();const sec=(t,title,tk,body)=>`<div class="sl-sec"><div class="sl-h"><span class="g">${TYPES[t].glyph}</span>${title}<em>${tk}</em></div>${body}</div>`;
+  let total=0,html='';
+  compsOf('prose',c).forEach(p=>{const t=tokOf(p.data.chapters.map(x=>x.text));total+=t;
+    html+=sec('prose',esc(p.title),`约 ${t} tokens`,`<ul>${p.data.chapters.map(x=>`<li class="${x.text?'':'off'}"><span>${esc(x.t)}</span><em>${x.text?'常驻 '+tokOf(x.text):'空白'}</em></li>`).join('')}</ul>`)});
+  compsOf('opening',c).forEach(o=>{const d=o.data;const t=tokOf([d.persona,d.style]);total+=t;const def=d.list.find(x=>x.def)||d.list[0];
+    html+=sec('opening',esc(o.title),`约 ${t} tokens`,`<ul><li><span>输入通道</span><em>${CHAN[d.channel].name}</em></li><li class="${d.persona?'':'off'}"><span>玩家身份</span><em>${d.persona?'卡片设定':'跟随全局'}</em></li><li class="${d.style?'':'off'}"><span>文风补充</span><em>${d.style?'卡片设定':'跟随全局'}</em></li>${def?`<li><span>开场：${esc(def.name)}</span><em>仅首轮 ${tokOf(def.text)}</em></li>`:''}</ul>`)});
+  compsOf('state',c).forEach(sc=>{let t=0;const lines=sc.data.fields.map(f=>{const v=pv(f.name,c);if(f.kind==='range'&&f.stages.length){const st=f.stages[stageAt(f,v)];t+=tokOf(st.text);return `<li class="${st.text?'':'off'}"><span>${esc(f.name)} ${v}：${esc(st.name)}</span><em>${st.text?tokOf(st.text):'阶段空白'}</em></li>`}return `<li><span>${esc(f.name)}：${esc(v)}</span><em>枚举</em></li>`});total+=t;
+    html+=sec('state',esc(sc.title),`约 ${t} tokens`,`<ul>${lines.join('')}</ul>`)});
+  compsOf('lore',c).forEach(lc=>{const E=lc.data.entries;const idx=tokOf(E.map(e=>e.hook));let t=idx;
+    const perm=E.filter(e=>e.life==='perm'&&e.layers.length===1);perm.forEach(e=>t+=tokOf(e.layers[0].text));
+    const multi=E.filter(e=>e.layers.length>1).map(e=>{let n=0;for(const L of e.layers){if(+pv(L.field,c)>=+L.v)n++;else break}if(n)t+=tokOf(e.layers.slice(0,n).map(x=>x.text));return `<li class="${n?'':'off'}"><span>${esc(e.name)}</span><em>已揭示 ${n} / ${e.layers.length} 层</em></li>`});
+    total+=t;
+    html+=sec('lore',esc(lc.title),`约 ${t} tokens`,`<ul><li><span>首句索引目录</span><em>${E.length} 条，${idx}</em></li>${perm.map(e=>`<li><span>${esc(e.name)}</span><em>永久常驻</em></li>`).join('')}${multi.join('')}</ul><p>其余单层词条按需翻阅：AI 检索 ${E.filter(e=>e.who!=='player').length} 条，可由玩家点亮 ${E.filter(e=>e.who!=='ai').length} 条。</p>`)});
+  compsOf('check',c).forEach(k=>{const vis=k.data.actions.filter(a=>a.show==='always'||condOk(a.cond,c));const t=tokOf(vis.map(a=>[a.n,a.desc]));total+=t;
+    html+=sec('check',esc(k.title),`约 ${t} tokens`,`<ul>${k.data.actions.map(a=>{const on=a.show==='always'||condOk(a.cond,c);const r=rateOf(a,c);return `<li class="${on?'':'off'}"><span>${esc(a.n)}</span><em>${on?(r===null?'AI 评判':Math.round(r*100)+'%'):'未浮现'}</em></li>`}).join('')}</ul>${(()=>{const hit=k.data.ends.find(e=>condOk(e,c));return hit?`<p><b style="color:#000">此状态下将触发结局：${esc(hit.name)}</b></p>`:''})()}`)});
+  compsOf('ledger',c).forEach(l=>{const d=l.data;const t=d.feed?tokOf(d.scene.map(g=>[g.k,g.v]).concat(d.npcs.map(n=>[n.n,n.loc,n.att,n.st]))):0;total+=t;
+    html+=sec('ledger',esc(l.title),d.feed?`约 ${t} tokens`:'不回喂',`<ul><li class="${d.feed?'':'off'}"><span>账本：${d.scene.length} 项场景，${d.npcs.length} 位人物</span><em>${d.feed?'回喂':'仅记录'}</em></li>${[d.inner.on&&'角色内心独白',d.suggest.on&&'下轮行动建议',...d.slots.filter(x=>x.trig==='auto').map(x=>x.name)].filter(Boolean).map(x=>`<li><span>${esc(x)}</span><em>回合末附带</em></li>`).join('')}</ul>`)});
+  compsOf('guard',c).forEach(g=>{html+=sec('guard',esc(g.title),'不占上下文',`<p>生成后执行 ${g.data.rules.filter(r=>r.on).length} 条禁令、${g.data.lex.length} 组替换，${g.data.names.length} 个代称在拼装前替换。</p>`)});
+  const iss=issues(c);
+  return `<div class="sl-total"><span>本轮拼入上下文</span><span class="mono">约 ${fmt(total)} tokens</span></div>${html}
+    <div class="sl-sec" style="border:0"><div class="sl-h">空白检查<em>${iss.filter(x=>x.lv==='e').length} 处空白，${iss.filter(x=>x.lv!=='e').length} 条提示</em></div>
+    ${iss.length?iss.map(x=>`<button class="iss" data-ov="jump" data-id="${x.id}"><i class="${x.lv==='e'?'e':''}">${x.lv==='e'?'空白':'提示'}</i><span>${x.t}</span><em>${esc(c.comps[x.id].title)}</em></button>`).join(''):'<p style="margin:0">没有发现空白项。</p>'}</div>`}
+function issues(c){const out=[];const add=(id,t,lv='e')=>out.push({id,t,lv});
+  Object.values(c.comps).forEach(x=>{const d=x.data;
+    if(x.type==='prose')d.chapters.forEach((ch,i)=>{if(!ch.text.trim())add(x.id,`第 ${i+1} 章“${esc(ch.t)}”还没有正文`)});
+    if(x.type==='opening'){d.list.forEach(o=>{if(!o.text.trim())add(x.id,`开场“${esc(o.name)}”还没有正文`)});if(d.channel==='in'&&!d.persona)add(x.id,'没有默认玩家身份，将跟随全局偏好','h')}
+    if(x.type==='lore')d.entries.forEach(e=>{if(!e.hook.trim())add(x.id,`“${esc(e.name)}”缺少首句索引`);e.layers.forEach((L,m)=>{if(!L.text.trim())add(x.id,`“${esc(e.name)}”${e.layers.length>1?`第 ${m+1} 层`:'正文'}是空的`)})});
+    if(x.type==='state')d.fields.forEach(f=>{f.stages.forEach(st=>{if(!st.text.trim())add(x.id,`${esc(f.name)}的“${esc(st.name)}”阶段还没有描写`)});if(!(f.reads||[]).length)add(x.id,`${esc(f.name)}没有回合判据，数值不会自己变化`,'h');else if(!f.q)add(x.id,`${esc(f.name)}的判据缺少总提问`)});
+    if(x.type==='check'){d.actions.forEach(a=>{if(a.mode==='ai'&&!a.ai.trim())add(x.id,`“${esc(a.n)}”选了 AI 评判，但没写判据`);if(!a.ok.length&&!a.fail.length)add(x.id,`“${esc(a.n)}”成败都不改变任何状态`,'h')});if(!d.ends.length)add(x.id,'没有结局条件，故事不会自然收束','h')}
+    if(x.type==='ledger')d.slots.forEach(s=>{if(!s.text.trim())add(x.id,`栏位“${esc(s.name)}”还没有说明`)});
+    if(x.type==='guard')d.rules.forEach((r,i)=>{if(!r.t.trim())add(x.id,`第 ${i+1} 条禁令是空的`)});
+  });return out}
+function openSlice(){if($('.slice',stage))return;const c=card();const fs=stateFields(c);
+  $('.ov',stage).insertAdjacentHTML('beforeend',`<div class="scrim" data-ov="closeSheet"></div><aside class="addsheet slice" role="dialog" aria-label="切片预览"><header>切片预览与检查<span class="sp"></span><button class="btn ghost sm" data-ov="closeSheet">关闭</button></header>
+    <p class="note">拖动状态值，看看这一轮会把哪些内容拼进 AI 的上下文。这里的取值也会用于行动成功率的预览。</p>
+    <div class="sl-ctrl">${fs.length?fs.map(f=>f.kind==='range'?`<label class="slr"><span>${esc(f.name)}</span><input type="range" min="${f.min}" max="${f.max}" value="${pv(f.name,c)}" data-pv="${esc(f.name)}"><b class="mono" data-pvv="${esc(f.name)}">${pv(f.name,c)}</b></label>`
+      :`<label class="slr"><span>${esc(f.name)}</span><select data-pv="${esc(f.name)}">${optList(pv(f.name,c),f.opts)}</select></label>`).join(''):'<p class="note2" style="margin:0">这张卡没有状态字段，上下文不随数值变化。</p>'}
+      ${fs.length?'<button class="btn ghost sm" data-ov="pvReset" style="align-self:flex-start">恢复初始值</button>':''}</div>
+    <div class="sl-out" data-slice-out>${sliceOut()}</div></aside>`)}
+function closeSheet(){$$('.addsheet,.scrim',stage).forEach(x=>x.remove())}
+
+/* ===================== layer transitions ===================== */
+function relRect(el){const s=stage.getBoundingClientRect(),r=el.getBoundingClientRect(),k=S.scale;return{x:(r.left-s.left)/k,y:(r.top-s.top)/k,w:r.width/k,h:r.height/k}}
+function zoomEl(comp){const z=document.createElement('div');z.className='zoom';z.innerHTML=`<div class="zoom-h"><span class="g">${TYPES[comp.type].glyph}</span>${esc(comp.title)}</div>`;stage.appendChild(z);return z}
+function openDetail(id){if(S.busy)return;
+  const cap=$(`.cap[data-id="${id}"]`,stage);const go=()=>{S.busy=false;S.view='dv';S.open=id;renderDetail(true)};
+  if(!cap||RM())return go();
+  const f=relRect(cap),[W,H]=SIZES[S.size],rad=parseFloat(cap.style.borderRadius)||22;const z=zoomEl(card().comps[id]);
+  S.busy=true;$('.ov',stage).classList.add('receding');
+  z.animate([{left:f.x+'px',top:f.y+'px',width:f.w+'px',height:f.h+'px',borderRadius:rad+'px'},{left:'0px',top:'0px',width:W+'px',height:H+'px',borderRadius:'16px'}],{duration:420,easing:'cubic-bezier(.2,.7,.1,1)',fill:'forwards'}).onfinish=go}
+function closeDetail(){if(S.busy||S.view!=='dv')return;const id=S.open;S.view='ov';S.open=null;renderOverview();
+  const cap=$(`.cap[data-id="${id}"]`,stage);if(!cap||RM())return;
+  const t=relRect(cap),[W,H]=SIZES[S.size],rad=parseFloat(cap.style.borderRadius)||22;const z=zoomEl(card().comps[id]);
+  cap.style.visibility='hidden';const ov=$('.ov',stage);ov.classList.add('receding');requestAnimationFrame(()=>requestAnimationFrame(()=>ov.classList.remove('receding')));
+  S.busy=true;z.animate([{left:'0px',top:'0px',width:W+'px',height:H+'px',borderRadius:'16px'},{left:t.x+'px',top:t.y+'px',width:t.w+'px',height:t.h+'px',borderRadius:rad+'px'}],{duration:380,easing:'cubic-bezier(.2,.7,.1,1)',fill:'forwards'}).onfinish=()=>{z.remove();cap.style.visibility='';S.busy=false}}
+
+/* ===================== overview interactions ===================== */
+function startResize(e,g,axis){
+  e.preventDefault();const Lo=L(),cv=g.closest('.canvas');cv.classList.add('resizing');
+  let arr,i,els;
+  if(axis==='x'){const r=+g.dataset.r;i=+g.dataset.i;arr=Lo.rows[r].items;els=$$(':scope > .cap',g.parentElement)}
+  else{i=+g.dataset.r;arr=Lo.rows;els=$$(':scope > .row',cv)}
+  const key=axis==='x'?'w':'h',dim=axis==='x'?'width':'height';
+  const total=els.reduce((a,el)=>a+el.getBoundingClientRect()[dim],0);
+  const a0=arr[i][key],pair=a0+arr[i+1][key];const minF=Math.min(pair/2-.001,(axis==='x'?110:58)*S.scale/total);
+  const start=axis==='x'?e.clientX:e.clientY;
+  const lab=document.createElement('div');lab.className='glabel';g.appendChild(lab);g.setPointerCapture(e.pointerId);g.classList.add('active');
+  const upd=()=>{lab.textContent=`${Math.round(arr[i][key]*100)} : ${Math.round(arr[i+1][key]*100)}`};upd();
+  const mv=ev=>{const d=((axis==='x'?ev.clientX:ev.clientY)-start)/total;const na=Math.max(minF,Math.min(pair-minF,a0+d));arr[i][key]=na;arr[i+1][key]=pair-na;els[i].style.flexGrow=na;els[i+1].style.flexGrow=pair-na;upd()};
+  const up=()=>{g.removeEventListener('pointermove',mv);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up);lab.remove();g.classList.remove('active');cv.classList.remove('resizing')};
+  g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up)}
+function gutterPair(g){const Lo=L();if(g.classList.contains('gx')){const r=+g.dataset.r,i=+g.dataset.i;return{arr:Lo.rows[r].items,i,key:'w',els:$$(':scope > .cap',g.parentElement)}}
+  const i=+g.dataset.r;return{arr:Lo.rows,i,key:'h',els:$$(':scope > .row',g.closest('.canvas'))}}
+function setPair(g,fn){const{arr,i,key,els}=gutterPair(g);const pair=arr[i][key]+arr[i+1][key];let a=fn(arr[i][key],pair);a=Math.max(pair*.12,Math.min(pair*.88,a));arr[i][key]=a;arr[i+1][key]=pair-a;els[i].style.flexGrow=a;els[i+1].style.flexGrow=pair-a}
+
+const ZONE_TXT={swap:'交换位置',left:'并排放在左侧',right:'并排放在右侧',top:'放到上方新的一行',bottom:'放到下方新的一行'};
+function startCapPress(e,cap){
+  if(e.button!==0)return;const id=cap.dataset.id,sx=e.clientX,sy=e.clientY;let drag=false,ghost,ind,tgt=null,zone=null;const cv=cap.closest('.canvas');const title=card().comps[id].title;
+  const mv=ev=>{
+    if(!drag){if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<6)return;drag=true;cap.classList.add('lifting');cv.classList.add('moving');
+      ghost=document.createElement('div');ghost.className='dragghost';document.body.appendChild(ghost);ind=document.createElement('div');ind.className='drop';ind.style.opacity=0;cv.appendChild(ind)}
+    ghost.style.transform=`translate(${ev.clientX+14}px,${ev.clientY+14}px)`;
+    const el=document.elementFromPoint(ev.clientX,ev.clientY);const t=el&&el.closest('.cap');
+    if(t&&t!==cap&&cv.contains(t)){const r=t.getBoundingClientRect();const x=(ev.clientX-r.left)/r.width,y=(ev.clientY-r.top)/r.height;
+      let z=x<.24?'left':x>.76?'right':y<.28?'top':y>.72?'bottom':'swap';if(S.size==='m'&&(z==='left'||z==='right'))z=z==='left'?'top':'bottom';
+      tgt=t.dataset.id;zone=z;const cr=cv.getBoundingClientRect(),k=S.scale;let X=(r.left-cr.left)/k,Y=(r.top-cr.top)/k,Wd=r.width/k,Hd=r.height/k;
+      if(z==='left')Wd*=.42;else if(z==='right'){X+=Wd*.58;Wd*=.42}else if(z==='top')Hd*=.42;else if(z==='bottom'){Y+=Hd*.58;Hd*=.42}
+      Object.assign(ind.style,{left:X+'px',top:Y+'px',width:Wd+'px',height:Hd+'px',opacity:1});ghost.innerHTML=`${esc(title)}<em>${ZONE_TXT[z]}</em>`}
+    else{tgt=null;ind.style.opacity=0;ghost.innerHTML=`${esc(title)}<em>拖到另一个组件上</em>`}};
+  const up=()=>{window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);
+    if(!drag){openDetail(id);return}
+    ghost.remove();ind.remove();cap.classList.remove('lifting');cv.classList.remove('moving');
+    if(tgt){moveComp(id,tgt,zone);renderOverview();ping(id)}};
+  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up)}
+
+function ping(id){const c=$(`.cap[data-id="${id}"]`,stage);if(c&&!RM())c.animate([{boxShadow:'0 0 0 0 rgba(0,0,0,.9)'},{boxShadow:'0 0 0 10px rgba(0,0,0,0)'}],{duration:700,easing:'ease-out'})}
+function toast(msg,label,fn){$('.toast',stage)?.remove();const t=document.createElement('div');t.className='toast';t.innerHTML=`<span>${msg}</span>${label?`<button>${label}</button>`:''}`;stage.appendChild(t);
+  if(label)$('button',t).onclick=()=>{t.remove();fn()};setTimeout(()=>t.remove(),5600)}
+
+function addCompSilent(type,c=card()){const id=c.key+(++uid);const T=TYPES[type];
+  c.comps[id]={id,type,title:T.name,data:T.blank()};
+  const Lo=c.layout;if(!Lo.rows.length)lInsertRow(Lo,0,id);else{let r=0;Lo.rows.forEach((x,k)=>{if(x.items.length<Lo.rows[r].items.length)r=k});if(Lo.rows[r].items.length>=3&&Lo.rows.length<3)lInsertRow(Lo,Lo.rows.length,id);else lInsertItem(Lo,r,Lo.rows[r].items.length,id)}
+  if(c.mlayout)lInsertRow(c.mlayout,c.mlayout.rows.length,id);return c.comps[id]}
+function addComp(type){if(Object.keys(card().comps).length>=MAXC)return;const comp=addCompSilent(type);renderOverview();ping(comp.id);toast(`已添加“${TYPES[type].name}”，点击它开始编辑`)}
+function removeComp(id){const c=card();const snap={comp:clone(c.comps[id]),layout:clone(c.layout),mlayout:c.mlayout?clone(c.mlayout):null,cardKey:c.key};
+  const doIt=()=>{delete c.comps[id];lRemove(c.layout,id);if(c.mlayout)lRemove(c.mlayout,id);renderOverview();
+    toast(`已移除“${esc(snap.comp.title)}”`,'撤销',()=>{const cc=CARDS[snap.cardKey];cc.comps[id]=snap.comp;cc.layout=snap.layout;cc.mlayout=snap.mlayout;if(S.card===cc.key&&S.view==='ov'){renderOverview();ping(id)}})};
+  const cap=$(`.cap[data-id="${id}"]`,stage);if(cap&&!RM())cap.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.96)'}],{duration:160,fill:'forwards'}).onfinish=doIt;else doIt()}
+function openAdd(){if($('.addsheet',stage))return;const c=card();const n=Object.keys(c.comps).length;const mounted=new Set(Object.values(c.comps).map(x=>x.type));
+  $('.ov',stage).insertAdjacentHTML('beforeend',`<div class="scrim" data-ov="closeSheet"></div><aside class="addsheet" role="dialog" aria-label="添加组件"><header>添加组件<span class="sp"></span><button class="btn ghost sm" data-ov="closeSheet">关闭</button></header>
+    <p class="note">每类组件在一张卡里挂载一次。当前 ${n} / ${MAXC}。</p>
+    <ul class="types">${ORDER.map(t=>{const T=TYPES[t];return `<li class="${mounted.has(t)?'mounted':''}"><span class="g">${T.glyph}</span><div><b>${T.name}</b><p>${T.desc}</p></div>${mounted.has(t)?'<span class="tag">已挂载</span>':`<button class="btn sm" data-ov="addType" data-t="${t}" ${n>=MAXC?'disabled':''}>添加</button>`}</li>`}).join('')}</ul></aside>`)}
+
+function jumpType(t){if(S.busy)return;
+  const has=k=>Object.values(CARDS[k].comps).some(x=>x.type===t);
+  const key=has(S.card)?S.card:['c','b','a'].find(has);
+  if(!key){toast(`样例卡里已经没有“${TYPES[t].name}”，可在“添加组件”里重新挂载`);return}
+  const id=Object.values(CARDS[key].comps).find(x=>x.type===t).id;
+  if(S.view==='dv'&&S.card===key){S.open=id;renderDetail(true);return}
+  S.card=key;S.view='ov';S.open=null;render();requestAnimationFrame(()=>openDetail(id))}
+
+/* ===================== events ===================== */
+stage.addEventListener('pointerdown',e=>{if(S.view!=='ov'||S.busy)return;if(!e.target.closest('.canvas'))return;
+  const gx=e.target.closest('.gx'),gy=e.target.closest('.gy');if(gx)return startResize(e,gx,'x');if(gy)return startResize(e,gy,'y');
+  if(e.target.closest('button'))return;const cap=e.target.closest('.cap');if(cap)startCapPress(e,cap)});
+stage.addEventListener('dblclick',e=>{const g=e.target.closest('.gx,.gy');if(g)setPair(g,(a,p)=>p/2)});
+stage.addEventListener('click',e=>{
+  const ov=e.target.closest('[data-ov]');
+  if(ov&&!ov.disabled){const a=ov.dataset.ov;
+    if(a==='add')openAdd();else if(a==='slice')openSlice();else if(a==='closeSheet')closeSheet();
+    else if(a==='addType'){closeSheet();addComp(ov.dataset.t)}
+    else if(a==='remove')removeComp(ov.dataset.id);
+    else if(a==='jump'){closeSheet();openDetail(ov.dataset.id)}
+    else if(a==='pvReset'){S.pv[card().key]={};closeSheet();openSlice()}
+    else if(a==='eq'){const Lo=L();Lo.rows.forEach(r=>{r.h=1/Lo.rows.length;r.items.forEach(it=>it.w=1/r.items.length)});
+      $$('.row',stage).forEach((el,r)=>{el.style.flexGrow=Lo.rows[r].h;$$(':scope > .cap',el).forEach((cp,i)=>cp.style.flexGrow=Lo.rows[r].items[i].w)})}
+    return}
+  const dv=e.target.closest('[data-dv]');
+  if(dv){if(dv.dataset.dv==='back')closeDetail();else if(dv.dataset.dv==='jump'&&dv.dataset.id!==S.open){S.open=dv.dataset.id;renderDetail(true)}return}
+  const a=e.target.closest('[data-act]');
+  if(a&&S.view==='dv'&&!a.disabled){const comp=curComp(),T=TYPES[comp.type],body=$('.dv-b',stage);if(T.act(a.dataset.act,a,comp,sel(comp),body))rerenderDetail()}});
+stage.addEventListener('input',e=>{const el=e.target;const c=card();
+  if(el.matches('[data-cardtitle]')){c.title=el.value;el.style.width=Math.max(3,el.value.length+1)+'em';renderProto();return}
+  if(el.matches('[data-cardsum]')){c.summary=el.value;return}
+  if(el.matches('[data-pv]')){const n=el.dataset.pv;pvMap(c)[n]=el.type==='range'?+el.value:el.value;const b=$(`[data-pvv="${CSS.escape(n)}"]`,stage);if(b)b.textContent=el.value;$('[data-slice-out]',stage).innerHTML=sliceOut();return}
+  if(S.view!=='dv')return;const comp=curComp(),body=$('.dv-b',stage);
+  if(el.matches('[data-comptitle]')){comp.title=el.value;return}
+  const k=el.dataset.k;
+  if(k){let v=el.value;if('num' in el.dataset)v=v===''?0:Number(v);if('list' in el.dataset)v=v.split(/[,，、]/).map(x=>x.trim()).filter(Boolean);setPath(comp.data,k,v);
+    $$(`[data-mirror="${k}"]`,stage).forEach(x=>x.textContent=v||'未命名');$$(`[data-len="${k}"]`,stage).forEach(x=>x.textContent=String(v).length);
+    const tk=$('.dv-h .tk',stage);if(tk)tk.textContent=`约 ${fmt(toks(comp))} tokens`}
+  const T=TYPES[comp.type];T.onInput&&T.onInput(el,comp,sel(comp),body)});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){const ae=document.activeElement;if(ae&&ae.matches('input,textarea,select')){ae.blur();return}if(S.view==='dv')closeDetail();else closeSheet();return}
+  const t=e.target;if(!stage.contains(t))return;
+  if(S.view==='ov'&&t.classList.contains('cap')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openDetail(t.dataset.id);return}
+  if(t.classList.contains('gx')&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){e.preventDefault();setPair(t,a=>a+(e.key==='ArrowRight'?.03:-.03))}
+  if(t.classList.contains('gy')&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();setPair(t,a=>a+(e.key==='ArrowDown'?.03:-.03))}});
+$('#proto').addEventListener('click',e=>{const cb=e.target.closest('[data-card]'),sb=e.target.closest('[data-size]'),jb=e.target.closest('[data-jump]');
+  if(jb)return jumpType(jb.dataset.jump);
+  if(cb&&cb.dataset.card!==S.card&&!S.busy){S.card=cb.dataset.card;S.view='ov';S.open=null;render();const ov=$('.ov',stage);if(ov&&!RM())ov.animate([{opacity:0},{opacity:1}],{duration:220})}
+  if(sb&&sb.dataset.size!==S.size&&!S.busy){S.size=sb.dataset.size;render()}});
+window.addEventListener('resize',()=>{fit()});
+
+render();
+</script>
+</body>
+</html>
