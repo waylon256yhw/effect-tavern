@@ -1,12 +1,12 @@
 ---
 name: card-author
-description: Writing, revising or remastering a card for the effect-tavern harness. Use whenever a task touches a card (packages/runtime/test/cards, a YAML card, a card's rules, lore, fiction, products) or asks how a card expresses something. Covers the Card schema and where each kind of content goes, the two-hat order (mechanism first, prose second), and the card check / view loop.
+description: Writing, revising or remastering a card for the effect-tavern harness. Use whenever a task touches a card (packages/runtime/cards, a YAML card, a card's rules, lore, fiction, products) or asks how a card expresses something. Covers the Card schema and where each kind of content goes, the two-hat order (mechanism first, prose second), and the card check / view loop.
 ---
 
 # Card author
 
-Status (2026-10-25, issue #30): the code side below is drafted from the schema (`packages/runtime/src/card.ts`,
-`fragment.ts`, `cond.ts`, `product.ts`, `lore.ts`) and reviewed by the owner. The semantic side (register, what a band
+Status (2026-10-25, issue #30; schema pass 2026-11-10): the code side below is drafted from the schema
+(`packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `product.ts`, `lore.ts`, `world.ts`) and reviewed by the owner. The semantic side (register, what a band
 must leave open, how far to keep an original author's sentences) is a matter of taste and is decided with the owner;
 until then that section lists the open questions and nothing else. Do not improvise rules there.
 
@@ -16,8 +16,9 @@ do not substitute synonyms (no "world book", "keyword trigger", "memory system",
 ## What a card is
 
 A card is data, one schema (`Card` in card.ts), decoded by `decodeCard`. A template card is one YAML file,
-`packages/runtime/test/cards/<id>.yaml`, with prose in `|-` block scalars; `loadCard(id)` in `index.ts` reads it. The runtime derives everything from it: a card with no actions has no decide stage, no lore means no lookup,
-no `director` means no direct stage.
+`packages/runtime/cards/<id>.yaml`, with prose in `|-` block scalars; `readCard(path)` and `loadCard(name)` in
+`packages/runtime/support/cards.ts` read it. The runtime derives everything from it: a card with no actions has no
+decide stage, no lore means no lookup, no `director` means no direct stage.
 
 Two coordinates place a card, not two kinds of card:
 
@@ -40,9 +41,9 @@ line.
 | ---------------------------- | ---------------------------------------------------------------------------------- |
 | `frame`                      | every stage (the head of every document)                                           |
 | `fiction`, transcript        | narrate only                                                                       |
-| `lore`                       | lookup (enum of readable entries), gate / direct (windows), narrate (as told text) |
+| `lore`                       | lookup (read tools over the unlocked entries), gate / direct (windows), narrate (as told text) |
 | `rules.actions`              | decide (the menu), settle (code)                                                   |
-| `rules.readouts`, `products` | record, after the prose                                                            |
+| `rules.readouts`, `products` | record, after the prose; a `stage: narrate` theater text is written inline by the narrator |
 | `guard`                      | check only; never shown to the narrator                                            |
 | `lexicon`                    | polish only (sentences the patterns hit are rewritten)                             |
 | `greetings`                  | node 0; `do` settles before anything                                               |
@@ -106,26 +107,46 @@ The narrator never sees a number. State reaches it only as the fiction variants 
   satisfied it, it stays unlocked. `offer` is the window: a Cond over state and this turn's events (`{ event }`) that
   opens the next layer for this turn; `lore.<id>.since` / `.shown` are readable counters for cooldowns and once-only
   chains. An opened entry delivers its unread lower layers too (#9). `{ any: [] }` as unlock = never in play.
+  Three optional policy keys say how an unlocked entry reaches a request (`ContextPolicy` in lore.ts; the old `invoke`
+  key is refused at decode): `access: { model, player }` (default model true, player false on a card's entry: the
+  player's `/` menu lists only entries with `player: true`); `activation: always | on_demand` (default on demand:
+  the model's lookup tools or the player's call bring it in; `always` loads it whenever unlocked); `residency:
+  permanent | window | turn` (default window: it stays while the turn that delivered it is in the unfolded window;
+  `permanent` never leaves, `turn` is this request only). Leave all three off unless a live run shows why.
 - **Ending** → `rules.over` (a Cond, code-decided) and `rules.cap` (beats per turn).
 - **Must-not** → `guard: string[]`. Checked after the prose, one correction rewrite on a miss. Never in the prompt: a
   prohibition is itself a prompt.
 - **Slop** → `lexicon: [{ pattern, hint? }]`, `*` is a wildcard inside a sentence (`指节*白`). Polish rewrites only the
   hit sentences. The player has their own list first.
 - **Memory and data from the scene** → `products`: patches over the defaults by id (`notes` on, `options` and `inner`
-  off; the player's toggle wins) or new ones. `{ id, label?, text, shape, fold?, feed?, recall?, when?, on? }`. `label`
-  is the shown name (the Writing page's toggle), the id when absent. Shapes:
-  `text`, `list` (max), `record` (fixed keys, one nested list/table allowed), `table` (typed columns, `max`, `filter`
-  Cond over the row). `fold`: `latest` | `append` | `{ key }` (newest row per key; list defaults to append, the rest to
-  latest). `feed: true` sends the fold back (`Current:` line; notes go as `Known:` to record only). `recall` (true for a
-  list, a column name for a table) puts the folded items in the lookup index like lore. Readouts move state; products
-  hold memory. To make a table affect a condition, add a readout; do not open a product into state.
+  off; the player's toggle wins) or new ones. `{ id, label?, text, shape, role, stage?, initial?, fold?, when?, on?,
+  trigger?, feed?, recall? }`. `label` is the shown name (the Writing page's toggle), the id when absent. Shapes:
+  `text`, `list` (max), `record` (fixed keys, one nested list/table allowed), `table` (typed columns text / int /
+  boolean / enum, `max`, `filter` Cond over the row). **`role` is declared, never guessed** (GLOSSARY 产物的三类):
+  - `world`: what is now (`scene`, `people`, `bag`). One state tree with the fields; record writes it through sparse
+    ops (set a key, add or patch a row, delete a row), so the model reports changes only. No `fold`, never `stage:
+    narrate`, the id is an identifier. `initial` is its starting value (a table's is `{ entityId: row }`; rows get
+    host ids, so no column may be named `entityId`). `feed: true` puts it on the `Current:` line; `recall` (a column
+    name) puts its rows in the lookup index like lore. A Cond may read a world record's key as `world.<id>.<key>`.
+  - `chronicle`: appended along the path (`notes`); `fold: append`; its feed is the `Known:` line to record.
+  - `theater`: for the player only, never `feed` or `recall`; `trigger: turn` (every turn, default) or `demand` (the
+    turn's action row). `stage: narrate` makes a text-shaped theater the narrator writes inline (`<<aside>>`), no
+    extra call; `demand` works on theater only.
+  `fold` (chronicle and theater only): `latest` | `append` | `{ key }` (newest row per key; list defaults to append,
+  the rest to latest). Readouts move fields; products hold memory and the world.
+- **Names for the holes** → `names: { key: text }`: the card's defaults for `{{user}}`, `{{char}}` and any other
+  `{{key}}` in its text (GLOSSARY 代称); a pack or the player's row overrides by key, the persona's name fills `user`.
+  A line whose hole has no name is skipped (lint `unfilled-name`); `{{random}}`-style macros are not names (lint
+  `unsupported-macro`).
 - **Turn title** → `heading`: a field path or `<product>.<key>` (a text key of a record product), read off the node.
 - **Director** → `director: true` only when some lore has an `offer`; it decides MUST / MAY among open entries.
 - **Card page copy** → `title`, `summary` (never reach the model), `version`, `source`.
 
 Cond, the only logic an author has: `{ path, is }`, `{ path, op: lt | lte | gt | gte, value }`, `{ all }`, `{ any }`,
-`{ not }`, `{ event }`. A path not declared in `fields` throws when the Cond is first evaluated (`unknown state
-path`), not at decode; lint (#27) reports it statically.
+`{ not }`, `{ event }`. A bare path is a field (`bond`); `world.<product>.<key>` and `lore.<id>.since | shown` are
+the two other namespaces, and `fields`, `world`, `lore` are reserved as field names (lint `reserved-path`). A path
+not declared throws when the Cond is first evaluated (`unknown state path`), not at decode; lint (#27) reports it
+statically.
 
 ## Two hats, in this order
 
@@ -133,9 +154,14 @@ path`), not at decode; lint (#27) reports it statically.
 initials; how each is drawn follows from them and the bands (the `field` lines of `card check`), so it is settled here, not by the novelist. Decide for each field who moves it: actions (mechanical) or a readout (the prose may). Write actions and
 readouts with their effects and events. Lay out lore: ids, how many layers, `unlock` per layer, `offer` on which events
 or counters. Lay out fiction: ids, labels, `when` bands with one-line placeholders. Count greetings and write their
-`do`. Patch or add products. Run `bun card check <card>` (in packages/runtime; a name or a path to a .yaml card)
-until there is no error, every warning is one you meant, and each greeting line shows the opening you intended (a
-window or a latching readout on turn 1 is a choice, not an accident). Exit 1 means an error-level diagnostic.
+`do`. Patch or add products. Start a new card from `bun run card init <id> --template chat|readout|rpg|world` (in
+packages/runtime; the template is the two coordinates, nothing else). Run `bun run card check <card>` (a name or a
+path to a .yaml card; `--json` for diagnostics an agent reads) until there is no error, every warning is one you
+meant, and each greeting line shows the opening you intended (a window or a latching readout on turn 1 is a choice,
+not an accident). Exit 1 means an error-level diagnostic. `bun run card test <card> [scenario.yaml]` runs the card
+under the scripted model with no token spent: assert field bounds, events, lore disclosure and the ending there. The
+full flag list is `docs/card-cli.md`; the live loop (`tavern card install`, `tavern play`, `tavern card
+compile|sort|review`) is `docs/tavern-cli.md`.
 
 **2. Novelist** (the mechanism is frozen). Fill `frame`, every fiction band, every lore layer, every greeting. Run
 `card check` again for `field-in-prose` and `inline-product`. Run `card view` at the states that matter: each band
@@ -146,17 +172,22 @@ readout that moves its field print side by side. The semantic rules below apply 
 ## What the schema and lint already check (do not hand-check)
 
 Decode and load: enum needs options; fold key must name a table column; recall on a list is `true`, on a table a
-column, never on text/record; a product needs text and shape. Settle time: an effect path that is not a field; a Cond
-path that is not a field; a `judge` roll with no chance on the beat.
-Lint (#27, #83): `unknown-frame-slot`, `unknown-path`, `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`,
-`unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`. `card check` also prints one line per
-greeting: the state its `do` leaves, the bands that hold, the lore windows open for turn 1, the readouts asked after it.
+column, never on text/record; a product needs text, shape and role; a theater never feeds or recalls; a world takes
+no fold, is never written by narrate, has an identifier id and no `entityId` column; a narrate product is text; a
+lore entry's `invoke` key is refused. Settle time: an effect path that is not a field; a Cond path that is not
+declared; a `judge` roll with no chance on the beat.
+Lint (#27, #83, #155): `unknown-frame-slot`, `unknown-path`, `reserved-path`, `orphan-event`, `dead-field`,
+`prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`,
+`unfilled-name`, `unsupported-macro`, `bad-identifier` (an id, event or enum value with whitespace), `empty-text`
+(an author slot left empty, error: a `compile` candidate cannot be installed until the author fills it). `card
+check` also prints one line per greeting: the state its `do` leaves, the bands that hold, the lore windows open for
+turn 1, the readouts asked after it.
 
 ## Samples in the repo
 
 - `wuxia.yaml` 竹林: participant mode, bands on `bond` with a readout, a three-layer lore entry (floor on bond, windows
-  on a beat event and a readout event), director on, a feed record product (`scene`) and a keyed recall table
-  (`people`), guard, `heading: "scene.place"`.
+  on a beat event and a readout event), director on, two world products (a fed record `scene`, a recalled table
+  `people`), guard, `heading: "scene.place"`.
 - `yandao.yaml` 盐道: author mode, `input: "note"`, the card fills `pov`, a world instead of a person, one field moved by
   a readout, a greeting whose `do` opens a lore window on turn 1.
 - `banxing.yaml` 伴星: pure chat, ported from a V3 export as-is (no persona, no rules, no lore); `mes_example` kept as an unlabelled fiction fragment
