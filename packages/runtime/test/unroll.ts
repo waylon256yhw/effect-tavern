@@ -110,15 +110,20 @@ assert.deepEqual(
 assert.deepEqual(u.macros, ["{{random::short::long}}"])
 assert.deepEqual(u.extensions, ["depth_prompt", "talkativeness"])
 
-// Markdown: every block is one paragraph (the sort hand-off splits on blank lines).
+// Markdown: headings are their own paragraphs and a field keeps its paragraphs (sort places whole paragraphs).
 const md = markdown(u)
 const paragraphs = md.split(/\r?\n[\t ]*\r?\n(?:[\t ]*\r?\n)*/)
-assert.ok(
-  paragraphs.includes("## description\nAnn keeps the lighthouse.\nShe talks to Bo in {{random::short::long}} bursts."),
-)
-assert.ok(
-  paragraphs.includes("## triggers\n- ship (order 5): ship\n- storm (order 50): storm; secondary night (AND_ALL)"),
-)
+const at = paragraphs.indexOf("## description")
+assert.deepEqual(paragraphs.slice(at, at + 4), [
+  "## description",
+  "Ann keeps the lighthouse.",
+  "She talks to Bo in {{random::short::long}} bursts.",
+  "## personality",
+])
+assert.ok(paragraphs.includes("- ship (order 5): ship\n- storm (order 50): storm; secondary night (AND_ALL)"))
+// An example block with no speaker yields no messages and no Block.
+const silent = unroll({ ...card, data: { ...card.data, mes_example: "no speakers here" } })
+assert.ok(!silent.blocks.some((b) => b.kind === "mes_example"))
 assert.equal(paragraphs.at(-1), "not expanded: {{random::short::long}}")
 assert.throws(() => unroll({ name: "v1" }), /V1/)
 console.log("unroll ok")

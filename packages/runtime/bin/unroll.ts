@@ -55,13 +55,14 @@ const positions = ["before_char", "after_char", "an_top", "an_bottom", "at_depth
 const roles = ["system", "user", "assistant"]
 const logics = ["AND_ANY", "NOT_ALL", "NOT_ANY", "AND_ALL"]
 
-// A block is one Markdown paragraph (the sort hand-off splits its source on blank lines), so blank lines inside a
-// field collapse to single newlines.
+// `card sort` places whole source paragraphs (split on blank lines), so a field keeps its own paragraphs; the heading
+// is a paragraph of its own that sort never places.
 const paragraph = (s: string) =>
   s
     .replace(/\r\n?/g, "\n")
-    .replace(/\n[\t ]*\n\s*/g, "\n")
+    .replace(/\n[\t ]*\n(?:[\t ]*\n)+/g, "\n\n")
     .trim()
+const section = (heading: string, text: string) => [heading, paragraph(text)].filter(Boolean).join("\n\n")
 
 /** ST's example parsing: force a leading <START>, split on it, prefix each block with the marker, drop line 0,
  *  open a message on a line starting `name:`; lines before the first speaker ride into the first message. */
@@ -169,11 +170,13 @@ export const unroll = (card: Raw, user = "User"): Unrolled => {
     ...field("scenario", data.scenario),
     ...at("after_char"),
     ...at("em_top"),
-    ...examples(expand(data.mes_example), user, char).map((ms, i) => ({
-      kind: "mes_example",
-      heading: `mes_example ${i + 1}`,
-      text: ms.map((m) => `${m.role}: ${m.text}`).join("\n"),
-    })),
+    ...examples(expand(data.mes_example), user, char)
+      .filter((ms) => ms.length)
+      .map((ms, i) => ({
+        kind: "mes_example",
+        heading: `mes_example ${i + 1}`,
+        text: ms.map((m) => `${m.role}: ${m.text}`).join("\n"),
+      })),
     ...at("em_bottom"),
     ...field("first_mes", data.first_mes),
     ...((data.alternate_greetings ?? []) as unknown[]).flatMap((g, i) => field(`alternate_greetings[${i}]`, g)),
@@ -202,10 +205,10 @@ export const unroll = (card: Raw, user = "User"): Unrolled => {
 export const markdown = (u: Unrolled) =>
   [
     `# ${u.name}\n${u.spec}; extensions: ${u.extensions.join(", ") || "none"}`,
-    ...u.blocks.map((b) => `## ${b.heading}\n${paragraph(b.text)}`),
+    ...u.blocks.map((b) => section(`## ${b.heading}`, b.text)),
     ...(u.triggers.length
       ? [
-          `## triggers\n${u.triggers
+          `## triggers\n\n${u.triggers
             .map(
               (t) =>
                 `- ${t.name} (order ${t.order}): ${t.keys.join(", ")}${t.secondary.length ? `; secondary ${t.secondary.join(", ")}${t.logic ? ` (${t.logic})` : ""}` : ""}`,
@@ -213,7 +216,7 @@ export const markdown = (u: Unrolled) =>
             .join("\n")}`,
         ]
       : []),
-    ...(u.disabled.length ? ["## disabled", ...u.disabled.map((b) => `### ${b.heading}\n${paragraph(b.text)}`)] : []),
+    ...(u.disabled.length ? ["## disabled", ...u.disabled.map((b) => section(`### ${b.heading}`, b.text))] : []),
     `not expanded: ${u.macros.join(" ") || "none"}`,
   ].join("\n\n")
 

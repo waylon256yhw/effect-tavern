@@ -92,5 +92,6 @@ example_user / example_assistant）、`first_mes` 与各 `alternate_greetings`�
 （`--user`，默认 `User`）机械展开，其余宏原样保留并在末行列出；`extensions` 只列键名。
 `--json` 输出同一份材料：按顺序的块及其位置元数据、触发表、未展开的宏。
 
-Markdown 每块是一个带 `##` 标题的段落（字段内的空行压成单换行），可以直接作为
-`tavern card sort <card> <source>` 的源稿，按段落下标归位到自己的卡里，再走 `check` / `view`。
+Markdown 中每块的 `##` 标题单独成段，字段正文保留作者原有的分段（只统一换行符，多余空行压成一个），
+可以直接作为 `tavern card sort <card> <source>` 的源稿：作者的每一段都是可按下标归位的整段，标题段不归位即可。
+归位后再走 `check` / `view`。
