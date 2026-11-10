@@ -16,6 +16,7 @@ import { deliveryText, freeze, loreResource } from "./context.ts"
 import { floorAt } from "./derived.ts"
 
 import { initialWorld } from "./world.ts"
+import { withCatalogs } from "./product.ts"
 import { tokens } from "./tokens.ts"
 
 export const stages = ["narrate", "direct", "record", "lookup"] as const
@@ -170,11 +171,15 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   ]
 
   // ───────── record ─────────
-  const asked = R.products // a 小剧场 is narrate's, not this record document's
-    .filter(
+  // a 小剧场 is narrate's, not this record document's; a catalog with no survivor drops what reads it (session `record`)
+  const asked = withCatalogs(
+    R.products.filter(
       (p) =>
         p.stage !== "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
-    )
+    ),
+    card.catalogs ?? [],
+    context,
+  )
   const asks = asked.map((p) => `${p.id}: ${p.text}`)
   const qs = rpg.questions(s, R.names, context)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
