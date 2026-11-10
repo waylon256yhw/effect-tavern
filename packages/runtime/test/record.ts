@@ -334,3 +334,50 @@ console.log("record transactions ok")
   )
   assert.deepEqual(tx.current().nested, { details: { a: "", b: "b" }, list: [] })
 }
+
+// Catalogs: a pick is an enum of the items whose `when` holds this turn. One track at most is a table of one column,
+// max 1: `[]` answers "none" with no dummy option. An id filtered out does not decode (the call is corrected); a
+// catalog with no survivor drops its product from the request.
+{
+  const bgm: Product = {
+    id: "bgm",
+    role: "chronicle",
+    text: "the track for this scene, if it changes",
+    fold: "latest",
+    shape: { kind: "table", max: 1, columns: [{ key: "id", type: "enum", catalog: "bgm" }] },
+  }
+  const battle = { id: "battle", when: { path: "hp", op: "lt", value: 10 } } as const
+  const catalogs = [
+    { id: "bgm", baseUrl: "https://a/", items: [{ id: "calm", variants: ["c1.ogg", "c2.ogg"] }, battle] },
+  ]
+  const asked: string[][] = []
+  const picks: unknown[] = []
+  const M = fake((o) => {
+    const d = readStage(o)
+    if (d.phase !== "record") return defaultAnswer(d)
+    asked.push(d.asked)
+    return { text: "", toolCalls: [tool("finish_record", { notes: "", bgm: picks.shift() })] }
+  })
+  const T = makeSession({ card: { ...chat, catalogs, products: [bgm] }, rows: () => ({}), model: () => M })
+  const turn = (parent: number | null) => Effect.runPromise(outcome(T.act(parent, { text: "go" })))
+  picks.push([{ id: "battle" }], [{ id: "calm" }]) // battle: hp is 40, filtered out; corrected to calm
+  const one = await turn(null)
+  assert.deepEqual(one.products.bgm, [{ id: "calm" }])
+  assert.equal(picks.length, 0) // the battle call was refused and answered again
+  assert.ok(asked[0]!.includes("bgm"))
+  picks.push([]) // no pick
+  const two = await turn(one.id)
+  assert.equal(two.settlementStatus, "committed")
+  assert.deepEqual(two.products.bgm, [])
+  // only `battle`, which does not hold: the product leaves the request, nothing is asked of it
+  const N = makeSession({
+    card: { ...chat, catalogs: [{ id: "bgm", items: [battle] }], products: [bgm] },
+    rows: () => ({}),
+    model: () => M,
+  })
+  const none = await Effect.runPromise(outcome(N.act(null, { text: "go" })))
+  assert.equal(none.settlementStatus, "committed")
+  assert.ok(!asked.at(-1)!.includes("bgm"))
+  assert.ok(!("bgm" in none.products))
+}
+console.log("catalog picks ok")

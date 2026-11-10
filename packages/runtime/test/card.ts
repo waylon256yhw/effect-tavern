@@ -225,6 +225,27 @@ assert.deepEqual(routed.apply(routed.initial, g.do!), { s: { route: "blood", hea
 assert.throws(() => Schema.decodeUnknownSync(Greeting)({ text: "G", do: [{ path: "route", go: "blood" }] }))
 
 assert.deepEqual(decodeCard({ ...full, version: "1.2", source: "hand" }).version, "1.2") // optional metadata, decoded as-is
+// catalogs: items by id with an optional `when` and variant files; an enum column names one by `catalog`; the card view
+// sends them as declared
+const cg = {
+  id: "cg",
+  baseUrl: "https://img/",
+  items: [
+    { id: "a", variants: ["a1.png"] },
+    { id: "b", when: { path: "hp", op: "lt", value: 5 } },
+  ],
+}
+const pics = {
+  id: "pics",
+  role: "chronicle",
+  text: "pics",
+  shape: { kind: "table", columns: [{ key: "id", type: "enum", catalog: "cg" }] },
+}
+const catalogued = decodeCard({ ...full, catalogs: [cg], products: [pics] })
+assert.deepEqual(catalogued.catalogs, [cg])
+assert.deepEqual(catalogued.products, [pics])
+assert.deepEqual(cardView(catalogued).catalogs, [cg])
+assert.throws(() => decodeCard({ ...full, catalogs: [{ id: "cg" }] }))
 // a card is a YAML file by name: a missing one fails naming the file
 await assert.rejects(loadCard("nowhere"), /nowhere\.yaml/)
 // What a client draws a field as. Cuts: 0 (when min < 0 < max) and any threshold on the path strictly inside

@@ -134,6 +134,14 @@ The narrator never sees a number. State reaches it only as the fiction variants 
     extra call; `demand` works on theater only.
     `fold` (chronicle and theater only): `latest` | `append` | `{ key }` (newest row per key; list defaults to append,
     the rest to latest). Readouts move fields; products hold memory and the world.
+- **Attachments by id** (illustrations, BGM, voice) → `catalogs: [{ id, baseUrl?, items: [{ id, when?, variants? }] }]`.
+  An enum column of a chronicle or theater product names one with `catalog: <id>` in place of `options`; each record
+  request its options are the ids of the items whose `when` holds on the post-settlement state (no `when`, always),
+  so a filtered-out id does not decode and nothing about the catalog is written into any prompt; a catalog with no
+  item holding drops the table, or the record key, that reads it for that turn. Paragraph pictures are a table
+  `{ after: int, id: enum }`; one track is a table of the one column with `max: 1`, `fold: latest`, where `[]` is
+  "none". Nodes store only the id; `variants` (files under `baseUrl`, several takes of one id) are the reader's to
+  pick by seed. Not on world products.
 - **Names for the holes** → `names: { key: text }`: the card's defaults for `{{user}}`, `{{char}}` and any other
   `{{key}}` in its text (GLOSSARY 代称); a pack or the player's row overrides by key, the persona's name fills `user`.
   A line whose hole has no name is skipped (lint `unfilled-name`); `{{random}}`-style macros are not names (lint
@@ -171,14 +179,14 @@ readout that moves its field print side by side. The semantic rules below apply 
 
 ## What the schema and lint already check (do not hand-check)
 
-Decode and load: enum needs options; fold key must name a table column; recall on a list is `true`, on a table a
+Decode and load: enum needs options (an enum column: exactly one of `options` and `catalog`); fold key must name a table column; recall on a list is `true`, on a table a
 column, never on text/record; a product needs text, shape and role; a theater never feeds or recalls; a world takes
 no fold, is never written by narrate, has an identifier id and no `entityId` column; a narrate product is text; a
 lore entry's `invoke` key is refused. Settle time: an effect path that is not a field; a Cond path that is not
 declared; a `judge` roll with no chance on the beat.
 Lint (#27, #83, #155): `unknown-frame-slot`, `unknown-path`, `reserved-path`, `orphan-event`, `dead-field`,
 `prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`,
-`unfilled-name`, `unsupported-macro`, `bad-identifier` (an id, event or enum value with whitespace), `empty-text`
+`unfilled-name`, `unsupported-macro`, `unknown-catalog`, `duplicate-catalog-item`, `bad-identifier` (an id, event or enum value with whitespace), `empty-text`
 (an author slot left empty, error: a `compile` candidate cannot be installed until the author fills it). `card
 check` also prints one line per greeting: the state its `do` leaves, the bands that hold, the lore windows open for
 turn 1, the readouts asked after it.

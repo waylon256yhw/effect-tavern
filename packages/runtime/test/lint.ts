@@ -200,6 +200,46 @@ assert.deepEqual(
   ],
 )
 
+// catalogs: an item's `when` is a Cond like any (unknown-path); a column naming no catalog, and an id declared twice
+// (a catalog, or an item in one), are errors.
+assert.deepEqual(
+  of({
+    ...base,
+    rules: { fields: [bond], actions: [] },
+    catalogs: [
+      {
+        id: "cg",
+        items: [
+          { id: "a", when: { path: "bnod", is: 1 } },
+          { id: "b", when: { path: "bond", op: "gt", value: 3 } },
+          { id: "a" },
+        ],
+      },
+      { id: "cg", items: [] },
+    ],
+    products: [
+      {
+        id: "pics",
+        role: "chronicle",
+        text: "插图",
+        shape: {
+          kind: "record",
+          keys: [
+            { key: "here", type: "enum", catalog: "cg" },
+            { key: "there", shape: { kind: "table", columns: [{ key: "id", type: "enum", catalog: "gc" }] } },
+          ],
+        },
+      },
+    ],
+  }).filter((d) => /catalog|unknown-path/.test(d)),
+  [
+    "error unknown-path catalogs.cg.items.a.when",
+    "error unknown-catalog products.pics.id",
+    "error duplicate-catalog-item catalogs.cg",
+    "error duplicate-catalog-item catalogs.cg.items.a",
+  ],
+)
+
 // unknown-frame-slot: a frame id outside the slot list is a warn (fiction misfiled); a slot left empty is still a slot.
 assert.deepEqual(
   said(

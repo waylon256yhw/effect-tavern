@@ -6,6 +6,7 @@ import type { Card, Effect_, Field } from "./card.ts"
 import { type Cond, holds, reads, STATE_HOLE } from "./cond.ts"
 import { SLOTS } from "./fragment.ts"
 import { hook } from "./lore.ts"
+import { colsOf } from "./product.ts"
 import { HOLE, unfilled } from "./names.ts"
 import { type Entry, scan } from "./polish.ts"
 
@@ -43,6 +44,9 @@ const conds = (card: Card): [string, Cond][] => [
     [`lore.${e.id}.offer`, e.offer],
   ]),
   ...(card.products ?? []).flatMap((p): [string, Cond][] => (p.when ? [[`products.${p.id}.when`, p.when]] : [])),
+  ...(card.catalogs ?? []).flatMap((c) =>
+    c.items.flatMap((i): [string, Cond][] => (i.when ? [[`catalogs.${c.id}.items.${i.id}.when`, i.when]] : [])),
+  ),
 ]
 /** Every effect in the card, with its place: actions, readout options, greeting openings. */
 const effects = (card: Card): [string, Effect][] => {
@@ -560,6 +564,34 @@ const rules: Rule[] = [
       "a field next to a number or a comparison",
       "the narrator never sees numbers: put the text in a fiction variant with `when`, or in a readout",
     ),
+  // An enum column's catalog is resolved by id at record time; a name no catalog has fails the settlement.
+  (card) =>
+    (card.products ?? []).flatMap((p) =>
+      (p.shape ? colsOf(p.shape) : [])
+        .filter((c) => c.catalog !== undefined && !card.catalogs?.some((x) => x.id === c.catalog))
+        .map((c) => ({
+          rule: "unknown-catalog",
+          level: "error" as const,
+          path: `products.${p.id}.${c.key}`,
+          message: `${c.catalog} is not a catalog of this card`,
+          hint: "declare it in catalogs, or fix the spelling",
+        })),
+    ),
+  // A catalog and an item are named by id (a node stores only the item's): two under one id are one.
+  (card) => {
+    const dupes = (ids: readonly string[]) => [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))]
+    const cs = card.catalogs ?? []
+    return [
+      ...dupes(cs.map((c) => c.id)).map((id) => `catalogs.${id}`),
+      ...cs.flatMap((c) => dupes(c.items.map((i) => i.id)).map((id) => `catalogs.${c.id}.items.${id}`)),
+    ].map((path) => ({
+      rule: "duplicate-catalog-item",
+      level: "error" as const,
+      path,
+      message: `${path.split(".").at(-1)} is declared twice`,
+      hint: "give each catalog, and each item in one, its own id",
+    }))
+  },
   // Output formats asked in the text are products and `heading`.
   (card) => prose(card, "inline-product", INLINE, "asks for an output format in the text", TAIL),
 ]

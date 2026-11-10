@@ -3,7 +3,18 @@
 // and validate holds a product's completeness and shape rules (the merge itself is test/layer.ts).
 import assert from "node:assert/strict"
 import { Schema } from "effect"
-import { cap, decodeProducts, fold, render, rows, shapeSchema, validate, type Product } from "../src/product.ts"
+import {
+  cap,
+  decodeProducts,
+  fold,
+  render,
+  rows,
+  shapeSchema,
+  validate,
+  withCatalogs,
+  type Catalog,
+  type Product,
+} from "../src/product.ts"
 
 const defaults = decodeProducts([
   { role: "chronicle" as const, id: "notes", text: "facts", shape: { kind: "list" }, feed: true },
@@ -88,4 +99,71 @@ assert.throws(
 assert.throws(() => validate({ ...inventory, stage: "narrate" }), /world writes belong to record/)
 
 assert.throws(() => validate({ ...inventory, fold: { key: "item" } }), /world state uses transactions/)
+// Catalogs: a catalog column is an enum whose options are the items holding on the state; none holding drops the table
+// product, or the record's key (and the record with its last key).
+const cgs: Catalog[] = [
+  {
+    id: "cg",
+    baseUrl: "https://img/",
+    items: [
+      { id: "sword", variants: ["sword1.png", "sword2.png"] },
+      { id: "night", when: { path: "dark", is: true } },
+    ],
+  },
+  { id: "bgm", items: [{ id: "battle", when: { path: "hp", op: "lt", value: 10 } }] },
+]
+const pics: Product = {
+  role: "chronicle",
+  id: "pics",
+  text: "illustrations after paragraphs",
+  shape: {
+    kind: "table",
+    columns: [
+      { key: "after", type: "int" },
+      { key: "id", type: "enum", catalog: "cg" },
+    ],
+  },
+}
+const track = { key: "track", type: "enum", catalog: "bgm" } as const
+const mood: Product = {
+  role: "theater",
+  id: "mood",
+  text: "this turn",
+  shape: { kind: "record", keys: [{ key: "line", type: "text" }, track] },
+}
+const day = { fields: { dark: false, hp: 50 } }
+const [p1, m1] = withCatalogs([pics, mood], cgs, day)
+assert.deepEqual(p1!.shape, {
+  kind: "table",
+  columns: [
+    { key: "after", type: "int" },
+    { key: "id", type: "enum", options: ["sword"] },
+  ],
+})
+assert.deepEqual(dec(p1!)([{ after: 2, id: "sword" }]), [{ after: 2, id: "sword" }])
+assert.throws(() => dec(p1!)([{ after: 2, id: "night" }])) // filtered out: not decodable
+assert.deepEqual(dec(p1!)([]), []) // a table answers "none" with no row
+assert.deepEqual(m1!.shape, { kind: "record", keys: [{ key: "line", type: "text" }] }) // bgm empty: the key dropped
+const [, m2] = withCatalogs([pics, mood], cgs, { fields: { dark: true, hp: 5 } })
+assert.deepEqual(m2!.shape, {
+  kind: "record",
+  keys: [
+    { key: "line", type: "text" },
+    { key: "track", type: "enum", options: ["battle"] },
+  ],
+})
+const solo: Product = { ...mood, id: "solo", shape: { kind: "record", keys: [track] } }
+assert.deepEqual(withCatalogs([solo, inventory], cgs, day), [inventory]) // no key left: the product goes; others untouched
+assert.deepEqual(
+  withCatalogs([pics], [{ id: "cg", items: [{ id: "night", when: { path: "dark", is: true } }] }], day),
+  [],
+)
+assert.throws(() => withCatalogs([pics], [], day), /no catalog cg/)
+// exactly one of options and catalog on an enum column; a catalog pick is not world state
+assert.equal(validate(pics).on, true)
+const col = (c: object) => ({ ...pics, shape: { kind: "table" as const, columns: [c as never] } })
+assert.throws(() => validate(col({ key: "id", type: "enum" })), /exactly one of options or catalog/)
+assert.throws(() => validate(col({ key: "id", type: "enum", options: ["a"], catalog: "cg" })), /exactly one/)
+assert.throws(() => validate(col({ key: "id", type: "text", catalog: "cg" })), /exactly one/)
+assert.throws(() => validate({ ...pics, role: "world" }), /not world state/)
 console.log("product ok")
