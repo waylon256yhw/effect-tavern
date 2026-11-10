@@ -265,7 +265,7 @@ const rules: Rule[] = [
   // a greeting is shown text, a note the narrator opens from, or both: with neither there is no node 0
   (card) =>
     card.greetings.flatMap((g, i): Diagnostic[] =>
-      g.text === undefined && g.note === undefined
+      !g.text?.trim() && !g.note?.trim() // session.ts `begin` reads them the same way
         ? [
             {
               rule: "empty-greeting",

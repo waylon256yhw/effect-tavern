@@ -769,7 +769,10 @@ const program = Effect.gen(function* () {
     card: {
       ...full,
       rules: { ...full.rules, fields: full.rules.fields.map((f) => (f.path === "bond" ? { ...f, start: true } : f)) },
-      greetings: [{ text: "SHOWN", note: "OPEN the scene", do: [{ event: "warmth:close" }] }, { text: "STATIC" }],
+      greetings: [
+        { text: "SHOWN", note: "OPEN the scene", do: [{ event: "warmth:close" }] },
+        { text: "STATIC", do: [{ event: "warmth:close" }] },
+      ],
     },
     rows: () => player,
     model,
@@ -794,8 +797,17 @@ const program = Effect.gen(function* () {
   assert.deepEqual([dyn.node(ds.id).state.bond, dyn.node(dr.id).state.bond], [8, 8])
   // a text greeting without a note stays static (no call), the player's opening appended to its `do`
   i = calls().length
-  const st = yield* go(perform(dyn, { kind: "greet", greeting: 1, opening: [{ path: "bond", set: 3 }] }))
-  assert.deepEqual([since(i), prose(st), st.opening], [[], "STATIC", [{ path: "bond", set: 3 }]])
+  const st = yield* go(perform(dyn, { kind: "greet", greeting: 1, opening: [{ path: "bond", set: 8 }] }))
+  assert.deepEqual(
+    [since(i), prose(st), st.opening],
+    [[], "STATIC", [{ event: "warmth:close" }, { path: "bond", set: 8 }]],
+  )
+  // the opening's events reach one gate: the narrated root's own, never again on its turn 1; a static root has no gate,
+  // so its turn 1 reads them (li offered there, not under the dynamic root)
+  const d1 = yield* go(dyn.act(d0.id, { text: "wait" }))
+  const s1 = yield* go(dyn.act(st.id, { text: "wait" }))
+  assert.deepEqual([d1.brief.may, d1.opportunities], [[], []])
+  assert.deepEqual([s1.brief.may, s1.opportunities.map((d) => d.id)], [["li"], ["li"]])
   // only `start` fields: hp is not one, and an event is no field at all
   assert.throws(() => dyn.begin({ opening: [{ path: "hp", set: 5 }] }), /hp: not a field the player sets/)
   assert.throws(() => dyn.begin({ opening: [{ event: "x" }] }), /not a field the player sets/)

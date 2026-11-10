@@ -928,8 +928,9 @@ export const makeSession = ({
       }
       const opening = [...(g.do ?? []), ...(a.opening ?? [])]
       fresh()
-      const note = [g.note && named("opening", g.note), a.note].filter(Boolean).join("\n\n")
-      if (g.text !== undefined && !note)
+      // text and note count when they say something (lint `empty-greeting` reads them the same way)
+      const note = [g.note?.trim() && named("opening", g.note), a.note?.trim() && a.note].filter(Boolean).join("\n\n")
+      if (g.text?.trim() && !note)
         return Stream.succeed<Event>({ kind: "change", ...greet({ ...g, ...(opening.length && { do: opening }) }) })
       return emitting((emit) =>
         turn(emit, null, { text: "", note }, "lookup", undefined, stop, opening.length ? opening : undefined),

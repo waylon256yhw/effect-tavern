@@ -132,11 +132,13 @@ export const makeDerived = ({
     const b = rpg.fold(o.s, t.beats, { fields: o.s, world })
     const r = rpg.settleReadouts(b.s, t.answers)
     const a = t.adjust ? rpg.apply(r.s, t.adjust) : { s: r.s, events: [] as string[] }
+    // a static greeting had no gate, so its opening's events wait for the next turn's; a narrated root read them in its own
+    const gated = !!(t.input.text || t.input.note || t.input.invoke?.length)
     return {
       s: a.s,
       events: [...o.events, ...b.events, ...r.events, ...a.events],
       checks: b.checks,
-      post: [...o.events, ...r.events, ...a.events],
+      post: [...(gated ? [] : o.events), ...r.events, ...a.events],
       pre: b.s, // after opening and beats, before readouts and adjustments: what the turn's record saw
     }
   }
