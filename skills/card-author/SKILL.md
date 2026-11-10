@@ -37,16 +37,16 @@ line.
 `lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`, assembled in one place
 (`src/request.ts`).
 
-| Card field                   | Read by                                                                            |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| `frame`                      | every stage (the head of every document)                                           |
-| `fiction`, transcript        | narrate only                                                                       |
+| Card field                   | Read by                                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `frame`                      | every stage (the head of every document)                                                       |
+| `fiction`, transcript        | narrate only                                                                                   |
 | `lore`                       | lookup (read tools over the unlocked entries), gate / direct (windows), narrate (as told text) |
-| `rules.actions`              | decide (the menu), settle (code)                                                   |
-| `rules.readouts`, `products` | record, after the prose; a `stage: narrate` theater text is written inline by the narrator |
-| `guard`                      | check only; never shown to the narrator                                            |
-| `lexicon`                    | polish only (sentences the patterns hit are rewritten)                             |
-| `greetings`                  | node 0; `do` settles before anything                                               |
+| `rules.actions`              | decide (the menu), settle (code)                                                               |
+| `rules.readouts`, `products` | record, after the prose; a `stage: narrate` theater text is written inline by the narrator     |
+| `guard`                      | check only; never shown to the narrator                                                        |
+| `lexicon`                    | polish only (sentences the patterns hit are rewritten)                                         |
+| `greetings`                  | node 0; `do` settles before anything                                                           |
 
 The narrator never sees a number. State reaches it only as the fiction variants whose `when` holds.
 
@@ -132,8 +132,8 @@ The narrator never sees a number. State reaches it only as the fiction variants 
   - `theater`: for the player only, never `feed` or `recall`; `trigger: turn` (every turn, default) or `demand` (the
     turn's action row). `stage: narrate` makes a text-shaped theater the narrator writes inline (`<<aside>>`), no
     extra call; `demand` works on theater only.
-  `fold` (chronicle and theater only): `latest` | `append` | `{ key }` (newest row per key; list defaults to append,
-  the rest to latest). Readouts move fields; products hold memory and the world.
+    `fold` (chronicle and theater only): `latest` | `append` | `{ key }` (newest row per key; list defaults to append,
+    the rest to latest). Readouts move fields; products hold memory and the world.
 - **Names for the holes** → `names: { key: text }`: the card's defaults for `{{user}}`, `{{char}}` and any other
   `{{key}}` in its text (GLOSSARY 代称); a pack or the player's row overrides by key, the persona's name fills `user`.
   A line whose hole has no name is skipped (lint `unfilled-name`); `{{random}}`-style macros are not names (lint

@@ -143,7 +143,10 @@ export const selectedText = (card: Card, path: string): string => {
   for (const e of card.lore)
     for (const [i, text] of e.layers.entries()) if (path === `lore.${e.id}.layers[${i}]`) return text
   const g = /^greetings\[(\d+)\]$/.exec(path)
-  if (g && card.greetings[Number(g[1])]) return card.greetings[Number(g[1])]!.text ?? ""
+  if (g && card.greetings[Number(g[1])]) {
+    const gr = card.greetings[Number(g[1])]!
+    return gr.text ?? gr.note ?? ""
+  }
   throw new Error(`invalid selection ${path}`)
 }
 
