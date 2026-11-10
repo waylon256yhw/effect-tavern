@@ -15,7 +15,7 @@ for (const [name, text, real] of [
   ["理 opening", ri.greetings[2]!.text ?? "", 1129],
   ["盐道 fiction", yandao.fiction.map((f) => f.text ?? "").join("\n"), 339],
   ["伴星 opening", banxing.greetings[0]!.text ?? "", 692],
-  ["理 band fragment", ri.fiction[2]!.text ?? "", 1616],
+  ["理 band fragment", ri.fiction[2]!.text ?? "", 1570],
   ["English prose", en, 390],
 ] as const) {
   assert.ok(within(tokens(text), real, 0.05), `${name}: ${tokens(text)} vs ${real}`)

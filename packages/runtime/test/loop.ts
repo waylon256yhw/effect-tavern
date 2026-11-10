@@ -178,7 +178,7 @@ const program = Effect.gen(function* () {
   assert.deepEqual(C.context(c0.id).world.scene, { place: "P#1", present: [{ name: "B", mood: "calm" }] })
   assert.ok(
     /^notes: Notes are the record/m.test(str(prompts("record")[0]!)) &&
-      /^scene: Where the scene/m.test(str(prompts("record")[0]!)),
+      /^scene: 当前场景所在的位置/m.test(str(prompts("record")[0]!)),
   )
 
   let i = calls().length

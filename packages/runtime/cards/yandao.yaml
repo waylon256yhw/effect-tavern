@@ -7,12 +7,16 @@ id: yandao
 title: 盐道
 summary: |-
   大世界指导续写：川南盐运码头上，官府与盐帮在新立的查验卡前对峙；没有玩家角色，输入是给叙述者的指示。
+version: "1.0"
+source: hand
 input: note
 frame:
   - id: pov
+    label: 全知群像视角
     text: |-
       全知第三人称叙述，镜头可以在任何人物之间切换。故事里没有玩家角色；输入是作者给叙述者的指示，不是任何人物的话，不要把它写进故事。
   - id: style
+    label: 冷峻白描
     text: |-
       白描，少用形容词；对白短，带方言味；每一幕有一个具体的物件或动作收尾。
 fiction:
@@ -52,26 +56,26 @@ greetings:
       三天前，货栈门口动了手。沈二的驼夫和查验卡的差役推搡起来，一个差役被盐包砸断了胳膊，一个驼夫额头开了口子，血洒在石板上，冲了两桶水还看得见印子。县衙贴了告示要拿打人的驼夫，沈大娘闭门不见客，沈二带着驼队停在镇外十里的渡口。天没黑透，街上就没人了。
 rules:
   fields:
-    - { path: 局势, type: int, min: 0, max: 10, initial: 2 }
-    - { path: 起点, type: enum, options: [平静, 血案], initial: 平静 }
+    - { path: 局势, label: 局势, group: World, type: int, min: 0, max: 10, initial: 2, start: true }
+    - { path: 起点, label: 起点, group: World, type: enum, options: [平静, 血案], initial: 平静, start: true }
   actions: []
   readouts:
     - id: tension
       text: 这一幕之后，官府与盐帮之间的局势
       options:
         - id: eased
-          text: 缓和了
+          text: 双方各退一步、达成暂时妥协或当场散去对峙
           do:
             - { path: 局势, add: -2 }
         - id: same
-          text: 没有变化
+          text: 仅作试探周旋或日常往来，僵局未见松动也未升级
           do: []
         - id: worse
-          text: 更紧张了
+          text: 言辞交锋激烈、查验受阻或街面风声鹤唳，对峙进一步紧绷
           do:
             - { path: 局势, add: 2 }
         - id: broke
-          text: 动了手或见了血
+          text: 当场动了手、砸了货栈卡子或见了血
           do:
             - { path: 局势, add: 4 }
             - { event: 冲突:升级 }

@@ -5,17 +5,24 @@ title: 竹林
 summary: |-
   暮春雨后的越州苦竹岭，你携故人遗物寻访李鹤下落，在竹林荒亭中与守坟的剑客裴青舟相对。
 heading: scene.place
+version: "1.0"
+source: hand
+names:
+  char: 裴青舟
 # The card gives the player's role (the persona slot's default; a player overrides or yields it like any slot).
 frame:
   - id: persona
+    label: 旧友送剑
     text: |-
       你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。
   - id: setting
+    label: 苦竹岭荒亭
     text: |-
       故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。
   - id: style
+    label: 传统白话武侠
     text: |-
-      行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要反复描写「手指收紧又松开、指节发白、摩挲衣领、喉结滚动、像一根绷紧的弦」这类套路化的微表情，也不要每次都用动作把人物的一句话硬生生截成两半。
+      行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。
 # Bands of the readout are `when` fragments: the narrator reads the band's text, never the number.
 fiction:
   - id: pei
@@ -56,7 +63,7 @@ rules:
     - { path: hp, label: 体力, group: Body, type: int, min: 0, max: 100, initial: 40 }
     - { path: foe, label: 敌手, group: People, type: int, min: 0, initial: 30 }
     # a readout: never settled before the prose
-    - { path: bond, label: 交情, group: People, type: int, min: -30, max: 100, initial: 0 }
+    - { path: bond, label: 交情, group: People, type: int, min: -30, max: 100, initial: 0, start: true }
   readouts:
     - id: warmth
       text: 这一幕里裴青舟对待你的态度
@@ -119,16 +126,19 @@ lore:
     offer: { all: [] }
 guard:
   - 裴青舟不会在交手中丧命
+lexicon:
+  - { pattern: 手指*松开, hint: 套路微表情 }
+  - { pattern: 摩挲*衣领, hint: 套路小动作 }
 director: true
-# Record products (src/product.ts), one of each flavour the card adds: a feed record with a nested table (scene: read
-# back to the model as `Current:`), and a keyed recall table (people: rows merged by name along the path, which the
-# lookup stage can deliver later, like lore). `options` is the player's toggle (the dev and test players turn it on).
+# World products (src/product.ts), one of each shape the card adds: a feed record with a nested table (scene: read
+# back to the model as `Current:`), and an entity table with recall (people: maintained by upsert/remove transactions
+# along the path, which the lookup stage can deliver later, like lore). `options` is the player's toggle.
 products:
   - id: scene
     role: world
     label: 场景
     text: |-
-      Where the scene stands now: the place, and who is present (by name, or 玩家 for the player) with their mood.
+      当前场景所在的位置，以及眼下在场的人物（用姓名，玩家写「玩家」）与各自此刻的神态。
     shape:
       kind: record
       keys:
@@ -144,7 +154,7 @@ products:
     role: world
     label: 新人物
     text: |-
-      New side characters or third parties first mentioned in this scene who are neither in the card's frame (exclude 裴青舟, 李鹤, and the player) nor already in Known, one row each. Empty if none.
+      这一幕新出场或新提及、不在卡片固有设定中（排除裴青舟、李鹤与玩家）且尚未记入已知列表的旁人，每人一行；没有则留空。
     shape:
       kind: table
       columns:
