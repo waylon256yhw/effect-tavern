@@ -806,7 +806,7 @@ const packs = [packB, packA]
   assert.deepEqual(R.lexicon, [{ pattern: "LEXICON-SHOWN", from: "card" }])
   // cardView carries it, with the card's own projection beside it
   const v = cardView(c, {})
-  assert.deepEqual(Object.keys(v).sort(), ["fiction", "greetings", "layer", "meta", "rules"])
+  assert.deepEqual(Object.keys(v).sort(), ["catalogs", "fiction", "greetings", "layer", "meta", "rules"])
   assert.ok(!/SECRET/.test(JSON.stringify(v)))
 }
 

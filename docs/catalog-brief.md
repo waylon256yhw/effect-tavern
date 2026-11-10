@@ -1,5 +1,8 @@
 # 卡片静态资源目录与附件机制（收敛稿）
 
+> Status 2026-11-10 (#1): §2.1 and §2.2 landed: `Card.catalogs`, `Col.catalog`, `withCatalogs` at record time, lint `unknown-catalog` / `duplicate-catalog-item`, `cardView.catalogs`; a single pick is a one-column table with `max: 1` (not a top-level enum shape), and world products may not pick from a catalog.
+> Pending: the client attachment view (§2.3 resolver: image after paragraph, audio player, card-page gallery).
+
 2026-10-25。本篇探讨如何解决插图卡、BGM 音乐播放器、语音包与图鉴卡等多媒体附件需求。
 
 经与现有代码接缝（`Card`、`Product`、`record`、`rollOf`）对照收敛后，结论非常明确：**它不需要一套独立的「插件系统」或额外的「配图师工序」，落在现有接缝上只需要新增三样小东西：Card 上的 `catalogs` 字段、Product 里可引用 catalog 的 `enum` 形状，以及客户端画附件的标准视图。**

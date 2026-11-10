@@ -14,7 +14,7 @@ import { Cond, holds, expandState, type State as Paths } from "./cond.ts"
 import { Fragment } from "./fragment.ts"
 import { expand, Names } from "./names.ts"
 import { Entry } from "./polish.ts"
-import { ProductPatch } from "./product.ts"
+import { Catalog, ProductPatch } from "./product.ts"
 
 const Num = Schema.Number
 const Scalar = Schema.Union([Num, Schema.Boolean, Schema.String])
@@ -311,6 +311,7 @@ export const Card = Schema.Struct({
   director: Schema.optionalKey(Schema.Boolean),
   input: Schema.optionalKey(Schema.Literals(["act", "note"])),
   asks: Schema.optionalKey(Schema.Array(Fragment)), // the harness's own wording, overridden by id
+  catalogs: Schema.optionalKey(Schema.Array(Catalog)), // attachments by id: an enum column's `catalog` names one
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // record products: patches over the harness defaults by id, or new ones
   lexicon: Schema.optionalKey(Schema.Array(Entry)), // slop patterns the polish stage scans for, after the player's own
   names: Schema.optionalKey(Names), // the author's defaults for the `{{key}}` holes in its text (GLOSSARY 代称)

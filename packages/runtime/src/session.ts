@@ -71,7 +71,7 @@ import { makeLore, type Disclosure, type Lore } from "./lore.ts"
 import { expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
-import { cap, type Product } from "./product.ts"
+import { cap, withCatalogs, type Product } from "./product.ts"
 import { recordTransaction, worldValue, worldOn, type RecordResult } from "./world.ts"
 
 export type Turn = TurnOf<Beat>
@@ -169,6 +169,7 @@ export const cardView = (card: Card, rows: Rows = {}) => {
     rules: card.rules,
     // the fiction's modules without their text: id, shown name, and the state condition that makes one a variant
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
+    catalogs: card.catalogs, // attachments by id as declared: a gallery draws them, a reader resolves a node's id
     layer: shown(resolve(card, rows)),
   }
 }
@@ -368,11 +369,12 @@ export const makeSession = ({
     qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
   ) =>
     Effect.gen(function* () {
-      if (!asked.length && !qs) return { changes: [], products: {}, answers: {} } satisfies RecordResult
-      const fed = derived.at(path).known(true)
       const context = derived.at(path).context(state)
+      const picks = withCatalogs(asked, card.catalogs ?? [], context) // a catalog with no survivor drops what reads it
+      if (!picks.length && !qs) return { changes: [], products: {}, answers: {} } satisfies RecordResult
+      const fed = derived.at(path).known(true)
       const tx = recordTransaction(
-        asked.map((p) => ({ ...p, text: expandState(p.text, context) })),
+        picks.map((p) => ({ ...p, text: expandState(p.text, context) })),
         worldOn(products(), path),
         qs?.schema,
         (answers) => {
@@ -386,7 +388,7 @@ export const makeSession = ({
         invoked: latest(scene.deliveries)
           .filter((d) => scene.input.invoke?.includes(d.resourceId))
           .map(deliveryText),
-        asks: asked.map((p) => `${p.id}: ${expandState(p.text, context)}`),
+        asks: picks.map((p) => `${p.id}: ${expandState(p.text, context)}`),
         tools: wording("record.tools"),
         readout: wording("record.readout"),
         questions: qs?.lines,

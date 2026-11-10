@@ -3,14 +3,32 @@
 // changes only through world.ts transactions and stable host-assigned entity IDs. Presentation caps apply
 // to per-turn outputs; exceeding a world-state limit is a recoverable transaction error.
 import { Schema } from "effect"
-import { Cond, holds } from "./cond.ts"
+import { Cond, holds, type State } from "./cond.ts"
 
 const Int = Schema.Int
+// An enum column's closed set is `options`, or `catalog`: the ids of a card catalog's items, filtered by their `when`
+// each record request (`withCatalogs`). Exactly one of the two (`validate`).
 export const Col = Schema.Struct({
   key: Schema.String,
   type: Schema.Literals(["text", "int", "boolean", "enum"]),
   options: Schema.optionalKey(Schema.Array(Schema.String)),
+  catalog: Schema.optionalKey(Schema.String),
 })
+type Col = typeof Col.Type
+/** Attachments by id (#1): what a record product may pick. A node stores only the id; a reader resolves `variants`
+ *  (files relative to `baseUrl`, several takes of one id) by the node's seed. */
+export const Catalog = Schema.Struct({
+  id: Schema.String,
+  baseUrl: Schema.optionalKey(Schema.String),
+  items: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      when: Schema.optionalKey(Cond), // pickable only while it holds; no `when`, always
+      variants: Schema.optionalKey(Schema.Array(Schema.String)),
+    }),
+  ),
+})
+export type Catalog = typeof Catalog.Type
 export const TextShape = Schema.Struct({ kind: Schema.Literal("text"), max: Schema.optionalKey(Int) }) // max chars
 export const ListShape = Schema.Struct({ kind: Schema.Literal("list"), max: Schema.optionalKey(Int) }) // max items
 export const TableShape = Schema.Struct({
@@ -103,6 +121,52 @@ export const shapeSchema = (s: Shape, partial = false): Schema.Top => {
       )
   }
 }
+
+/** Every column of a shape, nested record keys included. */
+export const colsOf = (s: Shape): Col[] =>
+  s.kind === "table"
+    ? [...s.columns]
+    : s.kind === "record"
+      ? s.keys.flatMap((k) => ("shape" in k ? colsOf(k.shape) : [k]))
+      : []
+/** A shape with each catalog column's `options` set to the ids of its catalog's items that hold on `state`. A catalog
+ *  with no survivor drops what references it: a table (a row needs every column) or a record's key; a record left with
+ *  no key, and so the product, is dropped too. An id not in the list does not decode: nothing is asked of the model. */
+const resolveShape = (s: Shape, catalogs: readonly Catalog[], state: State): Shape | undefined => {
+  const col = (c: Col): Col | undefined => {
+    if (c.catalog === undefined) return c
+    const cat = catalogs.find((x) => x.id === c.catalog)
+    if (!cat) throw new Error(`${c.key}: no catalog ${c.catalog}`)
+    const ids = [...new Set(cat.items.filter((i) => !i.when || holds(i.when, state)).map((i) => i.id))]
+    const { catalog: _, ...rest } = c
+    return ids.length ? { ...rest, options: ids } : undefined
+  }
+  if (s.kind === "table") {
+    const columns = s.columns.map(col)
+    return columns.every((c) => c !== undefined) ? { ...s, columns: columns as Col[] } : undefined
+  }
+  if (s.kind !== "record") return s
+  const keys = s.keys.flatMap((k): RecordShape["keys"][number][] => {
+    if (!("shape" in k)) {
+      const c = col(k)
+      return c ? [c] : []
+    }
+    const shape = resolveShape(k.shape, catalogs, state) as typeof k.shape | undefined
+    return shape ? [{ key: k.key, shape }] : []
+  })
+  return keys.length ? { kind: "record", keys } : undefined
+}
+/** The products as one record request asks them on `state` (the post-settlement context), catalogs resolved. */
+export const withCatalogs = <P extends Pick<Product, "shape">>(
+  products: readonly P[],
+  catalogs: readonly Catalog[],
+  state: State,
+): P[] =>
+  products.flatMap((p) => {
+    if (!colsOf(p.shape).some((c) => c.catalog !== undefined)) return [p]
+    const shape = resolveShape(p.shape, catalogs, state)
+    return shape ? [{ ...p, shape }] : []
+  })
 
 export const mergeRecord = (s: RecordShape, prev: Row, patch: Row): Row => {
   const out = { ...prev }
@@ -221,6 +285,14 @@ export const validate = <P extends Partial<Product> & { id: string }>(p: P): P &
     !(p.shape.kind === "table" && p.shape.columns.some((c) => c.key === (p.fold as { key: string }).key))
   )
     throw new Error(`${p.id}: fold key names a table column`)
+  for (const c of colsOf(p.shape)) {
+    if (c.type === "enum" ? (c.options === undefined) === (c.catalog === undefined) : c.catalog !== undefined)
+      throw new Error(`${p.id}.${c.key}: an enum column takes exactly one of options or catalog`)
+    // ponytail: world state stores an id the catalog's `when` may later filter out, and patch_record re-decodes the
+    // whole record; allow it once world tools decode stored values against the declared catalog, not the survivors
+    if (c.catalog !== undefined && p.role === "world")
+      throw new Error(`${p.id}.${c.key}: a catalog pick is per turn (chronicle or theater), not world state`)
+  }
   if (p.stage === "narrate" && p.shape.kind !== "text") throw new Error(`${p.id}: a narrate product is text`)
   if (p.recall !== undefined) {
     if (p.shape.kind === "list" && p.recall !== true) throw new Error(`${p.id}: recall on a list is true`)
