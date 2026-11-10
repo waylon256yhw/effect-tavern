@@ -69,3 +69,28 @@ steps:
 后两者使用 `id#层数`：windows 是当前回合开窗候选，lore 是 lookup/主动选择及 check 确认的披露。
 `end` 对应实际回合结束原因（end/over/cap/stopped）。每步自动验证字段边界和 record 已提交；
 失败报告步骤序号并返回 1。相同 seed 和回答序列得到相同规则结果。
+
+## 展开 ST 卡（unroll）
+
+`unroll` 是读卡仪器，不是转换器（#31）：把一张 SillyTavern 卡按 ST 自己的装配顺序展开成文档，
+让人和代理看清作者让模型按什么顺序读到什么。它只读不写，不产出本项目的卡，也不调用模型。
+
+```sh
+bun run unroll card.png --user 李
+bun run unroll card.json --json
+```
+
+输入两种：内嵌角色块的 PNG（取 `tEXt` 中的 `ccv3`，没有则取 `chara`；base64 JSON，不校验 CRC），
+或 V2/V3 JSON（`spec` 为 `chara_card_v2` / `chara_card_v3`）。V1 卡报错。
+
+输出两种：默认 Markdown，依次为 `before_char` 条目、`description`、`personality`、`scenario`、
+`after_char` 条目、按 ST 规则切好的 `mes_example`（补 `<START>`、丢首行、按 `名字:` 切成
+example_user / example_assistant）、`first_mes` 与各 `alternate_greetings`、带深度和 role 的深度条目，
+最后是触发表（每个非 constant 条目的 keys、secondary keys 与 selectiveLogic，按 `insertion_order`）
+和停用条目。作者写了 `system_prompt` / `post_history_instructions` 时分别排在最前和深度条目之后。
+每个条目标出名字、constant 或 selective、位置和 `insertion_order`。`{{char}}`、`{{user}}`
+（`--user`，默认 `User`）机械展开，其余宏原样保留并在末行列出；`extensions` 只列键名。
+`--json` 输出同一份材料：按顺序的块及其位置元数据、触发表、未展开的宏。
+
+Markdown 每块是一个带 `##` 标题的段落（字段内的空行压成单换行），可以直接作为
+`tavern card sort <card> <source>` 的源稿，按段落下标归位到自己的卡里，再走 `check` / `view`。
