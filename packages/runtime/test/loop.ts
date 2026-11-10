@@ -7,7 +7,7 @@ import assert from "node:assert/strict"
 import * as Log from "../src/log.ts"
 import type { Turn } from "../src/session.ts"
 import { prose, split, splitter } from "../src/journal.ts"
-import { makeSession, outcome, type Event } from "../src/session.ts"
+import { cardView, makeSession, outcome, perform, type Event } from "../src/session.ts"
 import { chat, full, plain as player } from "./cards/index.ts"
 import { defaultAnswer, lookupAnswer, readStage } from "../support/script.ts"
 
@@ -761,6 +761,62 @@ const program = Effect.gen(function* () {
   chance = 0.5
   const jumped = yield* go(judge.act(null, { text: "jump" }))
   assert.equal(jumped.beats[0]!.chance, 0.5)
+
+  // A dynamic opening (#148): a greeting with a note, the player's opening on a `start` field after the greeting's `do`
+  // and the player's note after the card's. Node 0 is a narrated turn on the opened state: the warm band is in the
+  // narrator's head, the opening's events open li's window on this very turn, and the node stores the opening.
+  const dyn = makeSession({
+    card: {
+      ...full,
+      rules: { ...full.rules, fields: full.rules.fields.map((f) => (f.path === "bond" ? { ...f, start: true } : f)) },
+      greetings: [
+        { text: "SHOWN", note: "OPEN the scene", do: [{ event: "warmth:close" }] },
+        { text: "STATIC", do: [{ event: "warmth:close" }] },
+      ],
+    },
+    rows: () => player,
+    model,
+  })
+  i = calls().length
+  const d0 = yield* go(perform(dyn, { kind: "greet", opening: [{ path: "bond", set: 8 }], note: "a wish" }))
+  assert.deepEqual(since(i), ["lookup", "decide", "direct", "narrate", "check", "record"])
+  assert.deepEqual(
+    [d0.parent, d0.input, d0.opening],
+    [null, { text: "", note: "OPEN the scene\n\na wish" }, [{ event: "warmth:close" }, { path: "bond", set: 8 }]],
+  )
+  assert.equal(dyn.node(d0.id).state.bond, 8)
+  assert.ok(str(lastNarr()).includes(full.fiction[2]!.text!) && !str(lastNarr()).includes("SHOWN")) // text not prepended
+  assert.deepEqual(d0.brief.may, ["li"])
+  // record reads the prose alone: the note goes to narrator and director only (request.ts), so a profile the opening
+  // asks for is extracted from what the prose shows (#148 §2.4, open)
+  assert.ok(!str(prompts("record").at(-1)!).includes("a wish"))
+  // a swipe and a reword of the dynamic root keep its opening, and their state is the opened one
+  const ds = yield* go(perform(dyn, { kind: "swipe", node: d0.id }))
+  const dr = yield* go(perform(dyn, { kind: "reword", node: d0.id }))
+  assert.deepEqual([ds.opening, dr.opening, ds.sibling, dr.sibling], [d0.opening, d0.opening, "swipe", "reword"])
+  assert.deepEqual([dyn.node(ds.id).state.bond, dyn.node(dr.id).state.bond], [8, 8])
+  // a text greeting without a note stays static (no call), the player's opening appended to its `do`
+  i = calls().length
+  const st = yield* go(perform(dyn, { kind: "greet", greeting: 1, opening: [{ path: "bond", set: 8 }] }))
+  assert.deepEqual(
+    [since(i), prose(st), st.opening],
+    [[], "STATIC", [{ event: "warmth:close" }, { path: "bond", set: 8 }]],
+  )
+  // the opening's events reach one gate: the narrated root's own, never again on its turn 1; a static root has no gate,
+  // so its turn 1 reads them (li offered there, not under the dynamic root)
+  const d1 = yield* go(dyn.act(d0.id, { text: "wait" }))
+  const s1 = yield* go(dyn.act(st.id, { text: "wait" }))
+  assert.deepEqual([d1.brief.may, d1.opportunities], [[], []])
+  assert.deepEqual([s1.brief.may, s1.opportunities.map((d) => d.id)], [["li"], ["li"]])
+  // only `start` fields: hp is not one, and an event is no field at all
+  assert.throws(() => dyn.begin({ opening: [{ path: "hp", set: 5 }] }), /hp: not a field the player sets/)
+  assert.throws(() => dyn.begin({ opening: [{ event: "x" }] }), /not a field the player sets/)
+  // a card with no greetings opens from the player's note alone; with neither, there is nothing to open
+  const bare = makeSession({ card: { ...full, greetings: [] }, rows: () => player, model })
+  assert.equal((yield* go(bare.begin({ note: "start here" }))).input.note, "start here")
+  assert.throws(() => bare.begin({}), /no greeting 0/)
+  // the client sees the note's first line where a greeting has no text, never the note itself
+  assert.deepEqual(cardView({ ...full, greetings: [{ note: "line one\nline two" }] }).greetings, [{ text: "line one" }])
 })
 
 await Effect.runPromise(program)

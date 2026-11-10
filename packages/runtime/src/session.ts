@@ -59,7 +59,7 @@ import {
 } from "@effect-tavern/provider"
 import { Deferred, Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
-import { Effect_, makeCard, type Beat, type Card, type Greeting, type State } from "./card.ts"
+import { Effect_, makeCard, shownGreeting, type Beat, type Card, type Greeting, type State } from "./card.ts"
 import { holds, expandState, type State as Paths } from "./cond.ts"
 import { gateOf, makeDerived, type Node } from "./derived.ts"
 import { head as headOf, type Hat } from "./fragment.ts"
@@ -165,7 +165,7 @@ export const cardView = (card: Card, rows: Rows = {}) => {
       tokens: { head: f.tokens }, // what the card's own text costs each turn, estimated (`facets`)
       facets: f, // what the card is: the shelf's `#facet` filter, the same function GET /cards rows read
     }, // leaves as JSON, which drops undefined
-    greetings: card.greetings,
+    greetings: card.greetings.map(shownGreeting),
     rules: card.rules,
     // the fiction's modules without their text: id, shown name, and the state condition that makes one a variant
     fiction: card.fiction.map(({ id, label, when }) => ({ id, label, when })),
@@ -448,6 +448,7 @@ export const makeSession = ({
     from: "lookup" | "narrate" | "check",
     base?: Turn,
     stop?: Stop,
+    start?: readonly (typeof Effect_.Type)[], // a new root's opening (a dynamic greet); a sibling carries its base's
   ) =>
     Effect.gen(function* () {
       // no line and no note: nothing to run the narrator from (an act of nothing, or a sibling of an opening; an edit
@@ -461,7 +462,10 @@ export const makeSession = ({
       const here = derived.at(path)
       // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
       const guard = card.guard.flatMap((g) => expand(g, layer().names) ?? [])
-      const s0 = here.state
+      // a root's opening settles first, as the fold does (derived.ts `settleFresh`); its events reach this turn's gate
+      const opening = start ?? base?.opening
+      const o = opening ? rpg.apply(here.state, opening) : { s: here.state, events: [] as string[] }
+      const s0 = o.s
       const resources = here.resources()
       const resident = here.resident()
       const current = here.currentResources()
@@ -568,10 +572,10 @@ export const makeSession = ({
       const { s: s1, events } = rpg.fold(s0, beats, here.context(s0))
       // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate
       // (derived.ts `gate`). Director only if the card has one and something is open.
-      const gateEvents = [...events, ...here.post]
+      const gateEvents = [...o.events, ...events, ...here.post]
       const gate = here.gate({
         state: s1,
-        events,
+        events: [...o.events, ...events],
         before: looked,
       })
       const disclosures = reused ? base!.read : gate.disclosures
@@ -776,7 +780,7 @@ export const makeSession = ({
           reply,
           fired,
           violated,
-          ...(base?.opening && { opening: base.opening }),
+          ...(opening && { opening }),
           ...(base && { sibling: SIBLING[from] }),
           products: capped(written),
           changes: [],
@@ -876,32 +880,60 @@ export const makeSession = ({
     return emitting((emit) => turn(emit, base.parent, patch?.input ?? base.input, from, base, stop))
   }
 
+  /** A greeting node: the card's opening as a root, with no player input; its `do` is the node's opening. */
+  const greet = (g: Greeting): Change => {
+    fresh()
+    return change(
+      held.commit(
+        Log.add(held.log, {
+          parent: null,
+          input: { text: "" },
+          read: [],
+          deliveries: [],
+          opportunities: [],
+          ...(g.do ? { opening: g.do } : {}),
+          beats: [],
+          answers: {},
+          end: "end",
+          brief: { must: [], may: [] },
+          reply: [{ type: "text", text: named("opening", g.text ?? "") }], // the transcript holds the names as they stand now
+          fired: [],
+          violated: [],
+          products: {},
+          changes: [],
+          settlementStatus: "committed",
+          settlementVersion: 0,
+        }),
+      ),
+    )
+  }
+
   return {
-    /** A greeting node: the card's opening as a root, with no player input; its `do` is the node's opening. */
-    greet: (g: Greeting): Change => {
+    greet,
+    /** The greet action: greeting `greeting` (0 by default; none on a card without greetings, when a note is given), with
+     *  the player's `opening` (effects on `start` fields only) after its `do` and the player's `note` after its own.
+     *  A greeting with text and no note is the static root above; otherwise node 0 is narrated from the note on the
+     *  opened state, its text never prepended. */
+    begin: (
+      a: { greeting?: number; opening?: readonly (typeof Effect_.Type)[]; note?: string },
+      stop?: Stop,
+    ): Events => {
+      const i = a.greeting ?? 0
+      const g = card.greetings[i] ?? (!card.greetings.length && a.note ? {} : undefined)
+      if (!g) throw new Error(`no greeting ${i}`)
+      for (const e of a.opening ?? []) {
+        const f = "path" in e ? card.rules.fields.find((f) => f.path === e.path) : undefined
+        if (!f?.start || f.hidden)
+          throw new Error(`${"path" in e ? e.path : JSON.stringify(e)}: not a field the player sets at the start`)
+      }
+      const opening = [...(g.do ?? []), ...(a.opening ?? [])]
       fresh()
-      return change(
-        held.commit(
-          Log.add(held.log, {
-            parent: null,
-            input: { text: "" },
-            read: [],
-            deliveries: [],
-            opportunities: [],
-            ...(g.do ? { opening: g.do } : {}),
-            beats: [],
-            answers: {},
-            end: "end",
-            brief: { must: [], may: [] },
-            reply: [{ type: "text", text: named("opening", g.text) }], // the transcript holds the names as they stand now
-            fired: [],
-            violated: [],
-            products: {},
-            changes: [],
-            settlementStatus: "committed",
-            settlementVersion: 0,
-          }),
-        ),
+      // text and note count when they say something (lint `empty-greeting` reads them the same way)
+      const note = [g.note?.trim() && named("opening", g.note), a.note?.trim() && a.note].filter(Boolean).join("\n\n")
+      if (g.text?.trim() && !note)
+        return Stream.succeed<Event>({ kind: "change", ...greet({ ...g, ...(opening.length && { do: opening }) }) })
+      return emitting((emit) =>
+        turn(emit, null, { text: "", note }, "lookup", undefined, stop, opening.length ? opening : undefined),
       )
     },
     cancelRecord: (nodeId: number): boolean => {
@@ -1101,7 +1133,13 @@ export const Action = Schema.Union([
     parent: Schema.optionalKey(Schema.NullOr(Id)), // absent: under head; null: a root
     input: InputSchema,
   }),
-  Schema.Struct({ kind: Schema.Literal("greet"), greeting: Schema.optionalKey(Id) }), // a new root from the card's opening
+  // a new root from the card's opening, with the player's start effects and note (Session.begin)
+  Schema.Struct({
+    kind: Schema.Literal("greet"),
+    greeting: Schema.optionalKey(Id),
+    opening: Schema.optionalKey(Schema.Array(Effect_)),
+    note: Schema.optionalKey(Schema.String),
+  }),
   Schema.Struct({ kind: Schema.Literal("checkout"), node: Schema.NullOr(Id) }), // head to a version's newest leaf, or an empty line
   Schema.Struct({ kind: Schema.Literal("retryRecord"), node: Id }),
   Schema.Struct({ kind: Schema.Literal("skipRecord"), node: Id }),
@@ -1124,11 +1162,8 @@ export const perform = (s: Session, a: Action, stop?: Stop): Events =>
     switch (a.kind) {
       case "act":
         return s.act(a.parent === undefined ? s.log.head : a.parent, a.input, stop)
-      case "greet": {
-        const g = s.greetings[a.greeting ?? 0]
-        if (!g) throw new Error(`no greeting ${a.greeting ?? 0}`)
-        return Stream.succeed<Event>({ kind: "change", ...s.greet(g) })
-      }
+      case "greet":
+        return s.begin(a, stop)
       case "checkout":
         return Stream.succeed<Event>({ kind: "change", ...s.checkout(a.node) })
       case "retryRecord":

@@ -48,6 +48,15 @@ show 默认打印阅读文本。`story delete` 是正式命令，`story drop` �
 `--input` 跑一条输入后退出，省略则逐行交互，也支持 stdin 管道。
 普通输入遵循卡片默认的 act/note 通道；开场由 `/greet` 显式选择。
 
+新建故事时也可直接开场：`--greeting N` 选开场白（默认 0），`--set path=value`（可重复）设置卡片标了
+`start: true` 的字段（其他字段报错），`--note` 给叙事者一句开场附言。开场白只有 `text` 且无附言时照旧原样写入；
+开场白带 `note`（卡作者的开场指令）或传了 `--note` 时，第 0 楼由叙事者在设好的初始状态上按附言生成，
+可 swipe / reword。
+
+```sh
+MODEL=fake bun run tavern play my-card --greeting 1 --set world=古风 --set bond=3 --note '主角是落第书生'
+```
+
 | 命令 | 行为 |
 | --- | --- |
 | `/greet [index]` | 选择开场（默认 0） |

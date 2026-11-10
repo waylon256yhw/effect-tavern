@@ -6,15 +6,36 @@ const idOf = (text: string) => {
   if (!/^\d+$/.test(text)) throw new Error(`expected node id, got ${text}`)
   return Number(text)
 }
+/** A field value as typed: JSON when it parses (`3`, `true`, `"a b"`), the raw text otherwise. */
+const scalar = (raw: string) => {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    value = raw
+  }
+  if (!["number", "boolean", "string"].includes(typeof value)) throw new Error("field value must be scalar")
+  return value as string | number | boolean
+}
 const help =
   "/greet [index], /act text, /note text, /pin resource-id, /set field=value, /swipe [node], /reword [note], /checkout node|root, /tree, /context, /detail [node], /inspect [node], /attach, /stop, /quit"
 
 export const play = async (
   host: CliHost,
   target: string,
-  options: { input?: string; jsonl: boolean; card?: boolean },
+  options: {
+    input?: string
+    jsonl: boolean
+    card?: boolean
+    // a new story's opening (the greet action): which greeting, `start` fields set, a note to the narrator
+    greeting?: number
+    set?: Record<string, string>
+    note?: string
+  },
 ) => {
   const numeric = /^\d+$/.test(target) && !options.card
+  const opens = options.greeting !== undefined || options.set !== undefined || options.note !== undefined
+  if (numeric && opens) throw new Error("--greeting, --set and --note open a new story: pass a card")
   if (numeric && !(await host.list()).some((s) => s.id === Number(target))) throw new Error(`no story ${target}`)
   const story = numeric ? Number(target) : await host.create(target)
   let head = (await host.timeline(story)).head
@@ -38,9 +59,11 @@ export const play = async (
   }
   const send = async (action: Action) => {
     let error: string | undefined
+    let streamed = false // a narrated opening already wrote its prose
     await host.submit(story, action, (e) => {
       emit(e)
       if (e.kind === "error") error = e.message
+      if (e.kind === "delta") streamed = true
     })
     if (!options.jsonl) {
       console.log()
@@ -49,7 +72,7 @@ export const play = async (
         for (const f of detail.fieldChanges) console.log(`${f.path}: ${f.was} → ${f.now}`)
         for (const c of detail.checks) console.log(`${c.action}: ${c.roll} / ${c.chance} ${c.hit ? "hit" : "miss"}`)
         if (detail.products.options) console.log(JSON.stringify(detail.products.options))
-        if (action.kind === "greet")
+        if (action.kind === "greet" && !streamed)
           console.log((await host.timeline(story)).nodes.find((n) => n.id === head)?.prose ?? "")
       }
     }
@@ -83,18 +106,10 @@ export const play = async (
       case "/set": {
         const split = rest.indexOf("=")
         if (split < 1) throw new Error("use /set field=value (strings may be JSON quoted)")
-        const raw = rest.slice(split + 1)
-        let value: unknown
-        try {
-          value = JSON.parse(raw)
-        } catch {
-          value = raw
-        }
-        if (!["number", "boolean", "string"].includes(typeof value)) throw new Error("field value must be scalar")
         return send({
           kind: "setField",
           node: node(),
-          effects: [{ path: rest.slice(0, split), set: value as string | number | boolean }],
+          effects: [{ path: rest.slice(0, split), set: scalar(rest.slice(split + 1)) }],
         })
       }
       case "/swipe":
@@ -132,6 +147,15 @@ export const play = async (
   process.on("SIGINT", stop)
   try {
     await attach()
+    if (opens)
+      await send({
+        kind: "greet",
+        ...(options.greeting !== undefined && { greeting: options.greeting }),
+        ...(options.set && {
+          opening: Object.entries(options.set).map(([path, v]) => ({ path, set: scalar(v) })),
+        }),
+        ...(options.note !== undefined && { note: options.note }),
+      })
     if (options.input !== undefined) return await line(options.input)
     const interactive = Boolean(process.stdin.isTTY)
     const terminal = interactive && !options.jsonl

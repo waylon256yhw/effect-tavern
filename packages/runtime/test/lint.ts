@@ -266,6 +266,12 @@ assert.deepEqual(of({ ...base, frame: [{ id: "style", text: "每次回复末尾�
 ])
 assert.match(lint({ ...base, frame: [{ id: "style", text: "在回复的末尾列出选项。" }] })[0]!.hint!, /product/)
 
+// empty-greeting: a greeting is text, a note, or both; with neither there is no node 0
+assert.deepEqual(of({ ...base, greetings: [{ text: "开场。" }, { note: "由叙事者开场。" }, { do: [] }] }), [
+  "error empty-greeting greetings[2]",
+])
+assert.ok(of({ ...base, greetings: [{ text: "  " }] }).includes("error empty-greeting greetings[0]"))
+
 // The template cards: no errors, and exactly these warnings (a new one fails here until it is meant).
 const templates: Record<string, string[]> = {
   wuxia: [

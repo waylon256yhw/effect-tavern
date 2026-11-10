@@ -161,7 +161,10 @@ const texts = (card: Card): [string, string][] => [
   ...card.frame.flatMap((f): [string, string][] => (f.text ? [[`frame.${f.id}.text`, f.text]] : [])),
   ...card.fiction.flatMap((f): [string, string][] => (f.text ? [[`fiction.${f.id}.text`, f.text]] : [])),
   ...card.lore.flatMap((e) => e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t])),
-  ...card.greetings.map((g, i): [string, string] => [`greetings[${i}].text`, g.text]),
+  ...card.greetings.flatMap((g, i): [string, string][] => [
+    ...(g.text ? [[`greetings[${i}].text`, g.text] as [string, string]] : []),
+    ...(g.note ? [[`greetings[${i}].note`, g.note] as [string, string]] : []),
+  ]),
 ]
 const prose = (card: Card, rule: string, lexicon: readonly Entry[], message: string, hint: string): Diagnostic[] =>
   texts(card).flatMap(([path, t]) =>
@@ -231,7 +234,10 @@ const rules: Rule[] = [
       ...card.frame.map((f): [string, string | undefined] => [`frame.${f.id}.text`, f.text]),
       ...card.fiction.map((f): [string, string] => [`fiction.${f.id}.text`, f.text ?? ""]),
       ...(card.asks ?? []).map((f): [string, string | undefined] => [`asks.${f.id}.text`, f.text]),
-      ...card.greetings.map((g, i): [string, string] => [`greetings[${i}].text`, g.text]),
+      ...card.greetings.flatMap((g, i): [string, string | undefined][] => [
+        [`greetings[${i}].text`, g.text],
+        [`greetings[${i}].note`, g.note],
+      ]),
       ...card.guard.map((t, i): [string, string] => [`guard[${i}]`, t]),
       ...card.lore.flatMap((e) => e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t])),
       ...card.rules.actions.flatMap((a): [string, string][] => [
@@ -256,6 +262,21 @@ const rules: Rule[] = [
         hint: "The author writes this slot; the workshop never fills it.",
       }))
   },
+  // a greeting is shown text, a note the narrator opens from, or both: with neither there is no node 0
+  (card) =>
+    card.greetings.flatMap((g, i): Diagnostic[] =>
+      !g.text?.trim() && !g.note?.trim() // session.ts `begin` reads them the same way
+        ? [
+            {
+              rule: "empty-greeting",
+              level: "error",
+              path: `greetings[${i}]`,
+              message: "greeting has neither text nor note",
+              hint: "Write the opening prose as `text`, or direct the narrator's opening with `note`.",
+            },
+          ]
+        : [],
+    ),
   // `lore` is the gate's derived counters, not a card field.
   (card) =>
     card.rules.fields

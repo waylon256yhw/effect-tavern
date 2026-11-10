@@ -102,7 +102,7 @@ const clip = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s).
 const greeting = card.greetings[Number(process.argv[3] ?? (which === "ri" ? 2 : 0))]
 if (greeting) {
   const g = S.greet(greeting).node!
-  console.log(`━━ node ${g.turn.id}: greeting (${greeting.text.length} chars), state=${show(g.state)}`)
+  console.log(`━━ node ${g.turn.id}: greeting (${greeting.text?.length ?? 0} chars), state=${show(g.state)}`)
 }
 
 let calls = 0
