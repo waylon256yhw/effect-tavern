@@ -33,6 +33,7 @@ export const Field = Schema.Struct({
   options: Schema.optionalKey(Schema.Array(Schema.String)),
   initial: Scalar,
   hidden: Schema.optionalKey(Schema.Boolean), // never shown (the status table and the card page skip it): an ending switch the player should not see coming. Settlement reads it like any field
+  start: Schema.optionalKey(Schema.Boolean), // the player may set it when a story opens (a greet's opening); `hidden` fields never
   view: Schema.optionalKey(Schema.Literals(["gauge", "scale"])), // how a two-bounded int is drawn when `drawn` would guess wrong: a stock with bands on it is still a gauge
 })
 export const Chance = Schema.Union([
@@ -282,8 +283,18 @@ export const LoreEntry = Schema.Struct({
 // A greeting is node 0 with no player input. `do` is its opening: the effects that make this opening differ from the
 // card's initial state (an IF line's route, a later date, a tenser town). Fiction variants read the result through
 // `when`; its events reach the first turn's gate. Two ecosystem cards needed exactly this and had no place for it.
-export const Greeting = Schema.Struct({ text: Schema.String, do: Schema.optionalKey(Schema.Array(Effect_)) })
+// `note` makes it a dynamic opening: node 0 is a narrated turn run from the note (direction to the narrator, this turn
+// only) on the state `do` leaves; `text` beside a note is only what a client shows for it. At least one of the two (lint).
+export const Greeting = Schema.Struct({
+  text: Schema.optionalKey(Schema.String),
+  note: Schema.optionalKey(Schema.String),
+  do: Schema.optionalKey(Schema.Array(Effect_)),
+})
 export type Greeting = typeof Greeting.Type
+/** A greeting as a client draws it: its shown line (the note's first line when it has no text); the note itself stays
+ *  on the server like every other direction to the narrator. */
+export const shownGreeting = ({ note, ...g }: Greeting) => ({ ...g, text: g.text ?? note?.split("\n")[0] ?? "" })
+export type ShownGreeting = ReturnType<typeof shownGreeting>
 export const Card = Schema.Struct({
   id: Schema.String,
   title: Schema.optionalKey(Schema.String), // shown in the client's header; the id when absent. Never reaches the model

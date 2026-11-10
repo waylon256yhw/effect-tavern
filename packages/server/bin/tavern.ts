@@ -170,12 +170,29 @@ const playing = Command.make(
     model: Flag.Literals("model", ["fake"]).pipe(Flag.optional),
     input: Flag.String("input").pipe(Flag.optional),
     jsonl: Flag.Boolean("jsonl").pipe(Flag.withDefault(false)),
+    greeting: Flag.Int("greeting").pipe(
+      Flag.withDescription("open the new story on greetings[n] (0-based)"),
+      Flag.optional,
+    ),
+    set: Flag.KeyValuePair("set").pipe(
+      Flag.withDescription("field=value on a `start` field when the story opens; repeat the flag for more fields"),
+      Flag.optional,
+    ),
+    note: Flag.String("note").pipe(Flag.withDescription("a note to the narrator for the opening"), Flag.optional),
   },
-  ({ target, card, url, input, jsonl, model }) =>
+  ({ target, card, url, input, jsonl, model, greeting, set, note }) =>
     task(() =>
       withHost(
         url,
-        (host) => play(host, target, { input: Option.getOrUndefined(input), jsonl, card }),
+        (host) =>
+          play(host, target, {
+            input: Option.getOrUndefined(input),
+            jsonl,
+            card,
+            greeting: Option.getOrUndefined(greeting),
+            set: Option.getOrUndefined(set),
+            note: Option.getOrUndefined(note),
+          }),
         Option.isSome(model) ? true : undefined,
       ),
     ),

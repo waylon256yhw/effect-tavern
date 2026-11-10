@@ -3,7 +3,7 @@ import { emptyDraft, hasDraft, type DraftModel } from "./composition.ts"
 // (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
 // keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
 // and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
-import type { Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
+import type { ShownGreeting as Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
 import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"

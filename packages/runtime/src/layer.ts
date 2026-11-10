@@ -533,7 +533,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   const out = [
     ...zone.flatMap((x) => (x.enabled === false ? [] : (x.text ?? []))),
     ...card.fiction.flatMap((x) => x.text ?? []),
-    ...card.greetings.map((g) => g.text),
+    ...card.greetings.flatMap((g) => [g.text ?? "", g.note ?? ""]),
     ...card.lore.flatMap((e) => e.layers),
     ...written.map((e) => e.text),
     ...card.guard,
