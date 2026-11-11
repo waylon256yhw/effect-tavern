@@ -18,7 +18,7 @@ const load = (name: string) =>
     catch: (e) => (e as Error).message,
   })
 
-const json = Flag.Boolean("json").pipe(Flag.withDefault(false))
+const json = Flag.Boolean("json").pipe(Flag.withDefault(false), Flag.withDescription("emit machine-readable JSON"))
 const attempt = <A>(f: () => A) => Effect.try({ try: f, catch: (e) => String(e) })
 const check = Command.make("check", { card, json }, ({ card: name, json }) =>
   Effect.gen(function* () {
@@ -48,24 +48,30 @@ const check = Command.make("check", { card, json }, ({ card: name, json }) =>
     }
     if (report.diagnostics.some((d) => d.level === "error")) process.exitCode = 1
   }),
-)
+).pipe(Command.withDescription("Validate YAML, Card schema, static lint, field drawing, openings and token estimates"))
 const init = Command.make(
   "init",
   {
-    id: Argument.String("id"),
-    template: Flag.Literals("template", templates).pipe(Flag.withDefault("chat")),
+    id: Argument.String("id").pipe(Argument.withDescription("card id; writes <id>.yaml in the current directory")),
+    template: Flag.Literals("template", templates).pipe(
+      Flag.withDefault("chat"),
+      Flag.withDescription("coordinate scaffold: chat | readout | rpg | world"),
+    ),
   },
   ({ id, template }) =>
     Effect.gen(function* () {
       yield* attempt(() => writeFileSync(`${id}.yaml`, scaffold(id, template), { flag: "wx" }))
       yield* Console.log(`Created ${id}.yaml`)
     }),
-)
+).pipe(Command.withDescription("Scaffold a new <id>.yaml card from one of the four coordinate templates"))
 const test = Command.make(
   "test",
   {
     card,
-    scenario: Argument.String("scenario").pipe(Argument.optional),
+    scenario: Argument.String("scenario").pipe(
+      Argument.optional,
+      Argument.withDescription("optional scenario.yaml with scripted replies and state/event/lore assertions"),
+    ),
   },
   ({ card: name, scenario }) =>
     Effect.gen(function* () {
@@ -76,16 +82,25 @@ const test = Command.make(
       const results = yield* Effect.tryPromise({ try: () => runScenario(c, value), catch: (e) => String(e) })
       yield* Console.log(`PASS ${results.length} step(s), zero model tokens`)
     }),
-)
+).pipe(Command.withDescription("Run deterministic zero-token smoke or scenario assertions against the fake model"))
 
 const show = Command.make(
   "view",
   {
     card,
     json,
-    events: Flag.String("events").pipe(Flag.optional),
-    pin: Flag.String("pin").pipe(Flag.optional),
-    persona: Flag.String("persona").pipe(Flag.optional),
+    events: Flag.String("events").pipe(
+      Flag.withDescription("comma-separated turn events for lore offer preview (e.g. met,won)"),
+      Flag.optional,
+    ),
+    pin: Flag.String("pin").pipe(
+      Flag.withDescription("player-invoked lore resource id for this turn (e.g. secret or card:secret)"),
+      Flag.optional,
+    ),
+    persona: Flag.String("persona").pipe(
+      Flag.withDescription("override player persona text for slot and request assembly preview"),
+      Flag.optional,
+    ),
     state: Flag.KeyValuePair("state").pipe(
       Flag.withDescription("field=value, set after the greeting; repeat the flag for more fields"),
       Flag.optional,

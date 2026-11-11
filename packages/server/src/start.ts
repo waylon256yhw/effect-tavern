@@ -20,7 +20,7 @@ export const start = async ({
       server.listen(port, host, resolve)
     })
     const address = server.address()
-    console.error(`http://${host}:${typeof address === "object" && address ? address.port : port}/api`)
+    process.stderr.write(`http://${host}:${typeof address === "object" && address ? address.port : port}/api\n`)
     await new Promise<void>((resolve) => {
       const stop = () => server.close()
       process.once("SIGINT", stop)
