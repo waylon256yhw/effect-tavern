@@ -111,9 +111,9 @@ export const makeTurn = (s: Session, file: (node: Id, calls: readonly Call[]) =>
     if (e.kind === "stage") {
       r.phase = e.phase
       // each draft starts over: a narrate after check is the rewrite, the first one kept as `prev`
-      if (e.phase === "narrate" && r.draft?.text) {
+      if (e.phase === "narrate" && (r.draft?.text || r.draft?.products)) {
         const { products: _, ...d } = r.draft // the rewrite writes its own blocks
-        r.draft = { ...d, text: "", prev: r.draft.text }
+        r.draft = { ...d, text: "", prev: r.draft.text || r.draft.prev }
       }
     }
     if (e.kind === "delta" && e.part.type === "text-delta") {

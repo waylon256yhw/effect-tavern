@@ -606,3 +606,41 @@ for (const skip of [false, true]) {
   assert.equal(events.at(-1)?.kind, "change") // the client's final change files every call before the stream closes
   assert.equal(T.busy, null)
 }
+
+// A rewrite clears an aside-only first draft for a late subscriber as well as a live client.
+{
+  let narrations = 0
+  let checks = 0
+  const M = fake((o) => {
+    const doc = readStage(o)
+    if (doc.phase === "narrate")
+      return { text: ++narrations === 1 ? "<<aside>> inner\nOLD BLOCK" : "NEW PROSE", delay: 30 }
+    if (doc.phase === "check") return { text: JSON.stringify({ violated: ++checks === 1 ? [doc.rules[0]] : [] }) }
+    return defaultAnswer(doc, { notes: "" })
+  })
+  const S = makeSession({
+    card: {
+      ...chat,
+      lore: [],
+      guard: ["Prose must be present."],
+      products: [{ id: "inner", role: "theater", stage: "narrate", shape: { kind: "text" }, text: "Thought" }],
+    },
+    rows: () => ({}),
+    model: () => M,
+  })
+  const T = makeTurn(S, () => {})
+  let stages = 0
+  let checked = false
+  await Effect.runPromise(
+    Stream.runForEach(T.start({ kind: "act", input: { text: "go" } }), (e) =>
+      Effect.sync(() => {
+        if (e.kind === "stage" && e.phase === "narrate" && ++stages === 2) {
+          const attached = T.attach()!
+          assert.equal(attached.draft?.products, undefined)
+          checked = true
+        }
+      }),
+    ),
+  )
+  assert.equal(checked, true)
+}
