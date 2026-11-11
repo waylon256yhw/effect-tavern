@@ -2,7 +2,16 @@ import assert from "node:assert/strict"
 import { fake, type FakeCall, type FakeReply } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
-import { contextLookup, freeze, revision, residentOn, type Resource } from "../src/context.ts"
+import {
+  contextLookup,
+  deliveryText,
+  freeze,
+  loreResource,
+  revision,
+  residentOn,
+  sectionResources,
+  type Resource,
+} from "../src/context.ts"
 import type { Card } from "../src/card.ts"
 import { chat } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "../support/script.ts"
@@ -220,5 +229,123 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   assert.deepEqual(new Set(two.slice(1, 4)), new Set(["card:灯塔看守", "card:灯塔", "card:茉璃"]))
   assert.equal(ids("茉璃的过去")[0], "card:茉璃")
   assert.deepEqual(ids("潜艇 xyz"), [])
+}
+// Sections (docs/sections-brief.md): an entry's appendices, read on demand; the face's snapshot never lists them.
+{
+  const mira = {
+    id: "mira",
+    layers: ["Mira keeps the lighthouse. She is tall."],
+    sections: [
+      { id: "kin", text: "Mira's kin live inland. Two brothers." },
+      { id: "past", text: "Mira's years at sea. She sailed the Gray Reach for ten years." },
+    ],
+  }
+  const harbor = { id: "harbor", layers: ["The Gray Reach harbor. Boats come in at dusk."] }
+  const resources = [mira, harbor].flatMap((e) => [loreResource(e, 1), ...sectionResources(e, 1)])
+  const [kin, past] = sectionResources(mira, 1)
+  assert.equal(past!.resourceId, "card:mira#past")
+  assert.deepEqual(
+    [past!.access, past!.activation, past!.disclosures],
+    [{ model: true, player: false }, "on_demand", []],
+  )
+  assert.deepEqual(loreResource(mira, 1), loreResource({ id: mira.id, layers: mira.layers }, 1)) // the face is today's, byte for byte
+  // reading the face: the snapshot has no section text, the tool result lists the sections
+  {
+    const l = contextLookup(resources, [])
+    const got = await l.tools.read_context.execute({ refs: ["card:mira"] }, tc)
+    assert.ok(!JSON.stringify(l.delivered).includes("Gray Reach") && !JSON.stringify(l.delivered).includes("#kin"))
+    assert.deepEqual((got as { value: { sections?: unknown }[] }).value[0]!.sections, [
+      { resourceId: kin!.resourceId, title: kin!.title },
+      { resourceId: past!.resourceId, title: past!.title },
+    ])
+    // the face resident, a section unread: still searchable, flagged resident, sections listed with the hit one first
+    const hits = l.search("reach")
+    assert.deepEqual(
+      hits.map((h) => h.resourceId),
+      ["card:harbor", "card:mira"], // the anchor hit ranks above the section-body hit
+    )
+    assert.equal(hits[1]!.resident, true)
+    assert.deepEqual(l.search("tall"), []) // a word only the resident face holds is nothing left to read
+    assert.deepEqual(
+      hits[1]!.sections!.map((x) => x.resourceId),
+      ["card:mira#past", "card:mira#kin"],
+    )
+    assert.match(l.told(l.delivered[0]!), /\nSections \(read_context\): card:mira#kin .* \| card:mira#past /)
+    await l.tools.read_context.execute({ refs: ["card:mira#kin", "card:mira#past"] }, tc)
+    assert.deepEqual(
+      l.delivered.map((d) => d.resourceId),
+      ["card:mira", "card:mira#kin", "card:mira#past"],
+    )
+    // every section resident: the entry leaves search, readable() holds only the other entry, the told line is bare
+    assert.equal(l.told(l.delivered[0]!), deliveryText(l.delivered[0]!))
+    assert.deepEqual(
+      l.readable().map((r) => r.resourceId),
+      ["card:harbor"],
+    )
+    assert.equal(l.search("mira").length, 0)
+  }
+  // reading a section alone brings its face along, ahead of it, within the 8-per-call cap
+  {
+    const l = contextLookup(resources, [])
+    await l.tools.read_context.execute({ refs: ["card:mira#past"] }, tc)
+    assert.deepEqual(
+      l.delivered.map((d) => d.resourceId),
+      ["card:mira", "card:mira#past"],
+    )
+    const face = contextLookup(resources, [freeze(resources[0]!)])
+    await face.tools.read_context.execute({ refs: ["card:mira#past"] }, tc)
+    assert.deepEqual(
+      face.delivered.map((d) => d.resourceId),
+      ["card:mira#past"],
+    )
+    const many = Array.from({ length: 5 }, (_, i) => ({
+      id: `e${i}`,
+      layers: [`E${i}.`],
+      sections: [{ id: "s", text: "S." }],
+    }))
+    const capped = contextLookup(
+      many.flatMap((e) => [loreResource(e, 1), ...sectionResources(e, 1)]),
+      [],
+    )
+    const out = await capped.tools.read_context.execute({ refs: many.map((e) => `card:${e.id}#s`) }, tc)
+    assert.equal((out as { code?: string }).code, "too_many_refs")
+    assert.equal(capped.delivered.length, 0)
+  }
+}
+// Session: a locked entry's sections are neither readable nor searchable; turn 2's lookup reads the section directory
+// under the resident face, narrate never sees it.
+{
+  const f = fixture(
+    [
+      {
+        ...lore("mira", "Mira keeps the lighthouse."),
+        sections: [{ id: "past", text: "Mira's years at sea. She sailed the Gray Reach." }],
+      },
+      { ...lore("vault", "The vault."), unlock: { any: [] }, sections: [{ id: "deep", text: "VAULT SECRET." }] },
+    ],
+    (_, n) =>
+      n === 0
+        ? call("read_context", { refs: ["card:vault#deep"] })
+        : n === 1
+          ? call("search_context", { query: "vault secret" })
+          : n === 2
+            ? call("read_context", { refs: ["card:mira"] })
+            : done,
+  )
+  const t1 = await f.go(f.S.act(f.g.id, { text: "who keeps the light" }))
+  assert.ok(JSON.stringify(f.lookup[1]!.prompt).includes("unavailable_resource"))
+  assert.ok(!JSON.stringify(f.lookup).includes("VAULT SECRET"))
+  assert.ok(!JSON.stringify(f.lookup[2]!.prompt.at(-1)).includes("card:vault"))
+  assert.deepEqual(
+    t1.deliveries.map((d) => d.resourceId),
+    ["card:mira"],
+  )
+  assert.ok(JSON.stringify(f.lookup[3]!.prompt.at(-1)).includes("card:mira#past")) // read_context's result lists it
+  await f.go(f.S.act(t1.id, { text: "tell me about her past" }))
+  assert.equal(f.lookup.length, 5)
+  assert.ok(JSON.stringify(f.lookup[4]!.prompt).includes("Sections (read_context): card:mira#past"))
+  const narrated = f.calls.filter((c) => c.phase === "narrate").map((c) => JSON.stringify(c.msgs))
+  assert.equal(narrated.length, 2)
+  assert.ok(narrated[1]!.includes("Mira keeps the lighthouse") && !narrated.some((m) => m.includes("#past")))
 }
 console.log("lookup ok")

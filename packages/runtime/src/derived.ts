@@ -7,6 +7,7 @@ import type { PlayerCatalogItem } from "./projection.ts"
 import {
   catalogEntry,
   loreResource,
+  sectionResources,
   contextLookup,
   freeze,
   policy as resourcePolicy,
@@ -196,7 +197,7 @@ export const makeDerived = ({
     const entries: Resource[] = I.entries.flatMap((e) => {
       const depth = I.current(e, s, seen)
       if (!depth) return []
-      return [loreResource(e, depth)]
+      return [loreResource(e, depth), ...sectionResources(e, depth)]
     })
     entries.push(...packs().map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)))
     const ps = products().filter((p) => p.on && p.recall !== undefined)

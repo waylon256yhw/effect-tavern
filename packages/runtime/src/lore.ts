@@ -30,6 +30,7 @@ export interface Entry<S, C> extends ContextPolicy {
   source?: "card" | "pack"
   id: string
   layers: readonly string[]
+  sections?: readonly { id: string; text: string }[] // lookup's on-demand appendices (context.ts `sectionResources`)
   unlock?: (s: S) => number
   offer?: (s: S, ctx: C) => boolean
 }

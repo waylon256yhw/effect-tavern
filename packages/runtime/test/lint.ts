@@ -170,6 +170,24 @@ assert.deepEqual(
   ],
 )
 
+// bad-section: `#` is the joint of `card:<entry>#<section>`; ids unique per entry; at most 8. An empty one is empty-text.
+{
+  const sections = (ids: string[]) => ids.map((id) => ({ id, text: "节。" }))
+  const card = lored([
+    { id: "x#y", layers: ["一。"], unlock: { all: [] }, offer: { all: [] } },
+    { id: "s", layers: ["一。"], sections: sections(["a", "a", "b#c"]), unlock: { all: [] }, offer: { all: [] } },
+    { id: "n", layers: ["一。"], sections: sections("abcdefghi".split("")), unlock: { all: [] }, offer: { all: [] } },
+    { id: "e", layers: ["一。"], sections: [{ id: "a", text: " " }], unlock: { all: [] }, offer: { all: [] } },
+  ])
+  assert.deepEqual(said(card, "bad-section"), [
+    "error lore.x#y: an entry id holds no #",
+    "error lore.s.sections.a: a is declared twice",
+    "error lore.s.sections.b#c: a section id holds no #",
+    "error lore.n.sections: 9 sections (ceiling 8)",
+  ])
+  assert.deepEqual(said(card, "empty-text"), ["error lore.e.sections.a: author text is empty"])
+}
+
 // hook-length: the first sentence of layers[0], as the index will cut it.
 assert.deepEqual(
   said(
