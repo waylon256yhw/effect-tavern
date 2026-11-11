@@ -67,6 +67,24 @@ try {
   const original = lib.session(direct)
   assert.throws(() => lib.cards.put({ ...card, rules: { fields: "wrong" } }))
   assert.equal(lib.session(direct), original) // rejected writes do not evict
+  for (const product of [
+    { id: "aside", role: "theater", text: "Aside", shape: { kind: "text" }, feed: true },
+    {
+      id: "people",
+      role: "world",
+      text: "People",
+      shape: { kind: "table", columns: [{ key: "name", type: "text" }] },
+      initial: { e1: { name: 17 } },
+    },
+  ]) {
+    const invalid = { ...card, products: [product] }
+    lib.drafts.put(card.id, invalid)
+    assert.throws(() => lib.cards.put(invalid))
+    assert.equal((await http(remote, `/cards/${card.id}`, "PUT", invalid)).status, 400)
+    assert.equal(data.cards.get(card.id), undefined)
+    assert.equal(lib.drafts.get(card.id).draft, true)
+    assert.equal(lib.session(direct), original)
+  }
   lib.cards.put({
     ...card,
     title: "Installed",

@@ -1,6 +1,7 @@
+import { validateCard } from "../src/author.ts"
 // Host-side authoring: decode failures and semantic diagnostics share one report.
-import { decodeCard, drawn, makeCard, type Card } from "../src/card.ts"
-import { lint, type Diagnostic } from "../src/lint.ts"
+import { drawn, type Card } from "../src/card.ts"
+import { type Diagnostic } from "../src/lint.ts"
 import { fields, openings, view } from "../src/view.ts"
 import { player } from "./cards.ts"
 
@@ -10,18 +11,15 @@ export const checkCard = (source: string) => {
   let preview: ReturnType<typeof view> | undefined
   let greetings: string[] = []
   try {
-    card = decodeCard(Bun.YAML.parse(source))
-    const rpg = makeCard(card.rules)
-    rpg.validate(rpg.initial)
-  } catch (e) {
-    diagnostics.push({ rule: "schema", level: "error", path: "$", message: String(e) })
-  }
-  if (card && !diagnostics.length) {
-    diagnostics.push(...lint(card))
-    if (!diagnostics.some((d) => d.level === "error")) {
+    const checked = validateCard(Bun.YAML.parse(source))
+    card = checked.card
+    diagnostics.push(...checked.diagnostics)
+    if (card && !diagnostics.some((d) => d.level === "error")) {
       preview = view(card, player)
       greetings = openings(card, player)
     }
+  } catch (e) {
+    diagnostics.push({ rule: "schema", level: "error", path: "$", message: String(e) })
   }
 
   return {

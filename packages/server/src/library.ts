@@ -36,8 +36,8 @@ import {
   type Trace,
 } from "@effect-tavern/provider"
 import { author } from "./author.ts"
-import { lint } from "@effect-tavern/runtime/src/lint.ts"
-import { decodeCard, makeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
+import { validateCard } from "@effect-tavern/runtime/src/author.ts"
+import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
 import {
   decodeLayer,
   decodeLocal,
@@ -547,12 +547,10 @@ export const library = ({
     cards: {
       list: () => cards.list(),
       put: (value: unknown) => {
-        const card = decodeCard(value)
-        // Validate executable rules before replacing the installed definition.
-        const rpg = makeCard(card.rules)
-        rpg.validate(rpg.initial)
-        const errors = lint(card).filter((d) => d.level === "error")
-        if (errors.length) throw new Error(errors.map((d) => `${d.level} ${d.rule} ${d.path}: ${d.message}`).join("\n"))
+        const { card, diagnostics } = validateCard(value)
+        const errors = diagnostics.filter((d) => d.level === "error")
+        if (!card || errors.length)
+          throw new Error(errors.map((d) => `${d.level} ${d.rule} ${d.path}: ${d.message}`).join("\n"))
         const flags = facets(card)
         data.cards.put(card, flags)
         data.drafts.del(card.id)

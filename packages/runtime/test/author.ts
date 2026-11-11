@@ -17,6 +17,20 @@ try {
     assert.deepEqual(checkCard(source).diagnostics, [])
     await runScenario(decodeCard(Bun.YAML.parse(source)))
   }
+  // Runtime-invalid products must become diagnostics, not escape from preview construction.
+  for (const product of [
+    { id: "aside", role: "theater", text: "Aside", shape: { kind: "text" }, feed: true },
+    {
+      id: "people",
+      role: "world",
+      text: "People",
+      shape: { kind: "table", columns: [{ key: "name", type: "text" }] },
+      initial: { e1: { name: 17 } },
+    },
+  ]) {
+    const card = { ...decodeCard(Bun.YAML.parse(scaffold("invalid", "chat"))), products: [product] }
+    assert.ok(checkCard(Bun.YAML.stringify(card)).diagnostics.some((d) => d.level === "error"))
+  }
   assert.equal(run("init", "chat", "--template", "chat").exitCode, 0)
   const original = readFileSync(join(dir, "chat.yaml"), "utf8")
   assert.equal(run("init", "chat").exitCode, 1)

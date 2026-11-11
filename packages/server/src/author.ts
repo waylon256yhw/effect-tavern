@@ -1,7 +1,7 @@
 // Stateless host operations: candidates are returned to the author, never installed here.
 import { object, type Model } from "@effect-tavern/provider"
 import { decodeCard, Card } from "@effect-tavern/runtime/src/card.ts"
-import { checkCard } from "@effect-tavern/runtime/support/author.ts"
+import { validateCard } from "@effect-tavern/runtime/src/author.ts"
 import {
   applyCompile,
   applySort,
@@ -68,12 +68,12 @@ export const author = (model: () => Model) => {
       const prompt = { card: mechanical(card), selected, intent: input.intent }
       let output = await ask(CompileOutput, "compile", prompt)
       let candidate = applyCompile(card, output)
-      let diagnostics = checkCard(Bun.YAML.stringify(candidate)).diagnostics
+      let diagnostics = validateCard(candidate).diagnostics
       const repair = diagnostics.filter((d) => d.level === "error" && d.rule !== "empty-text")
       if (repair.length) {
         output = await ask(CompileOutput, "compile", { ...prompt, previous: output, diagnostics: repair })
         candidate = applyCompile(card, output)
-        diagnostics = checkCard(Bun.YAML.stringify(candidate)).diagnostics
+        diagnostics = validateCard(candidate).diagnostics
       }
       return { candidate, diagnostics }
     },
