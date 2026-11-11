@@ -185,4 +185,40 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   )
   assert.equal(contextLookup(snapshots, []).readable().length, 3)
 }
+// Ensemble ranking (#160): the named entry beats nine earlier entries that mention the name once in their body; the
+// segmenter splits 茉璃 into single characters, which other ids share.
+{
+  const e = (id: string, title: string, text: string) => r(id, text, { source: "card", title })
+  const cast = [
+    "璃港守卫",
+    "雾璃商人",
+    "老船长",
+    "灯塔看守",
+    "渔村医师",
+    "盐田工头",
+    "港口书记",
+    "夜市琴师",
+    "璃窑匠人",
+  ]
+  const ensemble = [
+    ...cast.map((n, i) => e(`card:${n}`, `${n}，港口人物`, `${n}在港口生活了${i + 3}年。与茉璃有过一面之缘。`)),
+    e("card:灯塔", "灯塔，港口北端的旧塔", "灯塔立在北礁上，雾夜里由看守点灯。"),
+    // The name in a title and thrice in the body still ranks below the entry the id names.
+    e("card:港口编年", "茉璃上岸的那一年", "茉璃上岸那年港口结冰。人们说茉璃来自北方。茉璃自己不记得。"),
+    e("card:茉璃", "茉璃，失忆的女航海士", "茉璃被冲上岸时什么都不记得。她的过去藏在一本湿透的航海日志里。"),
+    e("card:初航_茉璃", "茉璃绕过灯塔的初航", "那年冬天，她独自驾船绕过灯塔，再没按原路回来。"),
+  ]
+  const ids = (q: string) =>
+    contextLookup(ensemble, [])
+      .search(q)
+      .map((h) => h.resourceId)
+  assert.equal(ids("茉璃")[0], "card:茉璃")
+  assert.equal(ids("茉璃").length, 8)
+  // Both words in the anchor, then one word in the anchor and the id, then anchor-only, then body-only mentions.
+  const two = ids("茉璃 灯塔")
+  assert.equal(two[0], "card:初航_茉璃")
+  assert.deepEqual(new Set(two.slice(1, 4)), new Set(["card:灯塔看守", "card:灯塔", "card:茉璃"]))
+  assert.equal(ids("茉璃的过去")[0], "card:茉璃")
+  assert.deepEqual(ids("潜艇 xyz"), [])
+}
 console.log("lookup ok")

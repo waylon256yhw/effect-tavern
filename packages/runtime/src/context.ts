@@ -97,10 +97,22 @@ export const residentOn = (
   )
 
 const Scope = Schema.Literals(["all", "card", "pack", "memory"])
-const segmenter = new Intl.Segmenter("zh", { granularity: "word" })
-const termsOf = (q: string) => [
-  ...new Set([...segmenter.segment(q.toLowerCase())].filter((s) => s.isWordLike).map((s) => s.segment)),
+// Whole chunks between spaces and punctuation; a CJK chunk found nowhere (an unspaced phrase such as 拉毗的过去) falls
+// back to its character bigrams. No word segmenter: ICU splits unknown names into single characters.
+const termsOf = (q: string, haystacks: readonly string[]) => [
+  ...new Set(
+    q
+      .toLowerCase()
+      .split(/[\p{P}\p{Z}\s]+/u)
+      .filter(Boolean)
+      .flatMap((c) => {
+        const cs = [...c]
+        const unmatched = /\p{Script=Han}/u.test(c) && cs.length > 2 && !haystacks.some((h) => h.includes(c))
+        return unmatched ? cs.slice(1).map((ch, i) => cs[i]! + ch) : [c]
+      }),
+  ),
 ]
+const count = (h: string, t: string) => h.split(t).length - 1
 
 export const contextLookup = (resources: readonly Resource[], injected: readonly DeliverySnapshot[]) => {
   const held = new Map(injected.map((s) => [s.resourceId, s]))
@@ -111,19 +123,30 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
       (r) => r.access.model && r.activation === "on_demand" && held.get(r.resourceId)?.revision !== r.revision,
     )
   const search = (query: string, scope: "all" | Source = "all") => {
-    const terms = termsOf(query)
-    if (!terms.length) return []
-    return readable()
+    const pool = readable()
       .filter((r) => scope === "all" || r.source === scope)
       .map((r) => ({
         r,
-        score: terms.reduce(
-          (n, t) => n + Number(`${r.resourceId}\n${r.title}\n${r.text}`.toLowerCase().includes(t)),
-          0,
-        ),
+        name: r.resourceId.toLowerCase().replace(/^.*[:/]/, ""),
+        anchor: `${r.resourceId}\n${r.title}`.toLowerCase(),
+        text: r.text.toLowerCase(),
       }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
+    const terms = termsOf(
+      query,
+      pool.flatMap((x) => [x.anchor, x.text]),
+    )
+    // ponytail: substring match ranked by zone (anchor terms, id prefixes, body terms, body occurrences), no BM25 or
+    // embeddings; upgrade when a card outgrows it (thousands of entries, or names that are substrings of common words).
+    const score = ({ name, anchor, text }: (typeof pool)[number]) => [
+      terms.filter((t) => anchor.includes(t)).length,
+      terms.filter((t) => name.startsWith(t)).length,
+      terms.filter((t) => text.includes(t)).length,
+      terms.reduce((n, t) => n + count(text, t), 0),
+    ]
+    return pool
+      .map((x) => ({ r: x.r, s: score(x) }))
+      .filter(({ s }) => s[0]! + s[2]! > 0)
+      .sort((a, b) => b.s.reduce((d, n, i) => d || n - a.s[i]!, 0))
       .slice(0, 8)
       .map(({ r }) => ({
         title: r.title.slice(0, 160),
@@ -136,7 +159,7 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
   const tools = {
     search_context: stageTool(
       Schema.Struct({ query: Schema.String, scope: Schema.optionalKey(Scope) }),
-      "Search unlocked, model-readable context by Chinese or English terms. Returns at most 8 summaries, excluding resident revisions. Read their resourceId to get full text; search again using facts you discover.",
+      "Search unlocked, model-readable context. Pass space-separated keywords in Chinese or English (names, places, topics), not a sentence. Returns at most 8 summaries, excluding resident revisions. Read their resourceId to get full text; search again using facts you discover.",
       async ({ query, scope }) => ({ ok: true, value: search(query, scope) }),
     ),
     read_context: stageTool(
