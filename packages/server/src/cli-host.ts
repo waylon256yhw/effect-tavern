@@ -4,16 +4,17 @@ import type { Card } from "@effect-tavern/runtime/src/card.ts"
 import type { ActiveContextView, TimelineNode, TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
 import type { Action } from "@effect-tavern/runtime/src/session.ts"
 import type { Library, PublicEvent } from "./library.ts"
-import type { Draft } from "./turn.ts"
+import type { Attach } from "@effect-tavern/runtime/src/projection.ts"
+import type { Listing, CardView } from "@effect-tavern/runtime/src/library.ts"
 import { backup, markdown } from "./export.ts"
 import { openHost } from "./host.ts"
 
-export type CliEvent = PublicEvent | { kind: "attach"; phase: string | null; draft: Draft | null }
+export type CliEvent = PublicEvent | Attach
 type Emit = (event: CliEvent) => void
 export interface CliHost {
   author: Library["author"]
   install(card: Card): Promise<void>
-  list(): Promise<ReturnType<Library["stories"]["list"]>>
+  list(): Promise<Listing["stories"]>
   create(card: string): Promise<number>
   drop(id: number): Promise<void>
   export(id: number, format: "md" | "json"): Promise<string>
@@ -117,8 +118,8 @@ export const connect = async (url?: string, fakeModel?: boolean): Promise<CliHos
     install: async (card) => {
       await request(`/cards/${encodeURIComponent(card.id)}`, "PUT", card)
     },
-    list: async () => (await json<{ stories: Awaited<ReturnType<CliHost["list"]>> }>("/stories")).stories,
-    create: async (card) => (await json<{ current: number }>("/stories", "POST", { card })).current,
+    list: async () => (await json<Listing>("/stories")).stories,
+    create: async (card) => (await json<Listing>("/stories", "POST", { card })).current!,
     drop: async (id) => {
       await request(`/stories/${id}`, "DELETE")
     },
@@ -127,7 +128,7 @@ export const connect = async (url?: string, fakeModel?: boolean): Promise<CliHos
     context: (id, node) => json(`/context?node=${node ?? "root"}`, "GET", undefined, id),
     detail: (id, node) => json(`/nodes/${node}/detail`, "GET", undefined, id),
     trace: (id, node) => json(`/nodes/${node}/trace`, "GET", undefined, id),
-    input: async (id) => (await json<{ input: "act" | "note" }>("/card", "GET", undefined, id)).input,
+    input: async (id) => (await json<CardView>("/card", "GET", undefined, id)).input,
     submit: async (id, action, emit) => readEvents(await request("/", "POST", action, id), emit),
     attach: async (id, emit) => readEvents(await request("/turn", "GET", undefined, id), emit),
     stop: (id) => json("/stop", "POST", undefined, id),

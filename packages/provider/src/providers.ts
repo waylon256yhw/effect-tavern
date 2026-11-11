@@ -109,3 +109,8 @@ export const connection = (p: Provider, m: ModelEntry, s: Secret | undefined): C
     ...(m.maxOutputTokens !== undefined && { maxOutputTokens: m.maxOutputTokens }),
   }
 }
+
+export interface ListedModel {
+  id: string
+  format?: Format
+}

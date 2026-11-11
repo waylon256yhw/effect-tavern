@@ -1,3 +1,6 @@
+import type { CardView, CardRow, StoryRow } from "@effect-tavern/runtime/src/library.ts"
+export type { CardRow } from "@effect-tavern/runtime/src/library.ts"
+export { Routing } from "@effect-tavern/runtime/src/session.ts"
 // The library behind the wire: every card's stories and the player's personas. A story is a session over its rows in
 // data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player's
 // rows the library stores (runtime layer.ts; the overlay given stands until one is stored), and the turn in flight beside it (turn.ts): a
@@ -28,6 +31,7 @@ import {
   secretView,
   type Connection,
   type Format,
+  type ListedModel,
   type Model,
   type ModelEntry,
   type Probe,
@@ -51,16 +55,16 @@ import {
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import { policyFor } from "@effect-tavern/runtime/src/history.ts"
 import {
+  Routing,
   cardView,
   facets,
   makeSession,
-  phases,
-  type Facets,
   type Phase,
+  type Pair,
   type Session,
   type Turn as Logged,
 } from "@effect-tavern/runtime/src/session.ts"
-import { Cause, Effect, Schema, Stream } from "effect"
+import { Cause, Effect, Stream } from "effect"
 import type { TimelineEvent } from "@effect-tavern/runtime/src/projection.ts"
 import type { Data } from "./data.ts"
 import type { Exported } from "./export.ts"
@@ -72,14 +76,6 @@ export type PublicEvent = TimelineEvent | { kind: "error"; message: string; code
 /** The model test asks for this many output tokens: the least a gateway accepts (CommandCode refuses `max_tokens` under
  *  16), still a fraction of a cent on any model. */
 const PROBE_TOKENS = 16
-const Pair = Schema.Struct({ provider: Schema.String, model: Schema.String })
-export const Routing = Schema.Struct({
-  default: Schema.optionalKey(Pair),
-  stages: Schema.optionalKey(
-    Schema.Struct(Object.fromEntries([...phases, "author"].map((p) => [p, Schema.optionalKey(Pair)]))),
-  ),
-})
-export type Routing = { default?: typeof Pair.Type; stages?: Partial<Record<Phase | "author", typeof Pair.Type>> }
 /** No pair for the stage and no environment model. Its `code` rides the stream's `error` event (serve.ts), so the client
  *  offers its way into Settings → 默认模型 without reading the message. */
 export class NoModel extends Error {
@@ -92,7 +88,7 @@ export class NoModel extends Error {
 /** A card as the shelf lists it: id and title, its one-line summary and its facets (session.ts `facets`), what the
  *  client's shelf shows and filters by: a card file's read off the decoded card, a table card's stored when it was
  *  written (data.ts `cards.put`; a row from before has neither). */
-export type CardRow = { id: string; title: string; summary?: string; facets?: Facets }
+
 /** Where cards come from (tavern.ts `shelf`: a directory of YAML and the library's table): every one as a row, and
  *  one whole by id (throws when there is none). */
 export interface Cards {
@@ -131,7 +127,7 @@ export const library = ({
   }
   const secretOf = (p: Provider) => data.secrets.list().find((s) => s.id === p.secret)
   /** A pair as the session runs it: the flattened connection, bound. */
-  const resolve = (pair: typeof Pair.Type): Model => {
+  const resolve = (pair: Pair): Model => {
     const p = providerOf(pair.provider)
     const m = p.models.find((x) => x.id === pair.model)
     if (!m) throw new Error(`provider "${p.name}": no model ${pair.model}`)
@@ -158,7 +154,7 @@ export const library = ({
     return policyFor(m?.contextTokens)
   }
   /** The routing row without the pairs `keep` refuses; written only when something went. */
-  const prune = (keep: (pair: typeof Pair.Type) => boolean) => {
+  const prune = (keep: (pair: Pair) => boolean) => {
     const r = routing()
     const stages = Object.entries(r.stages ?? {}).filter(([, v]) => v && keep(v))
     const lost = (r.default && !keep(r.default)) || stages.length !== Object.keys(r.stages ?? {}).length
@@ -363,7 +359,7 @@ export const library = ({
        *  one's input, the time, and `busy`: the phase of a turn in flight, or null. A card's stories all open on the
        *  same greeting, so no line of the text tells them apart: a name the player gave does, and the last line they
        *  wrote recalls where the story stands. Every card's when `card` is absent. */
-      list: (card?: string) =>
+      list: (card?: string): StoryRow[] =>
         data.stories.list(card).map((s) => ({ ...s, busy: sessions.get(s.id)?.turn.busy ?? null })),
       /** Named by the player, or the name cleared (empty or blank): null, the state "never named". */
       title: (id: Id, title: string | null) => data.stories.title(id, title?.trim() || null),
@@ -409,7 +405,7 @@ export const library = ({
     /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player's rows and the story's
      *  persona, with no story the card's default: the local row as it stands, the mounted packs by name, and the one
      *  merge. A client merges nothing. Throws on no card. */
-    view: (card: string, story?: Id) => {
+    view: (card: string, story?: Id): CardView => {
       const c = cards.get(card)
       const local = localOf(card)
       const picked = personaOf(story === undefined ? local.persona : row(story)?.persona)
@@ -495,7 +491,7 @@ export const library = ({
        *  lists goes under openai-compatible without the gateway's field. A listing that fails is left out while
        *  another answers (the connectivity tag names it); all failing is the first's error. Read only: the sync
        *  drawer writes the format into the entries it adds, and offers to on the ones already there. */
-      models: async (id: string): Promise<Array<{ id: string; format?: Format }>> => {
+      models: async (id: string): Promise<ListedModel[]> => {
         const p = providerOf(id)
         const groups = listings(id)
         const got = await Promise.allSettled(groups.map((g) => listModels(g.c)))

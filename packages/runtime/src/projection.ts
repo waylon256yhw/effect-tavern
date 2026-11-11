@@ -1,3 +1,6 @@
+import type { Id } from "./log.ts"
+import type { Input } from "./journal.ts"
+import type { Phase } from "./session.ts"
 // Public read contracts. The journal and complete path state never travel with a timeline.
 import type { Beat, Check, Rules, State } from "./card.ts"
 import type { DeliverySnapshot, Source } from "./context.ts"
@@ -134,3 +137,15 @@ export const turnDetail = (n: Node, before: State, rules: Rules): TurnDetail => 
   brief: n.turn.brief,
   products: n.turn.products,
 })
+
+export interface Draft {
+  parent: Id | null
+  input: Input
+  invocations?: readonly InvocationToken[]
+  text: string
+  products?: Record<string, string> // narrate blocks so far, by id
+  prev?: string
+  fresh?: boolean // the line is nowhere else (an act): a client that attaches and sees it fail puts it back in the box
+}
+export type Attach = { kind: "attach"; phase: Phase | null; draft: Draft | null }
+export type Failure = { message: string; code?: string; phase?: Phase }

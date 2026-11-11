@@ -1,3 +1,6 @@
+import type { Input } from "@effect-tavern/runtime/src/journal.ts"
+import type { StoredStory as StoryRow, Hit, Persona } from "@effect-tavern/runtime/src/library.ts"
+export type { StoredStory as StoryRow, Hit, Persona } from "@effect-tavern/runtime/src/library.ts"
 // The install's library: one SQLite file through `node:sqlite` (built into Bun and Node, no dependency), used as a
 // document store: a row is an id and a JSON column, nothing is ever joined. The tables mirror the types. `pack`: the
 // player's rows (runtime layer.ts `Layer`): `harness` (the overlay, only what differs from the code's defaults) and each
@@ -171,32 +174,11 @@ const known = <T>(n: T): T => {
   return reply ? { ...n, reply: reply.filter((p) => p.type === "text" || p.type === "reasoning") } : n
 }
 /** A player's input as the node keeps it: the line, and a note to the narrator when one went with it. */
-export interface Input {
-  text: string
-  note?: string
-}
 /** One story's row for the client: the player's name for it or none, whether it is starred, its persona (an id, or
  *  none: the card's own), the turns on the head's
  *  line and the input of the last of them (what the manager previews), the time. */
-export interface StoryRow {
-  id: Id
-  card: string
-  title: string | null
-  starred: boolean
-  persona: string | null
-  updated: number
-  turns: number
-  last: Input | null
-}
 /** A search hit on a story: the earliest turn on the head's line whose player line, note or prose holds the query
  *  (`turn` 0 is the greeting's prose), a snippet of that field around the first match, and how many nodes hit. */
-export interface Hit {
-  id: Id
-  turn: number
-  kind: "input" | "note" | "reply"
-  text: string
-  count: number
-}
 /** ASCII case folded, exactly what SQLite's lower() does: the query and the text fold the same way on both sides,
  *  and a fold never changes a string's length (JS's toLowerCase can: İ becomes two code units), so an index found
  *  in the folded text is an index in the text. */
@@ -211,12 +193,6 @@ const snippet = (text: string, q: string, before = 30, after = 90): string => {
 }
 
 /** A named frame fragment of the player's: who they are in the fiction, picked per card on the player row. */
-export interface Persona {
-  id: string
-  name: string
-  text: string
-}
-
 /** A live process (EPERM: alive, another user's); a dead one, or a lock file that names none, is not. */
 const alive = (pid: number) => {
   try {

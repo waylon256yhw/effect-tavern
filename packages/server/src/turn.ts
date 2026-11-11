@@ -1,4 +1,5 @@
-import type { InvocationToken } from "@effect-tavern/runtime/src/projection.ts"
+import type { Draft } from "@effect-tavern/runtime/src/projection.ts"
+export type { Draft } from "@effect-tavern/runtime/src/projection.ts"
 // The turn in flight on one story, owned by the story (library.ts keeps one beside each session), never by a response.
 // `start` runs an action to its end whether anyone listens or not and answers its events as a stream; a response is
 // only a subscriber, and closing it stops nothing. `stop` is the player's: before the first character of prose the
@@ -10,7 +11,6 @@ import type { InvocationToken } from "@effect-tavern/runtime/src/projection.ts"
 // no replay. A turn that fails with nobody subscribed keeps its failure for the next `attach`, which consumes it
 // (snapshot, then the `error`); a new action clears it. The calls a turn makes are filed under the node it lands
 // (`file`) here, whoever listens. The broadcast is one Queue per subscriber, private to the run.
-import type { Input } from "@effect-tavern/runtime/src/journal.ts"
 import { textOf } from "@effect-tavern/runtime/src/journal.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import {
@@ -23,15 +23,6 @@ import {
 } from "@effect-tavern/runtime/src/session.ts"
 import { Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect"
 
-export interface Draft {
-  parent: Id | null
-  input: Input
-  invocations?: readonly InvocationToken[]
-  text: string
-  products?: Record<string, string> // narrate blocks so far, by id
-  prev?: string
-  fresh?: boolean // the line is nowhere else (an act): a client that attaches and sees it fail puts it back in the box
-}
 /** What a subscriber reads: the session's events, and the failure as a last element (the wire's `error` event). */
 export type Out = Event | { kind: "error"; phase: Phase; cause: Cause.Cause<unknown> }
 export type Call = Extract<Event, { kind: "call" }>

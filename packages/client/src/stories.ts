@@ -6,13 +6,8 @@ import { t } from "./i18n.ts"
 
 /** A search hit as the server answers it (server data.ts `Hit`): the earliest turn on the head's line whose player
  *  line, note or prose holds the query (turn 0 is the greeting), a snippet of that field, and how many nodes hit. */
-export interface Hit {
-  id: number
-  turn: number
-  kind: "input" | "note" | "reply"
-  text: string
-  count: number
-}
+export type { Hit } from "@effect-tavern/runtime/src/library.ts"
+import type { Hit } from "@effect-tavern/runtime/src/library.ts"
 
 /** ASCII case folded, as the server's search folds (SQLite's lower()): the title here and the turns there match
  *  the same way, and a fold never moves an index (JS's toLowerCase can lengthen a string: İ becomes two units). */

@@ -1,3 +1,7 @@
+import type { Listing } from "@effect-tavern/runtime/src/library.ts"
+export type { Listing } from "@effect-tavern/runtime/src/library.ts"
+import { responseError, responseValue } from "./response.ts"
+import type { ListedModel as Listed } from "@effect-tavern/provider/src/providers.ts"
 import { readCache } from "./read-cache.ts"
 import type { TimelineNode as Node, ActiveContextView, TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
 type Change = L.Change<Node>
@@ -13,7 +17,6 @@ type Change = L.Change<Node>
 // (before the first character the turn is withdrawn, after it the prose halts and the node comes down the same
 // stream); `GET /turn` picks up the turn in flight on a story the client lands on (204 when there is none).
 import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
-import type { Format } from "@effect-tavern/provider/src/url.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Layer, Local } from "@effect-tavern/runtime/src/layer.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
@@ -36,7 +39,6 @@ import {
   routing,
   secrets,
   stories,
-  type StoryRow,
   type CardView,
   type Routing,
   type Wire,
@@ -56,18 +58,7 @@ const call = (url: string, init: RequestInit = {}): Promise<Response> => {
   return fetch(url, { ...init, headers })
 }
 /** A body or its {error}: a non-2xx answer throws the server's reason. */
-const got = async <T>(res: Promise<Response>): Promise<T> => {
-  const r = await res
-  const text = await r.text()
-  let v: (T & { error?: string }) | undefined
-  try {
-    v = JSON.parse(text) as T & { error?: string }
-  } catch {
-    throw new Error(!r.ok && text.trim() ? text.trim() : `HTTP ${r.status}`)
-  }
-  if (!r.ok) throw new Error(v.error ?? `HTTP ${r.status}`)
-  return v
-}
+const got = async <T>(res: Promise<Response>): Promise<T> => responseValue<T>(await res)
 
 const contexts = readCache<ActiveContextView>(1)
 const details = readCache<TurnDetail>(8)
@@ -140,7 +131,6 @@ export const fetchLocals = async (): Promise<void> => {
   await Promise.all(cs.map((c) => fetchLocal(c.id)))
 }
 
-export type Listing = { current: number | null; stories: readonly StoryRow[] }
 const listing = (res: Promise<Response>) => got(res) as Promise<Listing>
 // The story calls answer the listing with the story to be on; what the client does with it is pages.ts's (`land`).
 export const openStory = (id: number): Promise<Listing> => listing(call(`${base}/stories/${id}`, { method: "PUT" }))
@@ -209,10 +199,7 @@ export const deleteProvider = async (id: string): Promise<void> => {
 }
 /** A model as the service lists it (`GET /providers/<id>/models`): the format where the listing puts it off the
  *  provider's default protocol and onto an endpoint the provider has. */
-export interface Listed {
-  id: string
-  format?: Format
-}
+export type { ListedModel as Listed } from "@effect-tavern/provider/src/providers.ts"
 /** The service's own model list, each with the format it goes under when that is not the provider's default. */
 export const listModels = (id: string): Promise<Listed[]> => got(call(`${base}/providers/${enc(id)}/models`))
 /** The probes (provider `Probe`): with a model one request for a few tokens' answer, without one the listing from
@@ -287,7 +274,8 @@ const listen = (open: (signal: AbortSignal) => Promise<Response>): (() => void) 
     try {
       const res = await open(ac.signal)
       if (res.status === 204) return
-      if (!res.ok || !res.body) return apply({ kind: "error", message: `${res.status} ${await res.text()}` })
+      if (!res.ok) throw await responseError(res)
+      if (!res.body) throw new Error("missing event stream")
       const reader = res.body.getReader()
       const dec = new TextDecoder()
       let buf = ""
@@ -306,7 +294,12 @@ const listen = (open: (signal: AbortSignal) => Promise<Response>): (() => void) 
       }
       void fetchStories() // the open story's row: its size, its last line, its time
     } catch (e) {
-      if (!ac.signal.aborted) apply({ kind: "error", message: String(e) })
+      if (!ac.signal.aborted)
+        apply({
+          kind: "error",
+          message: e instanceof Error ? e.message : String(e),
+          ...(e instanceof Error && "code" in e && typeof e.code === "string" ? { code: e.code } : {}),
+        })
     }
   })()
   return () => ac.abort()

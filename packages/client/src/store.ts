@@ -1,20 +1,24 @@
+import type { CardView, StoryRow, Persona, CardRow as ShelfCard } from "@effect-tavern/runtime/src/library.ts"
+export type { CardView, StoryRow, Persona, CardRow as ShelfCard } from "@effect-tavern/runtime/src/library.ts"
+import type { Routing } from "@effect-tavern/runtime/src/session.ts"
+export type { Pair, Routing } from "@effect-tavern/runtime/src/session.ts"
 import { emptyDraft, hasDraft, type DraftModel } from "./composition.ts"
 // The client's state as atoms, fed by the wire's events. The log tree lives in `log`, a replica of the server's
 // (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
 // keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
 // and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
-import type { ShownGreeting as Greeting, Rules } from "@effect-tavern/runtime/src/card.ts"
-import type { Cond } from "@effect-tavern/runtime/src/cond.ts"
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
-import type { Layer, Local, shown } from "@effect-tavern/runtime/src/layer.ts"
+import type { Layer, Local } from "@effect-tavern/runtime/src/layer.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
-import type { Facets, Phase } from "@effect-tavern/runtime/src/session.ts"
+import type { Phase } from "@effect-tavern/runtime/src/session.ts"
 import type {
   TimelineNode as Node,
   TimelineEvent as Event,
-  InvocationToken,
+  Draft as SharedDraft,
+  Attach,
+  Failure,
 } from "@effect-tavern/runtime/src/projection.ts"
 import * as Atom from "./atom.ts"
 import { registry } from "./atom.ts"
@@ -31,79 +35,26 @@ export const stageNames: Record<Phase, Key> = {
 }
 
 export type Id = number
-export interface Draft {
-  parent: Id | null
-  input: { text: string; note?: string; invoke?: readonly string[] }
-  text: string
-  products?: Record<string, string> // narrate blocks so far by id (`product-delta`), drawn where the node's 小剧场 lands
-  prev?: string // the discarded first draft, shown greyed under the rewrite
-  invocations?: readonly InvocationToken[]
-  composition?: DraftModel
-  fresh?: boolean // the line is nowhere else (an act, a revised line): a failed turn puts it back in the composer
-}
-/** A failed turn as the server's `error` event says it: `code` "no-model" (no model to run it on) is the one the ghost
- *  turns into a way into Settings → 默认模型; `phase` names the stage that was running when the failure happened. */
-export type Failure = { message: string; code?: string; phase?: Phase }
-/** The turn in flight as a client that comes back to the story finds it (server GET /turn): its stage and its draft. */
-export type Attach = { kind: "attach"; phase: Phase | null; draft: Draft | null }
+export type Draft = SharedDraft & { composition?: DraftModel }
+export type { Attach, Failure } from "@effect-tavern/runtime/src/projection.ts"
 export type Wire = Event | ({ kind: "error" } & Failure) | Attach
 
 export { registry }
 export const log = Atom.make<L.Log<Node>>(L.of<Node>())
 export const draft = Atom.make<Draft | null>(null)
 /** What the client draws the card by (GET /card): read once at open, before anything subscribes, hence keepAlive. */
-export interface CardView {
-  id: string
-  title: string
-  summary?: string // one line on what this card is
-  facets: Facets // what the card is, off its structure (session.ts `facets`): the keys a client draws in its own words
-  heading?: string // what titles a turn (Card.heading); absent, turns have no titles
-  input: "act" | "note" // the default channel: participant mode (act) or author mode (note), fixed for the session
-  greetings: readonly Greeting[] // the openings: a story starts with one (greet, by index) or, with none, with the player's line
-  director: boolean
-  guard: number // must-nots check enforces: a count, never the words
-  lore: { entries: number; layers: number } // the card's size; what is readable now is on the node
-  tokens: { head: number } // what the card's own text costs each turn, estimated
-  fiction: readonly { id: string; label?: string; when?: Cond }[] // the fiction's modules without their text
-  rules: Rules
-  local: Local
-  mounts: readonly { id: string; name: string }[]
-  layer: ReturnType<typeof shown>
-}
 export const card = Atom.make<CardView | null>(null).pipe(Atom.keepAlive)
 /** The library (GET /stories, /personas, /cards/<id>/local): every card's stories and which is open (a story is one root's tree),
  *  the player's personas, and each card's local row (mounts, persona default, tags, switches, fragments). Read at open. */
-export interface StoryRow {
-  id: Id
-  card: string // the card it is of
-  busy: Phase | null // a turn in flight on it, where it stands
-  title: string | null // the player's name for it; none (never named), the row reads "New story"
-  starred: boolean // the player's star: first on the card and in the manager
-  persona: string | null // the persona in force on it; none: the card's own (a new story takes the card's default)
-  updated: number
-  turns: number // the nodes with a player line or note: a greeting is none
-  last: { text: string; note?: string; invoke?: readonly string[] } | null // the last turn's input: the manager's preview; none with only the opening
-}
-export interface Persona {
-  id: string
-  name: string
-  text: string
-}
 /** `current` is none on an empty library: the client is on the first card's page, no story yet. */
 export const stories = Atom.make<{ current: Id | null; stories: readonly StoryRow[] } | null>(null).pipe(Atom.keepAlive)
 export const personas = Atom.make<readonly Persona[]>([]).pipe(Atom.keepAlive)
 export const locals = Atom.make<Readonly<Record<string, Local>>>({}).pipe(Atom.keepAlive)
 /** The player's settings (GET /providers, /secrets, /routing, /hats, /packs): the model providers, the key vault as hints,
  *  which (provider, model) runs each stage, the hats (提示词模板 in the UI), and the player's rows ([harness, ...packs]). */
-export type Pair = { provider: string; model: string }
-export interface Routing {
-  default?: Pair
-  stages?: Partial<Record<Phase, Pair>>
-}
 export const providers = Atom.make<readonly Provider[]>([]).pipe(Atom.keepAlive)
 /** A card as GET /cards lists it (server library.ts `CardRow`): a card file's row adds its summary and facets; a
  *  library-table card's row has id and title alone. */
-export type ShelfCard = { id: string; title: string; summary?: string; facets?: Facets }
 /** Every card the install knows (GET /cards): the sidebar's shelf (side.tsx, searched by query.ts), and what a
  *  persona's picks are named by. */
 export const cards = Atom.make<readonly ShelfCard[]>([]).pipe(Atom.keepAlive)
