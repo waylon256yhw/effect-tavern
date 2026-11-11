@@ -146,7 +146,8 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
   const open = (r: Resource) => r.access.model && r.activation === "on_demand"
   /** An entry's sections not in this request: its directory, on the lookup side only (§3), never in a snapshot. */
   const sectionsOf = (id: string) => resources.filter((x) => x.of === id && open(x) && unheld(x))
-  const directory = (xs: readonly Resource[]) => xs.map((x) => ({ resourceId: x.resourceId, title: x.title.slice(0, 160) }))
+  const directory = (xs: readonly Resource[]) =>
+    xs.map((x) => ({ resourceId: x.resourceId, title: x.title.slice(0, 160) }))
   /** The search units: an entry (never a section) whose own face is unread, or that still has an unread section. */
   const readable = () =>
     resources.filter((r) => !r.of && r.access.model && ((open(r) && unheld(r)) || sectionsOf(r.resourceId).length))
