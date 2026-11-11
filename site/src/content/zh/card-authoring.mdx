@@ -61,7 +61,7 @@ sidebar:
 
 ## 4. 制卡工坊与旧卡重制
 
-Effect Tavern 内置三项 AI 辅助工坊能力（`packages/runtime/support/workshop.ts`，同时暴露于 `/api/author/*` 与 `tavern card` CLI）：
+Effect Tavern 内置三项 AI 辅助工坊能力（`packages/runtime/src/workshop.ts`，同时暴露于 `/api/author/*` 与 `tavern card` CLI）：
 
 - **`unroll`**（`bun packages/runtime/bin/unroll.ts <card.png|card.json>`）：只读读卡仪器，按 SillyTavern 自身的装配顺序将 PNG/JSON V2/V3 卡片完整展开为 Markdown，可直接作为 `sort` 源稿。
 - **`tavern card compile`**：根据选中的正文片段与自然语言 `--intent` 编译规则增量与条件绑定。输出 Schema **不含任何正文字段**——已有作者原文逐字不动，新建的正文与判据槽一律留空（`empty-text`），交由作者亲笔填写。

@@ -1,3 +1,4 @@
+import { expand, fill, type Names } from "./names.ts"
 import { Schema } from "effect"
 
 export const ContextPolicy = Schema.Struct({
@@ -91,3 +92,16 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
   }
 }
 export type Lore<S, C> = ReturnType<typeof makeLore<S, C>>
+
+/** An unresolved name in any layer or section hides the complete entry from every stage. */
+export const namedLore = <T extends { layers: readonly string[]; sections?: readonly { id: string; text: string }[] }>(
+  entries: readonly T[],
+  names: Names,
+): T[] =>
+  entries.flatMap((e) => {
+    const layers = e.layers.map((text) => expand(text, names))
+    const sections = e.sections && fill(e.sections, names)
+    return layers.includes(undefined) || sections?.length !== e.sections?.length
+      ? []
+      : [{ ...e, layers: layers as string[], ...(sections && { sections }) }]
+  })

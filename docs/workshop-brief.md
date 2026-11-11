@@ -100,7 +100,7 @@ DELETE /cards/:id/draft                                       → 放弃草稿�
 
 ### Step 2.1 锁（runtime，不接模型）
 - [x] `lint.ts`：`empty-text` 规则；四张模板与 `card init` 脚手架必须仍然 0 error（脚手架的占位句保留，它们不是空串）。
-- [x] `runtime/support/workshop.ts`：`applyCompile(card, output): Card` 与 `applySort(card, source, placements): Card` 两个纯函数，加模型侧 schema（`CompileOutput`、`SortOutput`、`ReviewOutput`）。`test/author.ts` 断言两条不同的不变式：
+- [x] `runtime/src/workshop.ts`：`applyCompile(card, output): Card` 与 `applySort(card, source, placements): Card` 两个纯函数，加模型侧 schema（`CompileOutput`、`SortOutput`、`ReviewOutput`）。`test/author.ts` 断言两条不同的不变式：
   - `applyCompile`：永远不改任何已有 `text`；它创建的每个 `text` 都是 `""`；只写封闭词汇与标识符键。
   - `applySort`：永远不改卡上已有的非空条目；只追加新的 `fiction` / `greetings` 条目或新的 `lore` 层，或填入 `text` 为 `undefined` / `""` 的 `frame` 槽位；写入的每个 `text` 严格等于 `source` 对应下标的段落（多段按原序以 `\n\n` 连接）；下标越界或重复抛错；`to` 指向新 `lore.<id>` 时初始化 `unlock: { all: [] }`、`offer: { any: [] }`，层只能追加到末尾（`layers[1]` 不能先于 `layers[0]` 出现）。
 - [x] 标识符 pattern 先只加在模型侧 schema；对 `Card` schema 的收紧另开一条 lint `bad-identifier`（warn）看模板反应再决定。

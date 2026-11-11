@@ -6,13 +6,11 @@ import type { PlayerCatalogItem } from "./projection.ts"
 // session.ts is the caller: turn, project, setField and demand.
 import {
   catalogEntry,
-  loreResource,
-  sectionResources,
+  resourcesAt,
+  fedResources,
   contextLookup,
   freeze,
-  policy as resourcePolicy,
   residentOn,
-  revision,
   type Resource,
   type DeliverySnapshot,
 } from "./context.ts"
@@ -22,7 +20,7 @@ import type { Beat, Check, Rpg, State, LoreEntry } from "./card.ts"
 import { folded, ledger, makeSummaries, type Policy } from "./history.ts"
 import { deliveredIn, deliveredOn, notesOf, textOf as proseOf, type Turn as TurnOf } from "./journal.ts"
 import { key, type Disclosure, type Lore } from "./lore.ts"
-import { fold, itemText, render, type Product } from "./product.ts"
+import { fold, render, type Product } from "./product.ts"
 import { applyChanges, initialWorld, worldValue, type World, type WorldState } from "./world.ts"
 import { tokens } from "./tokens.ts"
 
@@ -108,21 +106,17 @@ export const makeDerived = ({
   const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[], recall = false) => {
-    const feed = products().filter((p) => (p.feed || (recall && p.recall)) && p.on)
-    const world = worldAt(path)
-    const cur = {
-      ...fold(
-        feed.filter((p) => p.role !== "world"),
-        path.map((t) => t.products),
-      ),
-      ...Object.fromEntries(feed.filter((p) => p.role === "world").map((p) => [p.id, worldValue(p, world[p.id])])),
-    }
-    const rest = feed.filter((p) => p.id !== "notes" && cur[p.id] !== undefined && render(p.shape, cur[p.id]) !== "")
     return {
       known: `Known: ${path.flatMap(notesOf).join("; ")}`,
-      current: rest.length
-        ? `Current: ${rest.map((p) => `${p.id}=${render(p.shape, cur[p.id])}`).join(" | ")}`
-        : undefined,
+      current: currentAt(
+        products(),
+        worldAt(path),
+        fold(
+          products().filter((p) => p.role !== "world" && p.on && (p.feed || (recall && p.recall))),
+          path.map((t) => t.products),
+        ),
+        recall,
+      ),
     }
   }
 
@@ -207,45 +201,19 @@ export const makeDerived = ({
     const s = gated(path)
     const I = L()
     const seen = deliveredOn(path)
-    const entries: Resource[] = I.entries.flatMap((e) => {
-      const depth = I.current(e, s, seen)
-      if (!depth) return []
-      return [loreResource(e, depth), ...sectionResources(e, depth)]
+    return resourcesAt({
+      lore: I,
+      state: s,
+      seen,
+      packs: packs(),
+      products: products(),
+      chronicle: fold(
+        products().filter((p) => p.on && p.recall !== undefined && p.role !== "world"),
+        path.map((t) => t.products),
+      ),
     })
-    entries.push(...packs().map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)))
-    const ps = products().filter((p) => p.on && p.recall !== undefined)
-    const chronicle = fold(
-      ps.filter((p) => p.role !== "world"),
-      path.map((t) => t.products),
-    )
-    const memory: Resource[] = ps.flatMap((p) => {
-      const value = p.role === "world" ? worldValue(p, s.world[p.id]) : chronicle[p.id]
-      if (!Array.isArray(value)) return []
-      return value.flatMap((item): Resource[] => {
-        if (p.shape.kind === "table" && p.shape.filter && !holds(p.shape.filter, item)) return []
-        const identity =
-          p.role === "world" && p.shape.kind === "table"
-            ? item.entityId
-            : typeof p.fold === "object"
-              ? item[p.fold.key]
-              : revision(item)
-        const text = itemText(item)
-        return [
-          {
-            resourceId: `memory:${p.id}/${encodeURIComponent(String(identity))}`,
-            revision: revision(item),
-            title: p.shape.kind === "table" ? String(item[p.recall as string]) : String(item),
-            text,
-            source: "memory",
-            ...resourcePolicy("memory"),
-            product: p.id,
-            disclosures: [],
-          },
-        ]
-      })
-    })
-    return [...new Map([...entries, ...memory].map((r) => [r.resourceId, r])).values()]
   }
+
   // The summary actually selected for this request, not a guessed creation/write watermark.
   const resident = (path: readonly Turn[]) => {
     const sum = summaryOf(path)
@@ -256,10 +224,7 @@ export const makeDerived = ({
         s.source !== "memory" || resources.some((r) => r.resourceId === s.resourceId),
     )
   }
-  const currentResources = (path: readonly Turn[]) =>
-    resourcesOn(path).filter(
-      (r) => r.product && products().some((p) => p.id === r.product && p.id !== "notes" && p.on && p.feed),
-    )
+  const currentResources = (path: readonly Turn[]) => fedResources(resourcesOn(path), products())
   const playerCatalog = (path: readonly Turn[]) =>
     resourcesOn(path)
       .filter((r) => r.access.player)
@@ -348,4 +313,22 @@ export const makeDerived = ({
     }
   }
   return { at }
+}
+
+/** Current world and chronicle facts, with the same feed/recall selection for play and empty-history preview. */
+export const currentAt = (
+  products: readonly Product[],
+  world: World,
+  chronicle: Record<string, unknown> = {},
+  recall = false,
+): string | undefined => {
+  const feed = products.filter((p) => (p.feed || (recall && p.recall)) && p.on)
+  const values = {
+    ...chronicle,
+    ...Object.fromEntries(feed.filter((p) => p.role === "world").map((p) => [p.id, worldValue(p, world[p.id])])),
+  }
+  const rest = feed.filter(
+    (p) => p.id !== "notes" && values[p.id] !== undefined && render(p.shape, values[p.id]) !== "",
+  )
+  return rest.length ? `Current: ${rest.map((p) => `${p.id}=${render(p.shape, values[p.id])}`).join(" | ")}` : undefined
 }

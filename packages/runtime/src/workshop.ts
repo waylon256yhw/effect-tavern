@@ -1,9 +1,9 @@
 // Model outputs contain wiring only; pure application consumes decoded values.
 import { Schema } from "effect"
-import { type Card, Field } from "../src/card.ts"
-import { type Cond } from "../src/cond.ts"
-import { identifier } from "../src/lint.ts"
-import { type RecordShape } from "../src/product.ts"
+import { type Card, Field } from "./card.ts"
+import { type Cond } from "./cond.ts"
+import { identifier } from "./lint.ts"
+import { type RecordShape } from "./product.ts"
 
 const Token = Schema.String.check(Schema.isPattern(identifier))
 const Scalar = Schema.Union([Token, Schema.Number, Schema.Boolean])

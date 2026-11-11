@@ -60,18 +60,18 @@ import {
 import { Deferred, Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
 import { Effect_, makeCard, shownGreeting, type Beat, type Card, type Greeting, type State } from "./card.ts"
-import { holds, expandState, type State as Paths } from "./cond.ts"
+import { expandState, type State as Paths } from "./cond.ts"
 import { gateOf, makeDerived, type Node } from "./derived.ts"
 import { head as headOf, type Hat } from "./fragment.ts"
 import { narratorHistory, policyFor, type Policy } from "./history.ts"
 import { split, splitter, textOf as proseOf, type Brief, type Input, type Turn as TurnOf } from "./journal.ts"
 import * as Log from "./log.ts"
 import { resolve, shown, type Resolved, type Rows } from "./layer.ts"
-import { makeLore, type Disclosure, type Lore } from "./lore.ts"
-import { expand, fill, unfilled } from "./names.ts"
+import { makeLore, namedLore, type Disclosure, type Lore } from "./lore.ts"
+import { lines, expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
-import { cap, withCatalogs, type Product } from "./product.ts"
+import { cap, withCatalogs, askedAt, productAsks, type Product } from "./product.ts"
 import { recordTransaction, worldValue, type RecordResult } from "./world.ts"
 
 export type Turn = TurnOf<Beat>
@@ -214,15 +214,7 @@ export const makeSession = ({
   const current = () => {
     if (now) return now
     const R = resolve(card, rows())
-    const I = makeLore<Paths, readonly string[]>(
-      cardLore.flatMap((e) => {
-        const layers = e.layers.map((l) => expand(l, R.names))
-        const sections = e.sections && fill(e.sections, R.names) // a section with a hole drops the entry, as a layer does
-        return layers.includes(undefined) || sections?.length !== e.sections?.length
-          ? []
-          : [{ ...e, layers: layers as string[], ...(sections && { sections }) }]
-      }),
-    )
+    const I = makeLore<Paths, readonly string[]>(namedLore(cardLore, R.names))
     return (now = { R, I })
   }
   const layer = () => current().R
@@ -400,7 +392,7 @@ export const makeSession = ({
         invoked: latest(scene.deliveries)
           .filter((d) => scene.input.invoke?.includes(d.resourceId))
           .map(deliveryText),
-        asks: picks.map((p) => `${p.id}: ${expandState(p.text, context)}`),
+        asks: productAsks(picks, context),
         tools: wording("record.tools"),
         readout: wording("record.readout"),
         questions: qs?.lines,
@@ -475,7 +467,7 @@ export const makeSession = ({
         throw new Error("parent settlement must be completed or explicitly skipped")
       const here = derived.at(path)
       // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
-      const guard = card.guard.flatMap((g) => expand(g, layer().names) ?? [])
+      const guard = lines(card.guard, layer().names)
       // a root's opening settles first, as the fold does (derived.ts `settleFresh`); its events reach this turn's gate
       const opening = start ?? base?.opening
       const o = opening ? rpg.apply(here.state, opening) : { s: here.state, events: [] as string[] }
@@ -640,14 +632,8 @@ export const makeSession = ({
       const fed = here.known()
       const sum = here.summary()
       // the narrate products on this turn: one ask line each in narrate's tail, each block cut off the reply
-      const penned = products().filter(
-        (p) =>
-          p.stage === "narrate" &&
-          p.on &&
-          p.trigger !== "demand" &&
-          (!p.when || holds(p.when, here.context(s1))) &&
-          !p.unasked,
-      )
+      const penned = askedAt(products(), "narrate", here.context(s1))
+
       // No output cap by default: the model's own limit (128k on Haiku) is the ceiling. A cap is connection config.
       const M = modelFor("narrate")
       const opts = { name: "narrate", maxOutputTokens: M.maxOutputTokens, effort: M.effort }
@@ -819,10 +805,7 @@ export const makeSession = ({
       const path = chain(original.parent)
       const pre = derived.at(path).settle(original).pre
       const context = derived.at(path).context(pre)
-      const asked = products().filter(
-        (p) =>
-          p.stage !== "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
-      )
+      const asked = askedAt(products(), "record", context)
       const N = layer().names
       const qs = rpg.readoutSchema(pre, N, context)
       const attempt = crypto.randomUUID()

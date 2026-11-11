@@ -61,7 +61,7 @@ Always build a card in two distinct passes:
 
 ## 4. Workshop & Legacy Card Remastering
 
-Effect Tavern ships three AI-assisted Workshop operations (`packages/runtime/support/workshop.ts`, exposed via HTTP `/api/author/*` and `tavern card`):
+Effect Tavern ships three AI-assisted Workshop operations (`packages/runtime/src/workshop.ts`, exposed via HTTP `/api/author/*` and `tavern card`):
 
 - **`unroll`** (`bun packages/runtime/bin/unroll.ts <card.png|card.json>`): Read-only inspection tool that prints a SillyTavern V2/V3 card in ST's exact assembly order, ready to audit and feed into `sort`.
 - **`tavern card compile`**: Compiles `rules` and `bindings` from selected card prose and a natural-language `--intent`. Its output schema contains **no prose fields**—existing prose stays untouched and new prose/rubric slots remain empty (`empty-text`) for the author to write.

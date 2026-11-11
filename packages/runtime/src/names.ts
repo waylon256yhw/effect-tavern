@@ -27,3 +27,7 @@ export const fill = <T extends { readonly text?: string }>(items: readonly T[], 
     const text = expand(x.text, names)
     return text === undefined ? [] : [{ ...x, text }]
   })
+
+/** Optional whole lines (guards, for example) disappear when a name cannot be filled. */
+export const lines = (texts: readonly string[], names: Names): string[] =>
+  texts.flatMap((text) => expand(text, names) ?? [])

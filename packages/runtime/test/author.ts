@@ -207,7 +207,7 @@ try {
 console.log("author: ok")
 
 // Workshop boundaries: no generated prose, existing rubric preserved, sort copies bytes.
-const { applyCompile, applySort, CompileOutput, SortOutput, ReviewOutput } = await import("../support/workshop.ts")
+const { applyCompile, applySort, CompileOutput, SortOutput, ReviewOutput } = await import("../src/workshop.ts")
 const { Schema } = await import("effect")
 const base = decodeCard(Bun.YAML.parse(scaffold("workshop", "chat")))
 const wiring = {

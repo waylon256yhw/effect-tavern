@@ -8,15 +8,15 @@ import { drawn, makeCard, type Card, type State } from "./card.ts"
 import { holds, lookup, reads, type Cond } from "./cond.ts"
 import { head, type Fragment } from "./fragment.ts"
 import { resolve, type Rows } from "./layer.ts"
-import { hook, makeLore } from "./lore.ts"
-import { expand, fill } from "./names.ts"
+import { hook, makeLore, namedLore } from "./lore.ts"
+import { lines, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
 import { cond, effect, labels } from "./phrase.ts"
-import { contextLookup, deliveryText, freeze, loreResource, sectionResources } from "./context.ts"
-import { floorAt } from "./derived.ts"
+import { contextLookup, deliveryText, freeze, latest, resourcesAt, fedResources } from "./context.ts"
+import { floorAt, currentAt } from "./derived.ts"
 
 import { initialWorld } from "./world.ts"
-import { withCatalogs } from "./product.ts"
+import { withCatalogs, askedAt, productAsks } from "./product.ts"
 import { tokens } from "./tokens.ts"
 
 export const stages = ["narrate", "direct", "record", "lookup"] as const
@@ -103,13 +103,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   )
   // the index as the session builds it (session.ts `current`): the card's entries expanded, one with an unfilled hole left
   // out. Pack resources stay separate from story disclosure, as in derived.ts.
-  const own = card.lore.flatMap((e) => {
-    const layers = e.layers.map((l) => expand(l, R.names))
-    const sections = e.sections && fill(e.sections, R.names)
-    return layers.includes(undefined) || sections?.length !== e.sections?.length
-      ? []
-      : [{ ...e, layers: layers as string[], ...(sections && { sections }) }]
-  })
+  const own = namedLore(card.lore, R.names)
   const L = makeLore<Record<string, unknown>, readonly string[]>(
     own.map((e) => ({
       ...e,
@@ -119,9 +113,22 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   )
   const gated = {
     ...context,
-    lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id) }])),
+    lore: Object.fromEntries(card.lore.map((e) => [e.id, { since: Infinity, shown: 0, floor: floors.get(e.id)! }])),
   }
-  const readable = L.readable(gated, [], [])
+  const resources = resourcesAt({ lore: L, state: gated, seen: [], packs: R.entries, products: R.products })
+  // Bare ids refer to card lore; pack ids use the runtime's pack:<row>/<entry> identity.
+  const pin = o.pin?.includes(":") ? o.pin : o.pin ? `card:${o.pin}` : undefined
+  const pinned = resources.find((r) => r.resourceId === pin)
+  if (pin && !pinned?.access.player) throw new Error(`pin ${o.pin}: entry is not available to the player`)
+  const frozen = latest([
+    ...resources.filter((r) => r.activation === "always" && r.access.model).map((r) => freeze(r)),
+    ...(pinned ? [freeze(pinned)] : []),
+  ])
+  const injected = frozen.map(deliveryText)
+  const held = [...frozen, ...fedResources(resources, R.products).map((r) => freeze(r))]
+  const lookupContext = contextLookup(resources, held)
+  const readable = new Set(lookupContext.readable().map((r) => r.resourceId))
+
   const windows = new Map(L.offers(gated, [], events).map((d) => [d.id, d.layer]))
   const listed = own.map((e) => {
     const at = L.current(
@@ -133,31 +140,18 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     return {
       // an always-on entry spends request tokens every turn: it is never part of the quiet remainder
       settled: at === e.layers.length && !w && e.activation !== "always",
-      text: `${e.id}  layer ${at}/${e.layers.length}${e.sections?.length ? `  ${e.sections.length} sections` : ""}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}${(e.sections ?? []).map((x) => `\n    #${x.id} ${hook(x.text)}`).join("")}`,
+      text: `${e.id}  layer ${at}/${e.layers.length}${e.sections?.length ? `  ${e.sections.length} sections` : ""}${readable.has(`card:${e.id}`) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}${(e.sections ?? []).map((x) => `\n    #${x.id} ${hook(x.text)}`).join("")}`,
     }
   })
   const settled = o.lore ? 0 : listed.filter((r) => r.settled).length
   const lore = [
     ...listed.filter((r) => o.lore || !r.settled).map((r) => r.text),
     ...(settled ? [`(${settled} more fully unlocked, no window; --lore lists them)`] : []),
-    ...R.entries.map((e) => `${e.id}  (${e.from})  in the index\n    ${hook(e.text)}`),
+    ...R.entries.map(
+      (e) => `${e.id}  (${e.from})${readable.has(`pack:${e.id}`) ? "  in the index" : ""}\n    ${hook(e.text)}`,
+    ),
   ]
 
-  const resources = [
-    ...L.entries.flatMap((e) => {
-      const depth = L.current(e, gated, [])
-      return depth ? [loreResource(e, depth), ...sectionResources(e, depth)] : []
-    }),
-    ...R.entries.map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)),
-  ]
-  // Bare ids refer to card lore; pack ids use the runtime's pack:<row>/<entry> identity.
-  const pin = o.pin?.includes(":") ? o.pin : o.pin ? `card:${o.pin}` : undefined
-  const pinned = resources.find((r) => r.resourceId === pin)
-  if (pin && !pinned?.access.player) throw new Error(`pin ${o.pin}: entry is not available to the player`)
-  const frozen = resources
-    .filter((r) => (r.activation === "always" && r.access.model) || r === pinned)
-    .map((r) => freeze(r))
-  const injected = frozen.map(deliveryText)
   const offered = L.offers(gated, [], events)
   const explain = (path: string, c: Cond, ev: readonly string[] = []): string[] => [
     `${path}: ${holds(c, gated, ev)} — ${cond(c, labels(card.rules))}${"path" in c ? ` (current ${c.path}=${String(lookup(gated, c.path))})` : ""}`,
@@ -188,24 +182,12 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
 
   // ───────── record ─────────
   // a 小剧场 is narrate's, not this record document's; a catalog with no survivor drops what reads it (session `record`)
-  const asked = withCatalogs(
-    R.products.filter(
-      (p) =>
-        p.stage !== "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
-    ),
-    card.catalogs ?? [],
-    context,
-  )
-  const asks = asked.map((p) => `${p.id}: ${p.text}`)
+  const asked = withCatalogs(askedAt(R.products, "record", gated), card.catalogs ?? [], gated)
+  const asks = productAsks(asked, gated)
   const qs = rpg.questions(s, R.names, context)
   const questions = qs.length ? qs : undefined // none active: no Questions line, as the session sends none
   // the narrate products on: one `<id>: <question>` line each after the prose directive (session.ts `penned`)
-  const penned = R.products
-    .filter(
-      (p) =>
-        p.stage === "narrate" && p.on && p.trigger !== "demand" && !p.unasked && (!p.when || holds(p.when, context)),
-    )
-    .map((p) => `${p.id}: ${p.text}`)
+  const penned = askedAt(R.products, "narrate", gated).map((p) => `${p.id}: ${p.text}`)
 
   // ───────── the document ─────────
   const ask: Ask =
@@ -214,7 +196,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
           stage,
           question: R.asks["direct"]!.text,
           ledger: [],
-          rules: card.guard.map((g) => expand(g, R.names)).filter((g): g is string => g !== undefined),
+          rules: lines(card.guard, R.names),
           open: offered.map((d) => ({ id: d.id, text: d.text! })),
           events,
         }
@@ -222,13 +204,16 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
         ? {
             stage,
             question: R.asks["lookup"]!.text,
-            context: frozen.map(contextLookup(resources, frozen).told), // session.ts: sections listed for lookup only
+            context: frozen.map(lookupContext.told),
+            current: currentAt(R.products, world), // session.ts: sections listed for lookup only
             ledger: [],
           }
         : stage === "record"
           ? {
               stage,
               known: "Known: ",
+              current: currentAt(R.products, world, {}, true),
+              invoked: pinned ? [deliveryText(freeze(pinned))] : [],
               asks,
               tools: R.asks["record.tools"]!.text,
               readout: R.asks["record.readout"]!.text,
@@ -241,6 +226,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
               history: [],
               summarized: false,
               told: injected,
+              current: currentAt(R.products, world),
               outcome: events,
               must: [],
               may: offered.map((d) => ({ id: d.id, text: d.text! })),

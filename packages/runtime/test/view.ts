@@ -181,6 +181,66 @@ assert.doesNotMatch(section(recorded, "gates")!, /lore\./)
   const narrated = preview("narrate").doc.map(text).join("\n")
   assert.ok(narrated.includes("The keeper of the salt road.") && !narrated.includes("#past"))
 }
+// Empty-history preview uses the same world, permissions and state-expanded asks as a real turn.
+{
+  const card: Card = {
+    ...yandao,
+    products: [
+      {
+        id: "scene",
+        role: "world",
+        on: true,
+        feed: true,
+        text: "At {{world.scene.place}}, score {{fields.局势}}",
+        shape: { kind: "record", keys: [{ key: "place", type: "text" }] },
+        initial: { place: "inn" },
+      },
+    ],
+    lore: [
+      {
+        id: "manual",
+        layers: ["PLAYER ONLY"],
+        access: { model: false, player: true },
+        unlock: { all: [] },
+        offer: { any: [] },
+      },
+      { id: "quiet", layers: ["SEARCHABLE"], unlock: { all: [] }, offer: { any: [] } },
+      { id: "auto", layers: ["AUTOMATIC"], activation: "always", unlock: { all: [] }, offer: { any: [] } },
+      { id: "missing", layers: ["{{unknown_name}}"], unlock: { all: [] }, offer: { any: [] } },
+    ],
+  }
+  const preview = (stage: "narrate" | "lookup" | "record", pin?: string) =>
+    view(card, player, { stage, pin, lore: true })
+  const listed = section(preview("lookup"), "lore")!
+  assert.match(listed, /quiet  layer 1\/1  in the index/)
+  assert.doesNotMatch(listed, /manual[^\n]*in the index|auto[^\n]*in the index|missing/)
+  assert.doesNotMatch(preview("narrate").doc.map(text).join("\n"), /PLAYER ONLY/)
+  assert.match(preview("record", "manual").doc.map(text).join("\n"), /PLAYER ONLY/)
+  const runtime = makeSession({ card, rows: () => player, model })
+  calls.clear()
+  await Effect.runPromise(
+    Stream.runForEach(
+      runtime.act(runtime.greet(card.greetings[0]!).node!.id, { text: "", note: "继续", invoke: ["card:manual"] }),
+      (e) => Effect.sync(() => void (e.kind === "call" && calls.set(e.phase, e.msgs))),
+    ),
+  )
+  for (const stage of ["lookup", "record"] as const) {
+    const actual = sent(stage)
+      .filter((m) => !m.startsWith("Ledger:"))
+      .slice(0, -1)
+    assert.deepEqual(actual, preview(stage, "manual").doc.map(text).slice(0, -1))
+  }
+  for (const stage of ["lookup", "narrate", "record"] as const) {
+    const current = preview(stage)
+      .doc.map(text)
+      .join("\n")
+      .split("\n")
+      .find((x) => x.startsWith("Current:"))!
+    assert.match(current, /scene=.*inn/)
+    assert.ok(sent(stage).join("\n").includes(current))
+  }
+  assert.match(preview("record").doc.map(text).join("\n"), /scene: At inn, score 2/)
+}
 const help = run("--help")
 assert.equal(help.exitCode, 0)
 assert.match(help.stdout.toString(), /SUBCOMMANDS\n {2}init .*\n {2}check .*\n {2}view /)

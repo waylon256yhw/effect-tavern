@@ -1,7 +1,7 @@
 // Branch-local world state and record transactions. The journal stores validated commands;
 // staging is private to one attempt and no tool can write the journal or rule fields.
 import { Schema } from "effect"
-import { stageTool, type StageTool, type ToolResult } from "@effect-tavern/provider"
+import { stageTool, type StageTool, type ToolResult } from "@effect-tavern/provider/src/stage.ts"
 import { colSchema, shapeSchema, mergeRecord, cap, type Product, type Shape } from "./product.ts"
 import type { State } from "./card.ts"
 

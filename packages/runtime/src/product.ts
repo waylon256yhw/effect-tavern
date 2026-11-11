@@ -3,7 +3,7 @@
 // changes only through world.ts transactions and stable host-assigned entity IDs. Presentation caps apply
 // to per-turn outputs; exceeding a world-state limit is a recoverable transaction error.
 import { Schema } from "effect"
-import { Cond, holds, type State } from "./cond.ts"
+import { Cond, holds, expandState, type State } from "./cond.ts"
 
 const Int = Schema.Int
 // An enum column's closed set is `options`, or `catalog`: the ids of a card catalog's items, filtered by their `when`
@@ -302,3 +302,20 @@ export const validate = <P extends Partial<Product> & { id: string }>(p: P): P &
   }
   return { ...(p as P & Product), on: p.on ?? true }
 }
+
+/** The automatic products a stage asks at this state; demand products have their own explicit invocation. */
+export const askedAt = (
+  products: readonly (Product & { unasked?: boolean })[],
+  stage: "narrate" | "record",
+  state: State,
+) =>
+  products.filter(
+    (p) =>
+      (p.stage ?? "record") === stage &&
+      p.on &&
+      p.trigger !== "demand" &&
+      !p.unasked &&
+      (!p.when || holds(p.when, state)),
+  )
+export const productAsks = (products: readonly Product[], state: State): string[] =>
+  products.map((p) => `${p.id}: ${expandState(p.text, state)}`)

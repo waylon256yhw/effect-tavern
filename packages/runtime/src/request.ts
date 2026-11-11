@@ -20,7 +20,7 @@
 // and record wear review.head after the frame; lookup, decide and direct wear nothing. No hat: today's document, byte for byte.
 // Data lines are format and live here: Index, State / Actions / So far, Rule, Open, Events, Must, Outcome, Current,
 // MUST / MAY reveal, Tone, Player note, Known, Questions, Player's line.
-import { breakpoint, type CacheTtl, type Message } from "@effect-tavern/provider"
+import { breakpoint, type CacheTtl, type Message } from "@effect-tavern/provider/src/call.ts"
 import type { Hat, Msg } from "./fragment.ts"
 import type { Input } from "./journal.ts"
 

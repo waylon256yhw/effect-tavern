@@ -10,7 +10,7 @@ import {
   ReviewOutput,
   selectedText,
   cardPaths,
-} from "@effect-tavern/runtime/support/workshop.ts"
+} from "@effect-tavern/runtime/src/workshop.ts"
 import { Effect, Schema } from "effect"
 
 const CompileRequest = Schema.Struct({ card: Card, select: Schema.Array(Schema.String), intent: Schema.String })

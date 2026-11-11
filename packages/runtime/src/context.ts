@@ -1,9 +1,16 @@
+import type { State as Paths } from "./cond.ts"
+import { holds } from "./cond.ts"
+import type { Lore } from "./lore.ts"
+import type { PackEntry } from "./layer.ts"
+import { itemText, type Product } from "./product.ts"
+import { worldValue, type WorldState } from "./world.ts"
 import type { PlayerCatalogItem } from "./projection.ts"
 // Resource identity, immutable deliveries and request-local residency. Story unlocks are
 // resolved by derived.ts; a lookup can only see this already-authorized resource set.
-import { createHash } from "node:crypto"
+import { sha256 } from "@noble/hashes/sha2.js"
+import { bytesToHex } from "@noble/hashes/utils.js"
 import { Schema } from "effect"
-import { stageTool } from "@effect-tavern/provider"
+import { stageTool } from "@effect-tavern/provider/src/stage.ts"
 import { hook, type Disclosure, type ContextPolicy } from "./lore.ts"
 
 export type Source = "card" | "pack" | "memory"
@@ -24,19 +31,21 @@ export interface Resource extends DeliverySnapshot {
   of?: string // a section's entry resource (`card:<entry>`); never frozen into the snapshot
 }
 export const revision = (value: unknown): string =>
-  createHash("sha256")
-    .update(
-      JSON.stringify(value, (_, v) =>
-        v && typeof v === "object" && !Array.isArray(v)
-          ? Object.fromEntries(
-              Object.keys(v)
-                .sort()
-                .map((k) => [k, v[k]]),
-            )
-          : v,
+  bytesToHex(
+    sha256(
+      new TextEncoder().encode(
+        JSON.stringify(value, (_, v) =>
+          v && typeof v === "object" && !Array.isArray(v)
+            ? Object.fromEntries(
+                Object.keys(v)
+                  .sort()
+                  .map((k) => [k, v[k]]),
+              )
+            : v,
+        ),
       ),
-    )
-    .digest("hex")
+    ),
+  )
 export const policy = (source: Source, p: ContextPolicy = {}) => ({
   access: p.access ?? { model: true, player: source === "pack" },
   activation: p.activation ?? "on_demand",
@@ -259,3 +268,59 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
   }
   return { tools, readable, search, told, delivered, disclosures }
 }
+
+/** Materialize unlocked lore, pack entries and recalled rows before applying reader permissions. */
+export const resourcesAt = ({
+  lore: I,
+  state: s,
+  seen,
+  packs,
+  products,
+  chronicle = {},
+}: {
+  lore: Lore<Paths, readonly string[]>
+  state: WorldState & Paths
+  seen: readonly Disclosure[]
+  packs: readonly PackEntry[]
+  products: readonly Product[]
+  chronicle?: Record<string, unknown>
+}): Resource[] => {
+  const entries: Resource[] = I.entries.flatMap((e) => {
+    const depth = I.current(e, s, seen)
+    if (!depth) return []
+    return [loreResource(e, depth), ...sectionResources(e, depth)]
+  })
+  entries.push(...packs.map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)))
+  const ps = products.filter((p) => p.on && p.recall !== undefined)
+  const memory: Resource[] = ps.flatMap((p) => {
+    const value = p.role === "world" ? worldValue(p, s.world[p.id]) : chronicle[p.id]
+    if (!Array.isArray(value)) return []
+    return value.flatMap((item): Resource[] => {
+      if (p.shape.kind === "table" && p.shape.filter && !holds(p.shape.filter, item)) return []
+      const identity =
+        p.role === "world" && p.shape.kind === "table"
+          ? item.entityId
+          : typeof p.fold === "object"
+            ? item[p.fold.key]
+            : revision(item)
+      const text = itemText(item)
+      return [
+        {
+          resourceId: `memory:${p.id}/${encodeURIComponent(String(identity))}`,
+          revision: revision(item),
+          title: p.shape.kind === "table" ? String(item[p.recall as string]) : String(item),
+          text,
+          source: "memory",
+          ...policy("memory"),
+          product: p.id,
+          disclosures: [],
+        },
+      ]
+    })
+  })
+  return [...new Map([...entries, ...memory].map((r) => [r.resourceId, r])).values()]
+}
+
+/** Feed rows are already held through Current, so lookup does not ask for them again. */
+export const fedResources = (resources: readonly Resource[], products: readonly Product[]) =>
+  resources.filter((r) => r.product && products.some((p) => p.id === r.product && p.id !== "notes" && p.on && p.feed))

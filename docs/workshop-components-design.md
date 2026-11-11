@@ -2,7 +2,7 @@
 
 > 状态：设计定稿（2026-11-09，三方评审与交互原型 [`docs/workshop-prototype.html`](./workshop-prototype.html) 两轮对齐后修订；组件 2 已裁掉，见 §5.1）。正文槽只装散文与 Markdown：不再有 YAML、JSON 或键值缩进。本文修正 #121 的导航句：卡页按**已声明的组件**组织，不按 schema 顶层；#121 的披露开关不变。
 > 关联文档：[`docs/workshop-prototype.html`](./workshop-prototype.html)、[`docs/workshop-brief.md`](./workshop-brief.md)、[`docs/card-reading.md`](./card-reading.md)、[`docs/packs-brief.md`](./packs-brief.md)
-> 关联已落地后端：[`packages/runtime/support/workshop.ts`](../packages/runtime/support/workshop.ts)、[`packages/server/src/author.ts`](../packages/server/src/author.ts)、[`packages/runtime/src/lint.ts`](../packages/runtime/src/lint.ts)
+> 关联已落地后端：[`packages/runtime/src/workshop.ts`](../packages/runtime/src/workshop.ts)、[`packages/server/src/author.ts`](../packages/server/src/author.ts)、[`packages/runtime/src/lint.ts`](../packages/runtime/src/lint.ts)
 
 ---
 
@@ -176,7 +176,7 @@ Workshop 前端放弃「固定顶栏 Tab」，采用经 [`docs/workshop-prototyp
 
 ## 4. 已落地后端接口（Phase 2 Backend）在组件化模型下的落点
 
-[`0297ae0f`](../packages/runtime/support/workshop.ts) 已落地的后端架构（`checkCard` 的 `empty-text` 门禁、`compile` / `sort` / `review` 三个闭词表纯函数应用器、以及 `/api/cards/:id/draft` 草稿端点）在两层组件化前端中拥有清晰的交互挂载点：
+[`0297ae0f`](../packages/runtime/src/workshop.ts) 已落地的后端架构（`checkCard` 的 `empty-text` 门禁、`compile` / `sort` / `review` 三个闭词表纯函数应用器、以及 `/api/cards/:id/draft` 草稿端点）在两层组件化前端中拥有清晰的交互挂载点：
 
 | 后端能力 / 接口 | 在组件化前端中的自然落点 | 为什么比全局按钮更好用 |
 | :--- | :--- | :--- |

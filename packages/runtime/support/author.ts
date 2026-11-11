@@ -1,41 +1,16 @@
-import { validateCard } from "../src/author.ts"
-// Host-side authoring: decode failures and semantic diagnostics share one report.
-import { drawn, type Card } from "../src/card.ts"
-import { type Diagnostic } from "../src/lint.ts"
-import { fields, openings, view } from "../src/view.ts"
+// YAML is a host concern; the value report and workshop transformations also run in the browser.
+import { checkValue } from "../src/author.ts"
+import type { Card } from "../src/card.ts"
 import { player } from "./cards.ts"
 
-export const checkCard = (source: string) => {
-  const diagnostics: Diagnostic[] = []
-  let card: Card | undefined
-  let preview: ReturnType<typeof view> | undefined
-  let greetings: string[] = []
+export const checkCard = (source: string): ReturnType<typeof checkValue> => {
   try {
-    const checked = validateCard(Bun.YAML.parse(source))
-    card = checked.card
-    diagnostics.push(...checked.diagnostics)
-    if (card && !diagnostics.some((d) => d.level === "error")) {
-      preview = view(card, player)
-      greetings = openings(card, player)
-    }
+    return checkValue(Bun.YAML.parse(source), player)
   } catch (e) {
-    diagnostics.push({ rule: "schema", level: "error", path: "$", message: String(e) })
-  }
-
-  return {
-    diagnostics,
-    fields:
-      card?.rules.fields.map((f) => ({
-        ...f,
-        drawn: drawn(
-          f,
-          card!.fiction.map((f) => f.when),
-        ),
-      })) ?? [],
-    fieldLines: card ? fields(card) : [],
-    greetings,
-    sections: preview?.sections ?? [],
-    total: preview?.total ?? 0,
+    return {
+      ...checkValue(undefined),
+      diagnostics: [{ rule: "schema", level: "error", path: "$", message: String(e) }],
+    }
   }
 }
 
