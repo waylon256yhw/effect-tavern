@@ -1,0 +1,72 @@
+---
+title: Layers, Packs & Hats
+description: Preset-free prompt customization, rank-ordered Layer resolution, enhancer Packs, writing switches, and provider Hats.
+sidebar:
+  order: 4
+---
+
+Legacy roleplay clients bundle wire formatting, jailbreaks, prose style, status-bar prompts, and sampling knobs into a single monolithic "preset". Swapping models breaks the preset's prefill assumptions; swapping cards clashes with the preset's hardcoded POV or status-bar rules.
+
+Effect Tavern eliminates presets completely, decomposing what a legacy preset used to hold across five independent owners:
+
+| Legacy Preset Ingredient | Effect Tavern Owner | Why Separated |
+| --- | --- | --- |
+| Prompt order, stage boundaries & message roles | Harness (`packages/runtime/src/request.ts`) | Structural invariant—keeps KV cache breakpoints and stage schemas intact. |
+| Model continuation framing & assistant prefills | **`Hat`** (`/hats`, bound via `Connection.hat`) | Belongs to the model family/endpoint (e.g. `prefill: false` on Claude), never to a card or prose pack. |
+| POV, agency ("don't speak for `{{user}}`"), length & prose register | **`Layer` / `Pack` & `switches`** (`pov`, `echo`, `agency`, `verbosity`, `polish`) | Player taste, cleanly yielding when a card (`yandao.yaml`) requires a fixed POV. |
+| CoT `<thinking>`, `<status>` bars, memory & option lists | **`Card` `products` / `rules`** + opt-in harness stages (`decide`, `check`, `record`) | Structured state and side blocks belong to typed schemas, not fragile narrator prompt prose. |
+| Endpoint URL, model ID, reasoning budget & token limits | **`Connection`** (`/providers`) & stage routing | Infrastructure and credentials never travel inside exported cards or style packs. |
+
+## 1. Uniform `Layer` Resolution
+
+Every customization participant—harness defaults, the card, mounted enhancer packs, per-card player settings, and the active persona—projects into a single row type (`Layer` in `packages/runtime/src/layer.ts`) and resolves in one strict rank order:
+
+```text
+harness (code defaults + global player overlay)
+  → card
+    → mounted packs (in local.mounts order)
+      → local (per-card player row)
+        → persona (prose into `persona` slot, name into `names.user`)
+```
+
+- **Higher rank wins by `id`** across fragments, `asks`, `products`, `snippets`, `format`, and `names`.
+- **Slot modes (`Fragment.mode`):**
+  - `"override"` (default on packs/local): replaces lower-rank text in the same `frame` slot.
+  - `"yield"` (default on the global player overlay against the card): defers whenever a lower rank has already filled the slot.
+  - `"both"`: keeps both fragments in rank order.
+- **Zero-throw safety locks (`locked`):** Player rows and packs cannot inject `Cond` (`when`), alter message `role`, or mutate a card product's `shape` or `role`. Disallowed entries land in `Resolved.dropped` for UI inspection instead of crashing session startup.
+
+## 2. Frame Slots & Writing Switches
+
+Known `frame` slots (`SLOTS` in `fragment.ts`) are `persona`, `pov`, `voice`, `style`, `setting`, `language`, and `verbosity`.
+
+For everyday preferences, players toggle bounded **Writing Switches** (`Writing`) rather than editing prompt prose:
+
+| Switch | Values | Effect |
+| --- | --- | --- |
+| `pov` | `"second"` \| `"third"` \| `"none"` | Narrator address (`你`, persona name, or no player character) |
+| `echo` | `boolean` | Whether narration restates the player's action before reacting |
+| `agency` | `"strict"` \| `"free"` | Strict boundary against bleedthrough vs. co-writing continuation |
+| `verbosity` | `"concise"` \| `"medium"` \| `"detailed"` | Compiled into the `verbosity` slot |
+| `polish` | `boolean` | Enables or disables the post-check `polish` stage (`lexicon`) |
+
+`pov`, `echo`, and `agency` compile together into the `pov` slot using customizable `switch.<key>.<value>` asks, and automatically **yield** whenever a card (such as `yandao.yaml`) explicitly authors its own `pov` slot.
+
+## 3. Enhancer Packs (`/packs`)
+
+An enhancer **`Pack`** (analogous to a *text LoRA*) is a reusable, mountable `Layer` stored in the library and mounted per card via `local.mounts`. A pack can bundle:
+
+- **Head or tail `fragments`** (`at: "head"` for frame slots; `at: "tail"` for end-of-turn style directives).
+- **`switches` & `asks` overrides** (customizing harness prompts like `lookup`, `direct`, or `input.thought`).
+- **Product patches & inline `theater`** (renaming or toggling existing products, or declaring a new ID with `text` to create a `stage: "narrate"` `<<aside>>` theater block).
+- **Single-layer `entries`** (indexed in `lookup` as `<pack>/<entry>`, first sentence as hook, governed by `ContextPolicy`).
+- **`lexicon` patterns** (merged ahead of the card's slop patterns for `polish`), **`snippets`**, **`format` keys**, and **`names`** defaults.
+
+## 4. Hats (`/hats`) & Provider Connections
+
+Different model families respond best to different continuation framing—without that framing belonging in a card or style pack. A **`Hat`** is a named protocol shell bound to a `Connection` (`Connection.hat`):
+
+- **`narrate.head`**: System/handshake messages placed after `frame` and `fiction` (right before the head cache breakpoint and `transcript`).
+- **`narrate.tail`**: Placed at the very end of the `narrate` request (note: rejected at the boundary if it ends with an `assistant` prefill on a connection where `prefill: false`, such as current Claude models).
+- **`review.head`**: Worn by prose-reading stages (`check`, `polish`, `record`).
+- `lookup`, `decide`, and `direct` never wear a hat. When no hat is attached, zero extra messages are emitted.

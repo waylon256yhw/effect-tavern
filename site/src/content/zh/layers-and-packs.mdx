@@ -1,0 +1,72 @@
+---
+title: 玩家层、写作包与帽子
+description: 无预设（Preset-free）分层定制架构、五级 Layer 合并序、写作开关、Pack 写作包与 Hat 协议壳。
+sidebar:
+  order: 4
+---
+
+传统酒馆前端把消息拼装顺序、破限与预填握手、人称与防抢话指令、状态栏要求乃至采样参数全部揉成一份“预设（Preset）”JSON：换一个模型家族，预填握手就报错；换一张无主角卡，预设里写死的第二人称与状态栏咒语就与卡片打架。
+
+Effect Tavern 彻底取消了预设这一概念，将传统预设混装的五类职责拆回各自的真实归属方：
+
+| 传统 Preset 混装的成分 | Effect Tavern 归属模块 | 拆分原因 |
+| --- | --- | --- |
+| 消息拼装顺序、阶段隔离与角色标记 | Harness 代码（`packages/runtime/src/request.ts`） | 协议不变量——保证各阶段工具契约与 KV 缓存断点不被篡改。 |
+| 模型续写握手壳与 `assistant` 预填（Prefill / JB） | **帽子 `Hat`**（`/hats`，挂在 `Connection.hat`） | 取决于模型家族与端点能力（如当前 Claude 不支持末尾 `assistant` 预填），绝不该污染卡片或文风包。 |
+| 人称、防抢话（防 `bleedthrough`）、篇幅与文风滤镜 | **玩家层 `Layer` / `Pack` 与写作开关 `switches`** | 属于玩家个人审美；当卡片自带显式 `pov`（如无主角卡 `yandao.yaml`）时自动让位。 |
+| `<thinking>` 思维链、`<status>` 状态栏与选项输出指令 | **卡片 `products` / `rules`** + 按需开启的独立阶段 | 状态结算与边栏小剧场由独立阶段与强类型 Schema 承担，不再靠叙事提示词硬抠格式。 |
+| 接口地址、模型 ID、思考预算与最大输出长度 | **模型连接 `Connection`**（`/providers`）与阶段路由 | 基础设施与密钥只留在本机库，绝不随卡片或写作包外流。 |
+
+## 1. 统一 `Layer` 五级合并序
+
+从底座默认值、卡片自身、挂载的写作包到单卡本地设置与当前人设，所有参与者均表示为同一种 `Layer` 结构（`packages/runtime/src/layer.ts`），由纯函数 `resolve` 按唯一顺序一次合并：
+
+```text
+harness（代码默认 + 玩家全局叠加行）
+  → card（当前卡片投影）
+    → mounted packs（按 local.mounts 挂载顺序）
+      → local（玩家在该卡上的本地设置）
+        → persona（正文填入 persona 槽，名字填入 names.user）
+```
+
+- **同 `id` 后者胜出：** 对片段（`fragments`）、问法（`asks`）、产物补丁（`products`）、快捷片段（`snippets`）、格式键（`format`）与代称（`names`）一致生效。
+- **槽位相处模式（`Fragment.mode`）：**
+  - `"override"`（包与本地行默认）：覆盖低等级同名槽位；
+  - `"yield"`（全局叠加行相对卡片的默认）：若低等级已填入该槽位则主动让位；
+  - `"both"`：保留双方内容并按等级序拼接。
+- **零抛错安全锁（`locked`）：** 玩家行与写作包在入库解码时自动剥离 `when` 条件与自定义 `role`，且不得篡改产物的 `shape` 或 `role`；不合法条目归入 `Resolved.dropped` 供界面提示，绝不因挂载第三方包而炸毁会话。
+
+## 2. 框架槽位与写作开关（`switches`）
+
+标准框架槽位（`SLOTS`）共七个：`persona`、`pov`、`voice`、`style`、`setting`、`language`、`verbosity`。
+
+玩家日常无需手改提示词文本，直接拨动有界的**写作开关（`Writing`）**即可编译出对应槽位语句：
+
+| 开关 | 可选值 | 作用 |
+| --- | --- | --- |
+| `pov` | `"second"` \| `"third"` \| `"none"` | 叙事人称（“你”、人设名字，或无玩家角色） |
+| `echo` | `boolean` | 是否先转述玩家的动作台词再写反应 |
+| `agency` | `"strict"` \| `"free"` | 严格禁止抢话（防 `bleedthrough`）或允许顺着续写 |
+| `verbosity` | `"concise"` \| `"medium"` \| `"detailed"` | 编译进入 `verbosity` 篇幅槽位 |
+| `polish` | `boolean` | 启停 `check` 之后的套话润色阶段（`polish`） |
+
+`pov`、`echo`、`agency` 合并编译为一条 `pov` 槽位文本，并对卡片自带的显式 `pov` 槽位自动**让位**（例如大世界卡 `yandao.yaml` 自行定义了无主角视角，即整组接管）。
+
+## 3. 写作包（`Pack` / Enhancer）
+
+写作包（库表 `/packs`，对应社区常说的 *text LoRA*）是按卡挂载（`local.mounts`）的可复用 `Layer`，可包含：
+
+- **头区或尾区片段**：`at: "head"` 填框架槽位，`at: "tail"` 追加在 `narrate` 末尾；
+- **开关与 `asks` 问法覆盖**：微调 `lookup`、`direct`、`input.thought` 等系统指令措辞；
+- **产物补丁与小剧场（`theater`）**：调整已有产物的名称与开关，或新增带问法的 ID 以声明一条内联 `<<aside>>` 小剧场；
+- **单层词条（`entries`）**：以 `<包id>/<词条id>` 编入 `lookup` 索引（首句即钩子，支持 `ContextPolicy`）；
+- **套话词表（`lexicon`）**、**快捷输入（`snippets`）**、**标点格式键（`format`）**与**代称字典（`names`）**。
+
+## 4. 帽子（`Hat`）与连接配置
+
+不同模型家族往往需要不同的续写握手外壳，这类适配既不属于卡片设定，也不属于文风包。**`Hat`**（`/hats`，由 `Connection.hat` 按 ID 引用）专门承载这层协议壳：
+
+- **`narrate.head`**：接在 `frame` 与 `fiction` 之后、头区缓存断点与历史转录稿之前；
+- **`narrate.tail`**：落在 `narrate` 请求最末尾（若连接声明 `prefill: false`，如当前 Claude 模型，则拒绝以 `assistant` 消息收尾）；
+- **`review.head`**：供读取正文的阶段（`check`、`polish`、`record`）佩戴；
+- `lookup`、`decide`、`direct` 不戴任何帽子；未配置帽子时请求逐字节不增删。

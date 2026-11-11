@@ -4,7 +4,10 @@
   "scripts": {
     "dev": "cd packages/client && bun --bun vp dev",
     "verify": "pnpm -r verify",
-    "tavern": "bun packages/server/bin/tavern.ts"
+    "tavern": "bun packages/server/bin/tavern.ts",
+    "docs:dev": "pnpm --dir site run dev",
+    "docs:build": "pnpm --dir site run build",
+    "docs:check": "pnpm --dir site exec nimbus-docs check && pnpm --dir site run typecheck && pnpm --dir site run build && pnpm --dir site exec nimbus-docs check"
   },
   "devDependencies": {
     "eslint-plugin-solid": "0.18.1",

@@ -1,0 +1,119 @@
+---
+title: CLI & Headless Host
+description: Reference for the offline card toolchain, SillyTavern unroller, terminal play, Workshop CLI, and headless server.
+sidebar:
+  order: 3
+---
+
+Effect Tavern provides two command-line entrypoints plus a standalone SillyTavern card inspector. Every command supports `--help` for self-documentation and `--json` / `--jsonl` for scripts and coding agents.
+
+## 1. Offline Card Toolchain (`card`)
+
+Run `bun packages/runtime/bin/card.ts <subcommand>` from the repository root (or `bun run card <subcommand>` inside `packages/runtime`). Offline commands never open a SQLite `DATA` directory or call external LLM APIs.
+
+```sh
+bun packages/runtime/bin/card.ts init my-card --template chat
+bun packages/runtime/bin/card.ts check my-card.yaml --json
+bun packages/runtime/bin/card.ts view my-card.yaml --stage narrate --state hp=2 --events won
+bun packages/runtime/bin/card.ts test my-card.yaml scenario.yaml
+```
+
+### `card init <id> [--template chat|readout|rpg|world]`
+Creates `<id>.yaml` exclusively in the current directory (fails if the file already exists). Templates express the two card coordinates without pre-installing opinionated combat or romance subsystems:
+
+| Template | `persona` Slot | Default `input` | Typical Use |
+| --- | --- | --- | --- |
+| `chat` | Present | `act` | One-on-one or ensemble conversation |
+| `readout` | Present | `note` | Guided interactive fiction with readout bands |
+| `rpg` | Absent | `act` | Action-and-dice tabletop adventure |
+| `world` | Absent | `note` | Protagonist-free world simulation |
+
+### `card check <card> [--json]`
+Validates YAML syntax, `Card` schema decoding, initial rule state, static lint rules, `drawn` field meter types, per-greeting state/window previews, and section token estimates. Exits `1` on any `error` diagnostic (`0` on warnings only).
+
+### `card view <card> [flags]`
+Renders the exact prompt sections, cache breakpoints, slot origins, and `Cond` clause evaluations for a stage (`--stage narrate|direct|record|lookup`).
+- `--greeting <n>`: Apply `greetings[n].do` first (`0`-based).
+- `--state <k=v>`: Override field values after greeting settlement (repeatable).
+- `--events <a,b>`: Supply turn events for `lore` `offer` preview.
+- `--pin <id>`: Simulate player invocation of an unlocked `player: true` resource (`card:<id>` or `pack:<row>/<entry>`).
+- `--persona <text>`: Override player persona prose.
+- `--lore`: Include fully unlocked lore entries with no active window.
+
+### `card test <card> [scenario.yaml]`
+Executes the full runtime `Session` against the deterministic `fake` model at zero token cost. Omitting `scenario.yaml` runs a one-turn smoke check.
+
+```yaml
+seed: 42 # first roll uses seed + 1, incrementing by 1 per roll
+greeting: 0
+steps:
+  - text: 向前走
+    replies:
+      narrate: ["你走到了门口。"]
+      record:
+        - notes: 已到门口
+          options: []
+    expect:
+      events: []
+      windows: []
+      lore: []
+      end: end
+      products: { notes: 已到门口 }
+```
+
+## 2. Unrolling SillyTavern Cards (`unroll`)
+
+`unroll` inspects SillyTavern PNG (`ccv3` / `chara` chunks) or V2/V3 JSON exports in ST's assembly order without mutating files or calling models:
+
+```sh
+bun packages/runtime/bin/unroll.ts card.png --user 李
+bun packages/runtime/bin/unroll.ts card.json --json
+```
+
+Paragraph boundaries are preserved so Markdown output can feed directly into `tavern card sort`.
+
+## 3. Host, Workshop & Story CLI (`tavern`)
+
+Run `bun run tavern <subcommand>` from the repository root (`packages/server/bin/tavern.ts`).
+
+- **Local library mode (default):** Opens `DATA/tavern.db` (defaults to `./.tavern/tavern.db`). Fails cleanly with the owning PID if a server already holds the database lock.
+- **Remote attach mode (`--url`):** Pass `--url http://127.0.0.1:7777` to connect over HTTP/SSE to a running `vp run dev` or `tavern serve` instance without touching local `DATA`.
+
+```sh
+# Install & Workshop operations
+bun run tavern card install ./my-card.yaml
+bun run tavern card compile ./my-card.yaml --select fiction.setting --intent "Add a bond readout" -o candidate.yaml
+bun run tavern card sort ./my-card.yaml ./notes.md -o candidate.yaml
+bun run tavern card review ./my-card.yaml --json
+
+# Story lifecycle
+bun run tavern story list --json
+bun run tavern story new wuxia
+bun run tavern story show 1
+bun run tavern story export 1 --format md > story.md
+bun run tavern story delete 1
+
+# Server & standalone headless binary
+MODEL=fake bun run tavern serve --headless --port 7777
+cd packages/server && bun run compile:headless
+```
+
+## 4. Terminal Play (`tavern play`)
+
+Pass a numeric story ID to resume an existing story, or a card ID to create a new story (add `--card` to force card ID interpretation for numeric card names). Supports interactive readline, single-shot `--input`, stdin pipes, and `--jsonl` event streaming:
+
+```sh
+MODEL=fake bun run tavern play wuxia --greeting 1 --set bond=3 --note "雨夜初见"
+```
+
+| Slash Command | Action |
+| --- | --- |
+| `/greet [index]` | Start a root opening (`0` by default) |
+| `/act <text>` / `/note <text>` | Send on the `act` or `note` channel |
+| `/pin <resource-id>` | Arm a context resource (`card:guide`, `pack:p/entry`) for the next turn |
+| `/set <field=value>` | Apply `setField` on the current node |
+| `/swipe [node]` / `/reword [note]` | Create a `swipe` or `reword` sibling |
+| `/checkout <node\|root>` | Move `head` to a branch's newest leaf or empty root |
+| `/tree` / `/context` / `/detail [node]` | Inspect log tree JSON, active `WorldState`, or turn deltas |
+| `/inspect [node]` | Print recorded LLM call traces (honors server `inspect` gate) |
+| `/attach` / `/stop` / `/quit` | Re-attach in-flight turn, stop active generation, or exit cleanly |

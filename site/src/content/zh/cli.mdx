@@ -1,0 +1,119 @@
+---
+title: CLI 与无头宿主
+description: 离线制卡工具 card、ST 旧卡展开器 unroll、终端宿主 tavern 与无头服务完整参考。
+sidebar:
+  order: 3
+---
+
+Effect Tavern 提供离线制卡工具链、SillyTavern 旧卡只读展开器以及全功能 `tavern` CLI 宿主。所有命令均内置 `--help` 自述说明，并提供 `--json` / `--jsonl` 结构化输出供脚本与 Agent 调用。
+
+## 1. 离线制卡工具（`card`）
+
+在仓库根目录运行 `bun packages/runtime/bin/card.ts <subcommand>`（或在 `packages/runtime` 下运行 `bun run card <subcommand>`）。所有离线命令均不打开 `DATA` 数据库、不调用在线模型。
+
+```sh
+bun packages/runtime/bin/card.ts init my-card --template chat
+bun packages/runtime/bin/card.ts check my-card.yaml --json
+bun packages/runtime/bin/card.ts view my-card.yaml --stage narrate --state hp=2 --events won
+bun packages/runtime/bin/card.ts test my-card.yaml scenario.yaml
+```
+
+### `card init <id> [--template chat|readout|rpg|world]`
+在当前目录独占创建 `<id>.yaml`（文件已存在则报错）。四种最小脚手架对应两个卡片坐标，不预装多余机制：
+
+| 模板 | `persona` 槽位 | 默认 `input` | 典型场景 |
+| --- | --- | --- | --- |
+| `chat` | 有 | `act` | 一对一或群像自由对话 |
+| `readout` | 有 | `note` | 带状态读数与分段的引导叙事 |
+| `rpg` | 无 | `act` | 带动作与掷骰检定的冒险卡 |
+| `world` | 无 | `note` | 无玩家主角的大世界推演 |
+
+### `card check <card> [--json]`
+依次校验 YAML 语法、`Card` Schema、规则初值、静态 lint 诊断、字段量表绘制规格（`drawn`）、各开场初始状态与开窗预览，以及各分段 Token 估算。存在 `error` 时返回退出码 `1`，仅有 `warn` 返回 `0`。
+
+### `card view <card> [flags]`
+渲染指定阶段（`--stage narrate|direct|record|lookup`）在给定状态下的完整请求分段、缓存断点、槽位来源及每条 `Cond` 子句的求值详情：
+- `--greeting <n>`：先施加 `greetings[n].do`（从 `0` 起算）；
+- `--state <k=v>`：覆盖开场结算后的字段值（可重复传参）；
+- `--events <a,b>`：传入本轮事件以预览 `lore` 的 `offer` 开窗；
+- `--pin <id>`：模拟玩家本轮主动调用已解锁且 `player: true` 的条目（如 `card:<id>` 或 `pack:<row>/<entry>`）；
+- `--persona <text>`：覆盖玩家人设文本；
+- `--lore`：同时列出已全部解锁且无未开窗口的 lore 条目。
+
+### `card test <card> [scenario.yaml]`
+使用零 Token 确定性 `fake` 模型跑通完整 `Session` 回合断言；省略场景文件时执行单轮冒烟测试。
+
+```yaml
+seed: 42 # 首个掷骰使用 seed + 1，后续每次递增 1
+greeting: 0
+steps:
+  - text: 向前走
+    replies:
+      narrate: ["你走到了门口。"]
+      record:
+        - notes: 已到门口
+          options: []
+    expect:
+      events: []
+      windows: []
+      lore: []
+      end: end
+      products: { notes: 已到门口 }
+```
+
+## 2. 展开 SillyTavern 旧卡（`unroll`）
+
+`unroll` 按 SillyTavern 自身的提示词装配顺序将 PNG（`ccv3` / `chara` 块）或 V2/V3 JSON 卡片展开为可读文档，只读不写、不调模型：
+
+```sh
+bun packages/runtime/bin/unroll.ts card.png --user 李
+bun packages/runtime/bin/unroll.ts card.json --json
+```
+
+展开后的 Markdown 完整保留原作者分段，可直接传给 `tavern card sort` 按段落下标归位。
+
+## 3. CLI 宿主、工坊与故事管理（`tavern`）
+
+在仓库根目录运行 `bun run tavern <subcommand>`（`packages/server/bin/tavern.ts`）：
+
+- **本地直连模式（默认）：** 打开 `DATA/tavern.db`（默认 `./.tavern/tavern.db`）。若已有服务进程占用该库，会打印占用 PID 与路径并提示使用 `--url`，绝不静默切库。
+- **远程连接模式（`--url`）：** 传入 `--url http://127.0.0.1:7777` 即可通过 HTTP/SSE 连接运行中的 `vp run dev` 或 `tavern serve` 服务。
+
+```sh
+# 卡片安装与工坊三件套
+bun run tavern card install ./my-card.yaml
+bun run tavern card compile ./my-card.yaml --select fiction.setting --intent "交情达到 8 时开启信件第 2 层" -o candidate.yaml
+bun run tavern card sort ./my-card.yaml ./notes.md -o candidate.yaml
+bun run tavern card review ./my-card.yaml --json
+
+# 故事生命周期管理
+bun run tavern story list --json
+bun run tavern story new wuxia
+bun run tavern story show 1
+bun run tavern story export 1 --format md > story.md
+bun run tavern story delete 1
+
+# 启动无头服务与编译独立单文件二进制
+MODEL=fake bun run tavern serve --headless --port 7777
+cd packages/server && bun run compile:headless
+```
+
+## 4. 终端交互与管道游玩（`tavern play`）
+
+纯数字参数表示续玩已有故事 ID，其余参数作为卡片 ID 新建故事（数字卡片名可加 `--card` 强制新建）。支持交互式行输入、`--input` 单步执行、stdin 管道以及 `--jsonl` 事件流输出：
+
+```sh
+MODEL=fake bun run tavern play wuxia --greeting 1 --set bond=3 --note "雨夜初见"
+```
+
+| 斜杠命令 | 行为 |
+| --- | --- |
+| `/greet [index]` | 选择开场白开启新根（默认 `0`） |
+| `/act <text>` / `/note <text>` | 显式走角色行动（`act`）或场外指导（`note`）通道 |
+| `/pin <resource-id>` | 本轮主动调用上下文条目（如 `card:guide`、`pack:p/entry`） |
+| `/set <field=value>` | 修改当前节点字段值（`setField`） |
+| `/swipe [node]` / `/reword [note]` | 从 `lookup` 重跑或从 `narrate` 重写当前正文 |
+| `/checkout <node\|root>` | 切换分支到目标版本最新叶节点，或回到空根 |
+| `/tree` / `/context` / `/detail [node]` | 查看节点树 JSON、当前 `WorldState` 或单轮结算变更详情 |
+| `/inspect [node]` | 查看该轮各阶段模型调用记录（遵守服务端 `inspect` 开关） |
+| `/attach` / `/stop` / `/quit` | 接管运行中回合、中断当前生成或等待队列完成后退出 |

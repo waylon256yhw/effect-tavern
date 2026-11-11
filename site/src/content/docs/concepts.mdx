@@ -1,0 +1,77 @@
+---
+title: Core Concepts
+description: The multi-stage turn spine, immutable log tree, unified WorldState, and prompt-cache zones.
+sidebar:
+  order: 1
+---
+
+Effect Tavern separates **narrative prose**, **mechanical settlement**, and **structured memory** at the protocol level. Every runtime behavior derives from a small set of orthogonal primitives defined in `packages/runtime/src/`.
+
+## 1. The Eight-Stage Turn Spine
+
+A player turn is a fixed execution pipeline rather than a single LLM completion:
+
+```text
+lookup → (decide → settle)* → gate → direct → narrate → check → polish → record
+```
+
+Structured stages are **strictly opt-in**: a pure chat card (`banxing.yaml`) executes only `narrate` and `record`. All other stages activate automatically when the card declares their inputs:
+
+| Stage | Runs When | Reads | Responsibility |
+| --- | --- | --- | --- |
+| `lookup` | Unlocked `lore` or `recall` rows exist | `frame`, current input, factual ledger | Searches and reads relevant `lore` layers, `sections`, and `recall` rows, freezing `deliveries` |
+| `decide` | `rules.actions` non-empty & `act` input | `frame`, input (excluding `thought`), available actions | Picks an action ID, estimates `{ judge }` chance if declared, and signals `again` for multi-beat moves |
+| `settle` | `decide` chose an action | Seeded RNG + `rules` | Pure code: rolls dice, clamps `fields`, emits turn `events`, records `Beat` |
+| `gate` | `lore` entries exist | Post-settlement `WorldState` + turn events | Pure code: evaluates monotone `unlock` floors and per-turn `offer` windows |
+| `direct` | `card.director: true` & windows opened | `frame`, factual ledger, open windows | Partitions open lore into `must` vs. `may` and emits a one-line scene `tone` (`Brief`) |
+| `narrate` | Every turn | `frame`, `fiction` bands, `transcript`, `tail` | Streams story prose (and optional inline `<<aside>>` theater blocks) |
+| `check` | `guard` or `must` non-empty | `frame`, `review.head`, draft prose | Checks `guard` prohibitions and `must` disclosures; triggers at most one correction rewrite |
+| `polish` | `switches.polish !== false` & `lexicon` hit | `frame`, `review.head`, matched sentences | Rewrites only narration sentences outside dialogue that match `lexicon` slop patterns |
+| `record` | Every turn | `frame`, `review.head`, final prose | Answers `readouts`, extracts `chronicle`/`theater` products, commits sparse `world` `DomainChange` ops |
+
+<Aside type="important" title="Why Not One Completion + Regex Status Bars?">
+  Legacy tavern setups force a single chat completion to simultaneously write prose, reason inside `<thinking>` tags, format `<status>` or MVU JSON patches, and suggest player choices—then scrape and hide those blocks with client regexes. In Effect Tavern, `narrate` writes prose only and **never** sees raw field numbers (state reaches narration strictly via `when`-gated `fiction` bands). Dice settle in code (`settle`), while state judgements and structured tables run in `record` against strict schemas.
+</Aside>
+
+## 2. Two Coordinates, One `Card` Schema (Beyond "Character Cards")
+
+SillyTavern's `chara_card_v2` / `ccv3` format assumes every card is a single NPC (`description`, `personality`, `scenario`, `mes_example`), forcing ensemble casts, tabletop RPGs, and world simulations to abuse character fields as makeshift scripts. Effect Tavern uses a single `Card` schema across all genres, distinguished along two orthogonal coordinates:
+
+1. **Player presence (`persona` frame slot):**
+   - **Participant mode** (`persona` filled): the player inhabits a character in the scene. Private diegetic `thought` (marked e.g. with `⦅⦆`) stays in the transcript for *dramatic irony* while `decide` ignores it (*has no agency*).
+   - **Author mode** (`persona` empty): the player directs from outside the story while the narrator writes every character.
+2. **Default input channel (`input`):**
+   - `"act"` enters the `transcript` as in-world speech and action.
+   - `"note"` feeds `direct` and `narrate` on the current turn only, never entering the historical transcript—eliminating inline `[OOC: ...]` chat brackets and sticky `Author's Note` hacks at the data-model level.
+
+## 3. Immutable Log Tree vs. Flat Swipes & Checkpoints
+
+Legacy clients store a flat message array with per-message `swipes[]`, duplicating entire chat files to branch mid-story and frequently desynchronizing external variable plugins on rewind. Runtime, server, and client in Effect Tavern share a single zero-dependency immutable tree (`packages/runtime/src/log.ts`):
+
+- **Nodes store only ground-truth inputs and outputs:** player `input`, RNG seeds (`beats`), frozen `deliveries`, model `reply` parts, `readout` `answers`, `products`, `DomainChange` ops, and manual `adjust` edits. Snapshots of derived state are never stored on nodes.
+- **`head` is the single cursor:** a leaf node ID (or `null` on an empty thread). `checkout` moves `head` to any branch's newest leaf; `drop` removes a subtree.
+- **Sibling actions restart at exact stage boundaries** instead of a single undifferentiated "reroll":
+  - `swipe` re-runs from `lookup` (fresh retrieval, fresh dice, fresh prose).
+  - `reword` re-runs from `narrate` (keeping `deliveries` and settled `beats`), optionally appending a one-turn `note`.
+  - `edit` replaces prose, revises `input` while keeping prose, or both—re-running only `check` and `record` so state re-settles cleanly.
+- **Everything else is `Derived` (`derived.ts`):** `WorldState`, transcripts, per-turn `Ledger` pills, `TimelineNode` / `TurnDetail` projections, and prefix compression folds are pure functions of the root-to-node path.
+
+## 4. Unified `WorldState` & Three Product Roles
+
+Condition trees (`Cond`) evaluate against a single unified `WorldState`: `{ fields, world, lore }`. Products extracted per turn declare one of three explicit roles (`Product.role`):
+
+| Role | State & Accumulation | Model Feedback | Client Surface |
+| --- | --- | --- | --- |
+| `world` | Mutable records/tables (`scene`, `people`, `bag`) updated via two-phase `DomainChange` transactions (`insert_entity`, `patch_entity`, `remove_entity`, `patch_record`, `replace`) | `feed: true` → `Current:` line; `recall` → `lookup` index; readable in `Cond` as `world.<id>.<key>` | Status / Readings sheet & per-turn `Ledger` |
+| `chronicle` | Path-folded memory (`fold`: `append`, `latest`, or `{ key }`), e.g. default `notes` | `feed: true` → `Known:` line & prefix compression fold; `recall` → `lookup` | Inspector |
+| `theater` | Player-only output (`inner`, `options`, commentary) written in `record` or inline via `<<aside>> <id>` | Never fed back or recalled (`feed` / `recall` forbidden); supports on-node `demand` | Inline beneath turn prose (or composer chips for `options`) |
+
+## 5. Two-Zone Prompt Assembly (Why Chat `Depth` Does Not Exist)
+
+Legacy tavern cards and presets rely heavily on numeric **depth injection** (`at_depth` / `@D0`–`@D4`, `Author's Note`, `post_history_instructions`), splicing system instructions `N` messages above the bottom of the chat log. Every new turn shifts which historical message sits at depth `N`, mutating the middle of the message array and **invalidating the LLM provider's KV prefix cache on every single turn** while breaking up chronological dialogue.
+
+Effect Tavern enforces **strictly two prompt zones** (`head` and `tail`):
+
+- **`head`** assembles resolved `Layer` frame slots and active `fiction` bands into a stable prefix before the `transcript`.
+- **`tail`** sits immediately *after* the `transcript` and current player input, holding this turn's disclosures, beat outcomes, `Current:`, `Brief`, `note`, `input.thought`, and tail fragments—giving turn-level context maximum recency attention (`@D0`-equivalent position) without ever mutating historical turns.
+- **Interval `Fold` vs. rolling summaries:** Instead of rolling chat-summarizer plugins that rewrite a depth-injected summary every few turns, prefix compression folds older turns' `notes` and disclosed lore by code over fixed node intervals. Because each folded block depends only on nodes inside its closed interval, prompt-cache breakpoints (`head` end, folded prefix, and last prior turn) stay byte-identical across turns and across branches.

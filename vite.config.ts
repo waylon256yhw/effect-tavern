@@ -5,10 +5,10 @@ export default defineConfig({
   fmt: {
     printWidth: 120,
     semi: false,
-    ignorePatterns: ["docs/**", "review/**", "packages/server/src/names.json"], // archived research and reviews and the generated name table stay verbatim
+    ignorePatterns: ["docs/**", "review/**", "site/**", "packages/server/src/names.json"], // archived research, reviews, standalone Astro docs site, and generated name table stay verbatim
   },
   lint: {
-    ignorePatterns: ["**/dist/**"],
+    ignorePatterns: ["**/dist/**", "site/**"],
     jsPlugins: [
       { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
       { name: "solid", specifier: "eslint-plugin-solid" }, // the 2.0 rules: removed-api, no-single-arg-create-effect, no-accessor-as-prop …

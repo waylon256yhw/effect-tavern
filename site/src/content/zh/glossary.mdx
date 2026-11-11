@@ -1,0 +1,60 @@
+---
+title: 术语原语表（Glossary）
+description: 面向开发与 Agent 的标准英文命名原语及中文对照说明。
+sidebar:
+  order: 5
+---
+
+Effect Tavern 以英文代码标识符作为**命名原语（Naming Primitives）**。仓库根目录的 `GLOSSARY.md` 是面向代码与 Agent 的唯一权威英文词表；本页提供核心原语的中文对照，阅读源码或编写卡片时请始终以英文原语名准确定界。
+
+## 虚构与叙事原语
+
+| 命名原语（Code Primitive） | 边界定义 |
+| --- | --- |
+| `diegetic` / `non-diegetic` | 是否处于故事世界内部：**`external diegetic`**（场内可感的言行）、**`internal diegetic`**（即心声 `thought`，角色私密念头，读者可见但场内他人不知）、**`non-diegetic`**（即场外指示 `note`）。 |
+| `mark` | 玩家文本中心声的书写记号（如 `⦅⦆`、斜体、括号），由玩家层约定与 `input.thought` 说明，协议层不硬编码解析。 |
+| `dramatic irony` | 戏剧反讽：读者知道玩家心声或背景秘密，而场内角色不知情，叙事者可围绕这一信息差落笔。 |
+| `metagaming` | 角色越界使用了它在故事内不可能获知的信息（例如 NPC 直接接了玩家心声的话茬）。 |
+| `bleedthrough` | 叙事者替玩家说话、行动或做决定（社区常称抢话 / *impersonation*）。 |
+| `has no agency` | 心声无能动性：一个念头不是动作，`decide` 阶段绝不从心声中提取机械动作。 |
+| `participant mode` / `author mode` | 参与者视角与作者视角：由 `persona` 槽位有无与默认输入通道 `act` / `note` 决定的坐标，而非两种卡格式。 |
+| `persona` | 玩家在虚构里是谁：既是 `frame` 的 `persona` 槽位，也是库中可按卡选用的玩家资产（`/personas`）。 |
+| `hat` | 绑定在 `Connection.hat` 上的模型续写协议壳（`/hats`）：分 `narrate.head`、`narrate.tail` 与 `review.head`。 |
+| `slop` (`claudeism`) | 模型高频复读的陈词滥调与套话句式，由 `lexicon` 词表与 `polish` 阶段定向重写。 |
+
+## 运行时、回合与状态原语
+
+| 命名原语（Code Primitive） | 边界定义 |
+| --- | --- |
+| `Card` | 唯一卡片声明式 Schema（`packages/runtime/src/card.ts`），涵盖 `frame`、`fiction`、`greetings`、`rules`、`lore`、`products`、`catalogs`、`guard` 与 `lexicon`。 |
+| `Turn` & `Stage` | 固定八阶段流水线：`lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`。 |
+| `Log` / `Node` / `head` | 不可变节点树（`log.ts`）、单轮记录节点（`journal.ts`）与唯一当前叶游标（`head`）。 |
+| `sibling` (`swipe`, `reword`, `edit`) | 同父兄弟节点，分别从 `lookup`、`narrate`、`check` 阶段重跑。 |
+| `Derived` | 沿根到节点路径实时折叠算出的纯函数结果（`derived.ts`），从不落库存储。 |
+| `WorldState` & `DomainChange` | 统一求值状态 `{ fields, world, lore }` 及两阶段稀疏世界事务（`insert_entity`、`patch_entity`、`remove_entity`、`patch_record`、`replace`）。 |
+| `Fold` | 产物沿路径累积规则（`latest`、`append`、`{ key }`），以及对旧轮 `notes` 与已揭示 lore 的字节稳定前缀压缩。 |
+| `Head` / `Tail` | 提示词仅有的头尾两区（`request.ts`），取代破坏缓存的楼层深度插入。 |
+| `Channel` (`act` / `note`) | 输入通道：`act` 进入转录稿，`note` 仅在本轮指导叙事者与导演。 |
+| `Fragment` / `Slot` / `Band` | 装配单元、框架具名槽位（`SLOTS`）与带 `when` 条件的 `fiction` 状态分段。 |
+| `Layer` / `Local` / `Pack` | 五级定制行（`harness → card → packs → local → persona`）。 |
+| `Lore` / `Hook` / `Section` / `ContextPolicy` | 分层递进知识（`unlock` 地板 + `offer` 窗口）、首句检索钩子、无门控横向附录节（`card:<id>#<sec>`）与 `{ access, activation, residency }` 策略。 |
+| `Product` (`world` / `chronicle` / `theater`) | 按轮产出的类型化数据（`product.ts`），按职责严格划分为可变世界状态 `world`、编年记忆 `chronicle`（如 `notes`）与纯玩家小剧场 `theater`（如 `inner`、`options`、`<<aside>>`）。 |
+| `Catalog` | 卡片静态附件表（`catalogs`），在 `record` 阶段按状态条件动态收敛可选枚举 ID。 |
+| `Readout` / `Action` / `Beat` / `Cond` | 写后选择题状态读数（`Readout`）、写前动作掷骰（`Action` → `Beat`）与封闭条件树（`Cond`）。 |
+| `Guard` / `Lexicon` | 事后核查禁令（`check`）与通配符套话词表（`polish`）。 |
+
+## 传统酒馆概念辨析与负向约束
+
+Effect Tavern 明确否定并拆解了传统酒馆生态中的若干常见抽象；阅读源码、迁移旧卡或编写提示词时请严格遵循以下映射与边界：
+
+| 传统酒馆常见概念 | Effect Tavern 对应原语 | 架构原因与负向约束 |
+| --- | --- | --- |
+| **`Preset`（预设 / 破限预设）** | `request.ts` + `Layer` / `Pack` / `switches` + `Hat` + `Connection` | 传统预设把消息编排、模型预填/破限握手、玩家文风偏好、状态栏指令与采样参数混装在同一份 JSON 中，跨模型或换卡即失灵。 |
+| **`Character Card`（角色卡 V2/V3）** | `Card`（`frame` + `fiction` + `participant` / `author` 坐标） | 单 NPC 固定字段（`description`、`personality`、`mes_example`、`post_history_instructions`）迫使群像、跑团与无主角世界卡把人物栏当脚本容器滥用。 |
+| **`Depth`（`@D` 深度插入）与作者注释** | `at: "head" \| "tail"` + `note`（`Channel`） | 按倒数第 `N` 层往历史对话插队会每轮改写消息前缀，直接击穿推理端点的 KV 前缀缓存并污染 `transcript`；当轮高权重信息一律进 `tail`。 |
+| **`Worldbook`（世界书 / 蓝绿灯关键词触发）** | `Lore`（`unlock`、`offer`、`sections`）+ `lookup`（`hook`）+ `ContextPolicy` | 对聊天文本做子串/正则扫描会因顺口提及而误触发、因同义换词而漏检，且无法表达随剧情单调解锁的真相深度。 |
+| **内联 `<status>` 状态栏、MVU 与正则脚本** | `decide` / `settle` + `record`（`Readout`、`Product`、`DomainChange`）+ `<<aside>>` | 让叙事模型一边写正文一边算数值、吐 JSON 尾块再用正则剥离，既损伤文笔又会在重抽/改文时导致状态漂移（静态检查 `inline-product` 直接拦截）。 |
+| **`[OOC: ...]` 聊天括号旁白** | `note`（场外通道）与 `thought`（场内私密心声 `mark`） | 把场外指令塞进普通发言会永久污染历史转录稿，还会混淆“给导演的场外指示”与“角色未说出口的心声”。 |
+| **负向咒语墙（“严禁抢话 / 严禁写某词”）** | `switches.agency`（`pov` 槽）+ `Guard`（`check`）+ `Lexicon`（`polish`） | 往 `narrate` 提示词堆砌大量“不要……”会挤占注意力并诱发粉红大象效应；禁忌核查与套话除垢一律后置到事后阶段。 |
+| **有状态模板宏（`{{setvar}}`、`{{roll}}`）** | `Cond` + `Effect` + `Action.roll` + 单遍代称字典 `Names`（`{{key}}`） | 在字符串模板里夹带可变脚本会产生无法静态分析与回放的隐式状态（静态检查 `unsupported-macro` 拦截）。 |
+| **线性楼层 `swipes` 与分支拷贝文件** | `Log`（`Node`、`head`、`checkout`）+ `sibling`（`swipe`、`reword`、`edit`）+ `Derived` | 平面消息数组无法在中间楼层原位分叉，也容易与外部变量表失步；不可变树上的路径折叠保证任意分支状态绝对精确。 |

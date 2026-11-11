@@ -1,0 +1,83 @@
+---
+title: 卡片创作与工坊
+description: Card YAML 结构速查、“两顶帽子”制卡工作流、实测设计铁律与 AI 制卡工坊。
+sidebar:
+  order: 2
+---
+
+在 Effect Tavern 中，一张卡是一份通过 `Card` Schema（`packages/runtime/src/card.ts`）校验的声明式 YAML 或 JSON 数据。作者无需编写模板控制流或正则脚本：所有条件均由封闭的 `Cond` 树表达，所有状态效果仅由 `{ set }`、`{ add }` 与 `{ event }` 三种原语构成。
+
+## 1. 内容归属速查
+
+| 卡片字段 | 作用与可见范围 | 关键配置 |
+| --- | --- | --- |
+| `frame` | 叙事声音、基调与玩家槽位（**所有阶段**均作为头区读取） | 标准槽位 `SLOTS`：`persona`、`pov`、`voice`、`style`、`setting`、`language`、`verbosity` |
+| `fiction` | 人物设定、群像、世界观散文及按状态切换的**分段（`Band`）**（仅 `narrate` 读） | `{ id, label?, text, when? }` |
+| `greetings` | 静态开场白（`text`）或动态引导开场（`note` + `start: true` 开局字段） | `[{ text?, do?, note? }]` |
+| `rules.fields` | 标量状态（`int` / `number` / `boolean` / `enum`）及量表绘制推导（`drawn`） | `{ path, type, initial, min?, max?, options?, hidden?, start?, view? }` |
+| `rules.actions` | 叙事前机械动作与带种子的概率检定 | `{ id, text, when?, roll?, hit?, miss?, do? }` |
+| `rules.readouts` | 叙事后选择题判据，使剧情能够推动标量字段 | `{ id, text, when?, options: [{ id, text, do }] }` |
+| `lore` | 纵向渐进揭示 `layers`（`unlock` 地板 + `offer` 窗口）、横向附录 `sections` 与 `ContextPolicy` | `{ id, layers, sections?, unlock, offer?, access?, activation?, residency? }` |
+| `products` | 结构化 `world`、`chronicle` 或 `theater` 产物声明 | `{ id, label?, text, shape, role, initial?, stage?, fold?, feed?, recall? }` |
+| `catalogs` | 静态附件目录（立绘、BGM、语音），在 `record` 阶段按条件过滤可选项 ID | `{ id, baseUrl?, items: [{ id, when?, variants? }] }` |
+| `guard` / `lexicon` | 事后核查禁令（`check`）与套话重写词表（`polish`） | `guard: string[]`、`lexicon: [{ pattern, hint? }]` |
+
+### Lore 的纵向层（`layers`）与横向节（`sections`）：取代世界书蓝绿灯扫描
+传统酒馆世界书（`World Info` / `character_book`）靠“蓝灯常驻”与“绿灯关键词正则扫描”触发，极易因对话顺口提到某词而提前剧透，或换个说法就漏检。Effect Tavern 按内容结构将其拆为两条正交轴：
+- **层（`layers`）**表达随剧情解锁的真相深度：`unlock` 定义沿路径单调不退的解锁地板，`offer` 根据状态、当轮事件与计数器（`lore.<id>.since | shown`）打开下一层窗口；`layers[0]` 的首句即为供 `lookup` 浏览的自然语言检索钩子（`hook`）。
+- **节（`sections: [{ id, text }]`）**表达无需剧情解锁的横向背景附录（资源 ID 为 `card:<条目>#<节>`），首句即检索钩子，仅在 `lookup` 追问时按需读取，避免主词条过长挤占上下文。
+
+### 字段量表自动推导（`drawn`）
+客户端直接根据字段边界与 `fiction` 分段阈值决定绘制形态：
+- `enum` → **`steps`**（步骤轨）；
+- 同时带 `min` 与 `max` 的 `int` → 若 `min < 0` 或分段在区间内切出 2 个及以上阈值，画为 **`scale`**（分格刻度轴，如好感度 `-30..100`）；否则画为 **`gauge`**（存量进度条，如生命值 `0..100`）。当带伤势分段的存量仍需画为进度条时，显式声明 `view: "gauge"` 即可覆盖；
+- 其余字段 → **`value`**（数值行）。
+
+## 2. “两顶帽子”制卡流程
+
+务必严格分两步制卡，先搭机关再填散文：
+
+<Steps>
+  <Step title="第一顶帽子：建筑师（Architect —— 只搭机制骨架）">
+    正文只写一行占位符。先定两个坐标（`persona` 与 `input`），声明 `rules.fields` 及其写权限归属（`actions` 机械量还是 `readouts` 读数量），接好 `lore` 的 `unlock` / `offer`、`fiction` 分段 `when` 条件以及各开场的 `greetings[].do`。
+
+    运行 `card check` 直至零错误，逐行核对各开场的初始状态、激活分段与首轮窗口；再用 `card test` 编写零 Token `scenario.yaml` 锁死规则行为。
+  </Step>
+  <Step title="第二顶帽子：小说家（Novelist —— 冻结机制写散文）">
+    冻结规则结构，专注撰写 `frame`、各段 `fiction`、`lore` 各层/各节以及 `greetings` 开场正文。
+
+    再次运行 `card check`（拦截正文夹带数值 `field-in-prose`、内联索要状态栏 `inline-product`、留空槽 `empty-text` 等），并用 `card view` 在关键阈值两侧（如 `--state bond=59` 与 `--state bond=60`）预览模型实际读到的完整提示词。
+  </Step>
+</Steps>
+
+## 3. 真卡实测总结的设计铁律
+
+<Aside type="caution" title="四条高频踩坑准则">
+  1. **读数（`Readout`）选项必须写“可见举动”，绝不写“内心心理”。** 克制文风下心理活动含蓄不露，`record` 会永远保守落回不变项导致字段锁死；选项应写具体行为（如“收下信物”“追问来历”）。
+  2. **挂在某字段上的 `fiction` 分段不得提前规定该字段读数要测量的走向。** 分段只写角色当下的姿态与张力，把本幕推进空间留给玩家互动。
+  3. **锁存型读数（触发后翻转开关不再询问）必须包含“已提起、尚待回应”的中间态选项。** 当读数的 `when` 与某条 `lore` 的 `offer` 同阈值时，`record` 会在角色刚抛出话题、玩家尚未回答的当轮立即提问；若只有“未发生 / 接受 / 拒绝”，模型会误判为“拒绝”。
+  4. **多开场卡的 `Field.initial` 取所有开场的最低公共基线**，单条路线的增量写进各自的 `greetings[n].do`。切勿把人物设定放进 `frame`（包括 `direct` 在内的所有阶段都会读 `frame`）。
+</Aside>
+
+## 4. 制卡工坊与旧卡重制
+
+Effect Tavern 内置三项 AI 辅助工坊能力（`packages/runtime/support/workshop.ts`，同时暴露于 `/api/author/*` 与 `tavern card` CLI）：
+
+- **`unroll`**（`bun packages/runtime/bin/unroll.ts <card.png|card.json>`）：只读读卡仪器，按 SillyTavern 自身的装配顺序将 PNG/JSON V2/V3 卡片完整展开为 Markdown，可直接作为 `sort` 源稿。
+- **`tavern card compile`**：根据选中的正文片段与自然语言 `--intent` 编译规则增量与条件绑定。输出 Schema **不含任何正文字段**——已有作者原文逐字不动，新建的正文与判据槽一律留空（`empty-text`），交由作者亲笔填写。
+- **`tavern card sort`**：将源稿按段落原封不动归位到 `frame`、`fiction`、`greetings` 或 `lore` 槽位，绝不改写句子。
+- **`tavern card review`**：只读语义一致性审阅，返回指向具体卡片路径的 `review:consistency` 警告。
+
+### 重制 SillyTavern V2/V3 旧卡：落位映射与负向约束
+
+利用 `unroll` 拆解传统酒馆旧卡时，应**原封不动保留原作者的人物与世界观散文**，同时剥离因单次补全架构而生的提示词脚手架：
+
+| SillyTavern 旧卡结构 | Effect Tavern 落位目标（及禁止事项） |
+| --- | --- |
+| `description` / `personality` / `mes_example` | 归入 `fiction` 片段（随关系/状态变化的部分拆为带 `when` 的 `Band`；严禁放进 `frame`） |
+| `scenario` | 全局世界前提进 `frame` 的 `setting` 槽；当场对戏态势进 `fiction` |
+| `first_mes` + `alternate_greetings` | `greetings[n].text`，并将不同开场路线的初始数值增量提炼进 `greetings[n].do` |
+| `character_book`（蓝灯常驻 / 绿灯关键词词条） | 常驻背景进 `fiction`；渐进秘密与附录进 `lore`（纵向 `layers` + 横向 `sections` + 首句自然钩子，丢弃正则触发词） |
+| `at_depth`（`@D0`–`@D4`）、作者注释、`post_history_instructions` | **严禁复刻深度插入。** 行文基调进 `frame`，事后禁令进 `guard`，套话黑名单进 `lexicon`，状态提醒进 `fiction` 分段 |
+| 正文 `<status>` 状态栏、MVU JSON 尾块与正则脚本 | **丢弃格式咒语与正则。** 标量轴进 `rules.fields`（`actions` / `readouts`），动态实体表进 `world` 类 `products`，小剧场进 `theater` |
+| `{{user}}` / `{{char}}` 与 `{{setvar}}` / `{{roll}}` | 纯专名占位保留在 `names`；可变变量与随机宏改写为 `rules.fields`、`Cond`、`Effect` 与 `Action.roll` |

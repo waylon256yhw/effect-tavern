@@ -1,0 +1,72 @@
+---
+title: Introduction
+description: Declarative cards, multi-stage turn execution, and deterministic state settlement on Effect v4.
+sidebar:
+  order: 0
+---
+
+Effect Tavern is a ground-up full-stack harness for AI roleplay and interactive fiction, built on **Effect v4**, **Solid 2.0**, and **Bun**.
+
+Instead of relying on prompt incantations, chat-depth injections, and regex scrapers, Effect Tavern treats every card as **declarative data plus deterministic rules**. Code owns the control loop, seeded dice, state transitions, and prompt-cache boundaries; the LLM is called only at typed stage seams to classify, narrate prose, and extract structured facts.
+
+<Aside type="note" title="Bilingual & Agent-Ready Documentation">
+  Prefer Chinese? Switch to [简体中文](/zh/) in the top bar. Every page on this site also publishes a clean Markdown twin (`/<slug>/index.md`) and an agent discovery index at `/llms.txt`.
+</Aside>
+
+## Explore the Docs
+
+<CardGrid>
+  <Card title="Core Concepts" icon="ph:compass" href="/concepts/">
+    Understand the 8-stage turn spine, immutable log tree, unified `WorldState`, and prompt-cache zones.
+  </Card>
+  <Card title="Card Authoring & Workshop" icon="ph:cards" href="/card-authoring/">
+    Design cards with the two-hat workflow, author `rules`, `lore`, and `products`, or remaster legacy cards.
+  </Card>
+  <Card title="CLI & Headless Host" icon="ph:terminal-window" href="/cli/">
+    Run `card`, `unroll`, and `tavern` for zero-token testing, terminal play, Workshop compilation, and SSE hosting.
+  </Card>
+  <Card title="Layers, Packs & Hats" icon="ph:stack" href="/layers-and-packs/">
+    Customize voice, writing switches, enhancer packs, and provider continuation shells without presets.
+  </Card>
+</CardGrid>
+
+## Quick Start
+
+**Prerequisites:** Bun `>= 1.4.4`, Node.js `>= 24`, and Vite+ (`vp`, `pnpm@12.11.1`).
+
+<Steps>
+  <Step title="Install workspace dependencies">
+    ```sh
+    vp install
+    ```
+  </Step>
+  <Step title="Start the full-stack web workspace">
+    ```sh
+    bun --bun vp run dev
+    ```
+    Opens the Solid 2.0 client with HMR and an in-process `/api` session backed by `.dev/tavern.db`. Set `MODEL=fake` to run without spending API tokens.
+  </Step>
+  <Step title="Or play and inspect from the terminal">
+    ```sh
+    MODEL=fake bun run tavern play wuxia --greeting 0 --input "走进竹林"
+    bun packages/runtime/bin/card.ts check wuxia
+    ```
+  </Step>
+  <Step title="Run static checks & verification">
+    ```sh
+    vp check
+    vp run verify
+    ```
+  </Step>
+</Steps>
+
+## Built-in Template Cards
+
+Four canonical YAML cards live in `packages/runtime/cards/`—serving simultaneously as starter scaffolds, architectural exemplars, and live regression suites:
+
+| Card ID | Mode & Channel | Demonstrates |
+| --- | --- | --- |
+| `banxing` | `participant` / `act` | Pure chat card with zero rules or lore; voice-sample `fiction` fragment |
+| `ri` | `participant` / `act` | Multi-stage `scale` bands, `hidden` route switches, 3 openings, latching readout |
+| `wuxia` | `participant` / `act` | Action rolls, readout bands, 3-layer lore, `director`, `world` record & table, `guard` |
+| `yandao` | `author` / `note` | Protagonist-free world simulation with card-owned `pov` slot and turn-1 window |

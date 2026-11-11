@@ -1,0 +1,60 @@
+---
+title: Glossary
+description: Canonical English naming primitives mapping Effect Tavern concepts directly to codebase identifiers.
+sidebar:
+  order: 5
+---
+
+Canonical naming primitives for developers, card authors, and coding agents. The repository source of truth lives in `GLOSSARY.md` at the repo root.
+
+## Fiction & Dramaturgy
+
+| Primitive | Definition |
+| --- | --- |
+| `diegetic` / `non-diegetic` | Inside vs. outside the story world: **`external diegetic`** (perceptible speech/action), **`internal diegetic`** (`thought`—private to the player character, visible to the reader), and **`non-diegetic`** (`note`—direction to the narrator). |
+| `mark` | Player-layer notation marking `thought` (e.g. `⦅⦆`, italics), explained to stages via `input.thought` rather than parsed by wire protocol. |
+| `dramatic irony` | Asymmetry where the reader knows a `thought` or secret that counterparts in the scene do not. |
+| `metagaming` | A character acting on knowledge they cannot possess in-world (such as replying to the player's private `thought`). |
+| `bleedthrough` | The narrator speaking, acting, or deciding for the player (*impersonation*). |
+| `has no agency` | Mechanical rule that `decide` ignores `thought` when choosing card `actions`. |
+| `participant mode` / `author mode` | Coordinate pair (`persona` filled vs. empty, paired with default `input: "act" \| "note"`). |
+| `persona` | Frame slot (`persona`) and reusable player asset (`/personas`) defining who the player is in the fiction. |
+| `hat` | Provider-specific continuation shell (`/hats`, `Connection.hat`): `narrate.head`, `narrate.tail`, and `review.head`. |
+| `slop` (`claudeism`) | Over-repeated model stock phrases and clichés targeted by `lexicon` and `polish`. |
+
+## Runtime, Turn & State
+
+| Primitive | Definition |
+| --- | --- |
+| `Card` | Single declarative schema (`packages/runtime/src/card.ts`) covering metadata, `frame`, `fiction`, `greetings`, `rules`, `lore`, `products`, `catalogs`, `guard`, and `lexicon`. |
+| `Turn` & `Stage` | Fixed 8-stage pipeline: `lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`. |
+| `Log` / `Node` / `head` | Immutable append/amend tree (`log.ts`), turn record (`journal.ts`), and active leaf cursor (`head`). |
+| `sibling` (`swipe`, `reword`, `edit`) | Nodes sharing a `parent`, restarting respectively from `lookup`, `narrate`, or `check`. |
+| `Derived` | Pure path fold (`derived.ts`) computing state, floors/counters, transcripts, compression, and UI projections without storing snapshots. |
+| `WorldState` & `DomainChange` | Unified `{ fields, world, lore }` state and sparse two-phase mutations (`insert_entity`, `patch_entity`, `remove_entity`, `patch_record`, `replace`). |
+| `Fold` | Path accumulation (`latest`, `append`, `{ key }`) on products, and byte-stable prefix compression over `notes` and disclosed lore. |
+| `Head` / `Tail` | The two prompt assembly zones (`request.ts`); replaces numeric chat-depth insertion. |
+| `Channel` (`act` / `note`) | Input route: `act` enters the `transcript`; `note` directs this turn only. |
+| `Fragment` / `Slot` / `Band` | Prompt unit (`fragment.ts`), named `frame` slot (`SLOTS`), and `when`-gated `fiction` state variant. |
+| `Layer` / `Local` / `Pack` | Rank-ordered customization rows (`harness → card → packs → local → persona`). |
+| `Lore` / `Hook` / `Section` / `ContextPolicy` | Progressive `layers` (`unlock` floor + `offer` window), first-sentence `hook`, ungated `sections` (`card:<id>#<sec>`), and `{ access, activation, residency }` policy. |
+| `Product` (`world` / `chronicle` / `theater`) | Per-turn structured extractions (`product.ts`) separated into mutable `world` state, folded `chronicle` memory (`notes`), and player-only `theater` (`inner`, `options`, `<<aside>>`). |
+| `Catalog` | Card attachment registry (`catalogs`) dynamically filtering pickable `enum` IDs during `record`. |
+| `Readout` / `Action` / `Beat` / `Cond` | Post-prose multiple-choice state judgment (`Readout`), pre-prose roll (`Action` → `Beat`), and closed boolean tree (`Cond`). |
+| `Guard` / `Lexicon` | Post-prose prohibitions (`check`) and wildcard rewrite patterns (`polish`). |
+
+## Legacy Tavern Concepts & Negative Constraints
+
+Effect Tavern deliberately rejects several ubiquitous legacy tavern abstractions. Map them onto these exact primitives instead:
+
+| Legacy Tavern Concept | Effect Tavern Primitive(s) | Architectural Reason & Negative Constraint |
+| --- | --- | --- |
+| **`preset`** (monolithic prompt + sampler JSON) | `request.ts` + `Layer` / `Pack` / `switches` + `Hat` + `Connection` | Presets tangle message order, jailbreaks/prefills, prose preferences, CoT/status instructions, and endpoint settings into one brittle file. |
+| **`character card`** (`chara_card_v2` / `ccv3`) | `Card` (`frame` + `fiction` + `participant` / `author` coordinates) | Single-NPC fields (`description`, `personality`, `mes_example`, `post_history_instructions`) distort ensemble casts, RPGs, and protagonist-free worlds. |
+| **`depth` (`@D`) injection & `Author's Note`** | `at: "head" \| "tail"` + `note` (`Channel`) | Splicing dynamic strings `N` messages from the end of history mutates the prefix every turn, invalidating KV prefix caching and polluting `transcript`. |
+| **`worldbook` / `lorebook` & keyword triggers** | `Lore` (`unlock`, `offer`, `sections`) + `lookup` (`hook`) + `ContextPolicy` | Substring/regex chat scanning (`constant` blue-light vs. `selective` green-light, `scan_depth`) misfires on passing mentions and lacks monotone plot floors. |
+| **Inline `<status>` bars, MVU & regex scripts** | `decide` / `settle` + `record` (`Readout`, `Product`, `DomainChange`) + `<<aside>>` | Asking `narrate` to format XML/JSON state patches and scraping them with regex degrades prose voice and drifts on edits/branches (`inline-product`). |
+| **`[OOC: ...]` inline chat brackets** | `note` (`Channel`) vs. `thought` (`internal diegetic` `mark`) | Inline `[OOC]` enters permanent chat history and conflates out-of-character direction with private character monologue. |
+| **Negative prompt walls ("DO NOT...")** | `switches.agency` (`pov` slot) + `Guard` (`check`) + `Lexicon` (`polish`) | Narrator-facing prohibition lists bloat prompts and trigger ironic-process violations; verification and slop rewriting belong post-prose. |
+| **Stateful macros (`{{setvar}}`, `{{roll}}`)** | `Cond` + `Effect` + `Action.roll` + single-pass `Names` (`{{key}}`) | Imperative template scripting hides untestable state inside prose strings (`unsupported-macro`). |
+| **Flat `swipes[]` & branch checkpoint files** | `Log` (`Node`, `head`, `checkout`) + `sibling` (`swipe`, `reword`, `edit`) + `Derived` | Linear chat arrays duplicate files on mid-thread branches and desynchronize variable stores; path folding keeps state exact everywhere. |

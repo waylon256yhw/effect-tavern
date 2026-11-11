@@ -1,0 +1,83 @@
+---
+title: Card Authoring & Workshop
+description: How to structure Card YAML, follow the two-hat workflow, avoid live-play pitfalls, and use the Workshop.
+sidebar:
+  order: 2
+---
+
+A card in Effect Tavern is a single declarative YAML or JSON document validated by `Card` (`packages/runtime/src/card.ts`). Authors write zero template logic or regex parsers: conditions use the closed `Cond` tree, and effects use `{ set }`, `{ add }`, and `{ event }`.
+
+## 1. Where Everything Goes
+
+| Card Section | Purpose | Key Fields |
+| --- | --- | --- |
+| `frame` | Narrator register, voice & player slots (read by **all** stages) | `SLOTS`: `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity` |
+| `fiction` | Character sheets, cast, world prose & state-gated **bands** (`narrate` only) | `{ id, label?, text, when? }` |
+| `greetings` | Static openings (`text`) or dynamic narrated openings (`note` + `start` fields) | `[{ text?, do?, note? }]` |
+| `rules.fields` | Scalar state (`int`, `number`, `boolean`, `enum`) & UI meter shape (`drawn`) | `{ path, type, initial, min?, max?, options?, hidden?, start?, view? }` |
+| `rules.actions` | Pre-narration mechanical moves & seeded rolls | `{ id, text, when?, roll?, hit?, miss?, do? }` |
+| `rules.readouts` | Post-narration multiple-choice judgements Moving prose-driven fields | `{ id, text, when?, options: [{ id, text, do }] }` |
+| `lore` | Progressive `layers` (`unlock` floor + `offer` window), `sections` appendices & `ContextPolicy` | `{ id, layers, sections?, unlock, offer?, access?, activation?, residency? }` |
+| `products` | Typed `world`, `chronicle`, or `theater` schemas (`text`, `list`, `record`, `table`) | `{ id, label?, text, shape, role, initial?, stage?, fold?, feed?, recall? }` |
+| `catalogs` | Attachment registries (illustrations, BGM, voice) picked by ID in `record` | `{ id, baseUrl?, items: [{ id, when?, variants? }] }` |
+| `guard` / `lexicon` | Post-prose prohibitions (`check`) & wildcard slop patterns (`polish`) | `guard: string[]`, `lexicon: [{ pattern, hint? }]` |
+
+### Lore Layers vs. Lore Sections (Replacing Keyword Worldbooks)
+Legacy `World Info` / `character_book` entries rely on `constant` ("blue light") vs. `selective` ("green light") keyword scanning over chat text—firing spoilers on casual mentions and missing entries when synonyms are used. Effect Tavern separates lore along two structural axes instead:
+- **Layers (`layers: string[]`)** represent vertical narrative progression: `unlock` sets the monotone floor along the story path, while `offer` opens `current + 1` when an event or counter (`lore.<id>.since | shown`) matches. The first sentence of `layers[0]` serves as the semantic `lookup` **hook**.
+- **Sections (`sections: [{ id, text }]`)** represent horizontal appendices (`card:<entry>#<section>`), such as detailed timelines or technical lore. They are never gated by plot events and are fetched on demand by `lookup` only when relevant to the current turn.
+
+### UI Field Drawing (`drawn`)
+Clients render `rules.fields` directly from their bounds and band thresholds—no widget code required:
+- `enum` → **`steps`** track.
+- Bounded `int` (`min` and `max` set) → **`scale`** (staged cells with a dot, e.g. affection `-30..100`) when `min < 0` or `fiction` bands cut 2+ thresholds; otherwise **`gauge`** (`now / max` stock bar, e.g. HP `0..100`). Set `view: "gauge" | "scale"` to override.
+- Any other scalar → **`value`** row.
+
+## 2. The Two-Hat Workflow
+
+Always build a card in two distinct passes:
+
+<Steps>
+  <Step title="Hat 1 — Architect (Mechanism & Skeleton)">
+    Keep prose to one-line placeholders. Choose the two coordinates (`persona` + `input`), declare `rules.fields`, decide which fields move via `actions` vs. `readouts`, wire `lore` floors/windows, add `fiction` band `when` conditions, and define `greetings[].do`.
+
+    Run `card check` until zero errors remain and every greeting's initial state, active bands, and turn-1 windows match intent. Lock mechanics with a zero-token `scenario.yaml` via `card test`.
+  </Step>
+  <Step title="Hat 2 — Novelist (Prose & Voice)">
+    Freeze the mechanism. Write full prose for `frame`, `fiction` bands, `lore` layers/sections, and `greetings`.
+
+    Re-run `card check` (catching `field-in-prose`, `inline-product`, `hook-length`, `unfilled-name`, `empty-text`) and inspect exact stage prompts with `card view` across boundary states (`--state bond=59` vs. `--state bond=60`).
+  </Step>
+</Steps>
+
+## 3. Proven Design Rules from Live Play
+
+<Aside type="caution" title="Four Classic Card Bugs to Avoid">
+  1. **Write readout options as observable deeds, never internal psychology.** Reserved prose keeps feelings implicit, causing `record` to pick the conservative option forever. Name visible acts (`accepts the letter`, `asks about the scar`).
+  2. **Do not let a `fiction` band prescribe the trajectory its readout measures.** A band should describe present tension and leave room for the scene to move.
+  3. **Cover the "raised, not yet answered" state on latching readouts.** When a readout shares its `when` condition with a `lore` `offer`, `record` asks it on the very turn the NPC raises the topic—before the player replies. Include an explicit in-flight neutral option so the model is not forced into `refused`.
+  4. **Set `Field.initial` to the lowest baseline shared across all greetings** and place route-specific deltas in `greetings[n].do`. Never put character profiles inside `frame` (every stage, including `direct`, reads `frame`).
+</Aside>
+
+## 4. Workshop & Legacy Card Remastering
+
+Effect Tavern ships three AI-assisted Workshop operations (`packages/runtime/support/workshop.ts`, exposed via HTTP `/api/author/*` and `tavern card`):
+
+- **`unroll`** (`bun packages/runtime/bin/unroll.ts <card.png|card.json>`): Read-only inspection tool that prints a SillyTavern V2/V3 card in ST's exact assembly order, ready to audit and feed into `sort`.
+- **`tavern card compile`**: Compiles `rules` and `bindings` from selected card prose and a natural-language `--intent`. Its output schema contains **no prose fields**—existing prose stays untouched and new prose/rubric slots remain empty (`empty-text`) for the author to write.
+- **`tavern card sort`**: Places whole paragraphs from a source Markdown file into `frame`, `fiction`, `greetings`, or `lore` slots verbatim without rewriting a word.
+- **`tavern card review`**: Read-only semantic consistency pass returning path-addressed `review:consistency` warnings.
+
+### Remastering SillyTavern V2/V3 Cards: What Goes Where
+
+When porting an unrolled SillyTavern card, preserve the author's character and world prose verbatim while stripping legacy prompt scaffolding:
+
+| SillyTavern Construct | Effect Tavern Target (or Negative Constraint) |
+| --- | --- |
+| `description` / `personality` / `mes_example` | `fiction` fragments (`when`-gated `Band`s when posture shifts with state; never place in `frame`) |
+| `scenario` | Premise in `frame` (`setting` slot); active scene posture in `fiction` |
+| `first_mes` + `alternate_greetings` | `greetings[n].text`, factoring route-specific initial state into `greetings[n].do` |
+| `character_book` (`constant` / `selective` entries) | `fiction` (always-on) or `lore` (`layers` + `sections` + natural first-sentence `hook`; discard regex keyword lists) |
+| `at_depth` (`@D0`–`@D4`), `Author's Note`, `post_history_instructions` | **No depth injection.** Route voice rules to `frame`, prohibitions to `guard`, slop lists to `lexicon`, and state shifts to `fiction` bands |
+| Inline `<status>` bars, MVU JSON blocks & regex scripts | **Discard format prompts & regexes.** Model scalar axes in `rules.fields` (`actions` / `readouts`), world tables in `world` `products`, and side blocks in `theater` |
+| `{{user}}` / `{{char}}` vs. `{{setvar}}` / `{{roll}}` | Keep proper-noun holes in `names`; replace stateful/random macros with `rules.fields`, `Cond`, `Effect`, and `Action.roll` |

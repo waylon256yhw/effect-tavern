@@ -1,0 +1,77 @@
+---
+title: 核心概念
+description: 八阶段回合管线、不可变日志树、统一 WorldState 与提示词缓存分区。
+sidebar:
+  order: 1
+---
+
+Effect Tavern 在协议层面将**叙事正文**、**机械结算**与**结构化记忆**彻底解耦。所有运行时行为均由 `packages/runtime/src/` 中一组正交原语组合而成。
+
+## 1. 八阶段回合管线（Turn Spine）
+
+玩家的一轮输入走固定骨架的阶段流水线，而非单次模型生成：
+
+```text
+lookup → (decide → settle)* → gate → direct → narrate → check → polish → record
+```
+
+所有结构化阶段均为 **按需开启（Opt-in）**：一张纯聊天卡（如 `banxing.yaml`）每轮只运行 `narrate` 与 `record`；其余阶段仅在卡片声明了对应机制时自动接入：
+
+| 阶段 | 触发条件 | 读取范围 | 核心职责 |
+| --- | --- | --- | --- |
+| `lookup` | 存在已解锁 `lore` 或 `recall` 表行 | `frame`、本轮输入、事实账本 | 通过检索与按需读取挑选本轮所需的 `lore` 层、`sections` 节与召回行，冻结为 `deliveries` |
+| `decide` | 声明了 `rules.actions` 且走 `act` 通道 | `frame`、输入（忽略心声）、可用动作 | 选择动作 ID，为 `{ judge }` 估算概率，并在多拍指令时标记 `again` |
+| `settle` | `decide` 选出了动作 | 随机种子 + `rules` | 纯代码结算：掷骰、夹紧字段边界、发出本轮 `events`、记下 `Beat` |
+| `gate` | 声明了 `lore` | 结算后 `WorldState` + 本轮事件 | 纯代码门控：求值单调地板 `unlock` 与当轮窗口 `offer` |
+| `direct` | `director: true` 且本轮有窗口打开 | `frame`、事实账本、开窗候选 | 将开窗条目划分为必讲 `must` 与可选 `may`，并给出一句场景基调 `tone`（`Brief`） |
+| `narrate` | 每轮必跑 | `frame`、`fiction` 分段、`transcript`、`tail` | 流式生成故事正文（及可选的内联 `<<aside>>` 小剧场块） |
+| `check` | `guard` 或 `must` 非空 | `frame`、`review.head`、正文草稿 | 事后核查 `guard` 禁令与 `must` 揭示；违规或漏讲时最多触发一次纠错重写 |
+| `polish` | `switches.polish !== false` 且命中词表 | `frame`、`review.head`、命中句 | 仅重写对白之外命中 `lexicon` 套话模式的旁白句子 |
+| `record` | 每轮必跑 | `frame`、`review.head`、定稿正文 | 回答 `readouts` 选择题、提取 `chronicle` / `theater` 产物、提交 `world` 稀疏变更 |
+
+<Aside type="important" title="为什么摒弃“单次补全 + 状态栏正则剥离”？">
+  传统酒馆往往要求一次对话补全同时完成小说续写、`<thinking>` 思维链推演、`<status>` 或 MVU JSON 变量块输出与选项生成，再靠前端正则脚本抠字隐藏——既分散叙事注意力，又会在格式微偏或重抽改文时引发状态失步。在 Effect Tavern 中，`narrate` 只负责写小说且**永远看不到具体数值**（状态仅经由带 `when` 的 `fiction` 分段送达）；掷骰检定归纯代码（`settle`），状态判读与结构化表更新归独立的 `record` 阶段按严格 Schema 抽取。
+</Aside>
+
+## 2. 两个坐标，唯一 `Card` Schema（告别“角色卡”桎梏）
+
+SillyTavern 的 `chara_card_v2` / `ccv3` 默认每张卡都是单个 NPC（`description`、`personality`、`scenario`、`mes_example`），迫使群像剧、跑团卡与世界模拟器把人物描述栏当作脚本容器滥用。Effect Tavern 用同一份 `Card` Schema 覆盖所有体裁，它们的区别仅体现为两个正交坐标上的取值：
+
+1. **玩家在故事里是谁（`persona` 框架槽位）：**
+   - **`participant mode`（参与者视角）**：填充了 `persona`，玩家扮演故事中人。私有心声（`thought`，如 `⦅⦆` 标记）留在转录稿中制造戏剧反讽（`dramatic irony`），同时 `decide` 不从中提取动作（`has no agency`）。
+   - **`author mode`（作者视角）**：`persona` 为空，玩家在故事外指挥，模型负责书写所有人物。
+2. **默认输入通道（`input`）：**
+   - `"act"` 进入对话转录稿（`transcript`）。
+   - `"note"` 仅在本轮送给 `direct` 与 `narrate`，绝不进入历史记录——从数据结构上取代聊天框里的 `[OOC: ...]` 括号与常驻“作者注释（Author's Note）”。
+
+## 3. 不可变日志树 vs. 线性楼层 `swipes` 与分支拷贝
+
+传统前端采用线性消息数组加单层 `swipes[]`，一旦从中间楼层分叉就必须整份复制聊天文件，回退或切支时极易与外部变量插件失步。`runtime`、`server` 与 `client` 在 Effect Tavern 中共用同一份零依赖不可变树（`packages/runtime/src/log.ts`）：
+
+- **节点只存事实源：** 玩家 `input`、随机种子 `beats`、冻结上下文 `deliveries`、模型输出 `reply`、读数答案 `answers`、产物与稀疏变更 `changes` 以及手动微调 `adjust`；派生状态快照从不存入节点。
+- **唯一游标 `head`：** 指向当前叶节点 ID（空线为 `null`）。`checkout` 零拷贝切换到任意分支的最新叶节点，`drop` 删除子树。
+- **兄弟节点（`sibling`）按阶段精确重跑**，告别笼统的“重Roll”：
+  - `swipe`：从 `lookup` 重新起跑（重新检索、重新掷骰、重写正文）；
+  - `reword`：保留已检索上下文与检定结果，从 `narrate` 重新起笔（可附一句单次 `note`）；
+  - `edit`：直接修改正文、修订玩家输入（保留正文）或同时修改两者，仅重跑 `check` 与 `record` 使状态干净重算。
+- **一切状态与视图均为路径折叠（`Derived`）：** `WorldState`、转录稿、本轮账本 `Ledger`、时间轴投影以及前缀压缩块全部由根到节点的路径实时纯函数算出。
+
+## 4. 统一 `WorldState` 与三类产物职责
+
+条件树 `Cond` 统一在 `{ fields, world, lore }` 上求值。卡片每轮产出的 `Product` 必须显式声明三类 `role` 之一：
+
+| `role` | 状态性质与累积方式 | 是否回喂模型 | 客户端展示位置 |
+| --- | --- | --- | --- |
+| `world` | 当前世界状态（如 `scene`、`people`、`bag`），经 `record` 两阶段 `DomainChange` 稀疏事务更新 | `feed: true` 进 `Current:` 行；`recall` 进 `lookup` 索引；`Cond` 可读 `world.<id>.<key>` | 状态面板与本轮 `Ledger` 药丸 |
+| `chronicle` | 沿路径折叠的编年记忆（`fold`: `append` / `latest` / `{ key }`），如默认 `notes` | `feed: true` 进 `Known:` 行与前缀压缩摘要；`recall` 进 `lookup` | 检查器（Inspector） |
+| `theater` | 纯面向玩家的小剧场（`inner`、`options`、旁批），在 `record` 或 `narrate` 内联 `<<aside>> <id>` 产出 | 严禁回喂或召回（`feed` / `recall` 禁用）；支持对节点按需 `demand` | 正文下方内联卡片（`options` 进输入框候选） |
+
+## 5. 双区装配与缓存纪律（为什么不存在 `@D` 深度插入）
+
+传统酒馆预设与世界书大量依赖按楼层倒数的**深度插入（`at_depth` / `@D0`–`@D4`、作者注释、`post_history_instructions`）**，将指令硬塞进倒数第 `N` 条聊天记录中间。每推进一轮对话，倒数第 `N` 层的落点就会整体后移一位，导致历史消息前缀每轮改写、**推理端点的 KV 前缀缓存每轮全部失效**，同时把好端端的对话转录稿切得支离破碎。
+
+Effect Tavern 严格规定提示词只有 **`head`** 与 **`tail`** 两个装配区：
+
+- **`head`（头区）**：放置解析后的玩家层 `frame` 槽位与当前生效的 `fiction` 分段，整块位于 `transcript` 之前作为稳定缓存前缀。
+- **`tail`（尾区）**：紧接在历史转录稿与本轮输入*之后*，承载本轮揭示、掷骰结果、`Current:`、`Brief`、`note`、`input.thought` 及尾部片段——在不改动任何历史楼层的前提下获得最强的末尾近因权重（等价于 `@D0` 的注意力位置，且 100% 保住前缀缓存）。
+- **固定区间 `Fold` vs. 滚动摘要插件**：不同于每隔几轮改写一段深度插入摘要的滚动总结插件，前缀压缩由代码按固定节点区间折叠旧轮 `notes` 与已揭示 lore；每个折叠块只依赖区间内已定稿节点，因此缓存断点（头区末尾、折叠前缀末尾、上一轮历史末尾）在跨轮推进与分支切换时始终字节级一致。
