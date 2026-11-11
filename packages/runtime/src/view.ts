@@ -89,9 +89,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     return { tokens: t, text: `${name}  ~${t}\n${indent(on[0]!.text)}` }
   }
   const frags = [
-    ...layers
-      .filter((f) => stage === "narrate" || f.at !== "tail")
-      .map((f) => frag(f.at === "tail" ? "tail" : "frame", f)),
+    ...(stage === "narrate" ? layers : worldOf(card, R.frame)).map((f) => frag(f.at === "tail" ? "tail" : "frame", f)),
     ...(stage === "narrate" ? fiction.map((f) => frag("fiction", f)) : []),
   ]
 
@@ -233,6 +231,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     {
       frame: head(R.frame, { state: context }),
       world: head(worldOf(card, R.frame), { state: context }),
+      role: R.asks["stage.role"]!.text,
       tail: head(R.tail, { state: context }),
       input: { text: "" },
       thought: R.asks["input.thought"]!.text,

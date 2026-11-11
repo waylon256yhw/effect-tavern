@@ -18,9 +18,8 @@ const onCheck: Array<() => void> = [] // run inside the next check call, on the 
 let n = 0
 function script(o: FakeCall): FakeReply {
   const doc = readStage(o)
-  const { phase, open } = doc
+  const { phase, open, subject: want } = doc
   const last = o.prompt.at(-1)!
-  const want = fakeText(last)
   let out: string
   let reason: "stop" | "length" = "stop"
   let delay: number | undefined

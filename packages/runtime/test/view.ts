@@ -66,6 +66,7 @@ assert.deepEqual(
 )
 assert.match(sent("lookup").join("\n"), /search_context/)
 const r = at("record")
+assert.equal(r.sections[0]!.text, "") // yandao declares only pov and style: head (record) shows worldOf, never writing lines
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))
 for (const line of r.sections.find((x) => x.name === "record")!.text.split("\n"))
   assert.ok(sent("record").join("\n").includes(line), line)
@@ -86,7 +87,7 @@ await Effect.runPromise(
   ),
 )
 const quiet = view(gated, player, { stage: "record" }).doc.map(text)
-assert.ok(!quiet.some((t) => t.startsWith("Questions:")))
+assert.ok(!quiet.join("\n").includes("Questions:"))
 assert.deepEqual(sent("record").slice(0, -1), quiet.slice(0, -1))
 
 // the band ↔ readout section puts the band on 局势 directly above the readout that moves it

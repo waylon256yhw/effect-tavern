@@ -85,38 +85,45 @@ export const decodeLocal = (u: unknown): Local => {
 
 // ───────── The harness's own row ─────────
 // Every instruction the loop says to the model, with ids, in the open. Data lines (State:, Actions:, Open:, Known:,
-// Questions:) are format and stay in code (request.ts); these are the prose around them. Check carries no prose: the
-// schema is the question. Lookup carries one line, since an index and an array read as "fill it": the first Haiku
-// session picked one entry a turn until the index was empty, the innkeeper on a line that spoke to the swordsman. Direct
-// carries one line too: `tone` is a free string, and without its genre named the first 理 run wrote a sentence of story
-// into it, a priest guessed out of the setting, which then opened the narrator's draft as `Tone:` (#90).
+// Questions:) and the XML wrappers (<world>, <input>, <draft>, <scene>) are format and stay in code (request.ts); these
+// are the prose around them. Every non-narrate stage opens with `stage.role` before `<world>` and closes with its own
+// task ask after the closing material tag (#167: without both, reasoning models read a second-person persona at the top
+// and a bare scene/line at the bottom as a roleplay turn to continue). Direct names `tone`'s genre too (#90).
 const words: readonly Ask[] = [
   {
+    id: "stage.role",
+    text: 'You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns ("you" / "你") in the reference material refer to the player character, not to you.',
+  },
+  {
     id: "lookup",
-    text: "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts.",
+    text: 'Find only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. "No additional context needed."); never reply to <input>, write dialogue, or continue the story.',
   },
   {
     id: "direct",
-    text: `Put in "must" only the open entries this scene cannot make sense without; the rest stay in "may", and both are empty when none fits now. "tone" is one line to the narrator, not to the player: the mood, the pace, or where this scene should land, as a phrase or a short sentence. It is a direction, never a sentence of the story: it names no character and writes no one's words, actions or expression.`,
+    text: `Given <input> and the Open and Events lines above, put in "must" only the open entries the next scene cannot make sense without; the rest stay in "may", and both are empty when none fits now. "tone" is one line of direction to the narrator, not to the player: the mood, the pace, or where this scene should land, as a phrase or a short sentence. It is a direction, never a sentence of the story: it names no character and writes no one's words, actions or expression.`,
   },
   {
     id: "decide.first",
-    text: `Which card action does the player's input take first? "end" if it takes none of the listed actions. Set "again" to true only if the input's own words ask for more than one beat ("until he falls", "twice", "then …").`,
+    text: `Which card action in Actions does <input> take first? Pick "end" if it takes none of the listed actions. Set "again" to true only if <input>'s own words ask for more than one beat ("until he falls", "twice", "then …").`,
   },
   {
     id: "decide.again",
-    text: `The input asked to keep going. Given the outcomes so far, pick the next action, or "end" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left.`,
+    text: `The player's <input> asked to keep going. Given the outcomes in So far, pick the next action from Actions, or "end" when <input>'s goal is met, <input> said to stop under this outcome, or nothing sensible is left.`,
+  },
+  {
+    id: "check",
+    text: `Check <draft> against the Rule and Open lines above. Put in "fired" each Open entry id whose substance <draft> conveyed, and in "violated" each Rule text that <draft> broke; leave either empty when none applies. Judge only what is written in <draft>; do not rewrite or continue the story.`,
   },
   // The readouts' rule of evidence, once, before the Questions line. Without it the first ri run judged the confession
   // refused on the turn it was made: the prose ended on the question, the player had not answered, and the model took
   // the one option it could not rule out by the letter (#83). A card's option texts still have to cover that turn.
   {
     id: "record.tools",
-    text: "Use the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed.",
+    text: "Use the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed.",
   },
   {
     id: "record.readout",
-    text: "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.",
+    text: "Answer each question from what <scene> settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or <scene> does not bear on the question, pick the option that says nothing happened or nothing changed.",
   },
   { id: "narrate.correction", text: "Previous draft broke:" },
   // The narrate products' one instruction, before their `<id>: <question>` lines; sent only when one is on.
@@ -128,7 +135,7 @@ const words: readonly Ask[] = [
   { id: "narrate.demand", text: "Write no prose: answer with only the block asked for below, about the last scene." },
   {
     id: "polish",
-    text: "Each sentence marked <target> uses wording the reader has seen too often: the words in its hits, and what its hint below names. Rewrite each so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks.",
+    text: "Each sentence marked <target> in <draft> uses wording the reader has seen too often: the words in its hits, and what its hint above names. Rewrite each <target> sentence so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks, and never continue <draft>.",
   },
   {
     id: "input.thought",
@@ -186,7 +193,7 @@ const products = (input: "act" | "note"): readonly Product[] =>
       // seven items a turn, the prose paraphrased paragraph by paragraph, one item split in three on a quoted "我懂"
       // (a list's grammar admits that; a string's does not). The three ecosystem summaries read for #82 all make a
       // turn's summary one unit (docs/summary-reading.md).
-      text: "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
+      text: "Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
       shape: { kind: "text" },
       fold: "append",
       feed: true,

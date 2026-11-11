@@ -5,11 +5,13 @@
 // Two skeletons, one function. The narrator continues a conversation: head → transcript (ending in the last reply) →
 // the player's line as the user message → this turn's directives as system lines (Anthropic takes a mid-conversation
 // system message only directly after a user message, verified live; the one placement all three formats accept). The
-// structured stages classify or extract: every system line first (frame, ledger or facts, the question), then the
-// one user message being judged (the input, the prose, the scene). A structured call never ends in an assistant message
-// (current Claude rejects the prefix, docs/provider-reading.md §7), so record's scene is one user message.
+// off-stage passes classify or extract (#167): `stage.role` and `<world>` in the cached head prefix, this turn's state,
+// ledger or rules as system lines, then one user message holding the tagged material (`<input>`, `<draft>`, `<scene>`)
+// followed after its closing tag by the stage's task instruction—the identical message boundary across Anthropic, Gemini
+// and OpenAI-compatible, never ending in an assistant prefill or a bare story line that invites roleplay continuation.
 // The frame (player zone → card frame: language, persona, pov, style, setting) is narrate's, with the fiction and the
-// transcript; every other stage reads its `world` (layer.ts `worldOf`: who and where, no line on how to write). The input is one unit with an audience per stage: the line itself everywhere it is read,
+// transcript; every other stage reads `stage.role` plus its `<world>` (layer.ts `worldOf`: who and where, no line on how
+// to write). The input is one unit with an audience per stage: the line itself everywhere it is read,
 // the thought ask wherever the line is (decide takes no action from a thought, record no fact), the note only where the
 // README sends it, narrator and director. Cache breakpoints: the head's last message (the connection's TTL), the
 // summary, and the last history message; everything before this turn's input is a cached read next turn.
@@ -17,9 +19,9 @@
 // after frame + fiction and its handshake (user/assistant) after every head system message, the breakpoint on the last
 // head message (ai-sdk promotes only the leading system run to top-level system: a handshake first would demote the
 // frame); narrate's tail ends the request, after this turn's directives and the player's tail fragments. check, polish
-// and record wear review.head after the frame; lookup, decide and direct wear nothing. No hat: today's document, byte for byte.
-// Data lines are format and live here: Index, State / Actions / So far, Rule, Open, Events, Must, Outcome, Current,
-// MUST / MAY reveal, Tone, Player note, Known, Questions, Player's line.
+// and record wear review.head after `<world>`; lookup, decide and direct wear nothing.
+// Data lines and wrappers live here: `<world>`, `<input>`, `<draft>`, `<scene>`, State / Actions / So far, Rule, Open,
+// Events, Must, Outcome, Current, MUST / MAY reveal, Tone, Player note, Known, Questions, Player's line.
 import { breakpoint, type CacheTtl, type Message } from "@effect-tavern/provider/src/call.ts"
 import type { Hat, Msg } from "./fragment.ts"
 import type { Input } from "./journal.ts"
@@ -30,10 +32,11 @@ export interface Wire {
   ttl?: CacheTtl
   hat?: Hat
 }
-/** What every stage shares: the evaluated frame, this turn's input, and the ask that explains a thought in it. */
+/** What every stage shares: the evaluated frame, the off-stage framing line, this turn's input, and the thought ask. */
 export interface Common {
   frame: readonly Msg[] // narrate's alone
-  world: readonly Msg[] // the frame without its writing lines: what every other stage reads
+  world: readonly Msg[] // the frame without its writing lines: what every other stage reads inside <world>
+  role: string // `stage.role`: off-stage framing before <world> on every non-narrate stage
   input: Input
   thought: string
   tail?: readonly Msg[] // the player's tail-placed fragments; only narrate reads them
@@ -81,7 +84,14 @@ export type Ask =
       correction?: string
       blocks?: { question: string; asks: readonly string[] } // narrate products: the `narrate.blocks` ask, `<id>: <question>` lines
     }
-  | { stage: "check"; rules: readonly string[]; open: readonly Told[]; must: readonly string[]; prose: string }
+  | {
+      stage: "check"
+      question: string
+      rules: readonly string[]
+      open: readonly Told[]
+      must: readonly string[]
+      prose: string
+    }
   | { stage: "polish"; question: string; hints: readonly string[]; prose: string } // prose with <target> marks
   | {
       stage: "record"
@@ -104,58 +114,69 @@ const toP =
 /** A head zone: its last message carries the breakpoint, so the zone is a cached read while it stays byte-stable. */
 const zone = (msgs: readonly Msg[], w: Wire): Message[] =>
   msgs.map((m, i) => (i === msgs.length - 1 ? breakpoint(toP(w)(m), w.ttl) : toP(w)(m)))
+/** An off-stage pass's static head: `stage.role` first, then `<world>` when the card or player supplied one. */
+const worldHead = (c: Common): Msg[] => [
+  { role: "system", text: c.role },
+  ...(c.world.length
+    ? [{ role: "system" as const, text: `<world>\n${c.world.map((m) => m.text).join("\n\n")}\n</world>` }]
+    : []),
+]
 const rules = (rs: readonly string[]) => rs.map((r) => sys(`Rule: ${r}`))
 const openLine = (open: readonly Told[]) => `Open: ${open.map((d) => `${d.id}=${d.text}`).join(" | ")}`
 
-// ───────── The input as one unit ─────────
-/** This turn's user message: the line when there is one, else the note itself (directed prose: the player writes to the
- *  narrator, not as anyone in the story). A chip-only turn continues the story: keep a nonempty user
- *  boundary even if its invoked entries were removed before a rerun. */
-const said = (i: Input): Message => usr(i.text || i.note || "Continue the story.")
-/** The note as a system line, only beside a line; alone it is already the user message. */
+// ───────── The input and scene material ─────────
+/** This turn's input text: the line when there is one, else the note itself (directed prose: the player writes to the
+ *  narrator, not as anyone in the story). A chip-only turn continues the story: keep a nonempty boundary even if its
+ *  invoked entries were removed before a rerun. */
+const inputText = (i: Input) => i.text || i.note || "Continue the story."
+const said = (i: Input): Message => usr(inputText(i))
+/** An off-stage pass's single user message: the material enclosed in an XML tag, then the stage's task after it. */
+const tagged = (tag: "input" | "draft" | "scene", body: string, ...tasks: readonly string[]): Message =>
+  usr([`<${tag}>\n${body}\n</${tag}>`, ...tasks.filter(Boolean)].join("\n\n"))
+/** The note as a system line, only beside a line; alone it is already in the input text. */
 const noteOf = (i: Input) => (i.text && i.note ? [sys(`Player note: ${i.note}`)] : [])
 /** A thought (⦅ ⦆) in the line is a perception scope inside the fiction; every stage that reads the line hears what it is. */
 const thoughtOf = (c: Common) => (/⦅/.test(c.input.text) ? [sys(c.thought)] : [])
 /** The scene record reads: the player's line, marked as theirs, then the prose; an opening or a note-only turn is prose alone. */
-const scene = (i: Input, prose: string) => usr(i.text ? `Player's line: ${i.text}\n\n${prose}` : prose)
+const sceneBody = (i: Input, prose: string) => (i.text ? `Player's line: ${i.text}\n\n${prose}` : prose)
 
 /** A hat's messages that say something: the settings editor keeps empty rows to type into, and Anthropic and Gemini
  *  refuse empty content, so every hat slot is read through this. */
 const spoken = <M extends { text: string }>(ms: readonly M[] = []): M[] => ms.filter((m) => m.text.trim())
 
 export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
-  const frame = zone(c.world, w)
-  const reviewed = zone([...c.world, ...spoken(w.hat?.review?.head)], w)
+  const head = worldHead(c)
+  const frame = zone(head, w)
+  const reviewed = zone([...head, ...spoken(w.hat?.review?.head)], w)
   const hatHead = spoken(w.hat?.narrate?.head)
   switch (a.stage) {
     case "lookup":
       return [
         ...frame,
         ...a.ledger.map(toP(w)),
-        sys(a.question),
         ...a.context.map(sys),
         ...(a.current ? [sys(a.current)] : []),
         ...noteOf(c.input),
         ...thoughtOf(c),
-        said(c.input),
+        tagged("input", inputText(c.input), a.question),
       ]
     case "decide":
       return [
         ...frame,
         ...a.ledger.map(toP(w)),
-        sys(`${a.question}\nState: ${a.state}\nActions: ${a.menu.join(" | ")}\nSo far: ${a.soFar.join(",") || "-"}`),
+        sys(`State: ${a.state}\nActions: ${a.menu.join(" | ")}\nSo far: ${a.soFar.join(",") || "-"}`),
         ...thoughtOf(c),
-        said(c.input),
+        tagged("input", inputText(c.input), a.question),
       ]
     case "direct":
       return [
         ...frame,
         ...rules(a.rules),
         ...a.ledger.map(toP(w)),
-        sys(`${a.question}\n${openLine(a.open)}\nEvents: ${a.events.join(",")}`),
+        sys(`${openLine(a.open)}\nEvents: ${a.events.join(",")}`),
         ...noteOf(c.input),
         ...thoughtOf(c),
-        said(c.input),
+        tagged("input", inputText(c.input), a.question),
       ]
     case "narrate":
       return [
@@ -185,27 +206,31 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...(a.blocks?.asks.length ? [sys([a.blocks.question, ...a.blocks.asks].join("\n"))] : []),
         ...[...(c.tail ?? []), ...spoken(w.hat?.narrate?.tail)].map(toP(w)),
       ]
-    case "check": // nothing open (a guard-only turn): no empty Open / Must labels, the rules alone are the question
+    case "check": // nothing open (a guard-only turn): no empty Open / Must labels, the rules alone sit above <draft>
       return [
         ...reviewed,
         ...rules(a.rules),
         ...(a.open.length
           ? [sys([openLine(a.open), ...(a.must.length ? [`Must: ${a.must.join(",")}`] : [])].join("\n"))]
           : []),
-        usr(a.prose),
+        tagged("draft", a.prose, a.question),
       ]
-    case "polish": // check's shape, the rules swapped for the rewrite and its per-target hints
-      return [...reviewed, sys([a.question, ...a.hints].join("\n")), usr(a.prose)]
+    case "polish": // per-target hints above (when any), <draft> with <target> marks and the rewrite instruction below
+      return [...reviewed, ...(a.hints.length ? [sys(a.hints.join("\n"))] : []), tagged("draft", a.prose, a.question)]
     case "record":
       return [
         ...reviewed,
         ...(a.invoked?.length
-          ? [sys(`Invoked context (reference only; extract world facts from the scene):\n${a.invoked.join("\n\n")}`)]
+          ? [sys(`Invoked context (reference only; extract world facts from <scene> only):\n${a.invoked.join("\n\n")}`)]
           : []),
-        sys([a.known, ...(a.current ? [a.current] : []), ...a.asks, ...(a.tools ? [a.tools] : [])].join("\n")),
-        ...(a.questions ? [sys(`${a.readout}\nQuestions: ${a.questions.join("\n")}`)] : []),
+        sys([a.known, ...(a.current ? [a.current] : [])].join("\n")),
         ...thoughtOf(c),
-        scene(c.input, a.prose),
+        tagged(
+          "scene",
+          sceneBody(c.input, a.prose),
+          [...a.asks, ...(a.tools ? [a.tools] : [])].join("\n"),
+          a.questions ? `${a.readout}\nQuestions: ${a.questions.join("\n")}` : "",
+        ),
       ]
   }
 }

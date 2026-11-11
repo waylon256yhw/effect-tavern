@@ -45,15 +45,18 @@ const isDefault = (item: unknown, def: unknown) => JSON.stringify(item) === JSON
 type Save = (edit: (p: Layer) => Layer) => Promise<void>
 
 const stageAskLabels = (): [string, string][] => [
+  ["stage.role", t("packs.askStageRole")],
   ["lookup", t("settings.stageLookup")],
   ["direct", t("settings.stageDirect")],
   ["decide.first", t("packs.askDecideFirst")],
   ["decide.again", t("packs.askDecideAgain")],
+  ["check", t("settings.stageCheck")],
+  ["polish", t("settings.stagePolish")],
+  ["record.tools", t("packs.askRecordTools")],
   ["record.readout", t("packs.askRecordReadout")],
   ["narrate.correction", t("packs.askNarrateCorrection")],
   ["narrate.blocks", t("packs.askNarrateBlocks")],
   ["narrate.demand", t("packs.askNarrateDemand")],
-  ["polish", t("settings.stagePolish")],
   ["input.thought", t("packs.askInputThought")],
 ]
 

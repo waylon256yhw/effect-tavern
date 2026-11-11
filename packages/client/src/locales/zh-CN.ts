@@ -556,6 +556,8 @@ const zh = {
     askInputThought: "心声记号说明",
     restoreDefault: "恢复默认",
     local: "本卡",
+    askStageRole: "后台阶段定调",
+    askRecordTools: "结算工具说明",
   },
   invoke: {
     manual: "玩家调用",

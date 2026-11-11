@@ -558,6 +558,8 @@ const en: Dict = {
     askInputThought: "Thought mark rule",
     restoreDefault: "Restore default",
     local: "This card",
+    askStageRole: "Off-stage framing",
+    askRecordTools: "Settlement tools",
   },
   invoke: {
     manual: "Player invocation",

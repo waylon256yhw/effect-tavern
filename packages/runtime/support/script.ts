@@ -6,6 +6,7 @@ import type { Phase } from "../src/session.ts"
 
 export interface StageDoc {
   phase: Phase
+  subject: string // the unwrapped <input> / <draft> / <scene> text, or the last message's text on narrate
   open: string[] // Open: ids
   soFar: string[] // decide's So far: events
   rules: string[] // Rule: lines
@@ -18,11 +19,15 @@ export interface StageDoc {
 
 const after = (lines: readonly string[], label: string) => lines.find((l) => l.startsWith(label))?.slice(label.length)
 const head = (s: string, sep: string) => s.slice(0, s.indexOf(sep)).trim()
+const unwrap = (s: string) =>
+  /^<(?:input|draft|scene)>\n([\s\S]*?)\n<\/(?:input|draft|scene)>(?:\n|$)/.exec(s)?.[1] ?? s
 
 export const readStage = (o: FakeCall): StageDoc => {
   const msgs = o.prompt.map(fakeText)
+  const last = msgs.at(-1) ?? ""
   const lines = msgs.flatMap((m) => m.split("\n"))
-  const facts = msgs.find((m) => m.startsWith("Known: "))?.split("\n") ?? [] // record's Known / Current / asks message
+  const facts = msgs.find((m) => m.startsWith("Known: "))?.split("\n") ?? []
+  const recordTask = last.split("\n</scene>\n\n")[1]?.split("\nQuestions: ")[0]?.split("\n") ?? []
   const qs =
     msgs
       .find((m) => m.includes("\nQuestions: "))
@@ -31,6 +36,7 @@ export const readStage = (o: FakeCall): StageDoc => {
   const tools = o.tools?.filter((t) => t.type === "function").map((t) => t.name) ?? []
   return {
     tools,
+    subject: unwrap(last),
     phase: (tools.includes("finish_record")
       ? "record"
       : tools.includes("search_context")
@@ -47,8 +53,8 @@ export const readStage = (o: FakeCall): StageDoc => {
       const m = /^(\S+): .*\[(.*)\]$/.exec(l)
       return m ? [{ id: m[1]!, options: m[2]!.split(" | ").map((x) => head(x, ":")) }] : []
     }),
-    asked: facts.flatMap((l) => /^(\w+): /.exec(l)?.[1] ?? []).filter((id) => id !== "Known" && id !== "Current"),
-    targets: [...(msgs.at(-1) ?? "").matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(
+    asked: recordTask.flatMap((l) => /^(\w+): /.exec(l)?.[1] ?? []),
+    targets: [...last.matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(
       ([, id, s]) => [id!, s!] as [string, string],
     ),
   }

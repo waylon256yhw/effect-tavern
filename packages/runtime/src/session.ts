@@ -282,6 +282,7 @@ export const makeSession = ({
       {
         frame: headOf(frame, { state }),
         world: headOf(worldOf(card, frame), { state }),
+        role: wording("stage.role"),
         tail: headOf(tail, { state }),
         input,
         thought: wording("input.thought"),
@@ -716,6 +717,7 @@ export const makeSession = ({
             Check(openIds, guard),
             ask(here.context(s1), input, {
               stage: "check",
+              question: wording("check"),
               rules: guard,
               open: told(open),
               must: brief.must,

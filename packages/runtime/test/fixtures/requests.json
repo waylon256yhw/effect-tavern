@@ -5,11 +5,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -24,15 +24,11 @@
         },
         {
           "role": "system",
-          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
-        },
-        {
-          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "我看了看四周。⦅小心⦆"
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -41,11 +37,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -60,7 +56,7 @@
         },
         {
           "role": "system",
-          "content": "Which card action does the player's input take first? \"end\" if it takes none of the listed actions. Set \"again\" to true only if the input's own words ask for more than one beat (\"until he falls\", \"twice\", \"then …\").\nState: {\"hp\":40,\"foe\":30,\"bond\":0}\nActions: strike: 拔剑向裴青舟出手试探或进攻\nSo far: -"
+          "content": "State: {\"hp\":40,\"foe\":30,\"bond\":0}\nActions: strike: 拔剑向裴青舟出手试探或进攻\nSo far: -"
         },
         {
           "role": "system",
@@ -68,7 +64,7 @@
         },
         {
           "role": "user",
-          "content": "我看了看四周。⦅小心⦆"
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nWhich card action in Actions does <input> take first? Pick \"end\" if it takes none of the listed actions. Set \"again\" to true only if <input>'s own words ask for more than one beat (\"until he falls\", \"twice\", \"then …\")."
         }
       ]
     },
@@ -128,11 +124,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -147,7 +143,7 @@
         },
         {
           "role": "user",
-          "content": "不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<draft>\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</draft>\n\nCheck <draft> against the Rule and Open lines above. Put in \"fired\" each Open entry id whose substance <draft> conveyed, and in \"violated\" each Rule text that <draft> broke; leave either empty when none applies. Judge only what is written in <draft>; do not rewrite or continue the story."
         }
       ]
     },
@@ -156,11 +152,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -171,11 +167,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: 当前场景所在的位置，以及眼下在场的人物（用姓名，玩家写「玩家」）与各自此刻的神态。\npeople: 这一幕新出场或新提及、不在卡片固有设定中（排除裴青舟、李鹤与玩家）且尚未记入已知列表的旁人，每人一行；没有则留空。\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
-        },
-        {
-          "role": "system",
-          "content": "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: warmth: 这一幕里裴青舟对待你的态度 [cold: 敌意加深，出言驱赶、拔剑相向或厉声喝止 | flat: 冷淡审视，只做试探盘问而未见触动 | warm: 有所触动，戒心稍缓并肯听你细说或接话 | close: 防线大开，为你所言所行深深震动、流露悲恸或吐露实情]"
+          "content": "Known: "
         },
         {
           "role": "system",
@@ -183,7 +175,7 @@
         },
         {
           "role": "user",
-          "content": "Player's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<scene>\nPlayer's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</scene>\n\nnotes: Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: 当前场景所在的位置，以及眼下在场的人物（用姓名，玩家写「玩家」）与各自此刻的神态。\npeople: 这一幕新出场或新提及、不在卡片固有设定中（排除裴青舟、李鹤与玩家）且尚未记入已知列表的旁人，每人一行；没有则留空。\nUse the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed.\n\nAnswer each question from what <scene> settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or <scene> does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: warmth: 这一幕里裴青舟对待你的态度 [cold: 敌意加深，出言驱赶、拔剑相向或厉声喝止 | flat: 冷淡审视，只做试探盘问而未见触动 | warm: 有所触动，戒心稍缓并肯听你细说或接话 | close: 防线大开，为你所言所行深深震动、流露悲恸或吐露实情]"
         }
       ]
     },
@@ -257,11 +249,18 @@
       "msgs": [
         {
           "role": "system",
-          "content": "Ledger:\n → -; read -; fired -; "
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you.",
+          "providerOptions": {
+            "anthropic": {
+              "cacheControl": {
+                "type": "ephemeral"
+              }
+            }
+          }
         },
         {
           "role": "system",
-          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
+          "content": "Ledger:\n → -; read -; fired -; "
         },
         {
           "role": "system",
@@ -269,7 +268,7 @@
         },
         {
           "role": "user",
-          "content": "我看了看四周。⦅小心⦆"
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -329,11 +328,18 @@
       "msgs": [
         {
           "role": "system",
-          "content": "Known: \nnotes: 记事只记事实：谁做了什么、谁说了什么要紧的话、什么变了、新出现的人名和地名。不写景物、天气和气氛，不评价文字。一两句话。\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you.",
+          "providerOptions": {
+            "anthropic": {
+              "cacheControl": {
+                "type": "ephemeral"
+              }
+            }
+          }
         },
         {
           "role": "system",
-          "content": "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: tension: 这一幕之后，官府与盐帮之间的局势 [eased: 双方各退一步、达成暂时妥协或当场散去对峙 | same: 仅作试探周旋或日常往来，僵局未见松动也未升级 | worse: 言辞交锋激烈、查验受阻或街面风声鹤唳，对峙进一步紧绷 | broke: 当场动了手、砸了货栈卡子或见了血]"
+          "content": "Known: "
         },
         {
           "role": "system",
@@ -341,7 +347,7 @@
         },
         {
           "role": "user",
-          "content": "Player's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<scene>\nPlayer's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</scene>\n\nnotes: 记事只记事实：谁做了什么、谁说了什么要紧的话、什么变了、新出现的人名和地名。不写景物、天气和气氛，不评价文字。一两句话。\nUse the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed.\n\nAnswer each question from what <scene> settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or <scene> does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: tension: 这一幕之后，官府与盐帮之间的局势 [eased: 双方各退一步、达成暂时妥协或当场散去对峙 | same: 仅作试探周旋或日常往来，僵局未见松动也未升级 | worse: 言辞交锋激烈、查验受阻或街面风声鹤唳，对峙进一步紧绷 | broke: 当场动了手、砸了货栈卡子或见了血]"
         }
       ]
     },
@@ -454,7 +460,18 @@
       "msgs": [
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you.",
+          "providerOptions": {
+            "anthropic": {
+              "cacheControl": {
+                "type": "ephemeral"
+              }
+            }
+          }
+        },
+        {
+          "role": "system",
+          "content": "Known: "
         },
         {
           "role": "system",
@@ -462,7 +479,7 @@
         },
         {
           "role": "user",
-          "content": "Player's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<scene>\nPlayer's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</scene>\n\nnotes: Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed."
         }
       ]
     },
@@ -524,11 +541,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是新来到小镇的牧师。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "小镇的地点：\n教堂：劳伦斯主持礼拜的石砌教堂庄重宁静，钟声在清晨回荡提醒村民祈祷。教堂内部陈设简朴却整洁，彩绘玻璃映出温暖光影，为信徒带来心灵抚慰。圣女在此倾听烦恼与告解，她用温柔话语指引村民走出迷惘与痛苦。教堂旁小花园四季常青，鸽群在屋檐栖息，象征和平与纯洁信仰。\n小镇街道：教堂所在小镇街道狭窄曲折，石板路两侧是木构矮房，生活气息朴实浓厚。镇民友善互助，孩童在广场追逐嬉笑，午后阳光洒落为屋顶镀上金辉。节庆日里彩旗高悬，吟游诗人奏起悠扬旋律，引来旅行者驻足观赏。夜幕降临油灯次第点亮，安宁氛围让劳伦斯与圣女享受短暂闲适时光。\n面包房：面包房木门常敞开，空气里弥漫麦香与奶油气息，吸引村民排队购买。店主清晨四点起火烤炉，他用心揉面，只为给镇上带来新鲜温热面包。圣女偶尔帮忙包装面包，她灿烂微笑让顾客心头泛起暖意。节日限定蜂蜜烤面包外脆内软，成为教会茶会不可或缺的甜点。\n市场：周末市集在石板广场展开，农夫摆摊贩售蔬果，商贩高声吆喝招揽客人。香料与干花混合的清香在空气中交织，琳琅满目商品映出生活多彩面貌。圣女与牧师巡视市集慰问摊贩，了解民生疾苦并送上祝福祈祷。偶有旅商带来异国布料与饰品，为宁静小镇增添一抹新鲜亮色。\n诊所：小诊所紧靠教堂后侧，由白发老医师坐镇，药柜整齐摆放草药罐。村民轻伤感冒皆来此求诊，医师细心问症配药，收取象征性诊金。圣女常携手劳伦斯探望病患，她真诚祈祷给予患者恢复勇气。诊所窗边种植药草盆栽，青草香与木头气息让人心情平静。\n池边：镇外缓缓流淌的窄河在春日融雪后水量丰沛，清澈见底闪耀阳光。河岸草甸野花遍布，蝴蝶飞舞成群，成为情侣散步与孩童嬉水的天堂。傍晚时分金色夕阳洒满水面，倒影交错出诗意画卷，让人不自觉驻足凝望。",
+          "content": "<world>\n你是新来到小镇的牧师。\n\n小镇的地点：\n教堂：劳伦斯主持礼拜的石砌教堂庄重宁静，钟声在清晨回荡提醒村民祈祷。教堂内部陈设简朴却整洁，彩绘玻璃映出温暖光影，为信徒带来心灵抚慰。圣女在此倾听烦恼与告解，她用温柔话语指引村民走出迷惘与痛苦。教堂旁小花园四季常青，鸽群在屋檐栖息，象征和平与纯洁信仰。\n小镇街道：教堂所在小镇街道狭窄曲折，石板路两侧是木构矮房，生活气息朴实浓厚。镇民友善互助，孩童在广场追逐嬉笑，午后阳光洒落为屋顶镀上金辉。节庆日里彩旗高悬，吟游诗人奏起悠扬旋律，引来旅行者驻足观赏。夜幕降临油灯次第点亮，安宁氛围让劳伦斯与圣女享受短暂闲适时光。\n面包房：面包房木门常敞开，空气里弥漫麦香与奶油气息，吸引村民排队购买。店主清晨四点起火烤炉，他用心揉面，只为给镇上带来新鲜温热面包。圣女偶尔帮忙包装面包，她灿烂微笑让顾客心头泛起暖意。节日限定蜂蜜烤面包外脆内软，成为教会茶会不可或缺的甜点。\n市场：周末市集在石板广场展开，农夫摆摊贩售蔬果，商贩高声吆喝招揽客人。香料与干花混合的清香在空气中交织，琳琅满目商品映出生活多彩面貌。圣女与牧师巡视市集慰问摊贩，了解民生疾苦并送上祝福祈祷。偶有旅商带来异国布料与饰品，为宁静小镇增添一抹新鲜亮色。\n诊所：小诊所紧靠教堂后侧，由白发老医师坐镇，药柜整齐摆放草药罐。村民轻伤感冒皆来此求诊，医师细心问症配药，收取象征性诊金。圣女常携手劳伦斯探望病患，她真诚祈祷给予患者恢复勇气。诊所窗边种植药草盆栽，青草香与木头气息让人心情平静。\n池边：镇外缓缓流淌的窄河在春日融雪后水量丰沛，清澈见底闪耀阳光。河岸草甸野花遍布，蝴蝶飞舞成群，成为情侣散步与孩童嬉水的天堂。傍晚时分金色夕阳洒满水面，倒影交错出诗意画卷，让人不自觉驻足凝望。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -543,15 +560,11 @@
         },
         {
           "role": "system",
-          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
-        },
-        {
-          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "我看了看四周。⦅小心⦆"
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -611,11 +624,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是新来到小镇的牧师。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "小镇的地点：\n教堂：劳伦斯主持礼拜的石砌教堂庄重宁静，钟声在清晨回荡提醒村民祈祷。教堂内部陈设简朴却整洁，彩绘玻璃映出温暖光影，为信徒带来心灵抚慰。圣女在此倾听烦恼与告解，她用温柔话语指引村民走出迷惘与痛苦。教堂旁小花园四季常青，鸽群在屋檐栖息，象征和平与纯洁信仰。\n小镇街道：教堂所在小镇街道狭窄曲折，石板路两侧是木构矮房，生活气息朴实浓厚。镇民友善互助，孩童在广场追逐嬉笑，午后阳光洒落为屋顶镀上金辉。节庆日里彩旗高悬，吟游诗人奏起悠扬旋律，引来旅行者驻足观赏。夜幕降临油灯次第点亮，安宁氛围让劳伦斯与圣女享受短暂闲适时光。\n面包房：面包房木门常敞开，空气里弥漫麦香与奶油气息，吸引村民排队购买。店主清晨四点起火烤炉，他用心揉面，只为给镇上带来新鲜温热面包。圣女偶尔帮忙包装面包，她灿烂微笑让顾客心头泛起暖意。节日限定蜂蜜烤面包外脆内软，成为教会茶会不可或缺的甜点。\n市场：周末市集在石板广场展开，农夫摆摊贩售蔬果，商贩高声吆喝招揽客人。香料与干花混合的清香在空气中交织，琳琅满目商品映出生活多彩面貌。圣女与牧师巡视市集慰问摊贩，了解民生疾苦并送上祝福祈祷。偶有旅商带来异国布料与饰品，为宁静小镇增添一抹新鲜亮色。\n诊所：小诊所紧靠教堂后侧，由白发老医师坐镇，药柜整齐摆放草药罐。村民轻伤感冒皆来此求诊，医师细心问症配药，收取象征性诊金。圣女常携手劳伦斯探望病患，她真诚祈祷给予患者恢复勇气。诊所窗边种植药草盆栽，青草香与木头气息让人心情平静。\n池边：镇外缓缓流淌的窄河在春日融雪后水量丰沛，清澈见底闪耀阳光。河岸草甸野花遍布，蝴蝶飞舞成群，成为情侣散步与孩童嬉水的天堂。傍晚时分金色夕阳洒满水面，倒影交错出诗意画卷，让人不自觉驻足凝望。",
+          "content": "<world>\n你是新来到小镇的牧师。\n\n小镇的地点：\n教堂：劳伦斯主持礼拜的石砌教堂庄重宁静，钟声在清晨回荡提醒村民祈祷。教堂内部陈设简朴却整洁，彩绘玻璃映出温暖光影，为信徒带来心灵抚慰。圣女在此倾听烦恼与告解，她用温柔话语指引村民走出迷惘与痛苦。教堂旁小花园四季常青，鸽群在屋檐栖息，象征和平与纯洁信仰。\n小镇街道：教堂所在小镇街道狭窄曲折，石板路两侧是木构矮房，生活气息朴实浓厚。镇民友善互助，孩童在广场追逐嬉笑，午后阳光洒落为屋顶镀上金辉。节庆日里彩旗高悬，吟游诗人奏起悠扬旋律，引来旅行者驻足观赏。夜幕降临油灯次第点亮，安宁氛围让劳伦斯与圣女享受短暂闲适时光。\n面包房：面包房木门常敞开，空气里弥漫麦香与奶油气息，吸引村民排队购买。店主清晨四点起火烤炉，他用心揉面，只为给镇上带来新鲜温热面包。圣女偶尔帮忙包装面包，她灿烂微笑让顾客心头泛起暖意。节日限定蜂蜜烤面包外脆内软，成为教会茶会不可或缺的甜点。\n市场：周末市集在石板广场展开，农夫摆摊贩售蔬果，商贩高声吆喝招揽客人。香料与干花混合的清香在空气中交织，琳琅满目商品映出生活多彩面貌。圣女与牧师巡视市集慰问摊贩，了解民生疾苦并送上祝福祈祷。偶有旅商带来异国布料与饰品，为宁静小镇增添一抹新鲜亮色。\n诊所：小诊所紧靠教堂后侧，由白发老医师坐镇，药柜整齐摆放草药罐。村民轻伤感冒皆来此求诊，医师细心问症配药，收取象征性诊金。圣女常携手劳伦斯探望病患，她真诚祈祷给予患者恢复勇气。诊所窗边种植药草盆栽，青草香与木头气息让人心情平静。\n池边：镇外缓缓流淌的窄河在春日融雪后水量丰沛，清澈见底闪耀阳光。河岸草甸野花遍布，蝴蝶飞舞成群，成为情侣散步与孩童嬉水的天堂。傍晚时分金色夕阳洒满水面，倒影交错出诗意画卷，让人不自觉驻足凝望。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -626,11 +639,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
-        },
-        {
-          "role": "system",
-          "content": "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: affinity: 这一幕里，理在言行间对你流露出的亲疏变化 [cold: 受到冒犯、惊吓或冷落，眼眶泛红、退缩回避或强忍委屈 | cool: 感到局促或失落，收敛笑容、言辞变得客套拘谨 | flat: 维持往常的礼数与分寸，只作寻常交谈或公事往来 | warm: 神色放松下来，主动搭话、分享日常或欣然替你分担事务 | warmer: 流露明显的亲昵与依赖，主动靠近、倾诉心事或因你的夸奖而欢喜脸红 | moved: 被你的关怀或举动深深触动，不顾矜持地依偎、落泪或流露强烈情意]"
+          "content": "Known: "
         },
         {
           "role": "system",
@@ -638,7 +647,7 @@
         },
         {
           "role": "user",
-          "content": "Player's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<scene>\nPlayer's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</scene>\n\nnotes: Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed.\n\nAnswer each question from what <scene> settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or <scene> does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: affinity: 这一幕里，理在言行间对你流露出的亲疏变化 [cold: 受到冒犯、惊吓或冷落，眼眶泛红、退缩回避或强忍委屈 | cool: 感到局促或失落，收敛笑容、言辞变得客套拘谨 | flat: 维持往常的礼数与分寸，只作寻常交谈或公事往来 | warm: 神色放松下来，主动搭话、分享日常或欣然替你分担事务 | warmer: 流露明显的亲昵与依赖，主动靠近、倾诉心事或因你的夸奖而欢喜脸红 | moved: 被你的关怀或举动深深触动，不顾矜持地依偎、落泪或流露强烈情意]"
         }
       ]
     },
@@ -708,11 +717,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -727,15 +736,11 @@
         },
         {
           "role": "system",
-          "content": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
-        },
-        {
-          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "我看了看四周。⦅小心⦆"
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -744,11 +749,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -763,7 +768,7 @@
         },
         {
           "role": "system",
-          "content": "Which card action does the player's input take first? \"end\" if it takes none of the listed actions. Set \"again\" to true only if the input's own words ask for more than one beat (\"until he falls\", \"twice\", \"then …\").\nState: {\"hp\":40,\"foe\":30,\"bond\":0}\nActions: strike: 拔剑向裴青舟出手试探或进攻\nSo far: -"
+          "content": "State: {\"hp\":40,\"foe\":30,\"bond\":0}\nActions: strike: 拔剑向裴青舟出手试探或进攻\nSo far: -"
         },
         {
           "role": "system",
@@ -771,7 +776,7 @@
         },
         {
           "role": "user",
-          "content": "我看了看四周。⦅小心⦆"
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nWhich card action in Actions does <input> take first? Pick \"end\" if it takes none of the listed actions. Set \"again\" to true only if <input>'s own words ask for more than one beat (\"until he falls\", \"twice\", \"then …\")."
         }
       ]
     },
@@ -831,11 +836,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -850,7 +855,7 @@
         },
         {
           "role": "user",
-          "content": "不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<draft>\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</draft>\n\nCheck <draft> against the Rule and Open lines above. Put in \"fired\" each Open entry id whose substance <draft> conveyed, and in \"violated\" each Rule text that <draft> broke; leave either empty when none applies. Judge only what is written in <draft>; do not rewrite or continue the story."
         }
       ]
     },
@@ -859,11 +864,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -874,11 +879,11 @@
         },
         {
           "role": "system",
-          "content": "Each sentence marked <target> uses wording the reader has seen too often: the words in its hits, and what its hint below names. Rewrite each so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks.\nhit-1: 八股\nhit-2: 八股\nhit-3: 八股\nhit-4: 八股\nhit-5: 八股\nhit-6: 八股\nhit-7: 八股\nhit-8: 八股\nhit-9: 八股\nhit-10: 八股\nhit-11: 八股\nhit-12: 八股\nhit-13: 八股\nhit-14: 八股\nhit-15: 八股\nhit-16: 八股\nhit-17: 八股\nhit-18: 八股\nhit-19: 八股\nhit-20: 八股\nhit-21: 八股\nhit-22: 八股\nhit-23: 八股\nhit-24: 八股\nhit-25: 八股\nhit-26: 八股\nhit-27: 八股\nhit-28: 八股\nhit-29: 八股\nhit-30: 八股"
+          "content": "hit-1: 八股\nhit-2: 八股\nhit-3: 八股\nhit-4: 八股\nhit-5: 八股\nhit-6: 八股\nhit-7: 八股\nhit-8: 八股\nhit-9: 八股\nhit-10: 八股\nhit-11: 八股\nhit-12: 八股\nhit-13: 八股\nhit-14: 八股\nhit-15: 八股\nhit-16: 八股\nhit-17: 八股\nhit-18: 八股\nhit-19: 八股\nhit-20: 八股\nhit-21: 八股\nhit-22: 八股\nhit-23: 八股\nhit-24: 八股\nhit-25: 八股\nhit-26: 八股\nhit-27: 八股\nhit-28: 八股\nhit-29: 八股\nhit-30: 八股"
         },
         {
           "role": "user",
-          "content": "<target id=\"hit-1\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-2\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-3\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-4\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-5\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-6\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-7\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-8\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-9\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-10\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-11\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-12\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-13\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-14\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-15\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-16\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-17\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-18\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-19\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-20\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-21\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-22\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-23\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-24\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-25\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-26\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-27\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-28\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-29\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-30\" hits=\"不是这样而是\">不是这样而是那样。</target>"
+          "content": "<draft>\n<target id=\"hit-1\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-2\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-3\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-4\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-5\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-6\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-7\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-8\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-9\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-10\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-11\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-12\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-13\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-14\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-15\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-16\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-17\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-18\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-19\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-20\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-21\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-22\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-23\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-24\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-25\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-26\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-27\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-28\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-29\" hits=\"不是这样而是\">不是这样而是那样。</target><target id=\"hit-30\" hits=\"不是这样而是\">不是这样而是那样。</target>\n</draft>\n\nEach sentence marked <target> in <draft> uses wording the reader has seen too often: the words in its hits, and what its hint above names. Rewrite each <target> sentence so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks, and never continue <draft>."
         }
       ]
     },
@@ -887,11 +892,11 @@
       "msgs": [
         {
           "role": "system",
-          "content": "你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。"
+          "content": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
+          "content": "<world>\n你是替故人李鹤送还遗物的旧友。三年前李鹤在江南犯下大案、遭官府与师门两道追索，在关外与你结识并托付了随身短剑，只说若有朝一日听闻他的死讯，便去越州苦竹岭找他的同门师兄裴青舟。你并不知道当年江南那桩旧案的内情，只为践行诺言、寻访故人死因而来。\n\n故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。\n</world>",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -902,11 +907,7 @@
         },
         {
           "role": "system",
-          "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: 当前场景所在的位置，以及眼下在场的人物（用姓名，玩家写「玩家」）与各自此刻的神态。\npeople: 这一幕新出场或新提及、不在卡片固有设定中（排除裴青舟、李鹤与玩家）且尚未记入已知列表的旁人，每人一行；没有则留空。\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
-        },
-        {
-          "role": "system",
-          "content": "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: warmth: 这一幕里裴青舟对待你的态度 [cold: 敌意加深，出言驱赶、拔剑相向或厉声喝止 | flat: 冷淡审视，只做试探盘问而未见触动 | warm: 有所触动，戒心稍缓并肯听你细说或接话 | close: 防线大开，为你所言所行深深震动、流露悲恸或吐露实情]"
+          "content": "Known: "
         },
         {
           "role": "system",
@@ -914,7 +915,7 @@
         },
         {
           "role": "user",
-          "content": "Player's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。"
+          "content": "<scene>\nPlayer's line: 我看了看四周。⦅小心⦆\n\n不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。不是这样而是那样。\n</scene>\n\nnotes: Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nscene: 当前场景所在的位置，以及眼下在场的人物（用姓名，玩家写「玩家」）与各自此刻的神态。\npeople: 这一幕新出场或新提及、不在卡片固有设定中（排除裴青舟、李鹤与玩家）且尚未记入已知列表的旁人，每人一行；没有则留空。\nUse the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed.\n\nAnswer each question from what <scene> settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or <scene> does not bear on the question, pick the option that says nothing happened or nothing changed.\nQuestions: warmth: 这一幕里裴青舟对待你的态度 [cold: 敌意加深，出言驱赶、拔剑相向或厉声喝止 | flat: 冷淡审视，只做试探盘问而未见触动 | warm: 有所触动，戒心稍缓并肯听你细说或接话 | close: 防线大开，为你所言所行深深震动、流露悲恸或吐露实情]"
         }
       ]
     },
@@ -985,28 +986,36 @@
   "harness": {
     "asks": [
       {
+        "id": "stage.role",
+        "text": "You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns (\"you\" / \"你\") in the reference material refer to the player character, not to you."
+      },
+      {
         "id": "lookup",
-        "text": "Find only the context needed for this turn. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Stop with a short text response once sufficient; do not narrate or invent facts."
+        "text": "Find only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
       },
       {
         "id": "direct",
-        "text": "Put in \"must\" only the open entries this scene cannot make sense without; the rest stay in \"may\", and both are empty when none fits now. \"tone\" is one line to the narrator, not to the player: the mood, the pace, or where this scene should land, as a phrase or a short sentence. It is a direction, never a sentence of the story: it names no character and writes no one's words, actions or expression."
+        "text": "Given <input> and the Open and Events lines above, put in \"must\" only the open entries the next scene cannot make sense without; the rest stay in \"may\", and both are empty when none fits now. \"tone\" is one line of direction to the narrator, not to the player: the mood, the pace, or where this scene should land, as a phrase or a short sentence. It is a direction, never a sentence of the story: it names no character and writes no one's words, actions or expression."
       },
       {
         "id": "decide.first",
-        "text": "Which card action does the player's input take first? \"end\" if it takes none of the listed actions. Set \"again\" to true only if the input's own words ask for more than one beat (\"until he falls\", \"twice\", \"then …\")."
+        "text": "Which card action in Actions does <input> take first? Pick \"end\" if it takes none of the listed actions. Set \"again\" to true only if <input>'s own words ask for more than one beat (\"until he falls\", \"twice\", \"then …\")."
       },
       {
         "id": "decide.again",
-        "text": "The input asked to keep going. Given the outcomes so far, pick the next action, or \"end\" when the input's goal is met, the input said to stop under this outcome, or nothing sensible is left."
+        "text": "The player's <input> asked to keep going. Given the outcomes in So far, pick the next action from Actions, or \"end\" when <input>'s goal is met, <input> said to stop under this outcome, or nothing sensible is left."
+      },
+      {
+        "id": "check",
+        "text": "Check <draft> against the Rule and Open lines above. Put in \"fired\" each Open entry id whose substance <draft> conveyed, and in \"violated\" each Rule text that <draft> broke; leave either empty when none applies. Judge only what is written in <draft>; do not rewrite or continue the story."
       },
       {
         "id": "record.tools",
-        "text": "Use the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
+        "text": "Use the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed."
       },
       {
         "id": "record.readout",
-        "text": "Answer each question from what this scene settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or the scene does not bear on the question, pick the option that says nothing happened or nothing changed."
+        "text": "Answer each question from what <scene> settled on the page, not from where it is heading: when a character has only raised the matter and the player has yet to answer, or <scene> does not bear on the question, pick the option that says nothing happened or nothing changed."
       },
       {
         "id": "narrate.correction",
@@ -1022,7 +1031,7 @@
       },
       {
         "id": "polish",
-        "text": "Each sentence marked <target> uses wording the reader has seen too often: the words in its hits, and what its hint below names. Rewrite each so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks."
+        "text": "Each sentence marked <target> in <draft> uses wording the reader has seen too often: the words in its hits, and what its hint above names. Rewrite each <target> sentence so it no longer does, keeping its meaning, person, register, length and its seams with the sentences around it. Return a sentence unchanged if it already reads naturally. Answer each target by its id with the sentence alone, no marks, and never continue <draft>."
       },
       {
         "id": "input.thought",
@@ -1033,7 +1042,7 @@
       {
         "id": "notes",
         "label": "事件摘要",
-        "text": "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
+        "text": "Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
         "shape": {
           "kind": "text"
         },
@@ -1068,7 +1077,7 @@
       {
         "id": "notes",
         "label": "事件摘要",
-        "text": "Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
+        "text": "Notes are the record of <scene>, one or two plain sentences in the third person: only what already changed or was settled on the page (what was done, decided, promised, refused or learned), or, where <scene> was talk, what was raised or confided and how the other side met it. Never continue the story or infer what happens after <scene>. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.",
         "shape": {
           "kind": "text"
         },
