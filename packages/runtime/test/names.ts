@@ -48,10 +48,20 @@ const card: Card = {
     {
       id: "li",
       layers: ["LORE {{char}}.", "DEEP {{char}}."],
+      sections: [{ id: "s", text: "SECTION {{char}}." }],
       unlock: [{ all: [] }, { all: [] }],
       offer: { any: [] },
     },
     { id: "un", layers: ["UNFILLED {{missing}}."], unlock: { all: [] }, offer: { any: [] } },
+    // a section's hole drops its entry, face and all (an always-on face would otherwise be told unasked)
+    {
+      id: "secno",
+      layers: ["FACE-NO."],
+      sections: [{ id: "s", text: "SECTION-NO {{missing}}." }],
+      activation: "always",
+      unlock: { all: [] },
+      offer: { any: [] },
+    },
     { id: "late", layers: ["LATE.", "LATE-NO {{missing}}."], unlock: { all: [] }, offer: { any: [] } }, // any layer
     { id: "held", layers: ["HELD {{given}}."], unlock: { all: [] }, offer: { any: [] } },
   ],
@@ -151,7 +161,7 @@ assert.deepEqual(root.turn.reply, [{ type: "text", text: "G 依瑞丝" }])
 assert.throws(() => S.greet({ text: "G {{missing}} {{other}}" }), /\{\{missing\}\}, \{\{other\}\}/)
 assert.equal(S.log.nodes.size, 1)
 
-picks.push(["li", "pk/x"])
+picks.push(["li", "li#s", "pk/x"])
 const first = await collect(S.act(root.id, { text: "{{char}} typed" }))
 const narrate = doc(first, "narrate")
 const has = (d: readonly string[], s: string) => d.some((m) => m.includes(s))
@@ -165,6 +175,7 @@ for (const s of [
   "HATTAIL 依瑞丝",
   "LORE 依瑞丝.", // layer text, told
   "DEEP 依瑞丝.",
+  "SECTION 依瑞丝.", // a section, expanded like a layer
   "ENTRY 贝克兰德.", // a pack's entry
   "blk: BLOCK 依瑞丝", // a narrate block's ask
   "town: TOWN 贝克兰德",
@@ -189,7 +200,7 @@ assert.equal("skipped" in n1.turn.products, false)
 assert.equal(n1.turn.input.text, "{{char}} typed")
 assert.deepEqual(
   n1.delivered.map((d) => d.text),
-  ["LORE 依瑞丝.\n\nDEEP 依瑞丝.", "ENTRY 贝克兰德."],
+  ["LORE 依瑞丝.\n\nDEEP 依瑞丝.", "SECTION 依瑞丝.", "ENTRY 贝克兰德."],
 )
 
 // History: the literal holes in a past line and a past reply go back as they are

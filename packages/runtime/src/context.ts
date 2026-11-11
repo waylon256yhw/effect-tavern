@@ -21,6 +21,7 @@ export interface Resource extends DeliverySnapshot {
   activation: "always" | "on_demand"
   disclosures: readonly Disclosure[]
   product?: string
+  of?: string // a section's entry resource (`card:<entry>`); never frozen into the snapshot
 }
 export const revision = (value: unknown): string =>
   createHash("sha256")
@@ -56,6 +57,29 @@ export const loreResource = (
     ...policy(source, entry),
     disclosures: source === "card" ? Array.from({ length: depth }, (_, i) => ({ id: entry.id, layer: i + 1 })) : [],
   }
+}
+/** An entry's sections, one resource each (docs/sections-brief.md §2): visible with the entry, read on demand only,
+ *  never by the player, no disclosure. The entry's own resource stays loreResource's, byte for byte. */
+export const sectionResources = (
+  entry: ContextPolicy & { id: string; source?: "card" | "pack"; sections?: readonly { id: string; text: string }[] },
+  depth: number,
+): Resource[] => {
+  const source = entry.source ?? "card"
+  const p = policy(source, entry)
+  return depth < 1
+    ? []
+    : (entry.sections ?? []).map((x) => ({
+        resourceId: `${source}:${entry.id}#${x.id}`,
+        revision: revision({ text: x.text }),
+        title: hook(x.text),
+        text: x.text,
+        source,
+        access: { model: p.access.model, player: false },
+        activation: "on_demand",
+        residency: p.residency,
+        disclosures: [],
+        of: `${source}:${entry.id}`,
+      }))
 }
 /** Preserve every delivered version in the journal, while request assembly selects the latest. */
 export const uniqueDeliveries = (snapshots: readonly DeliverySnapshot[]) => [
@@ -118,19 +142,28 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
   const held = new Map(injected.map((s) => [s.resourceId, s]))
   const delivered: DeliverySnapshot[] = []
   const disclosures: Disclosure[] = []
+  const unheld = (r: Resource) => held.get(r.resourceId)?.revision !== r.revision
+  const open = (r: Resource) => r.access.model && r.activation === "on_demand"
+  /** An entry's sections not in this request: its directory, on the lookup side only (§3), never in a snapshot. */
+  const sectionsOf = (id: string) => resources.filter((x) => x.of === id && open(x) && unheld(x))
+  const directory = (xs: readonly Resource[]) => xs.map((x) => ({ resourceId: x.resourceId, title: x.title.slice(0, 160) }))
+  /** The search units: an entry (never a section) whose own face is unread, or that still has an unread section. */
   const readable = () =>
-    resources.filter(
-      (r) => r.access.model && r.activation === "on_demand" && held.get(r.resourceId)?.revision !== r.revision,
-    )
+    resources.filter((r) => !r.of && r.access.model && ((open(r) && unheld(r)) || sectionsOf(r.resourceId).length))
   const search = (query: string, scope: "all" | Source = "all") => {
     const pool = readable()
       .filter((r) => scope === "all" || r.source === scope)
-      .map((r) => ({
-        r,
-        name: r.resourceId.toLowerCase().replace(/^.*[:/]/, ""),
-        anchor: `${r.resourceId}\n${r.title}`.toLowerCase(),
-        text: r.text.toLowerCase(),
-      }))
+      .map((r) => {
+        const sections = sectionsOf(r.resourceId)
+        return {
+          r,
+          sections,
+          name: r.resourceId.toLowerCase().replace(/^.*[:/]/, ""),
+          anchor: `${r.resourceId}\n${r.title}`.toLowerCase(),
+          // a resident face is already in the request: only its name and its unread sections can match
+          text: [...(unheld(r) ? [r.text] : []), ...sections.map((x) => x.text)].join("\n").toLowerCase(),
+        }
+      })
     const terms = termsOf(
       query,
       pool.flatMap((x) => [x.anchor, x.text]),
@@ -143,42 +176,65 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
       terms.filter((t) => text.includes(t)).length,
       terms.reduce((n, t) => n + count(text, t), 0),
     ]
+    const hit = (x: Resource) => terms.some((t) => x.text.toLowerCase().includes(t))
     return pool
-      .map((x) => ({ r: x.r, s: score(x) }))
+      .map((x) => ({ ...x, s: score(x) }))
       .filter(({ s }) => s[0]! + s[2]! > 0)
       .sort((a, b) => b.s.reduce((d, n, i) => d || n - a.s[i]!, 0))
       .slice(0, 8)
-      .map(({ r }) => ({
+      .map(({ r, sections }) => ({
         title: r.title.slice(0, 160),
         source: r.source,
         resourceId: r.resourceId,
         revision: r.revision,
-        ...(held.has(r.resourceId) ? { supersedes: held.get(r.resourceId)!.revision } : {}),
+        ...(held.has(r.resourceId) && unheld(r) ? { supersedes: held.get(r.resourceId)!.revision } : {}),
+        ...(unheld(r) ? {} : { resident: true }), // only its sections are left to read
+        // ponytail: every unread section, bounded by lint's 8 per entry; page them when an entry may hold more
+        ...(sections.length
+          ? { sections: directory([...sections.filter(hit), ...sections.filter((x) => !hit(x))]) }
+          : {}),
       }))
+  }
+  /** A told snapshot as lookup reads it: narrate's line, then the entry's unread sections, if any. */
+  const told = (s: DeliverySnapshot) => {
+    const xs = sectionsOf(s.resourceId)
+    return xs.length
+      ? `${deliveryText(s)}\nSections (read_context): ${directory(xs)
+          .map((x) => `${x.resourceId} ${x.title}`)
+          .join(" | ")}`
+      : deliveryText(s)
   }
   const tools = {
     search_context: stageTool(
       Schema.Struct({ query: Schema.String, scope: Schema.optionalKey(Scope) }),
-      "Search unlocked, model-readable context. Pass space-separated keywords in Chinese or English (names, places, topics), not a sentence. Returns at most 8 summaries, excluding resident revisions. Read their resourceId to get full text; search again using facts you discover.",
+      "Search unlocked, model-readable context. Pass space-separated keywords in Chinese or English (names, places, topics), not a sentence. Returns at most 8 summaries, excluding resident revisions. Read their resourceId to get full text; search again using facts you discover. An entry may list `sections` (deeper text, read by their resourceId); `resident: true` means only its sections are left to read.",
       async ({ query, scope }) => ({ ok: true, value: search(query, scope) }),
     ),
     read_context: stageTool(
       Schema.Struct({ refs: Schema.Array(Schema.String) }),
-      "Read up to 8 resource IDs returned by search_context. Full frozen snapshots are delivered to the narrator. Already resident revisions need no repeat read.",
+      "Read up to 8 resource IDs returned by search_context. Full frozen snapshots are delivered to the narrator. Already resident revisions need no repeat read. A result's `sections` are its entry's deeper text, read only when the turn needs them.",
       async ({ refs }) => {
         const ids = [...new Set(refs)]
-        if (ids.length > 8) return { ok: false, code: "too_many_refs", message: "Read at most 8 resources per call." }
         const selected: Resource[] = []
         for (const id of ids) {
-          const r = resources.find((r) => r.resourceId === id && r.access.model && r.activation === "on_demand")
+          const r = resources.find((r) => r.resourceId === id && open(r))
           if (!r)
             return {
               ok: false,
               code: "unavailable_resource",
               message: `${id}: unavailable; search for accessible resources.`,
             }
+          // A section supplements its entry, never goes on alone: an entry not in the request comes first (§3).
+          const face = r.of === undefined ? undefined : resources.find((x) => x.resourceId === r.of)
+          if (face && unheld(face) && !ids.includes(face.resourceId) && !selected.includes(face)) selected.push(face)
           selected.push(r)
         }
+        if (selected.length > 8)
+          return {
+            ok: false,
+            code: "too_many_refs",
+            message: "Read at most 8 resources per call; a section's entry counts when it is not resident.",
+          }
         const results = selected.map((r) => {
           const previous = held.get(r.resourceId)
           if (previous?.revision === r.revision)
@@ -189,9 +245,16 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
           disclosures.push(...r.disclosures)
           return snapshot
         })
-        return { ok: true, value: results }
+        // an entry's unread sections ride on its result, after the whole call, never on the frozen snapshot
+        return {
+          ok: true,
+          value: results.map((x) => {
+            const xs = sectionsOf(x.resourceId)
+            return xs.length ? { ...x, sections: directory(xs) } : x
+          }),
+        }
       },
     ),
   }
-  return { tools, readable, search, delivered, disclosures }
+  return { tools, readable, search, told, delivered, disclosures }
 }

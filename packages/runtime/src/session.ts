@@ -207,7 +207,10 @@ export const makeSession = ({
     const I = makeLore<Paths, readonly string[]>(
       cardLore.flatMap((e) => {
         const layers = e.layers.map((l) => expand(l, R.names))
-        return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
+        const sections = e.sections && fill(e.sections, R.names) // a section with a hole drops the entry, as a layer does
+        return layers.includes(undefined) || sections?.length !== e.sections?.length
+          ? []
+          : [{ ...e, layers: layers as string[], ...(sections && { sections }) }]
       }),
     )
     return (now = { R, I })
@@ -513,7 +516,8 @@ export const makeSession = ({
               stage: "lookup",
               ledger: here.ledger(),
               question: wording("lookup"),
-              context: latest([...resident, ...deliveries]).map(deliveryText),
+              // lookup's own reading: an entry's unread sections listed under it; narrate's `told` stays bare
+              context: latest([...resident, ...deliveries]).map(lookup.told),
               current: here.known().current,
             }),
             {

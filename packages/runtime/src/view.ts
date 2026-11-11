@@ -12,7 +12,7 @@ import { hook, makeLore } from "./lore.ts"
 import { expand, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
 import { cond, effect, labels } from "./phrase.ts"
-import { deliveryText, freeze, loreResource } from "./context.ts"
+import { contextLookup, deliveryText, freeze, loreResource, sectionResources } from "./context.ts"
 import { floorAt } from "./derived.ts"
 
 import { initialWorld } from "./world.ts"
@@ -105,7 +105,10 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   // out. Pack resources stay separate from story disclosure, as in derived.ts.
   const own = card.lore.flatMap((e) => {
     const layers = e.layers.map((l) => expand(l, R.names))
-    return layers.includes(undefined) ? [] : [{ ...e, layers: layers as string[] }]
+    const sections = e.sections && fill(e.sections, R.names)
+    return layers.includes(undefined) || sections?.length !== e.sections?.length
+      ? []
+      : [{ ...e, layers: layers as string[], ...(sections && { sections }) }]
   })
   const L = makeLore<Record<string, unknown>, readonly string[]>(
     own.map((e) => ({
@@ -128,8 +131,9 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     )
     const w = windows.get(e.id)
     return {
-      settled: at === e.layers.length && !w,
-      text: `${e.id}  layer ${at}/${e.layers.length}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}`,
+      // an always-on entry spends request tokens every turn: it is never part of the quiet remainder
+      settled: at === e.layers.length && !w && e.activation !== "always",
+      text: `${e.id}  layer ${at}/${e.layers.length}${e.sections?.length ? `  ${e.sections.length} sections` : ""}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}${(e.sections ?? []).map((x) => `\n    #${x.id} ${hook(x.text)}`).join("")}`,
     }
   })
   const settled = o.lore ? 0 : listed.filter((r) => r.settled).length
@@ -142,7 +146,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const resources = [
     ...L.entries.flatMap((e) => {
       const depth = L.current(e, gated, [])
-      return depth ? [loreResource(e, depth)] : []
+      return depth ? [loreResource(e, depth), ...sectionResources(e, depth)] : []
     }),
     ...R.entries.map((e) => loreResource({ ...e, source: "pack", layers: [e.text] }, 1)),
   ]
@@ -150,9 +154,10 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const pin = o.pin?.includes(":") ? o.pin : o.pin ? `card:${o.pin}` : undefined
   const pinned = resources.find((r) => r.resourceId === pin)
   if (pin && !pinned?.access.player) throw new Error(`pin ${o.pin}: entry is not available to the player`)
-  const injected = resources
+  const frozen = resources
     .filter((r) => (r.activation === "always" && r.access.model) || r === pinned)
-    .map((r) => deliveryText(freeze(r)))
+    .map((r) => freeze(r))
+  const injected = frozen.map(deliveryText)
   const offered = L.offers(gated, [], events)
   const explain = (path: string, c: Cond, ev: readonly string[] = []): string[] => [
     `${path}: ${holds(c, gated, ev)} — ${cond(c, labels(card.rules))}${"path" in c ? ` (current ${c.path}=${String(lookup(gated, c.path))})` : ""}`,
@@ -214,7 +219,12 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
           events,
         }
       : stage === "lookup"
-        ? { stage, question: R.asks["lookup"]!.text, context: injected, ledger: [] }
+        ? {
+            stage,
+            question: R.asks["lookup"]!.text,
+            context: frozen.map(contextLookup(resources, frozen).told), // session.ts: sections listed for lookup only
+            ledger: [],
+          }
         : stage === "record"
           ? {
               stage,

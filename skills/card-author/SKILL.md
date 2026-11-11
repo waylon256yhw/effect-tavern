@@ -113,6 +113,12 @@ The narrator never sees a number. State reaches it only as the fiction variants 
   the model's lookup tools or the player's call bring it in; `always` loads it whenever unlocked); `residency:
   permanent | window | turn` (default window: it stays while the turn that delivered it is in the unfolded window;
   `permanent` never leaves, `turn` is this request only). Leave all three off unless a live run shows why.
+- **Depth always public, needed only when asked** → `sections: [{ id, text }]` on the entry. A layer is what the story
+  has to earn (an unlock or a window), and unlocked layers go out together; a section is the entry's appendix (the
+  long past, the chronicle), never gated, never rewriting the face, read by lookup as `card:<entry>#<section>` only when
+  the turn asks for it. Another entity is another entry, not a section. A section's first sentence is its hook in
+  lookup's list; it exists while its entry is visible and inherits the entry's policy (never the player's `/` menu,
+  never `always`). At most 8 per entry, ids unique and without `#` (lint `bad-section`).
 - **Ending** → `rules.over` (a Cond, code-decided) and `rules.cap` (beats per turn).
 - **Must-not** → `guard: string[]`. Checked after the prose, one correction rewrite on a miss. Never in the prompt: a
   prohibition is itself a prompt.
@@ -186,7 +192,7 @@ lore entry's `invoke` key is refused. Settle time: an effect path that is not a 
 declared; a `judge` roll with no chance on the beat.
 Lint (#27, #83, #155): `unknown-frame-slot`, `unknown-path`, `reserved-path`, `orphan-event`, `dead-field`,
 `prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`,
-`unfilled-name`, `unsupported-macro`, `unknown-catalog`, `duplicate-catalog-item`, `bad-identifier` (an id, event or enum value with whitespace), `empty-text`
+`unfilled-name`, `unsupported-macro`, `unknown-catalog`, `duplicate-catalog-item`, `bad-section`, `bad-identifier` (an id, event or enum value with whitespace), `empty-text`
 (an author slot left empty, error: a `compile` candidate cannot be installed until the author fills it). `card
 check` also prints one line per greeting: the state its `do` leaves, the bands that hold, the lore windows open for
 turn 1, the readouts asked after it.
