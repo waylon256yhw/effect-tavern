@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite"
 import assert from "node:assert/strict"
 import { LLMock } from "@copilotkit/aimock"
 import { decodeCard } from "@effect-tavern/runtime/src/card.ts"
@@ -113,7 +114,7 @@ try {
   fixture([{ ...warning, level: "error" }])
   await assert.rejects(lib.author.review({ card }))
   // Direct and HTTP installation have the same gate; failed installs retain the draft.
-  lib.drafts.put(card.id, result.candidate)
+  lib.drafts.put(card.id, { card: result.candidate })
   assert.equal(lib.drafts.get(card.id).draft, true)
   assert.throws(() => lib.cards.put(result.candidate), /empty-text/)
   const rejected = await request(`/cards/${card.id}`, "PUT", result.candidate)
@@ -135,13 +136,63 @@ try {
   assert.equal((await request(`/cards/${card.id}/draft`, "DELETE")).status, 200)
   assert.equal(lib.drafts.get(card.id).draft, false)
   assert.equal((await request("/cards/missing/draft")).status, 404)
+  // Canvas updates merge independently of content edits and survive both install and discard.
+  const layout = {
+    rows: [
+      {
+        h: 2,
+        items: [
+          { id: "fiction", w: 3 },
+          { id: "rules", w: 1 },
+        ],
+      },
+    ],
+  }
+  const draftUrl = `/cards/${card.id}/draft`
+  assert.equal((await request(draftUrl, "PUT", { layout })).status, 200)
+  assert.deepEqual(lib.drafts.get(card.id), { card, draft: false, layout })
+  await request(draftUrl, "PUT", { card: result.candidate })
+  assert.deepEqual(lib.drafts.get(card.id), { card: result.candidate, draft: true, layout })
+  const moved = { rows: [{ h: 1, items: [{ id: "fiction", w: 1 }] }] }
+  await request(draftUrl, "PUT", { layout: moved })
+  const editing = { card: result.candidate, draft: true, layout: moved }
+  assert.deepEqual(lib.drafts.get(card.id), editing)
+  for (const value of [
+    {},
+    { layout: null },
+    { layout: { rows: [{ h: 0, items: [] }] } },
+    { layout: { rows: [{ h: 1, items: [{ id: "fiction", w: -1 }] }] } },
+    { card: { ...card, id: "wrong" }, layout },
+  ]) {
+    assert.equal((await request(draftUrl, "PUT", value)).status, 400)
+    assert.deepEqual(lib.drafts.get(card.id), editing)
+  }
+  assert.equal((await request(`/cards/${card.id}`, "PUT", result.candidate)).status, 400)
+  assert.deepEqual(lib.drafts.get(card.id), editing)
+  await request(`/cards/${card.id}`, "PUT", card)
+  assert.deepEqual(lib.drafts.get(card.id), { card, draft: false, layout: moved })
+  assert.deepEqual(data.drafts.get(card.id), { layout: moved })
+  await request(draftUrl, "PUT", { card: result.candidate })
+  await request(draftUrl, "DELETE")
+  assert.deepEqual(lib.drafts.get(card.id), { card, draft: false, layout: moved })
+  await request(draftUrl, "PUT", { layout: { rows: [] } })
+  assert.deepEqual(lib.drafts.get(card.id).layout, { rows: [] })
   // CLI runs the same fixtures through both local SQLite routing and --url HTTP.
   const local = open(join(dir, "tavern.db"))
   configure(local)
-  local.drafts.put(card)
+  local.drafts.put(card.id, { card, layout })
   local.close()
+  const legacy = { ...card, id: "legacy" }
+  const sql = new DatabaseSync(join(dir, "tavern.db"))
+  sql.prepare("insert into draft (id, json) values (?, ?)").run(legacy.id, JSON.stringify(legacy))
+  sql.close()
   const reopened = open(join(dir, "tavern.db"))
-  assert.deepEqual(reopened.drafts.get(card.id), card)
+  assert.deepEqual(reopened.drafts.get(card.id), { card, layout })
+  assert.deepEqual(reopened.drafts.get(legacy.id), { card: legacy })
+  reopened.drafts.del(card.id)
+  reopened.drafts.del(legacy.id)
+  assert.deepEqual(reopened.drafts.get(card.id), { layout })
+  assert.equal(reopened.drafts.get(legacy.id), undefined)
   reopened.close()
   rmSync(join(dir, "tavern.db.lock"))
   const file = join(dir, "card.yaml"),

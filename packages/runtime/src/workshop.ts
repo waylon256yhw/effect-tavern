@@ -5,6 +5,26 @@ import { type Cond } from "./cond.ts"
 import { identifier } from "./lint.ts"
 import { type RecordShape } from "./product.ts"
 
+/** Author chrome, stored beside the editable card; it never enters a runtime Card. */
+const Fraction = Schema.Number.check(Schema.makeFilter((n) => Number.isFinite(n) && n > 0))
+export const WorkshopLayout = Schema.Struct({
+  rows: Schema.Array(
+    Schema.Struct({
+      h: Fraction,
+      items: Schema.Array(Schema.Struct({ id: Schema.String, w: Fraction })),
+    }),
+  ),
+})
+export type WorkshopLayout = typeof WorkshopLayout.Type
+export interface CardDraft {
+  card?: Card
+  layout?: WorkshopLayout
+}
+export interface DraftView extends CardDraft {
+  card: Card
+  draft: boolean
+}
+
 const Token = Schema.String.check(Schema.isPattern(identifier))
 const Scalar = Schema.Union([Token, Schema.Number, Schema.Boolean])
 const Sub = Schema.suspend((): Schema.Codec<Cond> => Condition)

@@ -289,8 +289,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
       if (req.method === "GET") return reply(() => lib.drafts.get(id), 404)
       if (req.method === "PUT")
         return reply(async () => {
-          const { card } = await read(Schema.decodeUnknownSync(Schema.Struct({ card: Schema.Unknown })))
-          lib.drafts.put(id, card)
+          lib.drafts.put(id, await read((u) => u))
           return lib.drafts.get(id)
         })
       if (req.method === "DELETE")

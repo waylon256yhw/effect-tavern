@@ -1,3 +1,4 @@
+import type { CardDraft } from "@effect-tavern/runtime/src/workshop.ts"
 import type { Input } from "@effect-tavern/runtime/src/journal.ts"
 import type { StoredStory as StoryRow, Hit, Persona } from "@effect-tavern/runtime/src/library.ts"
 export type { StoredStory as StoryRow, Hit, Persona } from "@effect-tavern/runtime/src/library.ts"
@@ -376,6 +377,21 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
       void q(`insert or replace into ${table} (id, name, json) values (?, ?, ?)`).run(id, name, JSON.stringify(rest)),
     del: (id: string) => void q(`delete from ${table} where id = ?`).run(id),
   })
+  const drafts = {
+    get: (id: string): CardDraft | undefined => {
+      const value = parse<Card | CardDraft>(q("select json from draft where id = ?").get(id) as Row | undefined)
+      // Existing libraries stored a bare Card. Normalize on read; the next write uses the envelope.
+      return value && ("id" in value ? { card: value } : value)
+    },
+    put: (id: string, value: CardDraft) =>
+      void q("insert or replace into draft (id, json) values (?, ?)").run(id, JSON.stringify(value)),
+    /** Discard content edits after install or cancel, retaining the author's canvas. */
+    del: (id: string) => {
+      const layout = drafts.get(id)?.layout
+      if (layout) drafts.put(id, { layout })
+      else q("delete from draft where id = ?").run(id)
+    },
+  }
   return {
     /** The file open: the one asked for, or this process's own when another process holds that one. */
     file,
@@ -420,13 +436,7 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
       write: (t: { etag: string | null; names: Names }) =>
         void q("insert or replace into names (id, etag, json) values (1, ?, ?)").run(t.etag, JSON.stringify(t.names)),
     },
-    drafts: {
-      get: (id: string): Card | undefined =>
-        parse<Card>(q("select json from draft where id = ?").get(id) as Row | undefined),
-      put: (card: Card) =>
-        void q("insert or replace into draft (id, json) values (?, ?)").run(card.id, JSON.stringify(card)),
-      del: (id: string) => void q("delete from draft where id = ?").run(id),
-    },
+    drafts,
     cards: {
       /** The library's cards by id and title, with the summary and facets `put` stored beside the json (a row written
        *  before those columns has neither), the Card in the json column left unread. */

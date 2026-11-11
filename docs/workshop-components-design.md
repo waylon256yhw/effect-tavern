@@ -206,4 +206,4 @@ Workshop 前端放弃「固定顶栏 Tab」，采用经 [`docs/workshop-prototyp
 
 3. **二维画布顺序、`Card.fiction` 装配顺序与布局持久化** —— **已解决（2026-11-09 原型对齐）**：
    - **唯一落点与内部顺序**：每类组件在二维画布上最多挂载 1 个实例。常驻无条件 `Fragment` 的先后顺序由组件 1 `[设定文稿]` 内部的章节顺序决定（全部位于 `Head` 缓存区内）；带 `when` 条件的阶段 `Fragment` 由组件 4 `[状态与阶段]` 内的字段与阶段顺序决定（按需进入 `Turn`）。跨组件需要引用画布顺序时，二维网格一律按**先行后列（row-major reading order）**读取。
-   - **布局持久化归属**：二维画布的行列结构与宽高分数（`layout: { rows: { h, items: { id, w }[] }[] }`）属于工坊视图层（author chrome），按 `card id` 持久化在草稿存储（`drafts`）中，不进入运行时 `Card` Schema。
+   - **布局持久化归属**：二维画布的行列结构与宽高分数（`layout: { rows: { h, items: { id, w }[] }[] }`）属于工坊视图层（author chrome），按 `card id` 持久化在草稿存储（`drafts`）中，不进入运行时 `Card` Schema。存储为 `{card?, layout?}`；安装或放弃内容编辑只清 `card`，保留 `layout`。只更新一项不会覆盖另一项。

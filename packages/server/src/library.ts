@@ -39,6 +39,7 @@ import {
   type Secret,
   type Trace,
 } from "@effect-tavern/provider"
+import { WorkshopLayout, type DraftView } from "@effect-tavern/runtime/src/workshop.ts"
 import { author } from "./author.ts"
 import { validateCard } from "@effect-tavern/runtime/src/author.ts"
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
@@ -64,7 +65,7 @@ import {
   type Session,
   type Turn as Logged,
 } from "@effect-tavern/runtime/src/session.ts"
-import { Cause, Effect, Stream } from "effect"
+import { Cause, Effect, Stream, Schema } from "effect"
 import type { TimelineEvent } from "@effect-tavern/runtime/src/projection.ts"
 import type { Data } from "./data.ts"
 import type { Exported } from "./export.ts"
@@ -98,6 +99,13 @@ export interface Cards {
 
 /** The rows of the `pack` table that are ranks, not packs. */
 const RESERVED = ["harness"]
+const decodeDraftUpdate = Schema.decodeUnknownSync(
+  Schema.Struct({
+    card: Schema.optionalKey(Schema.Unknown),
+    layout: Schema.optionalKey(WorkshopLayout),
+  }),
+)
+
 export const library = ({
   data,
   cards: source,
@@ -303,14 +311,23 @@ export const library = ({
     model,
     author: author(() => model("author")),
     drafts: {
-      get: (id: string) => {
-        const draft = data.drafts.get(id)
-        return { card: draft ?? cards.get(id), draft: draft !== undefined }
+      get: (id: string): DraftView => {
+        const saved = data.drafts.get(id)
+        return {
+          card: saved?.card ?? cards.get(id),
+          draft: saved?.card !== undefined,
+          ...(saved?.layout && { layout: saved.layout }),
+        }
       },
       put: (id: string, value: unknown) => {
-        const card = decodeCard(value)
-        if (card.id !== id) throw new Error("card id does not match URL")
-        data.drafts.put(card)
+        const update = decodeDraftUpdate(value)
+        if (update.card === undefined && update.layout === undefined) throw new Error("card or layout is required")
+        const saved = data.drafts.get(id)
+        const card = update.card === undefined ? saved?.card : decodeCard(update.card)
+        if (card && card.id !== id) throw new Error("card id does not match URL")
+        if (!card) cards.get(id) // Layout alone needs an installed card or an existing content draft.
+        const layout = update.layout ?? saved?.layout
+        data.drafts.put(id, { ...(card && { card }), ...(layout && { layout }) })
       },
       del: data.drafts.del,
     },

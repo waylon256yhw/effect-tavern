@@ -99,7 +99,9 @@ bun run tavern card review my-card.yaml --json --url http://localhost:7777
 
 HTTP 客户端调用 `POST /api/author/compile {card, select, intent}`、`/api/author/sort {card, source, paragraphs?}` 和 `/api/author/review {card}`，分别得到 `{candidate, diagnostics}`、`{candidate, placements}` 和 `{diagnostics}`。传入 `paragraphs` 可保留作者手动划选的段落边界。
 
-草稿在 SQLite 中一卡一行：`GET /api/cards/:id/draft` 返回 `{card, draft}`，有草稿时返回完整草稿，否则返回完整已安装卡。`PUT` 接收 `{card}`，卡片 id 必须与 URL 一致，允许判据未完成；`DELETE` 放弃草稿。草稿重启后仍保留，不影响运行中的故事。安装成功即清草稿；HTTP 与库直接调用都校验初始状态并拒绝所有 lint error，包括空白作者文本。安装失败保留已安装卡和草稿。
+草稿在 SQLite 中一卡一行：`GET /api/cards/:id/draft` 返回 `{card, draft, layout?}`，有内容草稿时返回完整草稿，否则返回完整已安装卡；`draft` 只表示有未提交的卡片编辑。`PUT` 接收 `{card?, layout?}`，至少提供一项：只传卡片保留布局，只传布局保留内容草稿。卡片 id 必须与 URL 一致，允许判据未完成；布局为 `{rows: {h, items: {id, w}[]}[]}`，`h`、`w` 是正有限数，`{rows: []}` 可重置布局。
+
+`DELETE` 放弃内容草稿，安装成功也只清内容编辑，两者均保留布局；没有布局时删除整行。草稿与布局重启后仍保留，不影响运行中的故事，旧库的裸 Card 草稿自动按新格式读取。HTTP 与库直接安装都校验初始状态并拒绝所有 lint error，包括空白作者文本。安装失败保留已安装卡、草稿和布局。
 
 模型输出契约位于 `runtime/src/workshop.ts`：compile 接收 `fields`、`actions`、`readouts`、`products`、`over`、`cap`、`slots` 和必填的 `bindings`。fiction/lore 绑定为 `{to, when}`，开场白绑定为 `{to, do}`。`roll: {judged: true}` 创建空 `judge`；输出 schema 没有正文、判据或展示标签字段。Sort 为 `{paragraphs: number[], to: string}[]`，目标是 `frame.<id>`、`fiction.<new-id>`、`greetings[n]` 或 `lore.<id>.layers[n]`。Review 固定使用 `rule: "review:consistency"` 和 `level: "warn"`。解码丢弃未声明字段；模型夹带的文本不会进入候选，已有作者文本保持原样。
 

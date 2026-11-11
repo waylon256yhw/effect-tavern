@@ -78,7 +78,7 @@ try {
     },
   ]) {
     const invalid = { ...card, products: [product] }
-    lib.drafts.put(card.id, invalid)
+    lib.drafts.put(card.id, { card: invalid })
     assert.throws(() => lib.cards.put(invalid))
     assert.equal((await http(remote, `/cards/${card.id}`, "PUT", invalid)).status, 400)
     assert.equal(data.cards.get(card.id), undefined)

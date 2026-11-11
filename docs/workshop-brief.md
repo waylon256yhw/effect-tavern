@@ -46,7 +46,7 @@ Phase 1 已经给了每一环，工坊不新建平行机制：
 | 候选卡校验 | `checkCard(source)`（`runtime/support/author.ts`） | 候选序列化为 YAML 后过它；`diagnostics` 进 diff 面板，`sections` / `total` 显示候选的 token 变化 |
 | 解释为什么没生效 | `card view --json`（子句求值、槽位来源、分段与断点） | 候选与当前卡各跑一次，并排显示同一 `--state` 下哪些 band / window / readout 变了 |
 | 零 token 回归 | `runScenario`（`runtime/support/scenario.ts`） | 卡旁若有 `*.scenario.yaml`，候选触及 `rules` 时自动跑一遍；失败列入 diff 面板，不阻止采纳 |
-| 入库 | `library.cards.put` / `PUT /cards/:id` / `tavern card install` | 候选不直接入库；作者采纳后页面保存草稿，install 时才 put。`cards.put` 今天不 lint，Step 2.2 补上（见 §3） |
+| 入库 | `library.cards.put` / `PUT /cards/:id` / `tavern card install` | 候选不直接入库；作者采纳后页面保存草稿，install 时才 put。`cards.put` 复用完整值级校验，拒绝所有 error |
 | 模型 | `library.routing`、`provider.object` | 三个操作用一个新路由键 `author`（缺省落 `default`）；都是单次 `object()`，compile 多一次回喂。不用 `runStageTools`：没有工具，没有事务 |
 | 双模 | `tavern` 宿主的本地 / `--url` | 三个操作住在宿主（需要模型），不住离线 `card` 命令；`--url` 模式走三条 POST 路由 |
 | 测试 | aimock（`bun run verify`，不花钱） | 每个操作一组 fixture：正常、越界（模型夹带正文 → schema 丢弃，候选保持作者文本）、回喂修正 |
@@ -70,12 +70,12 @@ HTTP（`serve.ts`，供 `--url` 与客户端）：
 POST /author/compile  { card, select: path[], intent }        → { candidate, diagnostics }
 POST /author/sort     { card, source, paragraphs?: string[] } → { candidate, placements }
 POST /author/review   { card }                                → { diagnostics }
-GET  /cards/:id/draft                                         → { card, draft: boolean }：有草稿返回草稿，否则返回已安装的完整 Card
-PUT  /cards/:id/draft { card }                                → 一卡一行，覆盖
-DELETE /cards/:id/draft                                       → 放弃草稿，回到正式卡
+GET  /cards/:id/draft                                         → { card, draft: boolean, layout? }：有草稿返回草稿，否则返回已安装的完整 Card
+PUT  /cards/:id/draft { card?, layout? }                       → 至少一项；分别更新，未提供的一项保留
+DELETE /cards/:id/draft                                       → 放弃内容草稿，回到正式卡，保留布局
 ```
 
-`GET /cards/:id` 返回的是脱敏的 `cardView`（不带 frame / fiction / lore / guard 正文），编辑态不能从它起步，所以 draft 的 GET 是唯一返回整卡原文的路由；库是本地私有的，这与 #121 的披露开关同一理由。`cards.put` 成功即删除该卡的 draft 行，否则下次进来读到的是旧草稿。
+`GET /cards/:id` 返回的是脱敏的 `cardView`（不带 frame / fiction / lore / guard 正文），编辑态不能从它起步，所以 draft 的 GET 是唯一返回整卡原文的路由；库是本地私有的，这与 #121 的披露开关同一理由。`cards.put` 成功只清该行的 `card`，保留 `layout`；没有布局时才删行。布局只属于编辑画布，GET 的 `draft` 标志由内容草稿是否存在决定。
 
 `paragraphs` 省略时按空行切源稿；客户端把作者在编辑器里的划选结果作为 `paragraphs` 传入，这样 GUI 里的"拆"始终是人做的。
 
@@ -108,7 +108,7 @@ DELETE /cards/:id/draft                                       → 放弃草稿�
 ### Step 2.2 三个操作（server 宿主）
 - [x] `library.cards.put` 加 `rpg.validate(rpg.initial)` 与 `lint` 无 error 校验，error 抛出；`server/test/author.ts` 断言带 `empty-text` 的卡被 HTTP 与直接调用同样拒绝。
 - [x] `library.author.{compile,sort,review}`：`object()` 一次，compile 过滤 `empty-text` 后最多回喂一次；路由键 `author`。
-- [x] `serve.ts` 三条 POST + `draft` 表与 `GET/PUT/DELETE /cards/:id/draft`（GET 回退到完整已安装卡，put 成功即清草稿）；`tavern card compile|sort|review` 本地与 `--url` 两模。
+- [x] `serve.ts` 三条 POST + `draft` 表与 `GET/PUT/DELETE /cards/:id/draft`（GET 回退到完整已安装卡，put 成功清内容草稿并保留布局）；`tavern card compile|sort|review` 本地与 `--url` 两模。
 - [x] aimock fixtures：每操作三组；`server/test/author.ts` 覆盖 CLI 本地与 `--url` 往返。
 - [x] `docs/tavern-cli.md` 补三条命令。
 
