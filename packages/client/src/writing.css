@@ -220,7 +220,7 @@
 .sw-card {
   min-width: 0;
   margin: 0;
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  padding: var(--space-3);
   border: 0;
   border-radius: var(--radius-card);
   background: var(--surface-2);
@@ -230,13 +230,15 @@
 .sw-card:disabled {
   opacity: 0.5;
 }
-.sw-head {
+/* a legend is drawn on its fieldset's top edge, outside the padding; floated, it is an ordinary first row inside
+   the card (the pills clear it), with the "taken by" tag at its far end */
+.sw-card legend {
+  float: left;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-}
-.sw-card legend {
   padding: 0;
   font-size: var(--text-footnote);
   font-weight: 600;
@@ -246,7 +248,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  margin-top: var(--space-2);
+  clear: both;
+  padding-top: var(--space-2); /* not a margin: a cleared box's top margin is absorbed by the clearance */
 }
 .sw-card .sw-pills button {
   height: 28px;
@@ -273,6 +276,7 @@
   font-size: var(--text-caption);
   color: var(--ink-3);
   line-height: 1.45;
+  min-height: 2lh; /* the built-in sentences run one or two lines: a pick never moves the page under it */
 }
 
 /* the record products: compact cards grouped by kind, with theaters paged in a 2×2 grid */

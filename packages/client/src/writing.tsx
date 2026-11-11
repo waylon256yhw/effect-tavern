@@ -384,12 +384,12 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
               const disabled = () => !cardId() || moot(s().key, effSw()) || taken() !== null
               return (
                 <fieldset class="sw-card" disabled={disabled()}>
-                  <legend>{t(s().label)}</legend>
-                  <div class="sw-head">
+                  <legend>
+                    {t(s().label)}
                     <Show when={taken()}>
                       {(who) => <span class="tag">{t("writing.takenBy", { from: props.fromLabel(who()) })}</span>}
                     </Show>
-                  </div>
+                  </legend>
                   <div class="sw-pills">
                     <For each={s().values} keyed={(v) => String(v[0])}>
                       {(v) => (
