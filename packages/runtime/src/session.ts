@@ -72,7 +72,7 @@ import { expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, type Ask, type Told } from "./request.ts"
 import { cap, withCatalogs, type Product } from "./product.ts"
-import { recordTransaction, worldValue, worldOn, type RecordResult } from "./world.ts"
+import { recordTransaction, worldValue, type RecordResult } from "./world.ts"
 
 export type Turn = TurnOf<Beat>
 export const phases = ["lookup", "decide", "direct", "narrate", "check", "polish", "record"] as const
@@ -244,7 +244,6 @@ export const makeSession = ({
 
   const wording = (id: string) => layer().asks[id]!.text
   const products = () => layer().products
-  worldOn(products(), []) // Validate declared initial state when the session opens.
   /** Narrate blocks under the declared product's cap; a block of an undeclared id is kept as written (the Inspector's). */
   const capped = (bs: Readonly<Record<string, string>>) =>
     Object.fromEntries(
@@ -378,7 +377,7 @@ export const makeSession = ({
       const fed = derived.at(path).known(true)
       const tx = recordTransaction(
         picks.map((p) => ({ ...p, text: expandState(p.text, context) })),
-        worldOn(products(), path),
+        context.world,
         qs?.schema,
         (answers) => {
           rpg.settleReadouts(state, answers)

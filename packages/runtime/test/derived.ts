@@ -187,4 +187,57 @@ const none = { events: [], before: [] }
       .some((r) => r.resourceId.startsWith("memory:")),
   )
 }
+
+// World participates in settlement dependencies, including an amended ancestor with unchanged scalar state.
+{
+  const card: Card = {
+    ...full,
+    lore: [],
+    rules: { fields: [], actions: [{ id: "pass", text: "Pass", when: { path: "world.scene.open", is: true } }] },
+    products: [
+      {
+        id: "scene",
+        role: "world",
+        text: "Scene",
+        shape: { kind: "record", keys: [{ key: "open", type: "boolean" }] },
+        initial: { open: true },
+      },
+    ],
+  }
+  const rpg = makeCard(card.rules)
+  let folds = 0
+  const D = makeDerived({
+    rpg: {
+      ...rpg,
+      fold: (...args) => {
+        folds++
+        return rpg.fold(...args)
+      },
+    },
+    L: () => makeLore([]),
+    lore: [],
+    products: () => resolve(card, {}).products,
+    policy: () => ({ budget: 0, keep: 2, block: 2 }),
+  })
+  const parent = add([], { changes: [{ kind: "patch_record", product: "scene", patch: { open: true }, prev: {} }] })
+  const path = add(parent, { beats: [{ next: "pass", seed: 0 }] })
+  assert.deepEqual(D.at(path).state, {})
+  const firstFolds = folds
+  D.at(path).node()
+  D.at(path).context()
+  assert.equal(folds, firstFolds, "reads of the same world path must reuse settlements")
+  const amended = {
+    ...parent[0]!,
+    changes: [{ kind: "patch_record" as const, product: "scene", patch: { open: false }, prev: {} }],
+  }
+  assert.throws(() => D.at([amended, path[1]!]).state, /not an available action/)
+  assert.deepEqual(D.at(path).context().world, { scene: { open: true } }) // original branch still correct
+  const adjusted = {
+    ...path[1]!,
+    changes: [{ kind: "patch_record" as const, product: "scene", patch: { open: false }, prev: {} }],
+  }
+  assert.deepEqual(D.at([parent[0]!, adjusted]).context().world, { scene: { open: false } })
+  assert.deepEqual(D.at(path).context().world, { scene: { open: true } })
+}
+
 console.log("derived ok")

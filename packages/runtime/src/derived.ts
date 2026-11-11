@@ -23,7 +23,7 @@ import { folded, ledger, makeSummaries, type Policy } from "./history.ts"
 import { deliveredIn, deliveredOn, notesOf, textOf as proseOf, type Turn as TurnOf } from "./journal.ts"
 import { key, type Disclosure, type Lore } from "./lore.ts"
 import { fold, itemText, render, type Product } from "./product.ts"
-import { applyChanges, initialWorld, worldOn, worldValue, type WorldState } from "./world.ts"
+import { applyChanges, initialWorld, worldValue, type World, type WorldState } from "./world.ts"
 import { tokens } from "./tokens.ts"
 
 const title = (ref: string, fields: State, world: Record<string, unknown>): string | undefined => {
@@ -81,6 +81,19 @@ export const makeDerived = ({
   products: () => readonly Product[] // the player toggles them mid-session
   policy: () => Policy // the routing can move the narrate window mid-session
 }) => {
+  // Card world shapes and initial values are fixed for this factory; player layers cannot override them.
+  // Stable world identities let settlement cache both of its inputs. Amending an ancestor changes the
+  // incoming world, so descendants miss even when their scalar fields remain unchanged.
+  const initial = initialWorld(products())
+  const worlds = new WeakMap<Turn, { from: World; out: World }>()
+  const worldAfter = (from: World, t: Turn): World => {
+    const hit = worlds.get(t)
+    if (hit?.from === from) return hit.out
+    const out = t.changes.length ? applyChanges(from, t.changes) : from
+    worlds.set(t, { from, out })
+    return out
+  }
+  const worldAt = (path: readonly Turn[]): World => path.reduce(worldAfter, initial)
   const summaries = makeSummaries<Beat>()
   // A turn's cost in the narrator's transcript (input, prose, the lore delivered with it), memoized: a turn is immutable.
   const costs = new WeakMap<Turn, number>()
@@ -96,7 +109,7 @@ export const makeDerived = ({
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[], recall = false) => {
     const feed = products().filter((p) => (p.feed || (recall && p.recall)) && p.on)
-    const world = worldOn(products(), path)
+    const world = worldAt(path)
     const cur = {
       ...fold(
         feed.filter((p) => p.role !== "world"),
@@ -120,12 +133,12 @@ export const makeDerived = ({
   // Memoized per turn on the state it was settled from: a path's states are the same objects every time it is folded
   // (each is the last settle's `s`), so folding a node's path again costs a lookup per turn, not a settle. An amended
   // turn is a new object and misses; so does a turn under it, whose from-state is new.
-  const settledFrom = new WeakMap<Turn, { from: State; out: ReturnType<typeof settleFresh> }>()
+  const settledFrom = new WeakMap<Turn, { from: State; world: Paths; out: ReturnType<typeof settleFresh> }>()
   const settleTurn = (s: State, t: Turn, world: Paths = {}) => {
     const hit = settledFrom.get(t)
-    if (hit?.from === s && !Object.keys(world).length) return hit.out
+    if (hit?.from === s && hit.world === world) return hit.out
     const out = settleFresh(s, t, world)
-    settledFrom.set(t, { from: s, out })
+    settledFrom.set(t, { from: s, world, out })
     return out
   }
   const settleFresh = (s: State, t: Turn, world: Paths = {}) => {
@@ -146,10 +159,10 @@ export const makeDerived = ({
   /** Every turn of the path settled, in order: each from the one before, the first from the card's initial state. */
   const settledAlong = (path: readonly Turn[]) => {
     const out: ReturnType<typeof settleFresh>[] = [] // pushed, not spread: a spread per turn made one call O(depth²)
-    let world = initialWorld(products())
+    let world = initial
     for (const t of path) {
       out.push(settleTurn(out.at(-1)?.s ?? rpg.initial, t, world))
-      world = applyChanges(world, t.changes)
+      world = worldAfter(world, t)
     }
     return out
   }
@@ -160,7 +173,7 @@ export const makeDerived = ({
    *  told layer already stayed (lore.ts keeps the deepest delivered); this keeps an untold one too. A card field named
    *  `lore` would collide, so none may be. */
   const gated = (path: readonly Turn[], extra: readonly Disclosure[] = [], s?: State): WorldState & Paths => {
-    let world = initialWorld(products())
+    let world = initial
     const floors = new Map(lore.map((e) => [e.id, floorAt(e.unlock, { fields: rpg.initial, world })]))
     const along = settledAlong(path)
     const at = s ?? along.at(-1)?.s ?? rpg.initial
@@ -168,7 +181,7 @@ export const makeDerived = ({
       for (const e of lore) floors.set(e.id, Math.max(floors.get(e.id)!, floorAt(e.unlock, { fields, world })))
     }
     for (const [i, o] of along.entries()) {
-      world = applyChanges(world, path[i]!.changes)
+      world = worldAfter(world, path[i]!)
       observe(o.s)
     }
     observe(at)
@@ -291,7 +304,7 @@ export const makeDerived = ({
       ledger: () => ledger(path, (t) => along()[path.indexOf(t)]!.events, summaryOf(path)),
       text,
       /** A candidate turn settled on top of the path (setField's adjusted node, demand's `pre`). */
-      settle: (t: Turn) => settleTurn(last().s, t, worldOn(products(), path)),
+      settle: (t: Turn) => settleTurn(last().s, t, worldAt(path)),
       /** The node projection of the path's last turn. */
       node: (withCatalog = true): Node => {
         const t = path.at(-1)!
@@ -301,7 +314,7 @@ export const makeDerived = ({
           parent: t.parent,
           turn: t,
           state: settled.s, // the fold to t's end
-          ...(heading ? { heading: title(heading, settled.s, worldOn(products(), path)) } : {}),
+          ...(heading ? { heading: title(heading, settled.s, worldAt(path)) } : {}),
           events: settled.events,
           checks: settled.checks,
           delivered: t.deliveries,
