@@ -67,7 +67,8 @@ assert.deepEqual(
 assert.match(sent("lookup").join("\n"), /search_context/)
 const r = at("record")
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))
-for (const line of r.sections[2]!.text.split("\n")) assert.ok(sent("record").join("\n").includes(line), line)
+for (const line of r.sections.find((x) => x.name === "record")!.text.split("\n"))
+  assert.ok(sent("record").join("\n").includes(line), line)
 
 // a card whose readouts are all gated off at this state: no Questions line in either document
 const gated: Card = {
@@ -133,6 +134,25 @@ assert.match(failed.stdout.toString(), /error orphan-event lore\.x\.offer/)
 const missing = run("view", "nope")
 assert.equal(missing.exitCode, 1)
 assert.match(missing.stderr.toString(), /nope/)
+
+// Lore noise: an entry fully unlocked with no window is one count line, its constant gates are not explained, and a
+// stage that reads no lore (record) prints neither the list nor the lore gates.
+const open: Card = {
+  ...yandao,
+  lore: [...yandao.lore, { id: "plain", layers: ["常识。"], unlock: { all: [] }, offer: { any: [] } }],
+}
+const section = (v: ReturnType<typeof view>, name: string) => v.sections.find((x) => x.name === name)?.text
+const narrated = view(open, player)
+assert.match(
+  section(narrated, "lore")!,
+  /^yandao {2}layer 1\/2[^]*\n\(1 more fully unlocked, no window; --lore lists them\)$/,
+)
+assert.match(section(view(open, player, { lore: true }), "lore")!, /\nplain {2}layer 1\/1/)
+assert.match(section(narrated, "gates")!, /lore\.yandao\./)
+assert.doesNotMatch(section(narrated, "gates")!, /lore\.plain\./)
+const recorded = view(open, player, { stage: "record" })
+assert.equal(section(recorded, "lore"), undefined)
+assert.doesNotMatch(section(recorded, "gates")!, /lore\./)
 const help = run("--help")
 assert.equal(help.exitCode, 0)
 assert.match(help.stdout.toString(), /SUBCOMMANDS\n {2}init .*\n {2}check .*\n {2}view /)

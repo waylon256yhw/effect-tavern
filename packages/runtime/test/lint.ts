@@ -79,6 +79,23 @@ assert.deepEqual(
   ],
 )
 
+// An opening switch (`start`, or a greeting's `do`) is written when the story opens; it is dead only if nothing reads it.
+const when = { path: "line", is: "b" } as const
+const line = { path: "line", type: "enum", options: ["a", "b"], initial: "a" } as const
+const opened = (fields: Card["rules"]["fields"], extra: Partial<Card> = {}) =>
+  said({ ...base, rules: { fields, actions: [] }, ...extra }, "dead-field")
+assert.deepEqual(opened([{ ...line, start: true }], { fiction: [{ id: "f", text: "乙。", when }] }), [])
+assert.deepEqual(opened([{ ...line, start: true }]), [
+  "warn rules.fields.line: line is an opening switch and nothing reads it (no when, unlock, offer or heading)",
+])
+assert.deepEqual(
+  opened([line], {
+    fiction: [{ id: "f", text: "乙。", when }],
+    greetings: [{ text: "开场。", do: [{ path: "line", set: "b" }] }],
+  }),
+  [],
+)
+
 // prose-cannot-move: written by actions only while the card has readouts. No readouts at all = mechanical by choice.
 const gold = { path: "gold", type: "int", min: 0, initial: 0 } as const
 const pay = { id: "pay", text: "付钱", do: [{ path: "gold", add: 3 }] }
@@ -324,7 +341,7 @@ const templates: Record<string, string[]> = {
     "warn orphan-event rules.readouts.confession.options.accepted.do[1]", // the confession's outcome is a ledger line
     "warn orphan-event rules.readouts.confession.options.refused.do[1]",
   ],
-  yandao: ["warn dead-field rules.fields.起点"], // set once by the second greeting, read by a fiction variant
+  yandao: [], // 起点 is an opening switch: set by the second greeting, read by a fiction variant
 }
 for (const [name, want] of Object.entries(templates)) assert.deepEqual(of(await loadCard(name)), want, name)
 console.log("ok")
