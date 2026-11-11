@@ -126,4 +126,30 @@ const silent = unroll({ ...card, data: { ...card.data, mes_example: "no speakers
 assert.ok(!silent.blocks.some((b) => b.kind === "mes_example"))
 assert.equal(paragraphs.at(-1), "not expanded: {{random::short::long}}")
 assert.throws(() => unroll({ name: "v1" }), /V1/)
+// The Author's Note positions sit at ST's default depth 4: before at_depth 0, after deeper entries, top before bottom.
+const note = (comment: string, extensions: object) => ({
+  keys: [],
+  content: comment,
+  constant: true,
+  comment,
+  extensions,
+})
+const noted = unroll({
+  ...card,
+  data: {
+    ...card.data,
+    character_book: {
+      entries: [
+        note("zero", { position: 4, depth: 0 }),
+        note("bottom", { position: 3 }),
+        note("top", { position: 2 }),
+        note("six", { position: 4, depth: 6 }),
+      ],
+    },
+  },
+})
+assert.deepEqual(
+  noted.blocks.filter((b) => b.kind === "entry").map((b) => b.heading.split(" · ")[1]!.split(" ")[0]),
+  ["six", "top", "bottom", "zero"],
+)
 console.log("unroll ok")

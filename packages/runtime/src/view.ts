@@ -27,6 +27,7 @@ export interface Options {
   events?: readonly string[]
   pin?: string
   stage?: Stage
+  lore?: boolean // list every lore entry; by default the fully unlocked ones with no window are one count line
 }
 export interface Section {
   name: string
@@ -119,16 +120,22 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   }
   const readable = L.readable(gated, [], [])
   const windows = new Map(L.offers(gated, [], events).map((d) => [d.id, d.layer]))
+  const listed = own.map((e) => {
+    const at = L.current(
+      L.entries.find((x) => x.id === e.id)!,
+      gated,
+      [],
+    )
+    const w = windows.get(e.id)
+    return {
+      settled: at === e.layers.length && !w,
+      text: `${e.id}  layer ${at}/${e.layers.length}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}`,
+    }
+  })
+  const settled = o.lore ? 0 : listed.filter((r) => r.settled).length
   const lore = [
-    ...own.map((e) => {
-      const at = L.current(
-        L.entries.find((x) => x.id === e.id)!,
-        gated,
-        [],
-      )
-      const w = windows.get(e.id)
-      return `${e.id}  layer ${at}/${e.layers.length}${readable.includes(e.id) ? "  in the index" : ""}${w ? `  window opens layer ${w} next turn` : ""}\n    ${hook(e.layers[0]!)}`
-    }),
+    ...listed.filter((r) => o.lore || !r.settled).map((r) => r.text),
+    ...(settled ? [`(${settled} more fully unlocked, no window; --lore lists them)`] : []),
     ...R.entries.map((e) => `${e.id}  (${e.from})  in the index\n    ${hook(e.text)}`),
   ]
 
@@ -164,11 +171,15 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     ...whens("readouts", card.rules.readouts ?? []),
     ...whens("products", R.products),
     ...(card.rules.over ? explain("rules.over", card.rules.over) : []),
-    ...card.lore.flatMap((e) => [
-      ...(Array.isArray(e.unlock) ? e.unlock : [e.unlock]).flatMap((c, i) => explain(`lore.${e.id}.unlock.${i}`, c)),
-      ...explain(`lore.${e.id}.offer`, e.offer, events),
-    ]),
   ]
+  // the same rule for lore: `{ all: [] }` / `{ any: [] }` is a constant, not a gate
+  const constant = (c: Cond) => ("all" in c && !c.all.length) || ("any" in c && !c.any.length)
+  const loreGates = card.lore.flatMap((e) => [
+    ...(Array.isArray(e.unlock) ? e.unlock : [e.unlock]).flatMap((c, i) =>
+      constant(c) ? [] : explain(`lore.${e.id}.unlock.${i}`, c),
+    ),
+    ...(constant(e.offer) ? [] : explain(`lore.${e.id}.offer`, e.offer, events)),
+  ])
 
   // ───────── record ─────────
   // a 小剧场 is narrate's, not this record document's; a catalog with no survivor drops what reads it (session `record`)
@@ -255,20 +266,22 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     ].join("\n")
   })
 
+  // a stage reads lore when its ask carries some: lookup's context, narrate's told / may, direct's Open line
+  const readsLore = "context" in ask || "told" in ask || "open" in ask
   const sections: Section[] = [
     {
       name: `head (${stage})`,
       tokens: frags.reduce((n, f) => n + f.tokens, 0),
       text: frags.map((f) => f.text).join("\n"),
     },
-    { name: "lore", tokens: 0, text: lore.join("\n") },
+    ...(readsLore ? [{ name: "lore", tokens: 0, text: lore.join("\n") }] : []),
     {
       name: "record",
       tokens: tokens([...asks, ...(questions ?? [])].join("\n")),
       text: [...asks, ...(questions ?? [])].join("\n"),
     },
     { name: "bands ↔ readouts", tokens: 0, text: bands.join("\n\n") },
-    { name: "gates", tokens: 0, text: gates.join("\n") },
+    { name: "gates", tokens: 0, text: [...gates, ...(readsLore ? loreGates : [])].join("\n") },
     { name: "narrate blocks", tokens: tokens(penned.join("\n")), text: penned.join("\n") },
   ]
   const text = [

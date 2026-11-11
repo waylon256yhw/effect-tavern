@@ -158,9 +158,13 @@ export const unroll = (card: Raw, user = "User"): Unrolled => {
   const at = (...ps: string[]) => live.filter((e) => ps.includes(e.meta.position)).map(entryBlock)
   const field = (kind: string, value: unknown): Block[] =>
     typeof value === "string" && value.trim() ? [{ kind, heading: kind, text: expand(value) }] : []
+  // The Author's Note sits at ST's default depth 4, its top before its bottom; other positions without a depth sort last.
+  const an = ["an_top", "an_bottom"]
+  const deep = (m: (typeof entries)[number]["meta"]) => m.depth ?? (an.includes(m.position) ? 4 : -1)
+  const rank = (m: (typeof entries)[number]["meta"]) => (an.includes(m.position) ? an.indexOf(m.position) : an.length)
   const depth = live
     .filter((e) => !["before_char", "after_char", "em_top", "em_bottom"].includes(e.meta.position))
-    .sort((a, b) => (b.meta.depth ?? -1) - (a.meta.depth ?? -1) || a.meta.order - b.meta.order)
+    .sort((a, b) => deep(b.meta) - deep(a.meta) || rank(a.meta) - rank(b.meta) || a.meta.order - b.meta.order)
     .map(entryBlock)
   const blocks: Block[] = [
     ...field("system_prompt", data.system_prompt),

@@ -92,8 +92,12 @@ const show = Command.make(
     ),
     greeting: Flag.Int("greeting").pipe(Flag.withDescription("apply greetings[n].do first (0-based)"), Flag.optional),
     stage: Flag.Literals("stage", stages).pipe(Flag.withDefault("narrate")),
+    lore: Flag.Boolean("lore").pipe(
+      Flag.withDescription("list every lore entry, the fully unlocked ones with no window included"),
+      Flag.withDefault(false),
+    ),
   },
-  ({ card: name, state, greeting, stage, events, pin, persona, json }) =>
+  ({ card: name, state, greeting, stage, events, pin, persona, json, lore }) =>
     Effect.gen(function* () {
       const c = yield* load(name)
       const v = yield* Effect.try({
@@ -107,6 +111,7 @@ const show = Command.make(
               stage,
               events: Option.getOrUndefined(events)?.split(",").filter(Boolean),
               pin: Option.getOrUndefined(pin),
+              lore,
             },
           ),
         catch: (e) => (e as Error).message,

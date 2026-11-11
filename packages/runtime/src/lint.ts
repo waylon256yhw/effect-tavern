@@ -64,7 +64,7 @@ const effects = (card: Card): [string, Effect][] => {
     ...card.greetings.flatMap((g, i) => at(`greetings[${i}].do`, g.do)),
   ]
 }
-const written = (card: Card, by: "rules.actions." | "rules.readouts.") =>
+const written = (card: Card, by: "rules.actions." | "rules.readouts." | "greetings[") =>
   new Set(effects(card).flatMap(([p, e]) => (p.startsWith(by) && "path" in e ? [e.path] : [])))
 /** An emitted event with `{path}` interpolation names a family: `hp:{hp}` emits `hp:3`, which `{ event: "hp:3" }` reads. */
 const emits = (template: string, name: string) =>
@@ -397,9 +397,14 @@ const rules: Rule[] = [
         })),
     ]
   },
-  // A field nothing writes in play never moves; a hidden field nothing reads is an ending switch wired to nothing.
+  // A field nothing writes in play never moves, unless a story's opening sets it (`start` or a greeting's `do`): that is
+  // an opening switch. A hidden field or an opening switch nothing reads is a switch wired to nothing.
   (card) => {
     const moved = new Set([...written(card, "rules.actions."), ...written(card, "rules.readouts.")])
+    const opening = new Set([
+      ...card.rules.fields.flatMap((f) => (f.start ? [f.path] : [])),
+      ...written(card, "greetings["),
+    ])
     const read = new Set([
       ...conds(card).flatMap(([, c]) => reads(c)),
       ...(card.heading ? [card.heading] : []),
@@ -409,7 +414,7 @@ const rules: Rule[] = [
       ...effects(card).flatMap(([, e]) => ("add" in e && typeof e.add === "object" ? [e.add.path] : [])),
     ])
     return card.rules.fields.flatMap((f) => [
-      ...(moved.has(f.path)
+      ...(moved.has(f.path) || opening.has(f.path)
         ? []
         : [
             {
@@ -430,7 +435,17 @@ const rules: Rule[] = [
               hint: "read it in a condition, or drop the field",
             },
           ]
-        : []),
+        : !f.hidden && !moved.has(f.path) && opening.has(f.path) && !read.has(f.path)
+          ? [
+              {
+                rule: "dead-field",
+                level: "warn" as const,
+                path: `rules.fields.${f.path}`,
+                message: `${f.path} is an opening switch and nothing reads it (no when, unlock, offer or heading)`,
+                hint: "read it in a condition, or drop the field",
+              },
+            ]
+          : []),
     ])
   },
   // Who writes a field decides what the prose may do to it. The narrator sees bands, never numbers, so a field only
