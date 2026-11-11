@@ -269,7 +269,7 @@ assert.deepEqual(
   }).filter((d) => /catalog|unknown-path/.test(d)),
   [
     "error unknown-path catalogs.cg.items.a.when",
-    "error unknown-catalog products.pics.id",
+    "error unknown-catalog products.pics.shape.keys[1].shape.columns[0].catalog",
     "error duplicate-catalog-item catalogs.cg",
     "error duplicate-catalog-item catalogs.cg.items.a",
   ],

@@ -105,6 +105,10 @@ HTTP 客户端调用 `POST /api/author/compile {card, select, intent}`、`/api/a
 
 模型输出契约位于 `runtime/src/workshop.ts`：compile 接收 `fields`、`actions`、`readouts`、`products`、`over`、`cap`、`slots` 和必填的 `bindings`。fiction/lore 绑定为 `{to, when}`，开场白绑定为 `{to, do}`。`roll: {judged: true}` 创建空 `judge`；输出 schema 没有正文、判据或展示标签字段。Sort 为 `{paragraphs: number[], to: string}[]`，目标是 `frame.<id>`、`fiction.<new-id>`、`greetings[n]` 或 `lore.<id>.layers[n]`。Review 固定使用 `rule: "review:consistency"` 和 `level: "warn"`。解码丢弃未声明字段；模型夹带的文本不会进入候选，已有作者文本保持原样。
 
+工坊机械字段包含 `Field.start`、列的 `catalog` 引用，以及产物的 `stage`、`fold`、`on`、`trigger`、`feed`、`recall`。`Product.initial` 可能含作者散文，因此仍由作者填写，compile 会保留已有值；模型输入也省略未选中的开场 note、产物初值与资源 URL。字段 label/group、正文和判据不进入输出词表。
+
+卡片地址由 `runtime/src/paths.ts` 提供：预览采用 `rules.actions.<id>.when`、`rules.readouts.<id>.when`，条件子节点为 `.all[n]`、`.any[n]`、`.not`。单条件 lore 解锁地址为 `lore.<id>.unlock`，分层数组为 `.unlock[n]`，两者可直接作为 compile 绑定目标；数组形式必须指定层。Catalog 列诊断定位到真实的 `.shape…columns[n].catalog`。
+
 生产入口（`tavern serve`、独立应用与 headless 二进制）共用最小 harness，默认数据目录为 `.tavern/`，不自动导入开发机密钥。开发服务器继续使用 `.dev/` 与开发用 player 配置。`DATA` 可指定现有数据库目录；切换入口不会自动搬迁旧数据。
 
 完整调用正文默认不暴露；`tavern serve --inspect` 或 `TAVERN_INSPECT=1` 显式开启。普通启动在后台刷新模型名，离线时保留随包基线；`MODEL=fake` 不刷新网络数据。

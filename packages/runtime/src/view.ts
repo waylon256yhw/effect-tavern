@@ -3,6 +3,7 @@
 // Pure: a card, the player's rows and a state in, text out. Nothing here renders a message: the head goes through
 // fragment.ts `head`, the lore through lore.ts, the wordings and products through layer.ts, and the document whose
 // total is printed is `request()` itself, so what prints is what the call would send.
+import { unlocks, unlockPath, whenPaths, conditionChildren } from "./paths.ts"
 import type { Message } from "@effect-tavern/provider"
 import { drawn, makeCard, type Card, type State } from "./card.ts"
 import { holds, lookup, reads, type Cond } from "./cond.ts"
@@ -155,28 +156,24 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const offered = L.offers(gated, [], events)
   const explain = (path: string, c: Cond, ev: readonly string[] = []): string[] => [
     `${path}: ${holds(c, gated, ev)} — ${cond(c, labels(card.rules))}${"path" in c ? ` (current ${c.path}=${String(lookup(gated, c.path))})` : ""}`,
-    ...("all" in c ? c.all : "any" in c ? c.any : "not" in c ? [c.not] : []).flatMap((child, i) =>
-      explain(`${path}.${i}`, child, ev),
-    ),
+    ...conditionChildren(path, c).flatMap(([path, child]) => explain(path, child, ev)),
   ]
   // Explain declared predicates consistently; unconditional entries have no gate to diagnose.
   const whens = (zone: string, entries: readonly { id: string; when?: Cond }[]) =>
-    entries.flatMap((e) => (e.when ? explain(`${zone}.${e.id}.when`, e.when) : []))
+    whenPaths(zone, entries).flatMap(([path, c]) => explain(path, c))
   const gates = [
     ...whens("frame", R.frame),
     ...whens("tail", R.tail),
     ...whens("fiction", fiction),
-    ...whens("actions", card.rules.actions),
-    ...whens("readouts", card.rules.readouts ?? []),
+    ...whens("rules.actions", card.rules.actions),
+    ...whens("rules.readouts", card.rules.readouts ?? []),
     ...whens("products", R.products),
     ...(card.rules.over ? explain("rules.over", card.rules.over) : []),
   ]
   // the same rule for lore: `{ all: [] }` / `{ any: [] }` is a constant, not a gate
   const constant = (c: Cond) => ("all" in c && !c.all.length) || ("any" in c && !c.any.length)
   const loreGates = card.lore.flatMap((e) => [
-    ...(Array.isArray(e.unlock) ? e.unlock : [e.unlock]).flatMap((c, i) =>
-      constant(c) ? [] : explain(`lore.${e.id}.unlock.${i}`, c),
-    ),
+    ...unlocks(e).flatMap((c, i) => (constant(c) ? [] : explain(unlockPath(e, i), c))),
     ...(constant(e.offer) ? [] : explain(`lore.${e.id}.offer`, e.offer, events)),
   ])
 

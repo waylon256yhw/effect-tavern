@@ -10,10 +10,10 @@
 
 | 类别 | 字段 | 谁写 |
 | --- | --- | --- |
-| 封闭词汇（代码） | `Field` 边界与初值、`Cond`、`Effect_`、`Chance` 的数值与 `path` 形式、`Shape`、`unlock` / `offer`、产物角色、`over` / `cap` | 模型可以生成 |
+| 封闭词汇（代码） | `Field` 边界、初值与 start、`Cond`、`Effect_`、`Chance` 的数值与 `path` 形式、`Shape`、`unlock` / `offer`、产物角色与 stage/fold/on/trigger/feed/recall、列 catalog 引用、`over` / `cap` | 模型可以生成 |
 | 接线标识符 | `id`、`path`、`event`、enum 的 `options[]` 值 | 模型可以生成，格式锁为 token（无空白） |
 | 判据语文（rubric） | `Action.text`、`Readout.text`、`Readout.options[].text`、`Chance.judge` | 只有作者 |
-| 正文语文 | `Fragment.text`、`LoreEntry.layers[]`、`Greeting.text` | 只有作者 |
+| 正文语文 | `Fragment.text`、`LoreEntry.layers[]`、`Greeting.text` / `note`、`Product.initial` 中的内容 | 只有作者 |
 | 展示词 | `Field.label` / `group`、`Fragment.label`、`title`、`summary` | 可选，模型一律不填 |
 
 判据语文归作者，是因为 `wuxia` 跑得好靠的正是读数选项措辞的分寸；`event` 归标识符，是因为模板里它就是 `warmth:close`、`strike:hit` 这样的 token，lint 按字符串同一性接线，进叙事者的只是 ledger 一行。
@@ -22,7 +22,7 @@
 
 1. **一页一模型，按声明露出。** 工坊是 #121 卡页的原位编辑。未声明的部分不占界面：纯散文卡默认就是一页干净的文稿流；作者声明了字段与规则，结构区才长出来；按了 check / view 或三个操作，诊断切片与 diff 才展开。这是 README"结构化阶段全部 opt-in"在编辑器上的投影，不是"多张脸"。
 2. **候选即整卡，diff 是两个值的结构差。** 没有 AST patch 协议，没有草稿状态机。模型从不输出整卡（否则它就能改写正文）：模型输出的是封闭词汇的增量与绑定，宿主用一个纯函数把它施加到当前卡上得到候选。施加函数只写封闭词汇与标识符键，`text` 键只能被创建为空串，永远不能被赋值。
-3. **compile：散文在先，只编逻辑与接线，判据留空。** 主输入是作者选中的已有段落（按路径：`fiction.<id>`、`lore.<id>.layers[n]`、`greetings[n]`）加一句机制意图；输出是挂在这些段落上的绑定，以及支撑它们的 `fields` / `actions` / `readouts` / `over`。绑定目标是封闭的四种：`fiction.<id>.when`、`lore.<id>.unlock[n]`（按层）、`lore.<id>.offer`（整条一个 Cond，不按层）、`greetings[n].do`（IF 线开局的效果，盐道与竹林的第二条开场白就是这个形状）。所有判据与正文槽回到作者面前都是空的，旁边由 `phrase.ts` 标出它的机械含义（`close · 交情 +8 · event warmth:close`）。只有作者明确要一条还没有文字的规则时，compile 才新建空的正文槽。
+3. **compile：散文在先，只编逻辑与接线，判据留空。** 主输入是作者选中的已有段落（按路径：`fiction.<id>`、`lore.<id>.layers[n]`、`greetings[n]`）加一句机制意图；输出是挂在这些段落上的绑定，以及支撑它们的 `fields` / `actions` / `readouts` / `over`。绑定目标是封闭的四种：`fiction.<id>.when`、`lore.<id>.unlock`（单条件）或 `lore.<id>.unlock[n]`（按层）、`lore.<id>.offer`（整条一个 Cond，不按层）、`greetings[n].do`（IF 线开局的效果，盐道与竹林的第二条开场白就是这个形状）。所有判据与正文槽回到作者面前都是空的，旁边由 `phrase.ts` 标出它的机械含义（`close · 交情 +8 · event warmth:close`）。只有作者明确要一条还没有文字的规则时，compile 才新建空的正文槽。
 4. **sort：整段归位，绝不破句。** 模型输出的是**源稿段落的下标**与目的槽位，不是文字；宿主按下标复制整段。一个槽可以收几段，按源稿顺序连接。段内摘句进 lore 只能由作者在编辑器里划选完成。
 5. **review：只读，只报路径。** 唯一同时读正文、规则与判据的操作。输出严格是 `Diagnostic[]`，`rule` 前缀 `review:`，`level` 恒为 `warn`：非确定性的读法不能阻止安装，阻止安装的只有 lint。
 
@@ -32,10 +32,10 @@
 
 - **compile 的输出 schema 没有任何正文或判据字符串字段。** `Action`、`Readout`、`Chance.judge` 在模型侧的类型是去掉 `text` / `judge` 的版本；宿主施加时补 `""`。不要把它们作为 optional 留在模型 schema 里。
 - **标识符格式锁。** `id`、`event`、enum 值、`path`：`^[\p{L}\p{N}_:.\-{}]+$`（`event` 允许 `{path}` 插值花括号）。加在模型侧 schema 上即可；是否同时加到 `Card` schema 看四张模板是否全过。
-- **新 lint 规则 `empty-text`（error）。** 文本存在但去空白后为空串即报：`fiction[].text`（必填）、`frame[].text` 与 `asks[].text`（`undefined` 是合法的空槽位声明，`test/lint.ts` 已有断言，不报；显式 `""` 才报）、`lore.<id>.layers[n]`、`greetings[].text`、`guard[]`、`Action.text`、`Readout.text`、`options[].text`、`Chance.judge`、非内置 `products[].text`（自定义产物的问法也是判据）。今天只有 CLI 的 `tavern card install` 在入库前跑 `checkCard`；`library.cards.put`（即 `PUT /cards/:id`）只跑 `decodeCard` 与 `makeCard`，不跑 `rpg.validate(rpg.initial)` 也不跑 `lint`。Step 2.2 把这两步放进 `cards.put` 本身，error 即抛，于是任何入口都装不进判据没写完的候选；CLI 侧的 `checkCard` 保留，只是不再是唯一的门。手写卡同样受益。
+- **新 lint 规则 `empty-text`（error）。** 文本存在但去空白后为空串即报：`fiction[].text`（必填）、`frame[].text` 与 `asks[].text`（`undefined` 是合法的空槽位声明，`test/lint.ts` 已有断言，不报；显式 `""` 才报）、`lore.<id>.layers[n]`、`greetings[].text`、`guard[]`、`Action.text`、`Readout.text`、`options[].text`、`Chance.judge`、非内置 `products[].text`（自定义产物的问法也是判据）。所有安装入口已统一经过 runtime 的 `validateCard`，校验 decode、rules、products、初始 world 与 lint；CLI 的 YAML 检查另提供预览报告。
 - **sort 的结构锁。** 模型 schema 里只有 `{ paragraphs: number[], to: path }[]`；下标越界或重复即拒绝。文字从不经过模型。
 - **review 的类型锁。** 输出 schema 是 `Diagnostic` 去掉自由 `rule` 与 `level`（两者为字面量），`path` 必须是候选卡上存在的路径，宿主校验后不存在的条目丢弃。
-- **自愈循环看不见 `empty-text`。** compile 结果过 `checkCard` 后若有 `unknown-path`、`orphan-event`、`reserved-path` 这类结构错误，把诊断回喂模型修一次（预算 2 步）。`empty-text` 是给作者的，回喂前过滤掉，否则模型被要求填它 schema 里不存在的字段，白耗预算。
+- **自愈循环看不见 `empty-text`。** compile 结果过 `validateCard` 后若有 `unknown-path`、`orphan-event`、`reserved-path` 这类结构错误，把诊断回喂模型修一次（预算 2 步）。`empty-text` 是给作者的，回喂前过滤掉，否则模型被要求填它 schema 里不存在的字段，白耗预算。
 
 ## 4. 接在 Phase 1 的哪里
 

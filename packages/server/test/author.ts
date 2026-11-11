@@ -63,13 +63,31 @@ try {
   const privateCard = {
     ...card,
     guard: ["private guard"],
+    greetings: [{ note: "private opening" }],
+    products: [
+      {
+        id: "aside",
+        role: "theater" as const,
+        text: "private question",
+        shape: { kind: "text" as const },
+        initial: "private initial",
+      },
+    ],
     rules: { ...card.rules, actions: [{ id: "old", text: "private rubric" }] },
     fiction: [...card.fiction, { id: "private", text: "unselected prose" }],
   }
   fixture(good)
   await lib.author.compile({ ...input, card: privateCard })
   const sent = JSON.stringify(mock.getRequests())
-  for (const text of ["private guard", "private rubric", "unselected prose"]) assert.ok(!sent.includes(text))
+  for (const text of [
+    "private guard",
+    "private rubric",
+    "unselected prose",
+    "private opening",
+    "private question",
+    "private initial",
+  ])
+    assert.ok(!sent.includes(text))
   fixture({ ...good, actions: [{ id: "bad", text: "model prose" }] })
   assert.equal((await lib.author.compile(input)).candidate.rules.actions[0]!.text, "")
   // Structural repair receives diagnostics but never the empty rubric diagnostics.

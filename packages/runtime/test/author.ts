@@ -132,7 +132,7 @@ try {
   const v = view(card, {}, { state: { hp: "2" }, events: ["won"], stage: "direct", pin: "secret" })
   assert.deepEqual(v.windows, ["secret→2"])
   assert.match(v.text, /Open: secret=Secret/)
-  assert.match(view(card, {}).text, /lore.secret.offer.0: false/)
+  assert.match(view(card, {}).text, /lore\.secret\.offer\.all\[0\]: false/)
   assert.match(view(card, {}).text, /current hp=1/)
   assert.throws(() => view(card, {}, { pin: "missing" }), /not available/)
   // Pack and card share an id but retain independent identities, text and access.
@@ -204,7 +204,6 @@ try {
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }
-console.log("author: ok")
 
 // Workshop boundaries: no generated prose, existing rubric preserved, sort copies bytes.
 const { applyCompile, applySort, CompileOutput, SortOutput, ReviewOutput } = await import("../src/workshop.ts")
@@ -323,3 +322,153 @@ assert.throws(() =>
   }),
 )
 assert.throws(() => applyCompile(base, { bindings: [{ to: "fiction.missing.when", when: { all: [] } }] }))
+
+// The explicit mechanical vocabulary covers current runtime keys, with author-owned omissions named here.
+const { Field } = await import("../src/card.ts")
+const { Product, Col } = await import("../src/product.ts")
+const { mechanical } = await import("../src/workshop.ts")
+const { cardPaths, selectedText } = await import("../src/paths.ts")
+const { lint } = await import("../src/lint.ts")
+const full = decodeCompile({
+  bindings: [],
+  fields: [
+    {
+      path: "mode",
+      type: "enum",
+      min: 0,
+      max: 1,
+      initial: "a",
+      options: ["a"],
+      hidden: false,
+      start: true,
+      view: "gauge",
+      label: "MODEL LABEL",
+      group: "MODEL GROUP",
+    },
+  ],
+  products: [
+    {
+      id: "memory",
+      role: "chronicle",
+      stage: "record",
+      fold: { key: "id" },
+      on: true,
+      trigger: "turn",
+      feed: true,
+      recall: "id",
+      when: { all: [] },
+      text: "MODEL PROSE",
+      label: "MODEL LABEL",
+      initial: { note: "MODEL INITIAL" },
+      shape: { kind: "table", columns: [{ key: "id", type: "enum", options: ["a"], catalog: "images" }] },
+    },
+  ],
+})
+const keys = (o: object) => Object.keys(o).sort()
+assert.deepEqual(
+  keys(full.fields![0]!),
+  keys(Field.fields).filter((k) => !["label", "group"].includes(k)),
+)
+assert.deepEqual(
+  keys(full.products![0]!),
+  keys(Product.fields).filter((k) => !["text", "label", "initial"].includes(k)),
+)
+const shape = full.products![0]!.shape
+assert.ok(shape.kind === "table")
+assert.deepEqual(keys(shape.columns[0]!), keys(Col.fields))
+for (const patch of [{ fold: { key: "two words" } }, { recall: "two words" }])
+  assert.throws(() => decodeCompile({ bindings: [], products: [{ ...full.products![0], ...patch }] }))
+const detailed: Card = {
+  ...base,
+  greetings: [{ note: "PRIVATE OPENING", do: [] }],
+  rules: {
+    fields: [
+      {
+        path: "mode",
+        type: "enum",
+        initial: "text",
+        options: ["text"],
+        label: "PRIVATE LABEL",
+        group: "PRIVATE GROUP",
+      },
+    ],
+    actions: [],
+  },
+  products: [
+    {
+      id: "memory",
+      role: "chronicle",
+      text: "PRIVATE QUESTION",
+      label: "PRIVATE PRODUCT",
+      shape: { kind: "text" },
+      initial: "PRIVATE INITIAL",
+    },
+  ],
+  catalogs: [{ id: "images", baseUrl: "PRIVATE URL", items: [{ id: "a", variants: ["PRIVATE FILE"] }] }],
+  lore: [
+    {
+      id: "dotted.id",
+      layers: ["PRIVATE LAYER"],
+      sections: [{ id: "details", text: "PRIVATE SECTION" }],
+      unlock: { path: "mode", is: "text" },
+      offer: { any: [] },
+    },
+  ],
+}
+const projected = mechanical(detailed)
+assert.ok(!JSON.stringify(projected).includes("PRIVATE"))
+assert.deepEqual(projected.rules.fields[0]!.options, ["text"])
+assert.deepEqual(projected.lore[0]!.unlock, { path: "mode", is: "text" })
+const revised = applyCompile(detailed, full)
+assert.equal(revised.rules.fields[0]!.start, true)
+assert.equal(revised.rules.fields[0]!.label, "PRIVATE LABEL")
+assert.equal(revised.rules.fields[0]!.group, "PRIVATE GROUP")
+assert.equal(revised.products![0]!.initial, "PRIVATE INITIAL")
+assert.equal(revised.products![0]!.text, "PRIVATE QUESTION")
+assert.equal(revised.products![0]!.recall, "id")
+assert.deepEqual(revised.products![0]!.fold, { key: "id" })
+assert.deepEqual(revised.products![0]!.shape, full.products![0]!.shape)
+assert.equal(selectedText(detailed, "greetings[0]"), "PRIVATE OPENING")
+assert.equal(selectedText(detailed, "lore.dotted.id.layers[0]"), "PRIVATE LAYER")
+assert.deepEqual(
+  applyCompile(detailed, decodeCompile({ bindings: [{ to: "lore.dotted.id.unlock", when: { all: [] } }] })).lore[0]!
+    .unlock,
+  { all: [] },
+)
+// Preview addresses and nested catalog diagnostics are real card paths, also accepted by workshop review.
+const addresses: Card = {
+  ...detailed,
+  rules: {
+    ...detailed.rules,
+    actions: [
+      { id: "a.dot", text: "A", when: { all: [{ path: "mode", is: "text" }, { not: { path: "mode", is: "other" } }] } },
+    ],
+    readouts: [
+      { id: "r.dot", text: "R", when: { path: "mode", is: "text" }, options: [{ id: "yes", text: "Yes", do: [] }] },
+    ],
+  },
+  products: [
+    {
+      id: "memory",
+      role: "chronicle",
+      on: false,
+      text: "Q",
+      shape: {
+        kind: "record",
+        keys: [{ key: "inner", shape: { kind: "table", columns: [{ key: "id", type: "enum", catalog: "missing" }] } }],
+      },
+    },
+  ],
+}
+const paths = cardPaths(addresses)
+const gates = view(addresses, {}, { lore: true })
+  .sections.find((s) => s.name === "gates")!
+  .text.split("\n")
+for (const line of gates) assert.ok(paths.has(line.slice(0, line.indexOf(": "))), line)
+assert.ok(gates.some((x) => x.startsWith("rules.actions.a.dot.when.all[1].not:")))
+assert.ok(gates.some((x) => x.startsWith("lore.dotted.id.unlock:")))
+const catalogError = lint(addresses).find((d) => d.rule === "unknown-catalog")!
+assert.equal(catalogError.path, "products.memory.shape.keys[0].shape.columns[0].catalog")
+assert.ok(paths.has(catalogError.path))
+
+console.log("author: ok")

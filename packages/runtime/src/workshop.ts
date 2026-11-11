@@ -3,7 +3,7 @@ import { Schema } from "effect"
 import { type Card, Field } from "./card.ts"
 import { type Cond } from "./cond.ts"
 import { identifier } from "./lint.ts"
-import { type RecordShape } from "./product.ts"
+import { Product, Col, type RecordShape } from "./product.ts"
 
 /** Author chrome, stored beside the editable card; it never enters a runtime Card. */
 const Fraction = Schema.Number.check(Schema.makeFilter((n) => Number.isFinite(n) && n > 0))
@@ -23,6 +23,40 @@ export interface CardDraft {
 export interface DraftView extends CardDraft {
   card: Card
   draft: boolean
+}
+
+/** The model sees wiring and empty prose slots; authored values are only sent through an explicit selection. */
+export const mechanical = (card: Card) => {
+  const fragment = ({ text: _t, label: _l, ...wiring }: Card["fiction"][number]) => wiring
+  return {
+    id: card.id,
+    heading: card.heading,
+    input: card.input,
+    director: card.director,
+    frame: card.frame.map(fragment),
+    fiction: card.fiction.map(fragment),
+    asks: card.asks?.map(fragment),
+    greetings: card.greetings.map((g) => ({ do: g.do })),
+    rules: {
+      ...card.rules,
+      fields: card.rules.fields.map(({ label: _l, group: _g, ...wiring }) => wiring),
+      actions: card.rules.actions.map(({ text: _t, roll, ...wiring }) => ({
+        ...wiring,
+        roll: roll && typeof roll === "object" && "judge" in roll ? { judged: true } : roll,
+      })),
+      readouts: card.rules.readouts?.map(({ text: _t, options, ...wiring }) => ({
+        ...wiring,
+        options: options.map(({ text: _t, ...wiring }) => wiring),
+      })),
+    },
+    lore: card.lore.map(({ layers, sections, ...wiring }) => ({
+      ...wiring,
+      layers: layers.map(() => ""),
+      sections: sections?.map(({ id }) => ({ id })),
+    })),
+    products: card.products?.map(({ text: _t, label: _l, initial: _i, ...wiring }) => wiring),
+    catalogs: card.catalogs?.map(({ id, items }) => ({ id, items: items.map(({ id, when }) => ({ id, when })) })),
+  }
 }
 
 const Token = Schema.String.check(Schema.isPattern(identifier))
@@ -51,7 +85,8 @@ const Fields = Schema.Struct({
   max: optional(Schema.Number),
   initial: Scalar,
   options: optional(Schema.Array(Token)),
-  hidden: optional(Schema.Boolean),
+  hidden: Field.fields.hidden,
+  start: Field.fields.start,
   view: Field.fields.view,
 })
 const Actions = Schema.Struct({
@@ -71,8 +106,9 @@ const Readouts = Schema.Struct({
 })
 const Column = Schema.Struct({
   key: Token,
-  type: Schema.Literals(["text", "int", "boolean", "enum"]),
+  type: Col.fields.type,
   options: optional(Schema.Array(Token)),
+  catalog: optional(Token),
 })
 const List = Schema.Struct({ kind: Schema.Literal("list"), max: optional(Schema.Int) })
 const Table = Schema.Struct({
@@ -98,7 +134,7 @@ const Shape = Schema.Union([
 ])
 const Binding = Schema.Union([
   Schema.Struct({
-    to: Schema.String.check(Schema.isPattern(/^fiction\..+\.when$|^lore\..+\.(?:unlock\[\d+\]|offer)$/)),
+    to: Schema.String.check(Schema.isPattern(/^fiction\..+\.when$|^lore\..+\.(?:unlock(?:\[\d+\])?|offer)$/)),
     when: Condition,
   }),
   Schema.Struct({ to: Schema.String.check(Schema.isPattern(/^greetings\[\d+\]\.do$/)), do: Effects }),
@@ -119,8 +155,15 @@ export const CompileOutput = Schema.Struct({
       Schema.Struct({
         id: Token,
         shape: Shape,
-        role: Schema.Literals(["world", "chronicle", "theater"]),
+        role: Product.fields.role,
+        stage: Product.fields.stage,
+        fold: optional(Schema.Union([Schema.Literals(["latest", "append"]), Schema.Struct({ key: Token })])),
         when: optional(Condition),
+        on: Product.fields.on,
+        trigger: Product.fields.trigger,
+        feed: Product.fields.feed,
+        recall: optional(Schema.Union([Schema.Literal(true), Token])),
+        // initial can contain arbitrary authored prose; it stays author-owned alongside text and label.
       }),
     ),
   ),
@@ -142,34 +185,6 @@ export const ReviewOutput = Schema.Array(
 )
 export type CompileOutput = typeof CompileOutput.Type
 export type SortOutput = typeof SortOutput.Type
-// Keep a recursive path inventory so ids containing dots remain unambiguous.
-export const cardPaths = (card: Card): Set<string> => {
-  const paths = new Set<string>(["$"])
-  const visit = (v: unknown, path: string) => {
-    paths.add(path)
-    if (Array.isArray(v))
-      v.forEach((x, i) => {
-        visit(x, `${path}[${i}]`)
-        if (x && typeof x === "object" && ("id" in x || "path" in x)) visit(x, `${path}.${x.id ?? x.path}`)
-      })
-    else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => visit(x, path ? `${path}.${k}` : k))
-  }
-  visit(card, "")
-  return paths
-}
-export const selectedText = (card: Card, path: string): string => {
-  const f = card.fiction.find((f) => path === `fiction.${f.id}`)
-  if (f && f.text !== undefined) return f.text
-  for (const e of card.lore)
-    for (const [i, text] of e.layers.entries()) if (path === `lore.${e.id}.layers[${i}]`) return text
-  const g = /^greetings\[(\d+)\]$/.exec(path)
-  if (g && card.greetings[Number(g[1])]) {
-    const gr = card.greetings[Number(g[1])]!
-    return gr.text ?? gr.note ?? ""
-  }
-  throw new Error(`invalid selection ${path}`)
-}
-
 // Only the four destination families below can receive text. Existing entries are never replaced.
 const place = (card: Card, to: string, text: string): Card => {
   const f = /^(fiction|frame)\.(.+)$/.exec(to)
@@ -301,6 +316,11 @@ export const applyCompile = (card: Card, output: CompileOutput): Card => {
         if (b.to === `lore.${e.id}.offer`) {
           found = true
           return { ...e, offer: b.when }
+        }
+        if (b.to === `lore.${e.id}.unlock`) {
+          if (Array.isArray(e.unlock)) throw new Error(`use an indexed unlock binding: ${b.to}`)
+          found = true
+          return { ...e, unlock: b.when }
         }
         const i = e.layers.findIndex((_, i) => b.to === `lore.${e.id}.unlock[${i}]`)
         if (i < 0) return e

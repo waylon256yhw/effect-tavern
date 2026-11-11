@@ -2,11 +2,12 @@
 // I/O, no console. The throws in `makeCard` / `resolve` stay decode-time invariants; lint reports what decodes but is
 // wired wrong (topology: events, fields, bands, layers) or written where code should do the work (prose: numbers and
 // output formats in the text). Rules are the list at the bottom; there is no plugin system and no config.
+import { unlocks, unlockPath, whenPaths } from "./paths.ts"
 import type { Card, Effect_, Field } from "./card.ts"
 import { type Cond, holds, reads, STATE_HOLE } from "./cond.ts"
 import { SLOTS } from "./fragment.ts"
 import { hook } from "./lore.ts"
-import { colsOf } from "./product.ts"
+import { colsAt } from "./product.ts"
 import { HOLE, unfilled } from "./names.ts"
 import { type Entry, scan } from "./polish.ts"
 
@@ -26,24 +27,18 @@ type Rule = (card: Card) => Diagnostic[]
 const leaves = (c: Cond): Cond[] =>
   "all" in c ? c.all.flatMap(leaves) : "any" in c ? c.any.flatMap(leaves) : "not" in c ? leaves(c.not) : [c]
 const eventsOf = (c: Cond) => leaves(c).flatMap((l) => ("event" in l ? [l.event] : []))
-const unlocks = (e: Card["lore"][number]) => (Array.isArray(e.unlock) ? e.unlock : [e.unlock]) as readonly Cond[]
-const unlockPath = (e: Card["lore"][number], i: number) =>
-  Array.isArray(e.unlock) ? `lore.${e.id}.unlock[${i}]` : `lore.${e.id}.unlock`
-
 /** Every Cond over state in the card, with its place. Product table filters read rows, not state, and are left out. */
 const conds = (card: Card): [string, Cond][] => [
-  ...card.frame.flatMap((f): [string, Cond][] => (f.when ? [[`frame.${f.id}.when`, f.when]] : [])),
-  ...card.fiction.flatMap((f): [string, Cond][] => (f.when ? [[`fiction.${f.id}.when`, f.when]] : [])),
-  ...card.rules.actions.flatMap((a): [string, Cond][] => (a.when ? [[`rules.actions.${a.id}.when`, a.when]] : [])),
-  ...(card.rules.readouts ?? []).flatMap((q): [string, Cond][] =>
-    q.when ? [[`rules.readouts.${q.id}.when`, q.when]] : [],
-  ),
+  ...whenPaths("frame", card.frame),
+  ...whenPaths("fiction", card.fiction),
+  ...whenPaths("rules.actions", card.rules.actions),
+  ...whenPaths("rules.readouts", card.rules.readouts ?? []),
   ...(card.rules.over ? [["rules.over", card.rules.over] as [string, Cond]] : []),
   ...card.lore.flatMap((e): [string, Cond][] => [
     ...unlocks(e).map((c, i): [string, Cond] => [unlockPath(e, i), c]),
     [`lore.${e.id}.offer`, e.offer],
   ]),
-  ...(card.products ?? []).flatMap((p): [string, Cond][] => (p.when ? [[`products.${p.id}.when`, p.when]] : [])),
+  ...whenPaths("products", card.products ?? []),
   ...(card.catalogs ?? []).flatMap((c) =>
     c.items.flatMap((i): [string, Cond][] => (i.when ? [[`catalogs.${c.id}.items.${i.id}.when`, i.when]] : [])),
   ),
@@ -592,12 +587,12 @@ const rules: Rule[] = [
   // An enum column's catalog is resolved by id at record time; a name no catalog has fails the settlement.
   (card) =>
     (card.products ?? []).flatMap((p) =>
-      (p.shape ? colsOf(p.shape) : [])
-        .filter((c) => c.catalog !== undefined && !card.catalogs?.some((x) => x.id === c.catalog))
-        .map((c) => ({
+      (p.shape ? colsAt(p.shape, `products.${p.id}.shape`) : [])
+        .filter(([, c]) => c.catalog !== undefined && !card.catalogs?.some((x) => x.id === c.catalog))
+        .map(([path, c]) => ({
           rule: "unknown-catalog",
           level: "error" as const,
-          path: `products.${p.id}.${c.key}`,
+          path: `${path}.catalog`,
           message: `${c.catalog} is not a catalog of this card`,
           hint: "declare it in catalogs, or fix the spelling",
         })),

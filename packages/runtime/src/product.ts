@@ -123,12 +123,15 @@ export const shapeSchema = (s: Shape, partial = false): Schema.Top => {
 }
 
 /** Every column of a shape, nested record keys included. */
-export const colsOf = (s: Shape): Col[] =>
+export const colsAt = (s: Shape, path = "shape"): [string, Col][] =>
   s.kind === "table"
-    ? [...s.columns]
+    ? s.columns.map((c, i) => [`${path}.columns[${i}]`, c])
     : s.kind === "record"
-      ? s.keys.flatMap((k) => ("shape" in k ? colsOf(k.shape) : [k]))
+      ? s.keys.flatMap((k, i): [string, Col][] =>
+          "shape" in k ? colsAt(k.shape, `${path}.keys[${i}].shape`) : [[`${path}.keys[${i}]`, k]],
+        )
       : []
+export const colsOf = (s: Shape): Col[] => colsAt(s).map(([, col]) => col)
 /** A shape with each catalog column's `options` set to the ids of its catalog's items that hold on `state`. A catalog
  *  with no survivor drops what references it: a table (a row needs every column) or a record's key; a record left with
  *  no key, and so the product, is dropped too. An id not in the list does not decode: nothing is asked of the model. */

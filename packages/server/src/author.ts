@@ -3,14 +3,14 @@ import { object, type Model } from "@effect-tavern/provider"
 import { decodeCard, Card } from "@effect-tavern/runtime/src/card.ts"
 import { validateCard } from "@effect-tavern/runtime/src/author.ts"
 import {
+  mechanical,
   applyCompile,
   applySort,
   CompileOutput,
   SortOutput,
   ReviewOutput,
-  selectedText,
-  cardPaths,
 } from "@effect-tavern/runtime/src/workshop.ts"
+import { selectedText, cardPaths } from "@effect-tavern/runtime/src/paths.ts"
 import { Effect, Schema } from "effect"
 
 const CompileRequest = Schema.Struct({ card: Card, select: Schema.Array(Schema.String), intent: Schema.String })
@@ -20,22 +20,6 @@ const SortRequest = Schema.Struct({
   paragraphs: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 const ReviewRequest = Schema.Struct({ card: Card })
-// Compile sees selected prose and mechanical structure, never the author's rubric or unrelated prose.
-const mechanical = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(mechanical)
-  if (!value || typeof value !== "object") return value
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, item]) => {
-      if (
-        ["text", "label", "group", "title", "summary", "guard", "lexicon", "names", "source", "version"].includes(key)
-      )
-        return []
-      if (key === "judge") return [["judged", true]]
-      if (key === "layers" && Array.isArray(item)) return [[key, item.map(() => "")]]
-      return [[key, mechanical(item)]]
-    }),
-  )
-}
 const prompts = {
   compile:
     "Compile mechanical increments and bindings from selected prose and intent; judged:true creates an empty author rubric, and slots are created only when explicitly requested.",
