@@ -126,3 +126,14 @@
 - 不新增 client → server 依赖的结论已一致。workspace 拓扑是合理顾虑，但当前 server 的二进制脚本名为 compile，client 为 build，不能直接推导当前某条递归命令必然失败；client tsconfig 也已有 types:node。无需为此争论或添加依赖。另需注意 Routing 的键是 runtime 的 Phase 加 author，放 provider 不能反向导入 runtime，也不能再复制一套阶段枚举；推荐留在拥有阶段语义的 runtime 侧。
 - headless.ts 虽短，却是 package.json 中 start:headless / compile:headless 的实际入口，执行 await start()。只要装配规则统一，这种三行 executable entrypoint 可以保留，删除不是架构收益。
 - layout 的 `{card?, layout?}` 方案可以作为最小实现：GET 的 draft 标志由 card 是否存在决定，不能再由数据库行是否存在决定；安装和放弃内容编辑后保留 layout。需让操作含义明确为“放弃内容编辑但保留布局”，并避免只更新 card 时覆盖已存 layout。兼容已存在的裸 Card 属于既有数据适配，不需要扩成通用版本框架。
+
+**第一批实施记录（2026-11-11）。**
+
+- 审阅记录先单独提交：`e42bc64`。
+- `abcb150`：纯值级 validateCard 覆盖 decode、rules、resolve/products、initialWorld、lint；安装与 compile 共享，compile 不再 YAML 往返；非法产品诊断和拒绝安装后的状态保留已测试。
+- `0693acd`：main 改用生产 start/host；生产采用 plain、默认关闭 inspect，CLI --inspect / TAVERN_INSPECT=1 可开启；开发入口保留。普通 HTTP 启动刷新模型名，MODEL=fake 保持离线；未增加本地 CLI 每次调用的网络刷新。
+- `77d8030`：edit 新增 invoke 时保留已冻结的同版本交付；新版本对比最新已交付快照。回归覆盖自动交付后追加 pin，以及同轮多版本与 superseded 保留。
+- `2255f60`：Derived 缓存初始 world、路径前缀 world 与依赖它的 settlement；测试覆盖缓存复用、祖先修订失效、分支恢复。此前同一合成 wuxia 基准，1000 节点 timeline 四次从 665/661/660/661ms 降至 23/23/22/22ms，500 节点为 9/7/6/5ms；不代表真实长局或移动端耗时。
+- `9db3216`：仅 aside 无正文的首稿进入重写时清除旧 products，attach 回归通过。
+- 验证：`vp run verify` 全仓通过；`vp check` 0 errors，保留既有 context.ts 字符串展开告警。实际 bun build --compile 应用成功；临时目录运行编译后二进制，嵌入前端返回 200、四张嵌入卡可读、SIGTERM 正常退出。未启动或重启用户的开发服务器。
+- 第一批完成；后续契约统一、预览读取规则共享、工坊 layout 与清扫项尚未实施。
