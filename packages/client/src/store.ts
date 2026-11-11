@@ -1,12 +1,12 @@
+// The client's state as atoms, fed by the wire's events. The log tree lives in `log`, a replica of the server's
+// (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
+// keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
+// and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { CardView, StoryRow, Persona, CardRow as ShelfCard } from "@effect-tavern/runtime/src/library.ts"
 export type { CardView, StoryRow, Persona, CardRow as ShelfCard } from "@effect-tavern/runtime/src/library.ts"
 import type { Routing } from "@effect-tavern/runtime/src/session.ts"
 export type { Pair, Routing } from "@effect-tavern/runtime/src/session.ts"
 import { emptyDraft, hasDraft, type DraftModel } from "./composition.ts"
-// The client's state as atoms, fed by the wire's events. The log tree lives in `log`, a replica of the server's
-// (src/log.ts: the same code, fed by the snapshot and by `change` events; head is where the reader is, and the server
-// keeps it). `draft` is the node being written: its prose grows by `delta`; a second draft (check failed) starts it over
-// and keeps the first as `prev`, greyed in place until the node lands. A failed turn keeps its draft as a ghost under `error`.
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"

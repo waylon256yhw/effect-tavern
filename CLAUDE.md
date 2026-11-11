@@ -89,4 +89,11 @@ Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
 effect on the next request. `MODEL=fake` scripts the model, `CARDS=<dir>` puts a directory of YAML cards on the shelf (default: the four templates), the library lives in
 `.dev/tavern.db` (gitignored; `DATA=<dir>` moves it; delete it to start every story over). The user starts and stops `vp dev` in their own
-terminal; an agent uses it and never starts, restarts or kills it. `bun src/main.ts` in packages/server serves the same session under `/api` on its own port, with the client build (`vp build` in packages/client → dist) under every other path: the one-port form a phone runs.
+terminal; an agent uses it and never starts, restarts or kills it.
+
+`bun src/main.ts` in packages/server is the standalone app, the one-port form a phone runs: `/api` plus the client build
+(`vp build` in packages/client → dist) under every other path. It is the production host (start.ts → host.ts, shared
+with `tavern serve`), not the dev session: the library is `.tavern/tavern.db` (`DATA=<dir>` moves it; `DATA=.dev` opens
+the dev library), the harness is the minimal one, no local key is imported, and call bodies stay out of the Inspector
+unless `TAVERN_INSPECT=1` (`tavern serve --inspect`). A schema change to the library needs a new `user_version` step in
+data.ts `upgrade`: a stamped library no longer runs the create statements on open.

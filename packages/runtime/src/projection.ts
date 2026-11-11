@@ -1,7 +1,7 @@
+// Public read contracts. The journal and complete path state never travel with a timeline.
 import type { Id } from "./log.ts"
 import type { Input } from "./journal.ts"
 import type { Phase } from "./session.ts"
-// Public read contracts. The journal and complete path state never travel with a timeline.
 import type { Beat, Check, Rules, State } from "./card.ts"
 import type { DeliverySnapshot, Source } from "./context.ts"
 import type { Node } from "./derived.ts"

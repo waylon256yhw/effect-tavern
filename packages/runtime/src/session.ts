@@ -1,4 +1,3 @@
-import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } from "./projection.ts"
 // A session: one card, the player's rows (layer.ts), one connection, one log tree. Its interface is the crossing protocol the
 // client speaks: player actions in (each returns the stream of events it causes, ending with the node), node
 // projections out. The in-process callers (test/loop.ts, test/live.ts) and the wire adapter cross the same seam.
@@ -35,6 +34,7 @@ import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } f
 // a record product arrives whole with record's `call`. The node's reply and blocks come from the landed split.
 // Errors: a model failure is a `ModelError` on the stream; an action that names what does not exist (a node, an
 // option, a product, a value outside a field) is a defect, the caller's bug.
+import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } from "./projection.ts"
 import {
   contextLookup,
   deliveryText,

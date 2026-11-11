@@ -79,6 +79,9 @@ export default {
       "src/dust.ts": ["/.*/"],
       "src/phrase.ts": ["/.*/"],
       "src/probe.ts": ["no probe"],
+      // transport failures, not words of the chrome: a body that is not JSON, a response with no stream
+      "src/response.ts": ["/invalid JSON/"],
+      "src/wire.ts": ["missing event stream"],
       "src/home.tsx": ["/.*/"],
     },
     templates: [

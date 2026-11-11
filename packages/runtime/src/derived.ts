@@ -1,9 +1,9 @@
-import type { PlayerCatalogItem } from "./projection.ts"
 // Derived (GLOSSARY): the facts code folds along a path, never stored. State and events, each turn's pre / post,
 // the gate state (counters and floors), the readable list, the fold boundary and its summary, the Known / Current
 // lines, the ledger, the node projection. One factory per session; `at(path)` reads them, lazily, per fact. The memo
 // tables live as long as the factory, keyed by Turn object: a turn is immutable, an amended one is a new object.
 // session.ts is the caller: turn, project, setField and demand.
+import type { PlayerCatalogItem } from "./projection.ts"
 import {
   catalogEntry,
   resourcesAt,

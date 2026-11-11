@@ -1,6 +1,3 @@
-import type { CardView, CardRow, StoryRow } from "@effect-tavern/runtime/src/library.ts"
-export type { CardRow } from "@effect-tavern/runtime/src/library.ts"
-export { Routing } from "@effect-tavern/runtime/src/session.ts"
 // The library behind the wire: every card's stories and the player's personas. A story is a session over its rows in
 // data.ts on the card its row names (`story.card`, resolved through `cards` when the session opens), with the player's
 // rows the library stores (runtime layer.ts; the overlay given stands until one is stored), and the turn in flight beside it (turn.ts): a
@@ -21,6 +18,9 @@ export { Routing } from "@effect-tavern/runtime/src/session.ts"
 // from the tables on every call the same way: a routing or provider edit is in force from the next request. A pair
 // that does not resolve (provider gone, disabled, no key, no endpoint) fails that request naming the provider. A stage
 // the row does not name runs on `model`, the environment's (dev.ts); `pinned` puts it over the row (MODEL=fake).
+import type { CardView, CardRow, StoryRow } from "@effect-tavern/runtime/src/library.ts"
+export type { CardRow } from "@effect-tavern/runtime/src/library.ts"
+export { Routing } from "@effect-tavern/runtime/src/session.ts"
 import {
   bind,
   connection,

@@ -18,7 +18,7 @@
   "dependencies": {
     "@effect-tavern/provider": "workspace:*",
     "@effect/platform-bun": "4.0.6",
-    "@noble/hashes": "^2.4.0",
+    "@noble/hashes": "2.4.0",
     "effect": "4.0.6"
   },
   "devDependencies": {

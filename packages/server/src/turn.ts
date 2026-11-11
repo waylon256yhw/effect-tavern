@@ -1,5 +1,3 @@
-import type { Draft } from "@effect-tavern/runtime/src/projection.ts"
-export type { Draft } from "@effect-tavern/runtime/src/projection.ts"
 // The turn in flight on one story, owned by the story (library.ts keeps one beside each session), never by a response.
 // `start` runs an action to its end whether anyone listens or not and answers its events as a stream; a response is
 // only a subscriber, and closing it stops nothing. `stop` is the player's: before the first character of prose the
@@ -11,6 +9,8 @@ export type { Draft } from "@effect-tavern/runtime/src/projection.ts"
 // no replay. A turn that fails with nobody subscribed keeps its failure for the next `attach`, which consumes it
 // (snapshot, then the `error`); a new action clears it. The calls a turn makes are filed under the node it lands
 // (`file`) here, whoever listens. The broadcast is one Queue per subscriber, private to the run.
+import type { Draft } from "@effect-tavern/runtime/src/projection.ts"
+export type { Draft } from "@effect-tavern/runtime/src/projection.ts"
 import { textOf } from "@effect-tavern/runtime/src/journal.ts"
 import type { Id } from "@effect-tavern/runtime/src/log.ts"
 import {

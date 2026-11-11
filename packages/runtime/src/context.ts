@@ -1,3 +1,5 @@
+// Resource identity, immutable deliveries and request-local residency. Story unlocks are
+// resolved by derived.ts; a lookup can only see this already-authorized resource set.
 import type { State as Paths } from "./cond.ts"
 import { holds } from "./cond.ts"
 import type { Lore } from "./lore.ts"
@@ -5,8 +7,6 @@ import type { PackEntry } from "./layer.ts"
 import { itemText, type Product } from "./product.ts"
 import { worldValue, type WorldState } from "./world.ts"
 import type { PlayerCatalogItem } from "./projection.ts"
-// Resource identity, immutable deliveries and request-local residency. Story unlocks are
-// resolved by derived.ts; a lookup can only see this already-authorized resource set.
 import { sha256 } from "@noble/hashes/sha2.js"
 import { bytesToHex } from "@noble/hashes/utils.js"
 import { Schema } from "effect"
@@ -139,7 +139,7 @@ const termsOf = (q: string, haystacks: readonly string[]) => [
       .split(/[\p{P}\p{Z}\s]+/u)
       .filter(Boolean)
       .flatMap((c) => {
-        const cs = [...c]
+        const cs = Array.from(c)
         const unmatched = /\p{Script=Han}/u.test(c) && cs.length > 2 && !haystacks.some((h) => h.includes(c))
         return unmatched ? cs.slice(1).map((ch, i) => cs[i]! + ch) : [c]
       }),
