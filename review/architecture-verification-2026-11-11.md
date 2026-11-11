@@ -146,3 +146,13 @@
 - `98114f9`：draft JSON 存 `{card?, layout?}`，无 DDL 变化；旧裸 Card 按需归一化。GET 返回 `{card, draft, layout?}`，draft 只反映内容编辑；PUT 至少提供 card/layout 一项并保留未提供的另一项。安装成功或 DELETE 只清 card，保留 layout，没有 layout 才删行。回归覆盖 HTTP 双向独立更新、非法更新与安装失败不覆盖原值、安装/放弃后保留布局、数据库重开及旧格式读取。
 - 验证：最终 `vp check`、`vp run verify`、client 的 `vp build`、`vp run docs:check` 均通过。check 为 0 errors，保留既有 context 字符串展开告警；client 构建有大 chunk 提示。本轮未调用真实供应商、未操作真实用户库、未启动或重启用户的开发服务器。
 - 第二批完成。第三批仍是 C5 工坊机械能力/路径一致性与 C6 最小版本戳；C9 的 provider 探测循环迁移保持低优先级，本轮仅统一其列表类型。未引入共享跨端 draft reducer、通用兼容框架或模型输出 Schema AST 裁剪。
+
+**第三批实施记录（2026-11-11）。**
+
+- `567004e`（C5）：工坊显式输出词表补齐 Field.start、列 catalog 引用、Product 的 stage/fold/on/trigger/feed/recall，复用现有枚举及布尔 schema。Field.label/group、正文、判据继续由作者填写；Product.initial 可包含任意散文，明确保持作者所有，不开放给模型。键对齐测试列出这些有意排除项，避免以后把遗漏误当设计。
+- C5 同时修正模型输入投影：原先按键名递归删字段会漏出 Greeting.note 和产品 initial 中的散文，也可能误删业务数据中的同名键；改为按 Card 结构投影，选择以外的正文、判据、初值和资源 URL 不送进 compile/sort。原值由 applyCompile 保留，输出仍经过闭词表解码；没有使用 Schema AST 动态裁剪。纯函数与服务端实际模型请求测试均覆盖这一点。
+- 卡片路径知识移到小范围的 `runtime/src/paths.ts`：预览和 lint 共用 when/unlock 地址，条件子节点写成 all[n]/any[n]/not，规则地址带 rules 前缀，review 与选择共用路径库存。单条件 unlock 的真实路径也可被 compile 绑定，数组仍要求指定层；含点号 id 的既有行为保留。嵌套 catalog 列诊断改为真实 shape 路径。对照测试确认卡片自身条件的预览路径和 catalog 诊断均存在于路径库存；玩家覆盖层的 frame/tail 展示仍是解析后的层视图，没有伪装成 Card 原文地址。
+- `5656d4a`（C6）：既有无版本库的全部升级纳入一个事务；成功后写 SQLite user_version=1。当前版本直接跳过形状探测、DDL 和历史 node JSON 扫描；story 重建与新建共用一份列定义。升级失败关闭连接并回滚，超出支持范围的库拒绝打开；没有引入 migration registry、双写或历史版本链。
+- C6 验收使用临时数据库，在第二个旧节点升级时注入故障，断言早先的 DDL、player/base 转换、首个节点更新与版本戳一起回滚；去掉故障后重试成功，外键检查通过。再次打开时记录实际 SQL，确认不再访问 sqlite_master/pragma_table_info 或扫描 json_extract；新库与重建旧库的 story 列相同。原有历史升级、节点级联与 id 不复用测试继续通过。
+- 验证：`vp check` 0 errors（仅既有 context.ts 字符串展开告警），`vp run verify` 全仓通过，含浏览器目标工坊构建与无 Node/Bun 全局对象的执行测试。未修改真实用户数据库，未调用真实供应商，未启动或重启用户开发服务器。
+- 三批封盘清单完成。C9 provider 探测循环的纯归属搬迁仍维持“触及再做”，不作为封盘门槛；没有把这项无已知行为缺陷的建议顺手扩成第四批。
