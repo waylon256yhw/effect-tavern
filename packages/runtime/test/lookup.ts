@@ -85,8 +85,16 @@ const entries = [lore("a", "A points to card:b."), lore("b", "B points to card:c
 }
 // The journal keeps both versions if lookup reads layer 1 before the gate offers layer 2.
 {
-  const f = fixture([{ ...lore("layered", "BASE"), layers: ["BASE", "DEEP"], offer: { all: [] } }], (_, n) =>
-    n === 0 ? call("read_context", { refs: ["card:layered"] }) : done,
+  const f = fixture(
+    [
+      {
+        ...lore("layered", "BASE"),
+        access: { model: true, player: true },
+        layers: ["BASE", "DEEP"],
+        offer: { all: [] },
+      },
+    ],
+    (_, n) => (n === 0 ? call("read_context", { refs: ["card:layered"] }) : done),
   )
   const t = await f.go(f.S.act(f.g.id, { text: "find" }))
   assert.deepEqual(
@@ -94,7 +102,18 @@ const entries = [lore("a", "A points to card:b."), lore("b", "B points to card:c
     ["BASE", "BASE\n\nDEEP"],
   )
   assert.equal(t.deliveries[1]!.superseded, t.deliveries[0]!.revision)
+  const edited = await f.go(f.S.edit(t.id, { input: { text: "find", invoke: ["card:layered"] } }))
+  assert.deepEqual(edited.deliveries, t.deliveries) // keep both revisions, their order and superseded evidence
+
   assert.deepEqual((await f.go(f.S.reword(t.id))).deliveries, t.deliveries)
+}
+// Adding a player pin to an automatically delivered resource does not append the same version again.
+{
+  const f = fixture([{ ...lore("shared"), activation: "always", access: { model: true, player: true } }], () => done)
+  const t = await f.go(f.S.act(f.g.id, { text: "go" }))
+  const edited = await f.go(f.S.edit(t.id, { input: { text: "go", invoke: ["card:shared"] } }))
+  assert.equal(t.deliveries.length, 1)
+  assert.deepEqual(edited.deliveries, t.deliveries)
 }
 // Recoverable permission errors return to the model; forbidden text never reaches a tool response.
 {

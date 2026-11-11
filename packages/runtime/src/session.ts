@@ -494,12 +494,14 @@ export const makeSession = ({
       if (reused) {
         const added = selected.filter((r) => !base!.input.invoke?.includes(r.resourceId))
         deliveries.push(
-          ...added.map((r) =>
-            freeze(
-              r,
-              resident.find((s) => s.resourceId === r.resourceId),
+          ...added
+            .filter((r) => !deliveries.some((s) => s.resourceId === r.resourceId && s.revision === r.revision))
+            .map((r) =>
+              freeze(
+                r,
+                [...resident, ...deliveries].findLast((s) => s.resourceId === r.resourceId),
+              ),
             ),
-          ),
         )
         looked.push(...added.flatMap((r) => r.disclosures))
       }
