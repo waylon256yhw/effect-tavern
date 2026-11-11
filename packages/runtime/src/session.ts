@@ -66,7 +66,7 @@ import { head as headOf, type Hat } from "./fragment.ts"
 import { narratorHistory, policyFor, type Policy } from "./history.ts"
 import { split, splitter, textOf as proseOf, type Brief, type Input, type Turn as TurnOf } from "./journal.ts"
 import * as Log from "./log.ts"
-import { resolve, shown, type Resolved, type Rows } from "./layer.ts"
+import { resolve, shown, worldOf, type Resolved, type Rows } from "./layer.ts"
 import { makeLore, namedLore, type Disclosure, type Lore } from "./lore.ts"
 import { lines, expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
@@ -281,6 +281,7 @@ export const makeSession = ({
     return request(
       {
         frame: headOf(frame, { state }),
+        world: headOf(worldOf(card, frame), { state }),
         tail: headOf(tail, { state }),
         input,
         thought: wording("input.thought"),
@@ -313,9 +314,11 @@ export const makeSession = ({
     Effect.gen(function* () {
       yield* emit({ kind: "stage", phase })
       const t0 = Date.now()
-      const r = yield* object(modelFor(phase), schema, msgs, {
+      const M = modelFor(phase)
+      // effort is the bound model entry's own: the harness names none (an unset one sends nothing)
+      const r = yield* object(M, schema, msgs, {
         name: phase,
-        effort: "off",
+        effort: M.effort,
         maxOutputTokens,
       })
       yield* emit({ kind: "call", phase, msgs, out: r.value, usage: r.usage, ms: Date.now() - t0 })
@@ -400,8 +403,9 @@ export const makeSession = ({
       const result = yield* native(emit, "record", msgs, {
         tools: tx.tools,
         completion: { tool: "finish_record" },
-        budget: { maxSteps: 8, maxOutputTokens: 4096, maxTotalOutputTokens: 16384, timeoutMs: 120000 },
-        call: { name: "record", effort: "off" },
+        // no per-step cap: reasoning counts as output, and the total already bounds a runaway
+        budget: { maxSteps: 8, maxTotalOutputTokens: 16384, timeoutMs: 120000 },
+        call: { name: "record" },
       })
       if (result.status !== "completed")
         return yield* Effect.fail(
@@ -525,8 +529,8 @@ export const makeSession = ({
             {
               tools: lookup.tools,
               completion: { text: true },
-              budget: { maxSteps: 5, maxOutputTokens: 1024, maxTotalOutputTokens: 4096, timeoutMs: 60000 },
-              call: { name: "lookup", effort: "off" },
+              budget: { maxSteps: 5, maxTotalOutputTokens: 8192, timeoutMs: 60000 },
+              call: { name: "lookup" },
             },
           )
           deliveries.push(...lookup.delivered)

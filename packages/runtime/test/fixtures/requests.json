@@ -9,11 +9,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -49,11 +45,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -140,11 +132,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -172,11 +160,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -273,21 +257,6 @@
       "msgs": [
         {
           "role": "system",
-          "content": "全知第三人称叙述，镜头可以在任何人物之间切换。故事里没有玩家角色；输入是作者给叙述者的指示，不是任何人物的话，不要把它写进故事。"
-        },
-        {
-          "role": "system",
-          "content": "白描，少用形容词；对白短，带方言味；每一幕有一个具体的物件或动作收尾。",
-          "providerOptions": {
-            "anthropic": {
-              "cacheControl": {
-                "type": "ephemeral"
-              }
-            }
-          }
-        },
-        {
-          "role": "system",
           "content": "Ledger:\n → -; read -; fired -; "
         },
         {
@@ -358,21 +327,6 @@
     {
       "phase": "record",
       "msgs": [
-        {
-          "role": "system",
-          "content": "全知第三人称叙述，镜头可以在任何人物之间切换。故事里没有玩家角色；输入是作者给叙述者的指示，不是任何人物的话，不要把它写进故事。"
-        },
-        {
-          "role": "system",
-          "content": "白描，少用形容词；对白短，带方言味；每一幕有一个具体的物件或动作收尾。",
-          "providerOptions": {
-            "anthropic": {
-              "cacheControl": {
-                "type": "ephemeral"
-              }
-            }
-          }
-        },
         {
           "role": "system",
           "content": "Known: \nnotes: 记事只记事实：谁做了什么、谁说了什么要紧的话、什么变了、新出现的人名和地名。不写景物、天气和气氛，不评价文字。一两句话。\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
@@ -498,17 +452,6 @@
     {
       "phase": "record",
       "msgs": [
-        {
-          "role": "system",
-          "content": "使用静谧的文本风格，突出安宁、一成不变与静滞感。",
-          "providerOptions": {
-            "anthropic": {
-              "cacheControl": {
-                "type": "ephemeral"
-              }
-            }
-          }
-        },
         {
           "role": "system",
           "content": "Known: \nnotes: Notes are the record of this scene, one or two plain sentences in the third person: what changed or was settled (what was done, decided, promised, refused or learned), or, where the scene was talk, what was raised or confided and how the other side met it. Keep only what later scenes will stand on; merge the rest or leave it out, and never summarize the prose paragraph by paragraph. Name characters by name, and refer to an unnamed player character as 玩家 (never 你 or 我). Never repeat Known, never record scenery or a gesture nothing later turns on, never judge feelings, never comment on the writing. For a pure transition where nothing happened or was settled, an empty string is allowed.\nUse the native tools only for facts established by this scene. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record with the required answers, even if no world data changed."
@@ -769,11 +712,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -809,11 +748,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -900,11 +835,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -932,11 +863,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {
@@ -964,11 +891,7 @@
         },
         {
           "role": "system",
-          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。"
-        },
-        {
-          "role": "system",
-          "content": "行文当如传统白话与新派武侠般气息绵长、句读自然，善用连词、副词与语气虚词把人物的动作、神态和周遭风物融在一口气里写出来。切忌写碎成电报式的短句或用冒号堆砌信息，不要每次都用动作把人物的一句话硬生生截成两半。",
+          "content": "故事发生在暮春雨后的越州苦竹岭。竹林深处有一座废弃的歇脚茶亭，你此行是为寻访故人李鹤的下落，在亭中遇上了独自守着孤坟的剑客裴青舟。",
           "providerOptions": {
             "anthropic": {
               "cacheControl": {

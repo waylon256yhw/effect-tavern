@@ -8,8 +8,8 @@
 // structured stages classify or extract: every system line first (frame, ledger or facts, the question), then the
 // one user message being judged (the input, the prose, the scene). A structured call never ends in an assistant message
 // (current Claude rejects the prefix, docs/provider-reading.md §7), so record's scene is one user message.
-// The frame (player zone → card frame: language, persona, pov, style, setting) is in every stage; the fiction and the
-// transcript only in narrate. The input is one unit with an audience per stage: the line itself everywhere it is read,
+// The frame (player zone → card frame: language, persona, pov, style, setting) is narrate's, with the fiction and the
+// transcript; every other stage reads its `world` (layer.ts `worldOf`: who and where, no line on how to write). The input is one unit with an audience per stage: the line itself everywhere it is read,
 // the thought ask wherever the line is (decide takes no action from a thought, record no fact), the note only where the
 // README sends it, narrator and director. Cache breakpoints: the head's last message (the connection's TTL), the
 // summary, and the last history message; everything before this turn's input is a cached read next turn.
@@ -32,7 +32,8 @@ export interface Wire {
 }
 /** What every stage shares: the evaluated frame, this turn's input, and the ask that explains a thought in it. */
 export interface Common {
-  frame: readonly Msg[]
+  frame: readonly Msg[] // narrate's alone
+  world: readonly Msg[] // the frame without its writing lines: what every other stage reads
   input: Input
   thought: string
   tail?: readonly Msg[] // the player's tail-placed fragments; only narrate reads them
@@ -123,8 +124,8 @@ const scene = (i: Input, prose: string) => usr(i.text ? `Player's line: ${i.text
 const spoken = <M extends { text: string }>(ms: readonly M[] = []): M[] => ms.filter((m) => m.text.trim())
 
 export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
-  const frame = zone(c.frame, w)
-  const reviewed = zone([...c.frame, ...spoken(w.hat?.review?.head)], w)
+  const frame = zone(c.world, w)
+  const reviewed = zone([...c.world, ...spoken(w.hat?.review?.head)], w)
   const hatHead = spoken(w.hat?.narrate?.head)
   switch (a.stage) {
     case "lookup":

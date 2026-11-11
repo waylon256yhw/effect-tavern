@@ -8,7 +8,7 @@ import type { Message } from "@effect-tavern/provider"
 import { drawn, makeCard, type Card, type State } from "./card.ts"
 import { holds, lookup, reads, type Cond } from "./cond.ts"
 import { head, type Fragment } from "./fragment.ts"
-import { resolve, type Rows } from "./layer.ts"
+import { resolve, worldOf, type Rows } from "./layer.ts"
 import { hook, makeLore, namedLore } from "./lore.ts"
 import { lines, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
@@ -232,6 +232,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const doc = request(
     {
       frame: head(R.frame, { state: context }),
+      world: head(worldOf(card, R.frame), { state: context }),
       tail: head(R.tail, { state: context }),
       input: { text: "" },
       thought: R.asks["input.thought"]!.text,

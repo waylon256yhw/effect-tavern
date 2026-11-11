@@ -332,6 +332,18 @@ const compile = (w: Writing, say: Readonly<Record<string, string>>): Fragment[] 
   ]
 }
 
+/** The slots that say how to write, whoever holds them: the two the switches compile to, and a card's `style`. */
+const WRITING = new Set(["pov", "verbosity", "style"])
+/** The part of a frame that says who and where, not how to write: the slots the card declares (a player's text in one
+ *  is still that slot) and the persona, less the writing slots. It is all a stage other than narrate reads of the
+ *  frame: a model that reads "write the player as 你, take your time" at the top of its document writes, whatever the
+ *  stage then asks (a record stage continued the story for 2,800 tokens and recorded its own continuation). A
+ *  player's own fragments (a pack's, the local row's) are writing by what the player layer is, so they stay narrate's. */
+export const worldOf = <F extends { id: string }>(card: Card, frame: readonly F[]): F[] => {
+  const declared = new Set(card.frame.map((f) => f.id))
+  return frame.filter((f) => (declared.has(f.id) || f.id === "persona") && !WRITING.has(f.id))
+}
+
 /** The one place a layer is merged. Pure; called once per request; never throws for a player's row. */
 export const resolve = (card: Card, rows: Rows): Resolved => {
   const dropped: Resolved["dropped"] = []
