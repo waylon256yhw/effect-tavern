@@ -133,6 +133,34 @@ assert.match(failed.stdout.toString(), /error orphan-event lore\.x\.offer/)
 const missing = run("view", "nope")
 assert.equal(missing.exitCode, 1)
 assert.match(missing.stderr.toString(), /nope/)
+// sections: the lore row counts them with their hooks; the lookup preview lists them under the always-on face as the
+// session does, the narrate preview never.
+{
+  const card: Card = {
+    ...yandao,
+    lore: [
+      {
+        id: "keeper",
+        layers: ["The keeper of the salt road."],
+        sections: [{ id: "past", text: "The keeper's years before the road. Long." }],
+        activation: "always",
+        unlock: { all: [] },
+        offer: { any: [] },
+      },
+    ],
+  }
+  const preview = (stage: "narrate" | "lookup") => view(card, player, { stage })
+  assert.match(
+    preview("lookup").sections.find((s) => s.name === "lore")!.text,
+    /^keeper {2}layer 1\/1 {2}1 sections.*\n {4}The keeper of the salt road\.\n {4}#past The keeper's years before the road\.$/m,
+  )
+  assert.match(
+    preview("lookup").doc.map(text).join("\n"),
+    /\nSections \(read_context\): card:keeper#past The keeper's years/,
+  )
+  const narrated = preview("narrate").doc.map(text).join("\n")
+  assert.ok(narrated.includes("The keeper of the salt road.") && !narrated.includes("#past"))
+}
 const help = run("--help")
 assert.equal(help.exitCode, 0)
 assert.match(help.stdout.toString(), /SUBCOMMANDS\n {2}init .*\n {2}check .*\n {2}view /)

@@ -161,10 +161,16 @@ const satisfiable = (c: Cond, fields: ReadonlyMap<string, Field>): boolean => {
 const NEVER = (c: Cond) => "any" in c && c.any.length === 0 // `{ any: [] }`: the card's way of saying "not in play"
 
 // ───────── prose: the lexicon matcher (polish.ts) over the card's own text ─────────
+/** An entry's text: its layers, then its sections. */
+const loreTexts = (card: Card): [string, string][] =>
+  card.lore.flatMap((e) => [
+    ...e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t]),
+    ...(e.sections ?? []).map((x): [string, string] => [`lore.${e.id}.sections.${x.id}`, x.text]),
+  ])
 const texts = (card: Card): [string, string][] => [
   ...card.frame.flatMap((f): [string, string][] => (f.text ? [[`frame.${f.id}.text`, f.text]] : [])),
   ...card.fiction.flatMap((f): [string, string][] => (f.text ? [[`fiction.${f.id}.text`, f.text]] : [])),
-  ...card.lore.flatMap((e) => e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t])),
+  ...loreTexts(card),
   ...card.greetings.flatMap((g, i): [string, string][] => [
     ...(g.text ? [[`greetings[${i}].text`, g.text] as [string, string]] : []),
     ...(g.note ? [[`greetings[${i}].note`, g.note] as [string, string]] : []),
@@ -243,7 +249,7 @@ const rules: Rule[] = [
         [`greetings[${i}].note`, g.note],
       ]),
       ...card.guard.map((t, i): [string, string] => [`guard[${i}]`, t]),
-      ...card.lore.flatMap((e) => e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t])),
+      ...loreTexts(card),
       ...card.rules.actions.flatMap((a): [string, string][] => [
         [`rules.actions.${a.id}.text`, a.text],
         ...(a.roll && typeof a.roll === "object" && "judge" in a.roll
@@ -592,6 +598,40 @@ const rules: Rule[] = [
       hint: "give each catalog, and each item in one, its own id",
     }))
   },
+  // A section is read as `card:<entry>#<section>`: `#` is the joint, so neither id may hold one; ids are unique within
+  // their entry, and an entry holds at most 8 (lookup lists them all; more is another entity).
+  (card) =>
+    card.lore.flatMap((e) => {
+      const ids = (e.sections ?? []).map((x) => x.id)
+      const bad = (path: string, message: string, hint: string): Diagnostic => ({
+        rule: "bad-section",
+        level: "error",
+        path,
+        message,
+        hint,
+      })
+      return [
+        ...(e.id.includes("#") ? [bad(`lore.${e.id}`, "an entry id holds no #", "rename the entry")] : []),
+        ...ids
+          .filter((id, i) => id.includes("#") || ids.indexOf(id) !== i)
+          .map((id) =>
+            bad(
+              `lore.${e.id}.sections.${id}`,
+              id.includes("#") ? "a section id holds no #" : `${id} is declared twice`,
+              "give each section of an entry its own id without #",
+            ),
+          ),
+        ...(ids.length > 8
+          ? [
+              bad(
+                `lore.${e.id}.sections`,
+                `${ids.length} sections (ceiling 8)`,
+                "split the entry: this many is another entity",
+              ),
+            ]
+          : []),
+      ]
+    }),
   // Output formats asked in the text are products and `heading`.
   (card) => prose(card, "inline-product", INLINE, "asks for an output format in the text", TAIL),
 ]

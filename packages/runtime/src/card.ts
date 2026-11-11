@@ -272,6 +272,9 @@ export type Rpg = ReturnType<typeof makeCard>
 export const LoreEntry = Schema.Struct({
   id: Schema.String,
   layers: Schema.Array(Schema.String),
+  // Sections (docs/sections-brief.md): additive text under the entry, read on demand by lookup as `card:<id>#<section>`.
+  // No gate of their own: they exist while the entry is visible. Story-gated text is a layer, another entity an entry.
+  sections: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Schema.String, text: Schema.String }))),
   ...ContextPolicy.fields,
   unlock: Schema.Union([Cond, Schema.Array(Cond)]),
   offer: Cond,
