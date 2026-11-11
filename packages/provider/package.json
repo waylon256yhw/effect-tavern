@@ -16,11 +16,11 @@
     "@ai-sdk/google": "4.0.104",
     "@ai-sdk/openai-compatible": "3.0.77",
     "ai": "7.0.152",
-    "effect": "4.0.6"
+    "effect": "4.1.4"
   },
   "devDependencies": {
-    "@copilotkit/aimock": "1.46.0",
-    "@types/node": "^26.6.3",
+    "@copilotkit/aimock": "1.48.0",
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2"
   }
 }

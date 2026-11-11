@@ -10,7 +10,7 @@
     "docs:check": "pnpm --dir site exec nimbus-docs check && pnpm --dir site run typecheck && pnpm --dir site run build && pnpm --dir site exec nimbus-docs check"
   },
   "devDependencies": {
-    "eslint-plugin-solid": "0.18.1",
+    "eslint-plugin-solid": "0.19.0",
     "vite-plus": "catalog:"
   },
   "engines": {
