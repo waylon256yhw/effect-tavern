@@ -316,7 +316,6 @@ export const makeSession = ({
       const r = yield* object(modelFor(phase), schema, msgs, {
         name: phase,
         effort: "off",
-        temperature: 0,
         maxOutputTokens,
       })
       yield* emit({ kind: "call", phase, msgs, out: r.value, usage: r.usage, ms: Date.now() - t0 })
@@ -402,7 +401,7 @@ export const makeSession = ({
         tools: tx.tools,
         completion: { tool: "finish_record" },
         budget: { maxSteps: 8, maxOutputTokens: 4096, maxTotalOutputTokens: 16384, timeoutMs: 120000 },
-        call: { name: "record", effort: "off", temperature: 0 },
+        call: { name: "record", effort: "off" },
       })
       if (result.status !== "completed")
         return yield* Effect.fail(
@@ -527,7 +526,7 @@ export const makeSession = ({
               tools: lookup.tools,
               completion: { text: true },
               budget: { maxSteps: 5, maxOutputTokens: 1024, maxTotalOutputTokens: 4096, timeoutMs: 60000 },
-              call: { name: "lookup", effort: "off", temperature: 0 },
+              call: { name: "lookup", effort: "off" },
             },
           )
           deliveries.push(...lookup.delivered)
