@@ -261,14 +261,22 @@ const serving = Command.make(
       Flag.withDefault(Number(process.env["PORT"] ?? 7777)),
       Flag.withDescription("TCP port to listen on (default: PORT env or 7777)"),
     ),
+    inspect: Flag.Boolean("inspect").pipe(
+      Flag.withDefault(process.env["TAVERN_INSPECT"] === "1"),
+      Flag.withDescription("Include request and response bodies in Inspector traces"),
+    ),
     headless: Flag.Boolean("headless").pipe(
       Flag.withDefault(false),
       Flag.withDescription("serve HTTP+SSE endpoints only, without static client assets"),
     ),
   },
-  ({ port, headless }) =>
+  ({ port, headless, inspect }) =>
     task(() =>
-      start({ port, dist: headless ? undefined : fileURLToPath(new URL("../../client/dist/", import.meta.url)) }),
+      start({
+        port,
+        inspect,
+        dist: headless ? undefined : fileURLToPath(new URL("../../client/dist/", import.meta.url)),
+      }),
     ),
 ).pipe(Command.withDescription("Start the tavern HTTP/SSE server (serves client/dist too unless --headless)"))
 const cli = Command.make("tavern").pipe(

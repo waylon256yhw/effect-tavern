@@ -3,6 +3,7 @@ import { existsSync } from "node:fs"
 import { createServer } from "node:http"
 import { join } from "node:path"
 import { openHost } from "./host.ts"
+import { refresh } from "./names.ts"
 import { app } from "./serve.ts"
 
 export const staticRoot = (dist?: string) => (dist && existsSync(join(dist, "index.html")) ? dist : undefined)
@@ -10,8 +11,11 @@ export const staticRoot = (dist?: string) => (dist && existsSync(join(dist, "ind
 export const start = async ({
   port = Number(process.env["PORT"] ?? 7777),
   dist,
-}: { port?: number; dist?: string } = {}) => {
-  const { handler, data } = await openHost()
+  inspect = process.env["TAVERN_INSPECT"] === "1",
+}: { port?: number; dist?: string; inspect?: boolean } = {}) => {
+  const { handler, data } = await openHost(undefined, { inspect })
+  // Scripted hosts stay offline; normal production startup refreshes the vendored name table.
+  if (process.env["MODEL"] !== "fake") void refresh(data)
   const host = process.env["HOST"] ?? "127.0.0.1"
   const server = createServer(app(handler, staticRoot(dist)))
   try {

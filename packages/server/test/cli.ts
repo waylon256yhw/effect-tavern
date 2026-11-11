@@ -108,6 +108,37 @@ try {
   assert.equal(await server.exited, 0)
   server = undefined
   assert.equal(JSON.parse(await ok("story", "list", "--json")).length, 1)
+  // The application entry uses the production host, including explicit inspect and clean shutdown.
+  for (const inspect of [false, true]) {
+    server = Bun.spawn(["bun", new URL("../src/main.ts", import.meta.url).pathname], {
+      cwd: dir,
+      env: { ...env, PORT: "0", TAVERN_INSPECT: inspect ? "1" : "0" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const output = (server.stderr as ReadableStream<Uint8Array>).getReader()
+    let announced = ""
+    while (!announced.includes("/api")) {
+      const part = await output.read()
+      assert.equal(part.done, false, announced)
+      announced += new TextDecoder().decode(part.value)
+    }
+    output.releaseLock()
+    const api = announced
+      .trim()
+      .split("\n")
+      .find((line) => line.startsWith("http://"))!
+    const headers = { "x-tavern-story": String(story) }
+    const trace = await (await fetch(`${api}/nodes/0/trace`, { headers })).json()
+    assert.ok(trace.length > 0)
+    assert.equal(
+      trace.some((c: { msgs: unknown[] }) => c.msgs.length > 0),
+      inspect,
+    )
+    server.kill("SIGTERM")
+    assert.equal(await server.exited, 0)
+    server = undefined
+  }
   // The terminal loop accepts a pipe; no raw-mode input is needed.
   const child = Bun.spawn(["bun", bin, "play", String(story), "--jsonl"], {
     cwd: dir,

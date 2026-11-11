@@ -7,7 +7,7 @@ import { join } from "node:path"
 import { open } from "./data.ts"
 import { shelf, tavern } from "./tavern.ts"
 
-export const openHost = async (fakeModel = process.env["MODEL"] === "fake") => {
+export const openHost = async (fakeModel = process.env["MODEL"] === "fake", { inspect = false } = {}) => {
   const at = process.env["CARDS"]
   const files = at
     ? readdirSync(at)
@@ -20,6 +20,7 @@ export const openHost = async (fakeModel = process.env["MODEL"] === "fake") => {
   const model = fakeModel ? fake((call) => defaultAnswer(readStage(call), { notes: "", options: [] })) : undefined
   return tavern({
     data,
+    inspect,
     cards: shelf(files),
     overlay: plain.harness,
     ...(model && { model: () => model, pinned: true }),

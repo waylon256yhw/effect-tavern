@@ -102,3 +102,7 @@ HTTP 客户端调用 `POST /api/author/compile {card, select, intent}`、`/api/a
 草稿在 SQLite 中一卡一行：`GET /api/cards/:id/draft` 返回 `{card, draft}`，有草稿时返回完整草稿，否则返回完整已安装卡。`PUT` 接收 `{card}`，卡片 id 必须与 URL 一致，允许判据未完成；`DELETE` 放弃草稿。草稿重启后仍保留，不影响运行中的故事。安装成功即清草稿；HTTP 与库直接调用都校验初始状态并拒绝所有 lint error，包括空白作者文本。安装失败保留已安装卡和草稿。
 
 模型输出契约位于 `runtime/support/workshop.ts`：compile 接收 `fields`、`actions`、`readouts`、`products`、`over`、`cap`、`slots` 和必填的 `bindings`。fiction/lore 绑定为 `{to, when}`，开场白绑定为 `{to, do}`。`roll: {judged: true}` 创建空 `judge`；输出 schema 没有正文、判据或展示标签字段。Sort 为 `{paragraphs: number[], to: string}[]`，目标是 `frame.<id>`、`fiction.<new-id>`、`greetings[n]` 或 `lore.<id>.layers[n]`。Review 固定使用 `rule: "review:consistency"` 和 `level: "warn"`。解码丢弃未声明字段；模型夹带的文本不会进入候选，已有作者文本保持原样。
+
+生产入口（`tavern serve`、独立应用与 headless 二进制）共用最小 harness，默认数据目录为 `.tavern/`，不自动导入开发机密钥。开发服务器继续使用 `.dev/` 与开发用 player 配置。`DATA` 可指定现有数据库目录；切换入口不会自动搬迁旧数据。
+
+完整调用正文默认不暴露；`tavern serve --inspect` 或 `TAVERN_INSPECT=1` 显式开启。普通启动在后台刷新模型名，离线时保留随包基线；`MODEL=fake` 不刷新网络数据。
