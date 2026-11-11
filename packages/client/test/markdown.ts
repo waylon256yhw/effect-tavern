@@ -14,7 +14,13 @@ const inlines = (block: string, open = false) => {
 
 // blocks: the reader's paragraphs (blank lines), a fence keeps its blank lines, a run of blank lines is one cut
 assert.deepEqual(blocks("一\n\n二\n\n\n三\n"), ["一", "二", "三"])
-assert.deepEqual(blocks("一\n二"), ["一\n二"]) // one newline is one block, shown as a line break (white-space: pre-wrap)
+assert.deepEqual(blocks("一\n二"), ["一", "二"]) // one newline in prose is a paragraph too: no second density
+assert.deepEqual(blocks("一\n二\n\n三\n四"), ["一", "二", "三", "四"])
+assert.deepEqual(blocks("一  \n二"), ["一  \n二"]) // a hard break stays the tight line
+assert.deepEqual(blocks("一\\\n二"), ["一\\\n二"])
+assert.deepEqual(blocks("- 一\n- 二"), ["- 一\n- 二"]) // not prose: a list, a table, a quote keep their lines
+assert.deepEqual(blocks("| a |\n| - |\n| b |"), ["| a |\n| - |\n| b |"])
+assert.deepEqual(blocks("> 一\n> 二"), ["> 一\n> 二"])
 assert.deepEqual(blocks("前\n\n```\na\n\nb\n```\n\n后"), ["前", "```\na\n\nb\n```", "后"])
 assert.deepEqual(blocks("~~~~\n```\n\nx\n~~~\n~~~~\n\n后"), ["~~~~\n```\n\nx\n~~~\n~~~~", "后"]) // closes only at its own run
 assert.deepEqual(blocks("```\n未闭合\n\n仍在栅栏内"), ["```\n未闭合\n\n仍在栅栏内"])

@@ -186,7 +186,7 @@ main > section:last-of-type {
 p {
   margin: 0;
   line-break: strict;
-  white-space: pre-wrap; /* a single newline is a line break, as the editor (a plaintext-only host) shows it */
+  white-space: pre-wrap; /* a newline left inside a block (a hard break's, the editor's ⇧↵) is a line break */
 }
 /* the rest of the Markdown subset (src/markdown.ts), as blocks in the turn's own rhythm: each is a flex child of the
    section (or the draft's .now, the timeline's node pane, the card page's opening), so the gap between blocks is

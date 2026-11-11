@@ -23,6 +23,7 @@ import { Home, Workshop } from "./home.tsx"
 import { imeController } from "./ime.ts"
 import { Check, Close, Copy, DieFill, Down, Edit, Insert, Next, Prev, Record, Warning } from "./icons.tsx"
 import { Inspect } from "./inspector.tsx"
+import { blocks } from "./markdown.ts"
 import { plain, Prose } from "./prose.tsx"
 import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
@@ -68,12 +69,12 @@ const waiting: Record<string, Key> = {
   record: "app.phaseRecord",
 }
 
-const paragraphs = (text: string) => text.split(/\n{2,}/).filter((p) => p.trim())
+const paragraphs = blocks // the reader's own cut, so the editor opens on the paragraphs the reader drew
 
 /** The prose in place, editable (Edit): the same paragraphs made contenteditable, so not a glyph moves when the editor
  *  opens (a textarea re-flowed the whole turn: its own padding, and a blank line where the paragraph gap was). The
- *  host is a rich one, so Enter is a paragraph as the browser makes it (a <p>, with the reader's gap) and ⇧↵ a line
- *  break, both what innerText reads back and `paragraphs` splits; formatting and pasted markup are refused, text is
+ *  host is a rich one, so Enter is a paragraph as the browser makes it (a <p>, with the reader's gap) and ⇧↵ a newline
+ *  in it, both what innerText reads back and `paragraphs` splits (in prose that newline is a paragraph on the way back); formatting and pasted markup are refused, text is
  *  text. ⌘↵ sends it as an `edit` sibling (check and record run over the player's text, nothing is narrated), Escape
  *  cancels, and so does sending it unchanged or empty. Two keys under it do the same for a touch screen, which has
  *  neither. The paragraphs are plain DOM the editor fills once: the player's typing mutates them, and nothing reactive

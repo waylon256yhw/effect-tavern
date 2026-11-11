@@ -23,8 +23,16 @@ extensions.push({ disable: { null: ["codeIndented"] } })
 
 // a fence opens on a run of three or more backticks (then no backtick on the line: ```a``` is inline code) or tildes
 const FENCE = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/
-/** A turn's text as blocks: cut at blank lines (as the reader's paragraphs always were), except inside a fence,
- *  which keeps its blank lines and closes at a run of its own character at least as long. */
+/** A cut's lines as paragraphs: prose written one newline per paragraph (a SillyTavern card, a web-novel model) reads
+ *  with the same gap as prose written with blank lines, so a text mixing the two is not two densities. Only a cut that
+ *  is paragraphs alone is split (a list, a table, a quote, a setext heading keep their lines), and a hard break (two
+ *  trailing spaces or a backslash) stays the tight line, for verse.
+ *  ponytail: a multi-line cut is parsed here and again per paragraph when drawn; cache by string if a long turn stutters */
+const lines = (cut: string): string[] =>
+  cut.includes("\n") && parse(cut).every((n) => n.type === "paragraph") ? cut.split(/(?<! {2}|\\)\n/) : [cut]
+
+/** A turn's text as blocks: cut at blank lines, and a cut of plain prose at each newline (`lines`), except inside a
+ *  fence, which keeps its blank lines and closes at a run of its own character at least as long. */
 export const blocks = (text: string): string[] => {
   const out: string[] = []
   let cur: string[] = []
@@ -37,14 +45,14 @@ export const blocks = (text: string): string[] => {
       continue
     }
     if (!line.trim()) {
-      if (cur.length) out.push(cur.join("\n"))
+      if (cur.length) out.push(...lines(cur.join("\n")))
       cur = []
       continue
     }
     if (m) fence = m
     cur.push(line)
   }
-  if (cur.length) out.push(cur.join("\n"))
+  if (cur.length) out.push(...lines(cur.join("\n")))
   return out
 }
 
