@@ -112,3 +112,5 @@ HTTP 客户端调用 `POST /api/author/compile {card, select, intent}`、`/api/a
 生产入口（`tavern serve`、独立应用与 headless 二进制）共用最小 harness，默认数据目录为 `.tavern/`，不自动导入开发机密钥。开发服务器继续使用 `.dev/` 与开发用 player 配置。`DATA` 可指定现有数据库目录；切换入口不会自动搬迁旧数据。
 
 完整调用正文默认不暴露；`tavern serve --inspect` 或 `TAVERN_INSPECT=1` 显式开启。普通启动在后台刷新模型名，离线时保留随包基线；`MODEL=fake` 不刷新网络数据。
+
+未带版本戳的 SQLite 库首次打开时执行既有升级，并在同一事务内写入 `user_version=1`；失败会回滚整批升级，再次打开可重试。已升级库跳过旧表探测和节点 JSON 扫描。新建库使用相同基线；版本高于当前支持范围的库拒绝打开。本次不改变已有草稿 JSON 的按需读取适配。

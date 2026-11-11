@@ -589,6 +589,92 @@ data.close()
   rmSync(dir, { recursive: true, force: true })
 }
 
+// A late failure rolls back the whole baseline: DDL, player/base conversion, nodes and version together.
+{
+  const dir = mkdtempSync(join(tmpdir(), "tavern-baseline-"))
+  const file = join(dir, "tavern.db")
+  const old = new DatabaseSync(file)
+  old.exec(`
+    create table story (id integer primary key, card text not null, title text, head integer,
+      next integer not null default 0, updated integer not null);
+    create table node (story integer not null references story(id) on delete cascade, id integer not null,
+      parent integer, json text not null, primary key (story, id));
+    create table player (id integer primary key, json text not null);
+    create table pack (id text primary key, name text not null, json text not null);
+    insert into story values (7, 'card', 'Kept', 1, 2, 123);
+    insert into player values (1, '{"persona":{"card":"friend"},"products":{"options":true}}');
+    insert into pack values ('base', 'Base', '{"fragments":[{"id":"style","text":"Keep me"}]}');
+    insert into node values (7, 0, null, '{"reply":[],"products":{"notes":"first"}}');
+    insert into node values (7, 1, 0, '{"reply":[],"products":{"scene":{"place":"inn"}}}');
+    create trigger fail_upgrade before update on node when old.id = 1 begin select raise(abort, 'upgrade fault'); end;
+  `)
+  const beforeStory = old.prepare("select * from story").all()
+  const beforeNodes = old.prepare("select * from node order by id").all()
+  old.close()
+  assert.throws(() => open(file), /upgrade fault/)
+  const failed = new DatabaseSync(file)
+  assert.equal((failed.prepare("pragma user_version").get() as Row)["user_version"], 0)
+  assert.deepEqual(failed.prepare("select * from story").all(), beforeStory)
+  assert.deepEqual(failed.prepare("select * from node order by id").all(), beforeNodes)
+  assert.equal(failed.prepare("select count(*) as n from player").get()!.n, 1)
+  assert.equal(failed.prepare("select count(*) as n from pack where id = 'base'").get()!.n, 1)
+  assert.equal(failed.prepare("select count(*) as n from pack where id = 'harness'").get()!.n, 0)
+  assert.equal(failed.prepare("select name from sqlite_master where name = 'draft'").get(), undefined)
+  failed.exec("drop trigger fail_upgrade")
+  failed.close()
+  const retried = open(file)
+  assert.equal(retried.stories.get(7)!.persona, "friend")
+  assert.equal(retried.packs.list().find((p) => p.id === "harness")!.fragments![0]!.text, "Keep me")
+  retried.close()
+  const upgraded = new DatabaseSync(file)
+  assert.equal((upgraded.prepare("pragma user_version").get() as Row)["user_version"], 1)
+  assert.equal(upgraded.prepare("select name from sqlite_master where name = 'player'").get(), undefined)
+  assert.equal(
+    upgraded.prepare("select json_extract(json, '$.settlementStatus') as s from node where id = 0").get()!.s,
+    "committed",
+  )
+  assert.equal(upgraded.prepare("pragma foreign_key_check").all().length, 0)
+  upgraded.close()
+  // The hot open reads only the stamp. No table probes, DDL or JSON migration scan recur.
+  const queries: string[] = []
+  // Preserve the methods to wrap them with their actual database receiver below.
+  // eslint-disable-next-line typescript/unbound-method
+  const prepare = DatabaseSync.prototype.prepare
+  // eslint-disable-next-line typescript/unbound-method
+  const exec = DatabaseSync.prototype.exec
+  DatabaseSync.prototype.prepare = function (sql) {
+    queries.push(sql)
+    return prepare.call(this, sql)
+  }
+  DatabaseSync.prototype.exec = function (sql) {
+    queries.push(sql)
+    return exec.call(this, sql)
+  }
+  try {
+    open(file).close()
+  } finally {
+    DatabaseSync.prototype.prepare = prepare
+    DatabaseSync.prototype.exec = exec
+  }
+  assert.ok(queries.some((sql) => /pragma user_version/i.test(sql)))
+  assert.ok(
+    !queries.some((sql) => /json_extract|sqlite_master|pragma_table_info|create table|alter table/i.test(sql)),
+    queries.join("\n"),
+  )
+  // A fresh file has the same baseline and story columns as the rebuilt legacy file.
+  const freshFile = join(dir, "fresh.db")
+  open(freshFile).close()
+  const fresh = new DatabaseSync(freshFile)
+  const prior = new DatabaseSync(file)
+  assert.equal((fresh.prepare("pragma user_version").get() as Row)["user_version"], 1)
+  assert.deepEqual(fresh.prepare("pragma table_info(story)").all(), prior.prepare("pragma table_info(story)").all())
+  prior.close()
+  fresh.exec("pragma user_version = 2")
+  fresh.close()
+  assert.throws(() => open(freshFile), /newer than supported/)
+  rmSync(dir, { recursive: true, force: true })
+}
+
 // The lock: one process per library file. A lock naming a live process (here our parent) is not ours: opening fails or isolates into
 // a fresh library only with explicit isolateOnBusy; a dead owner is taken over, and on exit the lock goes.
 {

@@ -19,6 +19,7 @@ export type { StoredStory as StoryRow, Hit, Persona } from "@effect-tavern/runti
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
 // A library file has one process: `open` locks it; a second process fails unless isolateOnBusy is explicit.
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
+// Unversioned libraries upgrade atomically to user_version=1; subsequent opens skip all legacy probes.
 // A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
 // for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`), and so does a `base` row (`foldIn`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
 // the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
@@ -36,6 +37,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
+const storyColumns =
+  "id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text"
 const schema = `
 create table if not exists persona (id text primary key, name text not null, json text not null);
 create table if not exists hat (id text primary key, name text not null, json text not null);
@@ -47,7 +50,7 @@ create table if not exists routing (id integer primary key check (id = 1), json 
 create table if not exists names (id integer primary key check (id = 1), etag text, json text not null);
 create table if not exists draft (id text primary key, json text not null);
 create table if not exists card (id text primary key, title text not null, json text not null, updated integer not null, summary text, facets text);
-create table if not exists story (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
+create table if not exists story (${storyColumns});
 create table if not exists node (story integer not null references story (id) on delete cascade, id integer not null,
   parent integer, json text not null, primary key (story, id));
 create table if not exists call (seq integer primary key autoincrement, story integer not null, node integer not null,
@@ -57,7 +60,7 @@ create index if not exists call_node on call (story, node);
 /** How many nodes of a story keep their calls: the Inspector's trace is for recent turns, and a call holds the whole
  *  request (the wire strips it for a player client, serve.ts `shown`), so an unbounded trace would grow the library by a fold budget per turn. */
 export const traced = 200
-/** Columns added to a table after libraries were made with it, each applied on open when the table lacks it. */
+/** Columns added to a table after libraries were made with it, applied once to an unversioned library when the table lacks it. */
 const migrations: readonly { table: string; column: string; add: string }[] = [
   { table: "story", column: "starred", add: "alter table story add column starred integer not null default 0" },
   // the card's pick (the old player row's `persona[card]`) as it stood copied in, so a running story keeps its persona on
@@ -243,56 +246,48 @@ const lock = (file: string, isolateOnBusy: boolean): string => {
   return file
 }
 
-export const open = (asked: string, { isolateOnBusy = false } = {}) => {
-  const file = asked === ":memory:" ? asked : lock(asked, isolateOnBusy)
-  const db = new DatabaseSync(file)
-  db.exec("pragma journal_mode = wal; pragma foreign_keys = on;")
-  db.exec(schema)
-  for (const m of migrations) {
-    const has = (db.prepare(`select name from pragma_table_info(?)`).all(m.table) as Row[]).some(
-      (r) => r["name"] === m.column,
-    )
-    if (!has) db.exec(m.add)
-  }
-  // A story table made before ids were `autoincrement` (#26) hands a deleted story's id to the next one made: the
-  // client then took the placeholder for the story it was on and kept its reader. Rebuilt once, rows and ids kept: a
-  // copy under the current definition, the old table dropped with foreign keys off (on, the drop's implicit delete
-  // would cascade into every node), the copy renamed. The explicit ids seed sqlite_sequence.
-  const made = (db.prepare("select sql from sqlite_master where type = 'table' and name = 'story'").get() as Row)["sql"]
-  if (!/autoincrement/i.test(String(made))) {
-    db.exec("pragma foreign_keys = off")
-    db.exec(`begin;
-      create table story_new (id integer primary key autoincrement, card text not null, title text, head integer, next integer not null default 0, updated integer not null, starred integer not null default 0, persona text);
-      insert into story_new (id, card, title, head, next, updated, starred, persona) select id, card, title, head, next, updated, starred, persona from story;
-      drop table story;
-      alter table story_new rename to story;
-      commit;`)
-    db.exec("pragma foreign_keys = on")
-  }
-  const q = (sql: string) => db.prepare(sql)
-  const tx = <A>(f: () => A): A => {
-    db.exec("begin")
-    try {
-      const a = f()
-      db.exec("commit")
-      return a
-    } catch (e) {
-      db.exec("rollback")
-      throw e
+// One baseline for all previously unversioned libraries, not a reconstruction of historical releases.
+const baseline = 1
+const upgrade = (db: DatabaseSync) => {
+  const version = (db.prepare("pragma user_version").get() as { user_version: number }).user_version
+  if (version === baseline) return
+  if (version > baseline) throw new Error(`library version ${version} is newer than supported ${baseline}`)
+  // FK mode must change before BEGIN so rebuilding story cannot cascade-delete its nodes.
+  db.exec("pragma foreign_keys = off; begin immediate;")
+  try {
+    const q = (sql: string) => db.prepare(sql)
+    db.exec(schema)
+    for (const m of migrations) {
+      const has = (db.prepare(`select name from pragma_table_info(?)`).all(m.table) as Row[]).some(
+        (r) => r["name"] === m.column,
+      )
+      if (!has) db.exec(m.add)
     }
-  }
-  /** `r` over the stored overlay; no row when nothing is in it. */
-  const intoOverlay = ({ id: _i, name: _n, ...r }: Partial<Layer>) => {
-    const had = parse<Partial<Layer>>(q("select json from pack where id = 'harness'").get() as Row | undefined)
-    const merged = foldIn(had ?? {}, r)
-    if (Object.keys(merged).length)
-      q("insert or replace into pack (id, name, json) values ('harness', '内置', ?)").run(JSON.stringify(merged))
-  }
-  // The player row of a library from before layer.ts, once, and the table with it. A pack row's `theaters` become its
-  // product patches (`Pack` is a `Layer` now); an older `products` map, which turned nothing on, goes.
-  if (q("select 1 from sqlite_master where type = 'table' and name = 'player'").get()) {
-    const old = parse<OldPlayer>(q("select json from player where id = 1").get() as Row | undefined)
-    tx(() => {
+    // A story table made before ids were `autoincrement` (#26) hands a deleted story's id to the next one made: the
+    // client then took the placeholder for the story it was on and kept its reader. Rebuilt once, rows and ids kept: a
+    // copy under the current definition, the old table dropped with foreign keys off (on, the drop's implicit delete
+    // would cascade into every node), the copy renamed. The explicit ids seed sqlite_sequence.
+    const made = (db.prepare("select sql from sqlite_master where type = 'table' and name = 'story'").get() as Row)[
+      "sql"
+    ]
+    if (!/autoincrement/i.test(String(made))) {
+      db.exec(`
+        create table story_new (${storyColumns});
+        insert into story_new (id, card, title, head, next, updated, starred, persona) select id, card, title, head, next, updated, starred, persona from story;
+        drop table story;
+        alter table story_new rename to story;`)
+    }
+    /** `r` over the stored overlay; no row when nothing is in it. */
+    const intoOverlay = ({ id: _i, name: _n, ...r }: Partial<Layer>) => {
+      const had = parse<Partial<Layer>>(q("select json from pack where id = 'harness'").get() as Row | undefined)
+      const merged = foldIn(had ?? {}, r)
+      if (Object.keys(merged).length)
+        q("insert or replace into pack (id, name, json) values ('harness', '内置', ?)").run(JSON.stringify(merged))
+    }
+    // The player row of a library from before layer.ts, once, and the table with it. A pack row's `theaters` become its
+    // product patches (`Pack` is a `Layer` now); an older `products` map, which turned nothing on, goes.
+    if (q("select 1 from sqlite_master where type = 'table' and name = 'player'").get()) {
+      const old = parse<OldPlayer>(q("select json from player where id = 1").get() as Row | undefined)
       for (const r of q("select id, json from pack").all() as Row[]) {
         const { theaters, products, ...rest } = parse<{ theaters?: unknown[]; products?: unknown }>(r)!
         const kept = [...(theaters ?? []), ...(Array.isArray(products) ? products : [])]
@@ -308,13 +303,11 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
           q("insert or replace into local (card, json) values (?, ?)").run(l.card, JSON.stringify(l))
       }
       db.exec("drop table player")
-    })
-  }
-  // The `base` row, a rank of its own until #69 §十, once, into the overlay. It stood above the card, where a fragment with
-  // no mode overrode; the overlay's default yields, so what it said is written down.
-  const base = parse<Partial<Layer>>(q("select json from pack where id = 'base'").get() as Row | undefined)
-  if (base)
-    tx(() => {
+    }
+    // The `base` row, a rank of its own until #69 §十, once, into the overlay. It stood above the card, where a fragment with
+    // no mode overrode; the overlay's default yields, so what it said is written down.
+    const base = parse<Partial<Layer>>(q("select json from pack where id = 'base'").get() as Row | undefined)
+    if (base) {
       intoOverlay({
         ...base,
         ...set(
@@ -323,13 +316,12 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
         ),
       })
       q("delete from pack where id = 'base'").run()
-    })
-  // Nodes written before Step 2/3 lack settlementStatus, changes, deliveries and opportunities: upgrade once on open.
-  const legacyNodes = q(
-    "select story, id, json from node where json_extract(json, '$.reply') is not null and json_extract(json, '$.settlementStatus') is null",
-  ).all() as Row[]
-  if (legacyNodes.length)
-    tx(() => {
+    }
+    // Nodes written before Step 2/3 lack settlementStatus, changes, deliveries and opportunities: upgrade once on open.
+    const legacyNodes = q(
+      "select story, id, json from node where json_extract(json, '$.reply') is not null and json_extract(json, '$.settlementStatus') is null",
+    ).all() as Row[]
+    if (legacyNodes.length) {
       for (const r of legacyNodes) {
         const n = parse<Record<string, unknown>>(r)!
         const changes: unknown[] = []
@@ -366,7 +358,38 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
           r["id"] as number,
         )
       }
-    })
+    }
+    db.exec(`pragma user_version = ${baseline}; commit;`)
+  } catch (e) {
+    db.exec("rollback")
+    throw e
+  } finally {
+    db.exec("pragma foreign_keys = on")
+  }
+}
+
+export const open = (asked: string, { isolateOnBusy = false } = {}) => {
+  const file = asked === ":memory:" ? asked : lock(asked, isolateOnBusy)
+  const db = new DatabaseSync(file)
+  db.exec("pragma journal_mode = wal; pragma foreign_keys = on;")
+  try {
+    upgrade(db)
+  } catch (e) {
+    db.close()
+    throw e
+  }
+  const q = (sql: string) => db.prepare(sql)
+  const tx = <A>(f: () => A): A => {
+    db.exec("begin")
+    try {
+      const a = f()
+      db.exec("commit")
+      return a
+    } catch (e) {
+      db.exec("rollback")
+      throw e
+    }
+  }
   /** A table of named records: the json column holds the record without its id and name, the row's own columns. */
   const named = <T extends { id: string; name: string }>(table: string) => ({
     list: (): T[] =>
