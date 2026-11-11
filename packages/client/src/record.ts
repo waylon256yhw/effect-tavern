@@ -153,7 +153,7 @@ export const heading = (_ref: string | undefined, node: Node, _log?: L.Log<Node>
 export const lineOf = (node: Node): string =>
   node.input.text || node.input.note || node.invocations.map((i) => i.title).join(" · ")
 
-/** Which channel a turn's input took (GLOSSARY §二 channel): an act, a note, both, or neither (the greeting). */
+/** Which channel a turn's input took (GLOSSARY Channel): an act, a note, both, or neither (the greeting). */
 export const channelOf = (node: Node): "act" | "note" | "both" | "invoke" | "greeting" => {
   const { text, note } = node.input
   return text && note ? "both" : text ? "act" : note ? "note" : node.invocations.length ? "invoke" : "greeting"

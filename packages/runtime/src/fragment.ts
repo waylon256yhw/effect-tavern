@@ -11,15 +11,15 @@ export const Fragment = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   when: Schema.optionalKey(Cond),
   mode: Schema.optionalKey(Schema.Literals(["override", "yield", "both"])), // a player row's: vs the lower ranks' same slot (layer.ts)
-  // GLOSSARY §63: no depth, only head or tail. head (absent) = the frame slot; tail = the end of the narrate request,
+  // GLOSSARY Head / Tail: no depth, only head or tail. head (absent) = the frame slot; tail = the end of the narrate request,
   // after this turn's directives and before the hat's tail (request.ts); no other stage reads a tail fragment
   at: Schema.optionalKey(Schema.Literals(["head", "tail"])),
 })
 export type Fragment = typeof Fragment.Type
-/** The frame's slots (GLOSSARY 槽位): the ids a player's layer meets a card's frame on. `persona`, `pov` and `verbosity`
+/** The frame's slots (GLOSSARY Slot): the ids a player's layer meets a card's frame on. `persona`, `pov` and `verbosity`
  *  the harness itself fills or compiles; the rest are the names cards and players write. The list is open at the
  *  mechanism (layer.ts merges by id, whatever the id), closed here for lint: a frame fragment under another id is most
- *  often a person or a world put where every stage reads it (lint `unknown-frame-slot`, issue #83). */
+ *  often a person or a world put where every stage reads it (lint `unknown-frame-slot`). */
 export const SLOTS: readonly string[] = ["persona", "pov", "voice", "style", "setting", "language", "verbosity"]
 export const decodeFragments = Schema.decodeUnknownSync(Schema.Array(Fragment))
 

@@ -317,7 +317,7 @@ export const Card = Schema.Struct({
   catalogs: Schema.optionalKey(Schema.Array(Catalog)), // attachments by id: an enum column's `catalog` names one
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // record products: patches over the harness defaults by id, or new ones
   lexicon: Schema.optionalKey(Schema.Array(Entry)), // slop patterns the polish stage scans for, after the player's own
-  names: Schema.optionalKey(Names), // the author's defaults for the `{{key}}` holes in its text (GLOSSARY 代称)
+  names: Schema.optionalKey(Names), // the author's defaults for the `{{key}}` holes in its text (GLOSSARY Names)
 })
 export type Card = typeof Card.Type
 export type LoreEntry = typeof LoreEntry.Type

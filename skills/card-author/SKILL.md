@@ -1,228 +1,71 @@
 ---
 name: card-author
-description: Writing, revising or remastering a card for the effect-tavern harness. Use whenever a task touches a card (packages/runtime/cards, a YAML card, a card's rules, lore, fiction, products) or asks how a card expresses something. Covers the Card schema and where each kind of content goes, the two-hat order (mechanism first, prose second), and the card check / view loop.
+description: Author, revise, test, or remaster cards for Effect Tavern. Trigger whenever a task touches a card YAML (`packages/runtime/cards/*.yaml` or user cards), asks how a card expresses state/lore/products/openings, unrolls a SillyTavern card, or runs `card` / `tavern card` workshop tools.
 ---
 
-# Card author
+# Card Author
 
-Status (2026-10-25, issue #30; schema pass 2026-11-10): the code side below is drafted from the schema
-(`packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `product.ts`, `lore.ts`, `world.ts`) and reviewed by the owner. The semantic side (register, what a band
-must leave open, how far to keep an original author's sentences) is a matter of taste and is decided with the owner;
-until then that section lists the open questions and nothing else. Do not improvise rules there.
+Use canonical naming from `GLOSSARY.md` (`stage`, `turn`, `slot`, `band`, `readout`, `lore`, `section`, `ContextPolicy`, `product`, `role`, `fold`, `catalog`). Never substitute legacy tavern terms (`worldbook`, `keyword trigger`, `preset`, `character card`, `depth`, `author's note`, `memory system`).
 
-Vocabulary: `GLOSSARY.md` at the repo root. Use its words (stage, turn, slot, band, readout, lore layer, product, fold);
-do not substitute synonyms (no "world book", "keyword trigger", "memory system", "preset", "character card").
+## 1. Core Model
 
-## What a card is
+A card is pure declarative data (`Card` in `packages/runtime/src/card.ts`, decoded by `decodeCard`). Runtime stages are derived from what the card declares: no `rules.actions` means no `decide`, no `lore` or `recall` means no `lookup`, no `director: true` means no `direct`.
 
-A card is data, one schema (`Card` in card.ts), decoded by `decodeCard`. A template card is one YAML file,
-`packages/runtime/cards/<id>.yaml`, with prose in `|-` block scalars; `readCard(path)` and `loadCard(name)` in
-`packages/runtime/support/cards.ts` read it. The runtime derives everything from it: a card with no actions has no
-decide stage, no lore means no lookup, no `director` means no direct stage.
+Two orthogonal coordinates place any card—not separate card formats:
 
-Two coordinates place a card, not two kinds of card:
+- **Player presence (`persona` frame slot):** Filled → `participant mode` (player inhabits a character; `thought` applies). Empty → `author mode` (player directs from outside; model writes everyone).
+- **Default input channel (`input`):** `"act"` (enters `transcript`) or `"note"` (feeds `direct` and `narrate` this turn only).
 
-- **Who the player is in the fiction**: the frame slot `persona`. Present → participant mode (the player is a character,
-  the model plays the counterpart; 心声 exists). Absent → author mode (the player directs, the model writes everyone).
-- **Default input channel** `input`: `act` (the line enters the transcript) or `note` (direction to the narrator, this turn
-  only). A world card with no protagonist (盐道, `yandao.yaml`) is `input: "note"` and fills the `pov` slot itself.
+Turn spine assembled in `packages/runtime/src/request.ts`:
+`lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`
 
-The harness owns neutral defaults only: the `asks` wording, the writing switches compiled into `pov` / `verbosity`, the
-default products (notes, options, inner). A card never explains the harness to the model, never asks for output
-formats, never carries defensive imperatives (that is `guard`, `check`, `polish`); the harness never carries one card's
-line.
+- The narrator (`narrate`) is the **only** stage that reads `fiction` and `transcript`, and **never** sees raw field numbers—state reaches narration strictly through `when`-gated `fiction` bands.
+- **Negative constraints against legacy tavern patterns:**
+  - **No preset / protocol instructions inside cards:** Never explain turn stages, XML/JSON output formats, CoT `<thinking>` tags, or continuation prefills inside card prose (`request.ts` and `Hat` own protocol framing).
+  - **No chat-depth (`@D`) or sticky `Author's Note` thinking:** Prompt assembly has only `head` (`frame` + `fiction`) and `tail` (turn context). Never write prompts expecting mid-transcript injection.
+  - **No inline status bars, MVU blocks, or option footers in prose:** Never ask `narrate` to print stats, inventories, or choice lists (`inline-product` and `field-in-prose` lints); declare `rules.fields`, `products` (`world` / `chronicle` / `theater`), or `<<aside>>` (`stage: "narrate"` `theater`) instead.
+  - **No keyword-trigger worldbooks or stateful macros:** Gate `lore` via `Cond` (`unlock` floors + `offer` windows) and concise first-sentence `hooks` for `lookup`; never use `{{setvar}}` / `{{roll}}` macros (`unsupported-macro` lint).
+  - **No negative prohibition walls in `narrate`:** Put post-prose rules in `guard` (`check`), slop patterns in `lexicon` (`polish`), and agency boundaries on `switches.agency` / `pov`.
 
-## The turn, and who reads what
+## 2. Two-Hat Workflow (Strict Order)
 
-`lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`, assembled in one place
-(`src/request.ts`).
+1. **Hat 1 — Architect (Mechanism & Skeleton Only)**
+   - Keep prose to one-line placeholders.
+   - Choose the two coordinates (`persona` slot + `input`).
+   - Declare `rules.fields` (bounds, `initial`, `start`, `hidden`, `view`), decide which fields move via `actions` (mechanical) vs. `readouts` (prose-driven), and wire `effects` / `events` / `over` / `cap`.
+   - Lay out `lore` (`unlock` floors, `offer` windows, `sections`, `ContextPolicy`), `fiction` band `when` conditions, `greetings` (`do` effects, optional dynamic `note`), `products`, and `catalogs`.
+   - Validate with `card check <card> --json` until zero errors and expected field/greeting lines, then lock behavior with `card test <card> [scenario.yaml]`.
+2. **Hat 2 — Novelist (Prose & Voice)**
+   - Freeze the mechanism. Write `frame` slots, `fiction` bands, `lore` layers/sections, `greetings`, `guard`, and `lexicon`.
+   - Re-run `card check` (catches `field-in-prose`, `inline-product`, `hook-length`, `unfilled-name`, `empty-text`).
+   - Inspect exact prompt assembly across states and stages via `card view <card> --stage narrate|record|lookup|direct --state k=v --greeting n`.
 
-| Card field                   | Read by                                                                                        |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| `frame`                      | every stage (the head of every document)                                                       |
-| `fiction`, transcript        | narrate only                                                                                   |
-| `lore`                       | lookup (read tools over the unlocked entries), gate / direct (windows), narrate (as told text) |
-| `rules.actions`              | decide (the menu), settle (code)                                                               |
-| `rules.readouts`, `products` | record, after the prose; a `stage: narrate` theater text is written inline by the narrator     |
-| `guard`                      | check only; never shown to the narrator                                                        |
-| `lexicon`                    | polish only (sentences the patterns hit are rewritten)                                         |
-| `greetings`                  | node 0; `do` settles before anything                                                           |
+## 3. Author Prose Boundaries
 
-The narrator never sees a number. State reaches it only as the fiction variants whose `when` holds.
+Whether invoking Workshop tools (`tavern card compile|sort|review`) or editing YAML directly:
 
-## Where each thing goes
+- **Preserve author prose verbatim.** Never paraphrase existing `frame`, `fiction`, `lore`, `greetings`, `Action.text`, `Readout.text`, option `text`, or `Chance.judge` unless the author explicitly asks to rewrite prose.
+- **Leave new slots empty when compiling mechanics.** Newly created prose or rubric slots stay empty (`empty-text` diagnostic blocks installation until filled with the author's words).
+- **`sort` only moves whole source paragraphs** in source order without rewriting sentences.
 
-- **How the narrator writes, who it is** → `frame` fragments. `id` is a slot, one of seven (`SLOTS` in fragment.ts,
-  GLOSSARY 槽位): `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity`; the player's same-named slot
-  overrides or yields per the player's setting (`frame()` in fragment.ts). A fragment without `text` is a slot left for
-  the player to fill. `pov` is compiled from the player's writing switches unless the card fills it. `role` defaults to
-  system. Order is the author's; a `when` flip costs one cache miss, never a reorder. The frame is the head of every
-  stage's document, lookup, decide and direct included: a character under any id here (`npc`, `character`) is read
-  by the director as the one in the scene (ri before d66becf: the director wrote the old priest's reaction in place of
-  the heroine's). Lint `unknown-frame-slot` warns on any other id; a card may open a new slot on purpose and list the
-  warning as meant.
-- **A person, a cast, a world** → `fiction` fragments. `label` is the shown module name (card page); `when` makes a
-  variant (a band). Bands of one field are read as alternatives: at most one should hold at a time (lint `band-gap`).
-- **Openings** → `greetings: [{ text, do? }]`. `do` holds the effects that make this opening differ from the initial
-  state (an IF line's route, a later date); its events reach turn 1's gate. Greeting text is the first sample of the
-  voice: the model continues what it reads. When porting, carry every opening the source has, and set each field's
-  `initial` to the lowest state any opening shares; what one opening adds goes in its `do`. ri's first port kept one
-  of three openings and wrote its 好感度 60 into `initial`, so every story began past the confession threshold and
-  the confession fired on turn 1 (#83). `card check` prints one line per greeting (state after `do`, bands, windows,
-  readouts): read it before any prose.
-- **State** → `rules.fields`: `{ path, type: int | number | boolean | enum, min?, max?, initial, options? (enum),
-  label?, group?, hidden?, view? }`. Flat paths. Strings exist only inside an enum: free text is never state. `hidden`
-  hides a switch from the player (an ending nobody should see coming); settlement reads it like any field. The
-  client draws a field from its shape, not from a component name: an enum is a step track; an int with both bounds
-  is a meter, a **gauge** (filled from min, `now / max`: a stock like hp 0..100) when `min >= 0` and the bands cut at
-  most one threshold, a **scale** (equal cells, one per stage, a dot at the value: a point on an axis like 好感度
-  -30..100) when the reach crosses below zero or the bands cut two or more stages; anything else is a value row. The
-  thresholds under a meter are the bands' `when` on that field (plus 0 where the scale crosses it), so `min: -30`
-  and six bands are already a seven-cell axis. When the guess is wrong (hp with 轻伤 / 重伤 / 濒死 bands is still a
-  stock), `view: gauge | scale` overrides it; nothing else is declared. `card check` prints one `field` line per shown
-  field with what it draws as.
-- **Mechanical moves** → `rules.actions`: `{ id, text, when?, roll?, hit?, miss?, do? }`. `text` is what the model sees
-  as the option; `when` gates availability (an unavailable action is not a decodable answer); `roll` is a number, a
-  field `{ path }`, or `{ judge }` (the model gives a probability inside decide, the die is code and seed). Effects are
-  `set`, `add` (clamped to min/max) and `event` (`{path}` interpolates post-effect state), nothing else.
-- **A judgement about what the prose did** → `rules.readouts`: `{ id, text, when?, options: [{ id, text, do }] }`,
-  asked in record after the prose; the chosen option's effects apply by code. Two rules from live play (GLOSSARY
-  读数): options name visible deeds (接过信物、追问细节), never psychology (a reserved register keeps psychology
-  implicit, the answer falls to the conservative option, the field never moves); and a band gated on a field must not
-  describe the trajectory that field's readout measures (pei-cool before b52f7db5 did, and bond was flat five turns).
-  A third, for a readout that latches (an option flips a boolean or an enum and the `when` then stops holding): its
-  options must cover every state the prose can leave, the in-between one included. When the readout's `when` is the
-  same condition as a lore entry's `offer`, record asks it on the very turn the window opens, after the character has
-  raised the matter and before the player has answered; so the no-change option must say "raised, not yet answered",
-  not only "did not happen" (ri's confession before d66becf offered none / accepted / refused, and the model, ruling
-  out the first two by the letter, judged the confession refused the turn it was made, #83). The harness says once,
-  before the Questions line (`record.readout` in session `asks`), that an open matter takes the no-change option; the
-  card's option texts still have to name that state. Check the question as the model reads it with
-  `card view <card> --stage record --state <field>=<threshold>`.
-- **Who may move a field**: a field only actions write is mechanical, the prose cannot move it. A field the fiction
-  may move needs a readout (lint `prose-cannot-move`).
-- **Knowledge revealed gradually** → `lore: [{ id, layers, unlock, offer }]`. `layers[0]`'s first sentence is the
-  **hook**: the entry's one line in the lookup index, written as the player would say it, not a keyword. `unlock` is the
-  floor: one Cond per layer (`{ all: [] }` is always true; a single Cond is layer 1's); once a state on the path
-  satisfied it, it stays unlocked. `offer` is the window: a Cond over state and this turn's events (`{ event }`) that
-  opens the next layer for this turn; `lore.<id>.since` / `.shown` are readable counters for cooldowns and once-only
-  chains. An opened entry delivers its unread lower layers too (#9). `{ any: [] }` as unlock = never in play.
-  Three optional policy keys say how an unlocked entry reaches a request (`ContextPolicy` in lore.ts; the old `invoke`
-  key is refused at decode): `access: { model, player }` (default model true, player false on a card's entry: the
-  player's `/` menu lists only entries with `player: true`); `activation: always | on_demand` (default on demand:
-  the model's lookup tools or the player's call bring it in; `always` loads it whenever unlocked); `residency:
-  permanent | window | turn` (default window: it stays while the turn that delivered it is in the unfolded window;
-  `permanent` never leaves, `turn` is this request only). Leave all three off unless a live run shows why.
-- **Depth always public, needed only when asked** → `sections: [{ id, text }]` on the entry. A layer is what the story
-  has to earn (an unlock or a window), and unlocked layers go out together; a section is the entry's appendix (the
-  long past, the chronicle), never gated, never rewriting the face, read by lookup as `card:<entry>#<section>` only when
-  the turn asks for it. Another entity is another entry, not a section. A section's first sentence is its hook in
-  lookup's list; it exists while its entry is visible and inherits the entry's policy (never the player's `/` menu,
-  never `always`). At most 8 per entry, ids unique and without `#` (lint `bad-section`).
-- **Ending** → `rules.over` (a Cond, code-decided) and `rules.cap` (beats per turn).
-- **Must-not** → `guard: string[]`. Checked after the prose, one correction rewrite on a miss. Never in the prompt: a
-  prohibition is itself a prompt.
-- **Slop** → `lexicon: [{ pattern, hint? }]`, `*` is a wildcard inside a sentence (`指节*白`). Polish rewrites only the
-  hit sentences. The player has their own list first.
-- **Memory and data from the scene** → `products`: patches over the defaults by id (`notes` on, `options` and `inner`
-  off; the player's toggle wins) or new ones. `{ id, label?, text, shape, role, stage?, initial?, fold?, when?, on?,
-  trigger?, feed?, recall? }`. `label` is the shown name (the Writing page's toggle), the id when absent. Shapes:
-  `text`, `list` (max), `record` (fixed keys, one nested list/table allowed), `table` (typed columns text / int /
-  boolean / enum, `max`, `filter` Cond over the row). **`role` is declared, never guessed** (GLOSSARY 产物的三类):
-  - `world`: what is now (`scene`, `people`, `bag`). One state tree with the fields; record writes it through sparse
-    ops (set a key, add or patch a row, delete a row), so the model reports changes only. No `fold`, never `stage:
-    narrate`, the id is an identifier. `initial` is its starting value (a table's is `{ entityId: row }`; rows get
-    host ids, so no column may be named `entityId`). `feed: true` puts it on the `Current:` line; `recall` (a column
-    name) puts its rows in the lookup index like lore. A Cond may read a world record's key as `world.<id>.<key>`.
-  - `chronicle`: appended along the path (`notes`); `fold: append`; its feed is the `Known:` line to record.
-  - `theater`: for the player only, never `feed` or `recall`; `trigger: turn` (every turn, default) or `demand` (the
-    turn's action row). `stage: narrate` makes a text-shaped theater the narrator writes inline (`<<aside>>`), no
-    extra call; `demand` works on theater only.
-    `fold` (chronicle and theater only): `latest` | `append` | `{ key }` (newest row per key; list defaults to append,
-    the rest to latest). Readouts move fields; products hold memory and the world.
-- **Attachments by id** (illustrations, BGM, voice) → `catalogs: [{ id, baseUrl?, items: [{ id, when?, variants? }] }]`.
-  An enum column of a chronicle or theater product names one with `catalog: <id>` in place of `options`; each record
-  request its options are the ids of the items whose `when` holds on the post-settlement state (no `when`, always),
-  so a filtered-out id does not decode and nothing about the catalog is written into any prompt; a catalog with no
-  item holding drops the table, or the record key, that reads it for that turn. Paragraph pictures are a table
-  `{ after: int, id: enum }`; one track is a table of the one column with `max: 1`, `fold: latest`, where `[]` is
-  "none". Nodes store only the id; `variants` (files under `baseUrl`, several takes of one id) are the reader's to
-  pick by seed. Not on world products.
-- **Names for the holes** → `names: { key: text }`: the card's defaults for `{{user}}`, `{{char}}` and any other
-  `{{key}}` in its text (GLOSSARY 代称); a pack or the player's row overrides by key, the persona's name fills `user`.
-  A line whose hole has no name is skipped (lint `unfilled-name`); `{{random}}`-style macros are not names (lint
-  `unsupported-macro`).
-- **Turn title** → `heading`: a field path or `<product>.<key>` (a text key of a record product), read off the node.
-- **Director** → `director: true` only when some lore has an `offer`; it decides MUST / MAY among open entries.
-- **Card page copy** → `title`, `summary` (never reach the model), `version`, `source`.
+## 4. Self-Describing CLI Toolchain
 
-Cond, the only logic an author has: `{ path, is }`, `{ path, op: lt | lte | gt | gte, value }`, `{ all }`, `{ any }`,
-`{ not }`, `{ event }`. A bare path is a field (`bond`); `world.<product>.<key>` and `lore.<id>.since | shown` are
-the two other namespaces, and `fields`, `world`, `lore` are reserved as field names (lint `reserved-path`). A path
-not declared throws when the Cond is first evaluated (`unknown state path`), not at decode; lint (#27) reports it
-statically.
+All CLIs expose full flag documentation via `--help` and machine-readable output via `--json` / `--jsonl`. Inspect `--help` rather than guessing flags:
 
-## Two hats, in this order
+| Task                 | Command (from repo root)                                                                                    | Notes                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Scaffold new card    | `bun packages/runtime/bin/card.ts init <id> --template chat\|readout\|rpg\|world`                           | Offline; writes `<id>.yaml` exclusively                        |
+| Validate & lint      | `bun packages/runtime/bin/card.ts check <card> [--json]`                                                    | Schema, lint, `drawn` meters, openings, token budget           |
+| Preview stage prompt | `bun packages/runtime/bin/card.ts view <card> [--stage ...] [--state k=v] [--greeting n] [--lore] [--json]` | Offline; prints exact sections, cache breakpoints & conditions |
+| Zero-token test      | `bun packages/runtime/bin/card.ts test <card> [scenario.yaml]`                                              | Offline deterministic run on scripted fake model               |
+| Unroll ST V2/V3 card | `bun packages/runtime/bin/unroll.ts <card.png\|card.json> [--user name] [--json]`                           | Read-only inspection in ST assembly order; feeds `sort`        |
+| Workshop operations  | `bun run tavern card compile\|sort\|review ...`                                                             | Uses `author` model route (`--url` for running server)         |
+| Install & live play  | `bun run tavern card install <file>` / `bun run tavern play <card-or-story>`                                | Pass `MODEL=fake` or `--model fake` for zero-token host runs   |
 
-**1. Architect** (no prose longer than a line). Place the card on its two coordinates. Declare fields with bounds and
-initials; how each is drawn follows from them and the bands (the `field` lines of `card check`), so it is settled here, not by the novelist. Decide for each field who moves it: actions (mechanical) or a readout (the prose may). Write actions and
-readouts with their effects and events. Lay out lore: ids, how many layers, `unlock` per layer, `offer` on which events
-or counters. Lay out fiction: ids, labels, `when` bands with one-line placeholders. Count greetings and write their
-`do`. Patch or add products. Start a new card from `bun run card init <id> --template chat|readout|rpg|world` (in
-packages/runtime; the template is the two coordinates, nothing else). Run `bun run card check <card>` (a name or a
-path to a .yaml card; `--json` for diagnostics an agent reads) until there is no error, every warning is one you
-meant, and each greeting line shows the opening you intended (a window or a latching readout on turn 1 is a choice,
-not an accident). Exit 1 means an error-level diagnostic. `bun run card test <card> [scenario.yaml]` runs the card
-under the scripted model with no token spent: assert field bounds, events, lore disclosure and the ending there. The
-full flag list is `docs/card-cli.md`; the live loop (`tavern card install`, `tavern play`, `tavern card
-compile|sort|review`) is `docs/tavern-cli.md`.
+## 5. Progressive Disclosure — Read On Demand
 
-**2. Novelist** (the mechanism is frozen). Fill `frame`, every fiction band, every lore layer, every greeting. Run
-`card check` again for `field-in-prose` and `inline-product`. Run `card view` at the states that matter: each band
-boundary (`--state bond=7` and `bond=8`; repeat `--state` for more fields), each greeting (`--greeting n`, 0-based),
-each stage (`--stage narrate|record|lookup`), and read the document the narrator actually gets; the band and the
-readout that moves its field print side by side. The semantic rules below apply in this hat.
+Load **only** the reference file required by your current task:
 
-## What the schema and lint already check (do not hand-check)
-
-Decode and load: enum needs options (an enum column: exactly one of `options` and `catalog`); fold key must name a table column; recall on a list is `true`, on a table a
-column, never on text/record; a product needs text, shape and role; a theater never feeds or recalls; a world takes
-no fold, is never written by narrate, has an identifier id and no `entityId` column; a narrate product is text; a
-lore entry's `invoke` key is refused. Settle time: an effect path that is not a field; a Cond path that is not
-declared; a `judge` roll with no chance on the beat.
-Lint (#27, #83, #155): `unknown-frame-slot`, `unknown-path`, `reserved-path`, `orphan-event`, `dead-field`,
-`prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`,
-`unfilled-name`, `unsupported-macro`, `unknown-catalog`, `duplicate-catalog-item`, `bad-section`, `bad-identifier` (an id, event or enum value with whitespace), `empty-text`
-(an author slot left empty, error: a `compile` candidate cannot be installed until the author fills it). `card
-check` also prints one line per greeting: the state its `do` leaves, the bands that hold, the lore windows open for
-turn 1, the readouts asked after it.
-
-## Samples in the repo
-
-- `wuxia.yaml` 竹林: participant mode, bands on `bond` with a readout, a three-layer lore entry (floor on bond, windows
-  on a beat event and a readout event), director on, two world products (a fed record `scene`, a recalled table
-  `people`), guard, `heading: "scene.place"`.
-- `yandao.yaml` 盐道: author mode, `input: "note"`, the card fills `pov`, a world instead of a person, one field moved by
-  a readout, a greeting whose `do` opens a lore window on turn 1.
-- `banxing.yaml` 伴星: pure chat, ported from a V3 export as-is (no persona, no rules, no lore); `mes_example` kept as an unlabelled fiction fragment
-  (示范（角色的声音）), which held the voice in live runs.
-- `ri.yaml` 理: an MVU card compiled from its source files into bands on one field, with hidden ending switches
-  (`恋人`, `哥哥`); three openings whose `do` sets the field (15, 0, 60), the third on the confession threshold, and a
-  latching readout whose no-change option covers the turn the confession is made.
-
-## Semantic side: open, to decide with the owner
-
-Workshop's boundary also applies when you edit YAML directly: compile rules and wiring from the author's selected prose and mechanism intent; leave new prose and rubric slots empty for the author. Preserve existing prose, Action/Readout/option text and Chance.judge verbatim. Sort copies whole source paragraphs in source order; review returns path-addressed warnings. The CLI is a neutral tool, so direct file edits must uphold these same boundaries. Use `tavern card compile|sort|review` for candidates, fill `empty-text` diagnostics with the author's own words, then check, test and install. See `docs/workshop-brief.md` for the three operations.
-
-The questions below remain open within that boundary.
-
-- Affordance: must every readout-driven band end with what the player can do this scene to move the field? Is the
-  pei-cool text after b52f7db5 the sample, or is the rule narrower?
-- Register: what is banned (README copy, telegraphic "词条：事实。" lines, defensive imperatives) and what is the
-  positive sample a hat-2 agent reads before writing?
-- Remastering an old card: keep the author's sentences where they are the art and only cut and move (card-reading.md
-  §2.3), or rewrite freely once the person says so? Where is the default?
-- Hooks: written as the player's own words for the thing. Sample set?
-- Greetings: how many, how long, what an opening must and must not do (the openings 竹林 gained in b52f7db5 as a
-  reference).
-- Language of the card copy that reaches the model vs the card page copy.
+- **[references/schema.md](references/schema.md)** — Read when mapping concepts to `Card` fields (`frame` slots, `fiction` bands, `greetings`, `rules`, `drawn` gauge/scale heuristics, `lore` + `sections` + `ContextPolicy`, `products` `world`/`chronicle`/`theater`, `catalogs`, `Cond`, `names`, and static `lint` codes).
+- **[references/pitfalls.md](references/pitfalls.md)** — Read before designing `readouts`, multi-opening state, `frame` vs. `fiction` placement, or inspecting the four canonical cards (`packages/runtime/cards/*.yaml`).
+- **[references/workshop-and-testing.md](references/workshop-and-testing.md)** — Read when porting/remastering SillyTavern cards with `unroll`, running `tavern card compile|sort|review`, or writing `scenario.yaml` assertions.

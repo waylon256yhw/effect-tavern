@@ -1,5 +1,5 @@
 import type { PlayerCatalogItem } from "./projection.ts"
-// Derived (GLOSSARY 派生): the facts code folds along a path, never stored. State and events, each turn's pre / post,
+// Derived (GLOSSARY): the facts code folds along a path, never stored. State and events, each turn's pre / post,
 // the gate state (counters and floors), the readable list, the fold boundary and its summary, the Known / Current
 // lines, the ledger, the node projection. One factory per session; `at(path)` reads them, lazily, per fact. The memo
 // tables live as long as the factory, keyed by Turn object: a turn is immutable, an amended one is a new object.

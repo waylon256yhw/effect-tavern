@@ -1,4 +1,4 @@
-// 代称 (GLOSSARY): a dictionary of proper nouns behind `{{key}}` holes, one plain pass of replacement, not a template
+// Names (GLOSSARY): a dictionary of proper nouns behind `{{key}}` holes, one plain pass of replacement, not a template
 // language. `user` and `char` are conventional keys, no special case here. A value is one line with no `{{`, so a value
 // holding a template does not exist by definition, and the single pass rules out recursion besides. The session expands
 // per entry before a request is assembled (docs/packs-brief.md §八); history and the player's input are never expanded.

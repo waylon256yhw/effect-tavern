@@ -1,143 +1,140 @@
-# 术语表
+# Glossary
 
-本项目的词，用的时候按这里的意思用，不换同义词。分两部分：虚构与写作的词（借电影、戏剧、叙事学的既有术语，不自造），和结构的词（harness 自己的名字）。每条给一个词、一句定义、必要时给"不用的说法"。README 讲成品的形状，这里只定词。
+Canonical naming primitives (ubiquitous language) for Effect Tavern. Developers, coding agents, skills, and internal specifications must use these exact terms without substituting synonyms. Every entry binds a domain concept directly to its code identifier.
 
-**定词的两条规矩（取实不取形、内隐与外显分层）**：
+## Naming Principles
 
-1. **取实不取形**：向电影、戏剧、叙事学借词，借的是它们已经理清的**概念边界与正交分类（实）**，用来拆解旧生态里混成一团的机制（如把"角色心声"与"场外指令"分开，把"常驻设定"、"状态分段"与"渐进揭示"分开）；绝不是为了表面风格去给普通概念换文艺腔的皮（形）。
-2. **内隐与外显按受众分层**：
-   - **对开发、协作者 AI 与模型指令（`request.ts`）内隐精确**：代码、架构文档与给模型的系统说明直接用边界最严密的专业词（如 `diegetic`、`dramatic irony`、`has no agency`），不发生概念混淆，也能直接唤醒模型的训练先验。
-   - **对玩家与卡作者（UI 界面）外显平实**：凡是日常词或社区既有共识词本身已经准确的，界面上一律用最直白、零理解成本的词（开场白、提示词、`tokens`、人设、状态、检定、标签），不为了 branding 把"开场白"改叫"序幕"或把"提示词"改叫"底本"。
+1. **Substance over ornament.** Dramaturgical and narratological terms (`diegetic`, `dramatic irony`, `has no agency`, `metagaming`, `bleedthrough`) are borrowed strictly for their orthogonal conceptual boundaries—disentangling mechanisms that legacy tavern ecosystems conflate—never as decorative literary jargon.
+2. **Internal precision, surface plainness.**
+   - **Internal (`packages/*/src`, prompts in `request.ts`, skills, specs):** Use exact, boundary-tight primitives (`diegetic`, `readout`, `chronicle`, `disclosure`, `slot`).
+   - **Player & author UI (`locales/`):** Use plain, zero-friction words where everyday vocabulary is already unambiguous (`opening`, `prompt`, `tokens`, `persona`, `status`, `roll`, `tag`).
 
-## 一、虚构与写作
+---
 
-**场内 / 场外（diegetic / non-diegetic）**：在不在故事世界里。借电影声音的三分法：
+## 1. Fiction & Dramaturgy
 
-- **场内可感（external diegetic）**：在故事里，在场者都能感知。说的、做的。
-- **场内私有（internal diegetic）**：在故事里，只在一个人心里；观众读到，别的角色不知道。**心声**就是它。
-- **场外（non-diegetic）**：不在故事里。给叙事者的指示、OOC。
+- **`diegetic` / `non-diegetic`** — Whether content exists inside the story world, split three ways after film sound:
+  - **`external diegetic`** — Inside the story world and perceptible to everyone in the scene (speech, visible action).
+  - **`internal diegetic` (`thought`)** — Inside the story world, private to one mind. The reader sees it; other characters in the scene do not. Exists only when `persona` is present.
+  - **`non-diegetic` (`note`)** — Outside the story world: out-of-character direction to the narrator or director on this turn.
+- **`mark`** — Surface notation marking `thought` inside player text (such as `⦅⦆`, italics, or parentheses). A player-layer convention paired with the `input.thought` ask; the wire protocol never hardcodes mark parsing.
+- **`dramatic irony`** — An asymmetry between what the reader knows and what a character knows. `thought` asks the narrator for dramatic irony: counterparts remain ignorant of the thought, while narration may write around that gap.
+- **`metagaming`** — A character acting on knowledge they cannot possess in-world (for example, an NPC replying to the player's unspoken `thought` or citing unrevealed lore).
+- **`bleedthrough`** — The narrator speaking, acting, or deciding on the player's behalf (often called _impersonation_ or _godmodding_, split into _narrative impersonation_—describing what the player perceives—and _user impersonation_—writing the player's dialogue or choices).
+  - _Contrast:_ Legacy tavern communities often lump both under "OOC / breaking character". `metagaming` is an in-world knowledge boundary violation; `bleedthrough` is a player-agency boundary violation.
+- **`has no agency`** — A thought is not a move. The `decide` stage ignores `thought` when selecting mechanical actions.
+- **`participant mode` / `author mode`** — Two positions on a coordinate pair rather than separate "character card" vs. "world simulator card" formats, determined by `persona` presence and default `input` channel:
+  - **`participant mode`** (homodiegetic): `persona` is filled; the player inhabits a character and the model plays counterparts (`thought` applies).
+  - **`author mode`** (heterodiegetic): `persona` is empty and `input` defaults to `"note"`; the player directs from outside the story while the model writes everyone.
+- **`persona`** — Who the player is in the fiction. Both a `frame` slot (`persona`, filled by card default or left empty) and a named player library asset (`/personas`). A story binds an active persona (`story.persona`, defaulting to `local.persona`); resolution places its prose into the `persona` slot and its name into `names.user` on the next request without restarting the story.
+- **`hat`** — A named protocol shell (`/hats`, referenced by `Connection.hat`) that primes a model family into continuation mode for a specific provider or endpoint—extracting the legitimate wire handshake that legacy tavern "jailbreak / prefill presets" buried inside style prompts. `narrate` wears `narrate.head` (placed after `frame` and `fiction`, before `transcript`) and `narrate.tail` (at the very end of the request); prose-reading stages (`check`, `polish`, `record`) wear `review.head`; `lookup`, `decide`, and `direct` wear nothing. Empty by default.
+- **`slop` (`claudeism`)** — Over-repeated modelisms—stock words, formulaic antitheses (`not X, but Y`), melodrama, or clichés—that self-reinforce once admitted into openings, examples, or history.
 
-_不用_："通道"来指心声（它不是通道，是场内的一种），"元提示"来指场外的话。
+---
 
-**心声**：玩家角色的 internal diegetic 内容。它向叙事者要的是 dramatic irony；它对 decide 的机械后果是 has no agency。只在有 persona 的卡上存在。
+## 2. Runtime, Turn & State
 
-**标记（mark）**：心声在文字里怎么标。`⦅⦆`、斜体、括号都是标记，是约定，不是概念。协议不解析标记，标记是玩家层的片段和一条问法。
+### Turn Spine & Execution
 
-**戏剧反讽（dramatic irony）**：观众知道、角色不知道的落差。心声向叙事者要的就是它：角色不知道，叙述可以围着这个不知道写。能不能接住是模型的事，harness 不保证。
+- **`Turn`** — One complete execution pass triggered by player input, running a fixed stage pipeline rather than a single monolithic chat completion:
+  `lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`.
+  Structured stages (`lookup`, `decide`, `direct`, `check`, `polish`) are opt-in and activate automatically from what the card declares; a pure chat card runs only `narrate` and `record`.
+  - _Contrast:_ Legacy tavern clients force one completion to simultaneously roleplay, track variables in `<status>` XML/JSON blocks, and propose options—degrading prose quality and coupling state to fragile regex scraping.
+- **`Stage` (`Phase`)** — A bounded harness invocation with its own assembled request (`request.ts`) and tool/schema contract. The model never owns the outer loop.
+  - **`lookup`** — Pre-narration context retrieval. Queries unlocked `lore` entries, lore `sections`, and `recall` product rows via `search_context` (directory mode on large indexes) and `read_context`, freezing this turn's `deliveries`.
+  - **`decide`** — Action selection against `rules.actions`. The model outputs an action ID (plus a probability when `roll` is `{ judge }` and `again` for multi-beat input); dice and outcomes are computed by code.
+  - **`settle`** — Deterministic rule evaluation (`card.ts`). Applies `hit`, `miss`, and `do` effects using seeded RNG, clamping scalar fields to bounds.
+  - **`gate`** — Evaluates `lore` `unlock` floors and `offer` windows against post-settlement `WorldState` and turn events.
+  - **`direct`** — Opt-in (`card.director: true`) stage that runs when `gate` opens windows, reading the factual ledger to partition open lore into `must` vs. `may` and emit a one-line scene `tone` (`Brief`).
+  - **`narrate`** — Streaming prose generation. The only stage that reads `fiction` and the `transcript`. Prose is non-authoritative over mechanical state, and `narrate` never sees raw scalar numbers.
+  - **`check`** — Post-narration verification of `guard` prohibitions and `must` disclosures. On violation or missed `must`, triggers at most one correction rewrite.
+  - **`polish`** — Post-check prose pass triggered only when `lexicon` patterns match narration outside dialogue; rewrites only matched sentences (`switches.polish: false` disables it).
+  - **`record`** — Post-prose structured extraction. Answers active `readouts`, emits `chronicle` and `record`-stage `theater` products, and commits sparse `world` `DomainChange` operations.
 
-**越界，两个方向，两个名字**：
+### Tree, Projections & Compression
 
-- **metagaming**：角色用了它不可能有的知识。NPC 接了玩家心里的话，就是这个。RPG 的老词。
-- **bleedthrough**：叙事者替玩家说话、做事、做决定。Statuo 的词；社区也叫 impersonation。Geechan 再分两级：narrative impersonation（叙述玩家看见什么、感到什么，很多人接受）和 user impersonation（写玩家的台词和决定，没人接受）。
+- **`Log`** (`log.ts`) — Generic immutable append/amend tree shared across `runtime`, `server`, and `client`. Every write (`add`, `amend`, `checkout`, `drop`) produces a `Change` value applied via `apply`. **`head`** is the single active cursor (a leaf node ID, or `null` on an empty thread); the active reading path is the root-to-`head` chain.
+  - _Contrast:_ Replaces flat chat arrays with per-message `swipes[]` and duplicated "branch checkpoint" chat files. Branching at any historical turn is a zero-copy tree operation.
+- **`Node` (`Turn<Beat>`)** (`journal.ts`, `derived.ts`) — One node in the `Log`: player `input` (`{ text, note?, invoke? }`) plus recorded model outputs, RNG seeds (`beats`), `deliveries`, `answers`, `products`, `changes`, `adjust`, and `settlementStatus`. Derived state snapshots are never stored on nodes.
+- **`sibling`** — Nodes sharing the same `parent`, split into three exact stage restarts rather than a single ambiguous "swipe / reroll":
+  - **`swipe`** — Re-runs the turn from `lookup` (new retrieval, new roll, new prose).
+  - **`reword`** — Re-runs from `narrate` (preserving frozen `deliveries` and settled `beats`), optionally appending a one-turn `note`.
+  - **`edit`** — Replaces prose (`text`), revises `input` while keeping prose, or both, re-running only `check` and `record` so state re-settles cleanly.
+- **`Derived`** (`derived.ts`) — All state computed purely by folding a root-to-node path: scalar `fields`, `world` entities/records, `lore` floors and counters (`since`, `shown`), compression boundaries, `Known:` / `Current:` lines, and client projections (`TimelineNode`, `TurnDetail`, `ActiveContextView`). Rewinding or switching branches never desynchronizes state.
+- **`WorldState` & `DomainChange`** (`world.ts`) — Unified state object `{ fields, world, lore }` read by `Cond`, `heading`, and prompt assembly. `world` products mutate exclusively through recorded `DomainChange` operations (`insert_entity`, `patch_entity`, `remove_entity`, `patch_record`, `replace`) under two-phase settlement (`settlementStatus`: `pending` | `committed` | `failed` | `skipped`, recoverable via `retryRecord` / `skipRecord`).
+- **`Fold`** — Two pure path reductions:
+  1. **Product `fold`** (`product.ts`): how `chronicle` and `theater` values accumulate along a path—`"latest"`, `"append"`, or `{ key }` (table row merge by key column).
+  2. **Context compression** (`history.ts`): folding older turns' `notes` and disclosed lore over fixed node intervals into a cached prefix block. Unlike rolling chat-summarizer plugins that rewrite a depth-injected summary block and invalidate KV cache, interval folds keep prompt breakpoints byte-identical across turns and branches.
+- **`Transcript`** — The chronological dialogue view rendered from path nodes for `narrate` only: past `act` inputs, assistant `prose`, and disclosed lore. Never stored, and never spliced with out-of-band system prompts.
+- **`Head` / `Tail`** — The only two prompt assembly zones (`request.ts`). **`head`** holds resolved player/card `frame` and `fiction` as a stable cache prefix; **`tail`** sits after `transcript` and current input, carrying per-turn disclosures, beat outcomes, `Current:`, `Brief`, `note`, `input.thought`, and tail fragments. Cache breakpoints sit at the end of `head`, the folded prefix, and the last prior history turn.
+  - _Negative constraint:_ Numeric chat-depth injection (`@D0`, `@D4`, `Author's Note`, `post_history_instructions`) does not exist. Splicing dynamic text `N` messages from the end of history mutates the message prefix on every turn, destroying provider KV prefix caching. Placing turn-level guidance in `tail` achieves end-of-context recency weight with 100% prefix cache preservation.
 
-_不用_："OOC 泄漏"来笼统指这两种。
+### Input, Layers & Customization
 
-**无能动性（has no agency）**：一个念头不是动作。decide 不从心声里取动作，这是代码层面的后果，不依赖模型的人文底蕴。
+- **`Channel`** — Which route player input takes: `"act"` (enters the `transcript`) or `"note"` (feeds `direct` and `narrate` on this turn only, never entering history). Cards declare default `input: "act" | "note"`, and `Input.invoke` (`string[]`) pins player-accessible context resources for the turn.
+  - _Negative constraint:_ Never embed `[OOC: ...]` brackets in `act` messages or maintain sticky `Author's Note` depth prompts; non-diegetic direction belongs on `note`.
+- **`<<aside>>`** — Line-start stream delimiter (`<<aside>> <id>`) opening an inline `stage: "narrate"` `theater` product block (`journal.ts` `splitter`). Stripped from `prose(t)` during streaming, invisible to `transcript`, `check`, `polish`, and `record`.
+- **`Fragment`**, **`Slot`** & **`Band`** (`fragment.ts`) — Unit of prompt assembly (`{ id, text?, label?, role?, enabled?, when?, mode?, at? }`).
+  - **`Slot`**: A `frame` fragment ID where player layers and the card meet. Known slots (`SLOTS`): `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity`.
+  - **`Band`**: A `fiction` fragment gated by `when` over a field or state threshold; bands on one axis represent mutually exclusive narrative postures.
+- **`Layer`, `Local` & `Pack`** (`layer.ts`) — Uniform customization row resolved in one strict rank order:
+  `harness` (code defaults + global player overlay) → `card` → mounted `packs` (`local.mounts` order) → `local` (`/cards/<id>/local`) → `persona`.
+  Higher rank wins by `id`, except `mode: "yield"` (defers if already filled) and `mode: "both"` (concatenates). Player rows are locked at decode (`locked`): they cannot carry `when` or `role` on fragments or alter a product's `shape`/`role`; invalid items land in `Resolved.dropped` without throwing. A **`Pack`** (`/packs`, ecosystem _enhancer_ / _text LoRA_) bundles fragments, `switches`, `asks`, product patches, single-layer `entries` (`<pack>/<entry>`), `lexicon`, `snippets`, `format`, and `names`.
+  - _Negative constraint:_ Monolithic **presets** do not exist; prompt assembly, style layers, continuation hats, and endpoint connections are strictly separated by owner.
+- **`Writing` (`switches`)** — Bounded player controls (`pov`, `echo`, `agency`, `verbosity`, `polish`) compiled into `pov` and `verbosity` frame slots via `switch.<key>.<value>` asks. Compiled switches always yield to explicit card or free-text slot fragments.
+- **`Names`** (`names.ts`) — Single-pass proper-noun dictionary replacing `{{key}}` holes (`user`, `char`, or custom keys) across fragments, asks, and greetings. Values are single-line strings containing no `{{` (ruling out recursion by construction). Unfilled holes drop optional fragments and reject greetings/demands.
+  - _Negative constraint:_ No imperative template macros (`{{setvar}}`, `{{getvar}}`, `{{roll}}`, `{{random}}`, EJS, or STscript).
+- **`Ask`** — Named harness prompt templates (`lookup`, `direct`, `decide.first`, `decide.again`, `narrate.correction`, `record.readout`, `input.thought`, `switch.*`, `product.<id>`), overridable across `Layer` ranks.
+- **`Snippet` vs. `Format`** — **`Snippet`** (`{ name, text, after?, hint?, note? }`) inserts play-meaningful templates (`thought` marks, `note` toggles, narrator directions) from the `/` or `+` menu without auto-sending. **`Format`** (`{ label, text, after? }`) provides pure punctuation/bracket keys (`「」`, `『』`) above a focused input.
 
-**参与者视角 / 作者视角（participant / author mode）**：玩家在故事里（homodiegetic：玩家是故事中人，AI 演对手）还是在故事上（heterodiegetic：玩家指挥，AI 写所有人）。不是两种卡，是 `persona` 有无加默认通道两个坐标上的取值。心声只在参与者视角里有意义；作者视角下"她心里想的"是场外指示的一部分。
+### Card Mechanics, Lore & Products
 
-_不用_："导演"来指作者视角（director 是 harness 的阶段）、"小说模式"（它不是模式，是坐标）。
+- **`Card`** (`card.ts`) — Single declarative schema (`decodeCard`) encompassing metadata, `frame`, `fiction`, `greetings`, `rules`, `lore`, `products`, `catalogs`, `guard`, `lexicon`, `names`, `director`, `input`, `heading`, and optional `view`.
+  - _Negative constraint:_ Not a "character card". Fixed single-NPC schemas (`description`, `personality`, `scenario`, `mes_example`, `post_history_instructions`) force cast, RPG, and world-simulation authors to abuse character fields as prompt scripts; in `Card`, whether `fiction` depicts one character, an ensemble, or an entire world is content, not schema.
+- **`Greeting`** — Root opening (`greetings[n]: { text?, do?, note? }`). `do` settles initial branch effects before turn 1; `note` (or a player `--note` / `Field.start` override on `greet`) triggers a dynamic narrated opening on node 0.
+- **`Field` & `Drawn`** (`card.ts`) — Typed scalar state (`int`, `number`, `boolean`, `enum`) with `initial`, optional `min`/`max`/`options`, `hidden` (omitted from UI), `start` (configurable at story start), and `view` override (`"gauge" | "scale"`). `drawn()` derives UI presentation from field shape and band thresholds (`steps`, `gauge`, `scale`, or `value`).
+- **`Cond`** (`cond.ts`) — Closed boolean expression tree (`is`, `lt | lte | gt | gte`, `all`, `any`, `not`, `{ event }`) over `fields.<path>` (or bare `<path>`), `world.<product>.<key>`, and `lore.<id>.since | shown`. The only logic available to card authors.
+- **`Effect`** (`Effect_`) — Closed mutation vocabulary: `{ path, set }`, `{ path, add }`, and `{ event }` (with `{path}` post-effect interpolation).
+- **`Action`, `Chance` & `Beat`** — Mechanical move in `rules.actions` gated by `when`, with optional `roll` (`Chance`: fixed number, `{ path }`, or `{ judge }` answered in `decide`) and `hit` / `miss` / `do` effects. Each resolved roll records a **`Beat`** (`action`, `seed`, `chance?`) on the node.
+- **`Readout`** — Post-prose multiple-choice judgement in `rules.readouts` asked during `record` when `when` holds. The model chooses an option ID; code applies its `do` effects. Fields writable only by `actions` are purely mechanical; fields that prose may move must attach a `Readout`.
+- **`Lore`, `Hook`, `Lore Layer`, `Section` & `ContextPolicy`** (`lore.ts`, `context.ts`):
+  - **`Lore`**: Progressive knowledge entry (`{ id, layers, sections?, unlock, offer, ...ContextPolicy }`).
+  - **`Hook`**: The first sentence of `layers[0]` (or of a `section`'s text), shown in the `lookup` index.
+  - **`Lore Layer`**: Cumulative depth (`1..n`) gated by **`unlock`** (monotone floor along the path) and **`offer`** (per-turn window condition reading state, events, and `lore.<id>.since | shown`).
+  - **`Section`**: Ungated on-demand appendix under an entry (`sections: [{ id, text }]`, addressed as `card:<entry>#<section>`), readable by `lookup` while the parent entry is visible without altering layer progression.
+  - **`ContextPolicy`**: `{ access?: { model, player }, activation?: "always" | "on_demand", residency?: "permanent" | "window" | "turn" }` governing who can invoke an unlocked resource, whether it auto-injects or waits for lookup/pin, and how long a **`Disclosure`** stays resident.
+  - _Negative constraint:_ Replaces legacy **worldbooks / lorebooks** and substring/regex **keyword triggers** (`constant` blue-light vs. `selective` green-light, `scan_depth`, `insertion_order`, recursive keyword chains), which misfire on passing mentions, miss synonyms, and cannot model monotone plot progression.
+- **`Product` & `Role`** (`product.ts`) — Typed data (`text`, `list`, `record`, `table`) produced per turn and declared with an explicit `role`:
+  - **`world`** — Mutable current-state records/tables (`scene`, `people`, `bag`) living in `WorldState.world` and updated via sparse `DomainChange` ops during `record`. Supports `feed: true` (`Current:` line) and `recall` (lookup index).
+  - **`chronicle`** — Append/folded narrative memory along the path (such as default `notes`, whose `feed` supplies `Known:` and prefix compression). Shown in Inspector.
+  - **`theater`** — Player-only side content (`inner`, `options`, commentary), never fed back or recalled (`feed` and `recall` forbidden). Written in `record` or inline in `narrate` (`<<aside>>`), triggered every `turn` or on player `demand`.
+- **`Ledger`** — Per-turn delta summary shown under a turn's prose pill: field deltas, beats/rolls, disclosures, and `world` product changes.
+- **`Catalog`** (`product.ts`) — Static attachment registry on a card (`catalogs: [{ id, baseUrl?, items: [{ id, when?, variants? }] }]`) referenced by an `enum` column (`catalog: "<id>"`) on `chronicle` or `theater` products. Each `record` call restricts valid enum options to items whose `when` holds; readers resolve `variants` deterministically from the node's seed.
+- **`Guard` & `Lexicon`** — **`Guard`**: post-prose prohibitions (`guard: string[]`) verified in `check` and never placed in `narrate` prompts. **`Lexicon`**: wildcard prose patterns (`{ pattern, hint? }`) rewritten outside dialogue in `polish`.
+  - _Negative constraint:_ Never stuff negative prohibition walls ("DO NOT act for `{{user}}`", "NEVER write phrase X") into `narrate` prompts; negative imperatives degrade voice and induce ironic-process violations.
 
-**persona**：玩家在虚构里是谁。卡框架的一个槽位，卡给默认，玩家覆盖或让位，为空就是没有玩家角色。玩家的 persona 是库里带名字的片段（`/personas`），是玩家的资产，卡的兄弟，不属于某一局：一局的行（`story.persona`）记着这一局在用哪一个，`local.persona` 是这张卡新开局的默认；库在每次请求时把它交给 `resolve`，正文是本卡行末尾的 `persona` 片段，名字最后填 `names.user`；换 persona、改 persona 的正文都是一次头部重写，下一次请求起生效，不开新局；删掉 persona 就撤掉它在各卡上的选用，回到卡自带的。
+### Session & Host Boundary
 
-**hat（帽子）**：让一个模型按续写模式开口的协议壳，随模型和渠道换，是玩家的资产：库里带名字的一行（`/hats`），`Connection.hat` 按 id 引用，库在每次请求时读出来。两半按阶段读什么由代码定：narrate（写正文）戴 `narrate.head`（system 接在框架与 fiction 之后，user/assistant 的握手接在全部头部 system 之后、历史之前，缓存断点落在头部最后一条）与 `narrate.tail`（请求最末，本轮指令与玩家的尾部片段之后）；check、polish、record（读正文）戴 `review.head`（框架之后）；lookup、decide、direct 什么都不戴。harness 不带任何文本，每个字段默认为空；没有帽子时请求与原来逐字节相同。连接不接受 prefill 时，请求不得以 assistant 结尾，线上拒绝。玩家片段的 `at: "tail"` 是同一类位置的另一面：文风包、题材特化放在玩家层，落在 narrate 的尾部、帽子的尾部之前。
+- **`Session`** (`session.ts`) — In-memory runtime binding one `Card`, resolved `Layer` rows, stage `Connection` bindings, and a `Log` `Store`.
+- **`Action` (Session Wire Protocol)** — Closed union accepted by `perform`: `act`, `greet`, `checkout`, `swipe`, `reword`, `edit`, `setField`, `demand`, `retryRecord`, `skipRecord`.
+- **`Event`** — Streamed items emitted by `perform`: `stage` (phase started), `delta` (streaming `narrate` prose/reasoning or `product-delta`), `call` (completed LLM call metadata/trace), and `change` (committed `Log` mutation + projected node).
+- **`Stop`** — Stream cancellation split by progress: before the first prose character, aborts cleanly leaving no node; after the first prose character, halts `narrate`, skips `check`, runs `record`, and commits the partial node with `end: "stopped"`.
+- **`Connection`** (`provider`) — Provider endpoint configuration (`anthropic`, `openai-compatible`, `gemini`), model ID, capabilities (`prefill`, `reasoningBack`), cache TTL, token limits, proxy setting, and optional `hat` ID.
 
-**上下文即角色，模式强于指令**：模型续写的是它看到的文字的模式。于是表达力等于散文被原样读到的程度，它的来源是玩家一轮里的材料和钩子、作者定义里的声音和省略、开场作为范例。schema 的责任是对散文透明；harness 自己插进去的每句话按同一套语文规矩写（正向、范例式、不带 claudeism、不出现"roleplay"这类词）。
+---
 
-**claudeism / slop**：模型在特定情境下过度重复的东西，从词（ministrations）、惯用语（a mix of X and Y）、句式，到情绪夸张、设定刻板。放进范例或开场就会被复读。
+## 3. Legacy Tavern Concepts & Negative Constraints
 
-## 二、结构
+When reading external cards, writing prompts, or designing features, map legacy tavern concepts onto Effect Tavern's orthogonal primitives and enforce their negative constraints:
 
-**回合（turn）**：固定骨架的一趟流程，不是一次模型调用：`lookup → (decide → settle)* → gate → direct → narrate → check → record`。_不用_："一次生成"、"一条回复"。
-
-**阶段（stage）**：harness 对工具的一次调用方式。结构化阶段（lookup、decide、gate、direct、check）只看事实，大多只看本轮；narrate 是唯一读转录稿的阶段；polish 在 check 之后、record 之前，只在代码按词表（玩家层各行的 `lexicon` 加卡的）在旁白里扫到命中句时调用一次，只改命中的句子，改完不再过 check（省一次调用，有意为之：改写只限对白之外的命中句，空答案保留原句；掉线索、擦边守则是代价，`writing.polish: false` 可关）；record 每轮都跑。每个阶段读到的文档由 `src/request.ts` 一处拼出：框架进所有阶段，虚构与转录稿只进 narrate，输入作为一个单元按阶段分受众。默认强制单个工具、一轮结束。
-
-- **lookup**：叙述前的查阅阶段，结合账本从自取集挑选条目，可循已读内容继续查阅，汇成这一轮的送达。小索引列名字与钩子；大索引用**目录模式**只列名字，通过**检索**取回相关钩子再选读。
-- **decide**：动作判断。模型只贡献一个概率或一个选项，结果由代码和种子决定。
-- **settle**：结算。解释器按卡的规则施加效果。
-- **gate**：闸门。按状态和事件决定哪些 lore 可开窗。
-- **direct**：导演。卡 opt-in 的阶段，读事实账本决定 must / may。只在有东西被 offer 时跑。
-- **narrate**：叙事。流式，正文非权威。
-- **check**：事后检查。护栏、必讲是否讲到；失败触发一次纠错重写。
-- **record**：提取。一次回答本轮的 notes、小剧场和读数；跨轮产物只报告变化，以稀疏操作 set（设值）、upsert（添行或改列）、delete（删行）表达，未变就省略。
-
-**节点（node）与 Turn**：一个节点等于玩家输入加系统为它产出的全部块。只存模型输出、种子与玩家动作。状态不存，是对路径依次结算的结果。
-
-**日志树（log）**：节点的树，`src/log.ts`，自包含、对节点内容泛型，runtime、server、client 用同一份。**head** 是唯一的"在哪"：一个叶子，或 null（空线，等第一句）；阅读线就是根到 head 的链；新节点成为 head，`checkout` 把 head 移到某个版本最新的叶子，drop 删到 head 就落到最新存活的叶子。Log 是值，写只决定一个 **Change**（落下的节点、删掉的 id、head），`apply` 是唯一变更，副本按序 apply 等于权威方。_不用_："active"、"当前兄弟"来指 head。**兄弟（sibling）**是同父节点：`swipe` 从 lookup 起跑，`reword` 从 narrate 起跑，`edit` 带着玩家的正文、或修订过的输入（正文留着）、或两者，只重跑 check 与 record；节点记下自己是哪种兄弟（`sibling`），`reword` 可带一句给叙述者的话，并入这个兄弟的 note。_不用_："分支"来指 swipe、"重roll"。
-
-**派生（derived）**：沿一条路径由代码折叠出、从不存储的事实：状态与事件、每回合的 pre / post、门控状态（计数与地板）、未讲名单、折叠边界与摘要、Known / Current 行、账本、节点投影。`src/derived.ts` 一处算，session 的 turn / project / setField / demand 都是它的调用方。_不用_："快照"、"缓存"来指它（memo 是实现，不是概念）。
-
-**折叠（fold）**：压缩作为派生视图。对一段回合的 notes 按代码折叠，按区间缓存，跨分支共享，节点不动。_不用_："摘要"来指机制（摘要是折叠的内容之一）。
-
-**转录稿（transcript）**：叙事者看到的历史视图：过去的输入、正文、当轮揭示的 lore。从不存储，按阶段渲染。
-
-**头区 / 尾区（head / tail）**：装配只有两个区。头区是玩家层、卡框架、角色，整块缓存前缀；尾区在转录稿和本轮输入之后，每轮重写：揭示、结果、Current 行、MUST / MAY、语气、note、心声的问法。没有"深度"这个维度，深度退化为头或尾。
-
-**通道（channel）**：本轮输入走哪条路。`act` 进转录稿；`note` 只在本轮喂叙事者与导演，从不进历史，没有正文的 note 就是本轮的用户消息本身。卡声明默认通道。_不用_：`aside`（旧名；戏剧里的 aside 恰好是心声那一类，故弃）、"OOC"来指协议字段。
-
-**note**：场外的话，给叙事者的指示。客户端没有模式开关：默认通道随卡（`GET /card` 的 `input`）。参与者视角下，片段菜单里的"场外"把这一次发送变成 note，输入框上出现一个 Note 小标，发完即清；作者视角下每次输入都是 note，"场外"与"心声"不出现在菜单里。注意与产物 `notes` 只差一个 s。
-
-**`<<aside>>`**：定界符的名字，不是概念。narrate 的输出里以它起头的一行开出一块 narrate 阶段的产物（`<<aside>> <id>`，见产物的 `stage`），代码切块后写进 `turn.products[id]`，`prose(t)` 读不到：不进转录稿、check、polish 与折叠，也不回传模型。声明即问法：这块由 harness 按产物声明生成那一句，和 record 产物一样。_不用_："附言"来指一类内容（它是小剧场），`{ type: "aside" }` part（#76 §二 落地后不存在；在此之前它是过渡形态，docs/theater-brief.md）。
-
-**Fragment**：文本、位置、条件。头区装配的单位。**槽位（slot）**是框架里的 id，玩家的行与低等级的同名槽位如何相处（覆盖、让位、并存）是玩家按条调的设置，缺省覆盖。已知的槽位七个（`fragment.ts` `SLOTS`）：`persona`（玩家在虚构里是谁）、`pov`（人称、转述、抢话，由写作开关编译）、`voice`、`style`、`setting`、`language`、`verbosity`。框架进每个阶段的头区，结构化阶段也读；一个人物、一群人或一个世界不是槽位，是虚构区的 fragment（lint `unknown-frame-slot` 对别的 id 提醒一次，不禁止：卡可以为玩家开一个新槽位，但要是有意的）。
-
-**玩家层（layer）**：一种行 `Layer`，五个作者一个序（`runtime/src/layer.ts`，只在那里说一次）：harness（代码默认，叠加行按 id 盖上）→ 卡（投影成一行，不入库）→ `local.mounts` 顺序的包 → 本卡（`Local`，一卡一行）→ 人设。**同 id 后者赢**，对每一种都成立；唯一例外是片段的 `mode: "yield"`：低等级已填这个槽就不站上去；叠加行在卡之前，其片段的 `mode` 对卡而言，缺省让位，`override` 压过卡。一次纯函数 `resolve(card, rows)` 得出 `Resolved`，每一项带来源（`from`），锁拒绝的落进 `dropped`，从不抛；客户端不再合并任何东西，卡的条目离开服务器时不带 `text`（唯一的脱敏；禁词是给润色的指令，不是卡的虚构，整条出门）。产物的 `from` 是写下生效问法的那一行：只拨开关、只改名称不换作者，卡的问法照旧不出门。词条 id 与包 id 不含 `/`（它是行与词条之间的连字，含它就会冒充别人的词条；词条落 `dropped`，包在服务端拒绝）。库在 `pack` 与 `local` 两张表（`/packs`、`/cards/<id>/local`），每次请求读。**写作开关（switches）**是框架槽位的有界前端：人称（你 / 名字 / 没有玩家角色）、转述与否、抢话与否合成一条 `pov` 槽，篇幅是 `verbosity` 槽，每个值编译成一句话（问法 `switch.<key>.<value>`，叠加行改一句即生效），开关沿等级按键合并；编译出的片段一律让位：卡或自由文本写了这个槽就整组接管（`switches.taken` 记着谁占着：只算头区里有正文、未禁用、洞已填的条目，卡留空的槽位和尾区的同名指令都不算占着；自由文本自己写了 `mode: "yield"`，低等级编译出的开关也算填过，它让位）；和 Cond、产物一样有三张脸：可编译成头区文字、可画成开关、可从一句话解码。排在卡的框架之前。**enhancer（写作包）**：包即一行，库里带名字的一行（`/packs`），按卡挂载（`local.mounts`，按挂载顺序）：片段（id 是槽位，`at` 定头尾）、开关、问法、产物补丁、**词条**（单层、无条件、首句即 hook，索引 id 为 `<行>/<词条>`）、禁词、快捷输入、格式键、代称，生态里叫 text LoRA。产物补丁按等级：代码默认与卡可以写整条；内置（叠加行）、包、本卡只带名称、问法与默认开关，落在任何已有 id 上（形状、阶段、折叠不动）；新 id 带问法就是一条 narrate 阶段的 text，即**小剧场**；没有问法则丢弃。碰不到卡的 `Cond` 与状态：入库时剥掉 `when` / `role`。_不用_："预设"（作为提示词对象不存在，只剩 provider 配置）。
-
-**代称（names）**：一张专有名词字典（键是纯标识符，值是一行名字），单遍纯替换文本里的**洞**（`{{key}}`），不是模板语言。`user` / `char` 是两个约定键名，不是引擎特例。按玩家层的序，后者压前者（内置、卡、包、本卡）；`user` 默认"玩家"，生效的人设名最后压过它。按条目在组装前展开，洞未填的那一条不发；开场与索取则拒绝并报洞名；`asks` 的问法不能不问，顺着玩家层的序往下取第一条填得上的，harness 的没有洞。history 与玩家输入不展开，lexicon 不展开。_不用_："宏""变量"（生态的 `{{setvar::…}}` 一类带参数、有副作用的脚本宏不做，lint `unsupported-macro`）。
-
-**asks**：harness 在固定点向模型提的问法，带 id 的默认文字（lookup、direct、decide.first、decide.again、narrate.correction、record.readout、input.thought 等），加上写作开关的句子（`switch.<key>.<value>`），都是 harness 行的 `asks`，按玩家层的序覆盖，前台看得见也改得了。`product.<id>` 是那个产物问法的补丁，算在写它的那一行的等级上。数据行是格式，留在代码里。
-
-**snippets（快捷片段）**：`{ name, text, after?, hint?, note? }`，有游戏意义的快捷输入（心声的记号、场外通道、给叙事者的指示），行的字段，harness 行带默认几条，按 `name` 后者赢。客户端按 `+` 或空框按 `/` 拉出，分"故事里 / 给叙事者"两组，插进光标处，从不代发。_不用_：把格式键混进来。
-
-**format（格式键）**：`{ label, text, after? }`，没有游戏意义的输入便利（手机键盘打不出的 「」『』“”（）《》），ST 输入助手的底子：模板加光标落点，选区落在 text 与 after 之间。行的字段，harness 行带默认几条，按 `label` 后者赢，输入框聚焦时在框上方一排。格式归格式，语文归语文。
-
-**lore**：分层、受状态控制的知识。**hook** 是条目对外的一句（作者用玩家的说法写的触发描述，不是关键词），**层（layer）**是逐步揭示的正文：已解锁的层是累积的事实，一起送达。**节（section）**是条目下的附加正文（`card:<条目>#<节>`），不受剧情控制、不改写主面貌，只在 lookup 追问时按需读取；层是纵向的揭示，节是横向的附录（`docs/sections-brief.md`）。**unlock** 是代码地板，**offer** 是窗口，都是条件，沿路径单调。派生计数 `lore.<id>.since / shown` 供 `offer` 读。玩家层的词条走同一索引，id 带行前缀（`<行>/<词条>`）。_不用_："世界书"（生态的词）、"关键词触发"。
-
-**揭示（disclosure）**：某一轮把某条 lore 的某一层送进正文。**可调用名单（invocable）**：已解锁的手动条目，以及叙事窗口里还有未读层的自取条目；玩家从中选择本轮要调用的条目。
-
-**调用（invoke）**：把已解锁条目的正文交给叙事者。条目分三档：**常驻（always）**每轮在场；**自取（auto）**由模型或玩家调用，留在窗口直到折叠，之后可再取；**手动（manual）**只由玩家调用，只在本轮在场。
-
-**产物（product）**：按声明在某个阶段产出、挂在节点上的东西。**stage** 说谁写它：record（单独一次结构化调用，形状词表封闭：text / list / record / table，列有类型，record 可嵌一层；默认）或 narrate（叙事者顺手在正文后写，流式，只能是 text，以 `<<aside>> <id>` 起块）。harness 默认 notes（开）、options、inner（关）。**fold** 声明值沿路径如何累积：最新 / 追加 / 按 key 列合并（只合并已写列，保留其余列，删除后不再召回）；record 按字段深度合并，未写的键保留；list 默认追加，其余默认最新。**feed** 产物把折叠结果回喂（Known / Current 行）；**recall** 产物的折叠结果中的行与 lore 钩子一起进 lookup 的枚举；客户端画表读的也是这一个折叠。`demand` 向任一产物要一份答案挂回节点，不开回合。
-
-**产物的三类**（由 feed / recall 与 fold 判定，代码一个纯函数，不按 id 列举，docs/theater-brief.md）：**状态（world）**，模型回读且 fold 为最新或按 key，"现在是什么"，与字段同类，折叠值画在读数页、本轮的变化进账本；**上下文（context）**，模型回读且 fold 为追加，只增的编年，只在 Inspector；**小剧场（theater）**，模型从不回读（既不 feed 也不 recall），只为玩家存在，内联画在那一轮正文下，入口是那一轮动作行的小剧场菜单。options 单独豁免（有自己的容器）。**账本（ledger）** 是一个视图：这一轮改了什么（字段变化、检定、送出的线索、状态产物的新值或新行），正文下的记录药丸打开它，账本为空药丸不画。_不用_："记录"来指产物的一类（它是药丸的界面词）。
-
-**notes**：默认产物，这一轮立下的事实，一段一两句（#82），`fold: "append"`，折叠与 Known 行的来源；上下文类，玩家在 Inspector 里读它，不在账本里。**inner**：NPC 的心声，走数据不走正文；小剧场类的现成实例，默认关，可索取。**options**：建议的下一步，只填输入框，自己的容器。
-
-**读数（readout）**：写之后才知道的状态。record 阶段向模型提作者写的选择题，选项带 set / add / event 效果，答案记在节点上，由代码施加并夹在边界内。读数的区间是带 `when` 的 fragment，叙事者读到区间的文字，看不到数字。**写入途径决定权责**：只由动作写的字段是机械量，叙事者的即兴改不了它（它看不到数字，"老板塞给你三枚金币"之后 gold 还是原值）；允许叙事改动的字段必须挂读数。有读数的卡加载时对只有动作写入的字段提醒一次，不强制；没有读数的卡是全机械的，不提醒。读数与产物是两条接缝：模型的判断进状态走读数（选项 → 效果 → 字段），进记忆走产物（形状 → 节点）；要让一张表影响条件，加一个读数，不给产物开口。写读数的两条规矩：选项写可见的举动（接过信物、追问细节），不写心理（克制文风下心理永远写得隐晦，判定落回保守项，字段不动，区间不变，死锁）；挂在某字段上的区间 fragment 不描述该字段的读数要测的那条轨迹。
-
-**Cond**：作者可用的唯一逻辑：状态路径上的封闭条件树（is、比较、all / any / not、本轮事件）。可求值、可画 GUI、可解码。
-
-**效果（effect）**：只有 set、add、event 三种，由解释器施加。**拍（beat）**：decide 一次的结果，记概率与种子，重掷保留难度只换骰子。
-
-**卡（Card）**：一份 schema：版本与来源、框架与虚构 fragment、带开局效果的开场、规则、lore、护栏、导演开关、默认通道；RPG 部分是字段、动作、概率、效果、终局、上限、读数。形式（纯文字卡还是自带前端）只是可选附件 `view` 的有无。_不用_："角色卡"（角色不是 schema 词，虚构区写一个人还是一个世界是内容）。
-
-**Session**：一局：一张卡、一个玩家层、一条连接、一棵日志树。它的接口就是过线协议：动作进，事件流出，节点投影。
-
-**动作（action）**：act、greet、checkout、swipe、reword、edit、setField、demand。每个返回它引起的事件流，以 change 收尾；act 不带 parent 就挂在 head 下。
-
-**事件（event）**：四种：阶段开始、narrate 逐 part 的增量、每次调用的记录、变化（change）。
-
-**停止（stop）**：按阶段两种。正文第一个字之前是取消，什么都不留；之后是收尾，narrate 在当前位置停、check 跳过、record 照跑，节点以 `end: "stopped"` 存下。"继续"是它下面一条 note 子轮，不是 swipe，不需要 prefill。
-
-**护栏（guard）**：作者的 must-not，只在 check 事后查，不写进叙事者的提示词，因为禁令本身就是提示。
-
-**连接（Connection）**：provider 配置：格式、模型、缓存 TTL、输出上限。阶段绑定连接。
-
-## 三、关系
-
-- 一个**回合**由若干**阶段**组成；每个阶段是一次或多次模型**调用**，带自己的请求形状。
-- 一个**节点**是一个回合的结果；**日志树**由节点组成；**状态**是对一条路径依次结算的结果。
-- **转录稿**和**折叠**都是对路径的视图，不是存储。
-- **头区**由 Fragment 装配，**玩家层**在**卡框架**之前；**尾区**是 harness 的行加**note**加**心声**的问法。
-- **lore** 经 **gate** 开窗、经 **lookup** 或玩家**调用**或 **direct** 进入 **narrate**，成为**揭示**；**invocable** 是玩家当前可调用的。
-- **产物**由 **record** 提取或由 **narrate** 顺手写出（`stage`）、挂在**节点**上；**feed** 回喂、**recall** 进 lookup、**demand** 按需；按 feed / recall 与 fold 分成**状态 / 上下文 / 小剧场**三类，各有一个画它的地方。
-- **心声**是场内私有；**note** 是场外；两者都在输入里，只有心声进历史。
-
-## 四、不采用的说法
-
-- **通道来指心声**：心声不是"发给谁"，是"谁感知得到"。它进历史，note 不进。
-- **深度插入**：ST 的底部不可编程才需要按深度切进聊天记录。两区之后深度只有头和尾两个值，中间插入既破坏缓存又切开正文，角色归属还不确定。
-- **预设**：作为提示词对象不存在。它的内容按归属拆成 harness 代码、卡、玩家层槽位、record 产物。
-- **记忆系统**：记忆是 record 的产物加折叠加 lore 的两层，没有单独的系统。
-- **角色卡**：卡只有一种 schema。
-- **aside 来指通道或一类内容**：旧的通道名，与戏剧术语相反，已改 note；作为内容类别它是小剧场，`<<aside>>` 只剩定界符的名字。
+| Legacy Tavern Concept                              | Effect Tavern Primitive(s)                                                             | Architectural Reason & Negative Constraint                                                                                                                      |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`preset`** (monolithic prompt + sampler bundle)  | `request.ts` + `Layer` / `Pack` / `switches` + `Hat` + `Connection`                    | Presets conflate wire roles, jailbreaks/prefills, player prose style, status-bar prompts, and endpoint parameters into one brittle file.                        |
+| **`character card`** (`chara_card_v2` / `ccv3`)    | `Card` (`frame` + `fiction` + `participant` / `author` coordinates)                    | Fixed single-NPC fields (`description`, `personality`, `mes_example`, `post_history_instructions`) distort cast, RPG, and protagonist-free world cards.         |
+| **`depth` / `@D` injection & `Author's Note`**     | `at: "head" \| "tail"` + `note` (`Channel`)                                            | Splicing prompts `N` messages from the end of chat mutates the historical prefix every turn, invalidating KV prefix cache and polluting `transcript`.           |
+| **`worldbook` / `lorebook` & keyword triggers**    | `Lore` (`unlock`, `offer`, `sections`) + `lookup` (`hook`) + `ContextPolicy`           | Substring/regex chat scanning (`constant` blue-light vs. `selective` green-light, `scan_depth`) misfires on passing mentions and lacks monotone plot staging.   |
+| **Inline status bars, MVU blocks & regex scripts** | `decide` / `settle` + `record` (`Readout`, `Product`, `DomainChange`) + `<<aside>>`    | Asking `narrate` to emit `<status>` XML/JSON or variable patches and scraping them with regex corrupts prose voice and desynchronizes state (`inline-product`). |
+| **`[OOC: ...]` inline chat brackets**              | `note` (`Channel`) vs. `thought` (`internal diegetic` `mark`)                          | Inline `[OOC]` pollutes permanent `transcript` history and conflates non-diegetic direction with private character monologue.                                   |
+| **Negative prompt walls ("DO NOT...")**            | `switches.agency` (`pov` slot) + `Guard` (`check`) + `Lexicon` (`polish`)              | Narrator-facing prohibition lists bloat prompts and trigger ironic-process violations; verification and slop rewriting belong post-prose.                       |
+| **Stateful macros (`{{setvar}}`, `{{roll}}`)**     | `Cond` + `Effect` + `Action.roll` + single-pass `Names` (`{{key}}`)                    | Imperative template scripting hides untestable state inside prose strings (`unsupported-macro`).                                                                |
+| **Flat chat `swipes[]` & branch checkpoint files** | `Log` (`Node`, `head`, `checkout`) + `sibling` (`swipe`, `reword`, `edit`) + `Derived` | Linear chat arrays duplicate files on mid-thread branches and desynchronize external variable stores; tree path folding keeps state exact everywhere.           |

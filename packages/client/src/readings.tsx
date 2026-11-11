@@ -33,7 +33,7 @@ import { t } from "./i18n.ts"
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
 
-/** Which sibling action made a version (GLOSSARY §二 swipe / reword / edit), as its icon; a plain act draws the
+/** Which sibling action made a version (GLOSSARY sibling: swipe / reword / edit), as its icon; a plain act draws the
  *  fallback (nothing unless given). The reader's version list and the Timeline draw with it. */
 export const SiblingKind = (props: { of: Node["sibling"]; class?: string; fallback?: JSX.Element }) => (
   <Switch fallback={props.fallback}>

@@ -1,191 +1,135 @@
 # Effect Tavern
 
-从头设计的 AI 角色扮演全栈项目。服务端运行时基于 Effect v4，先做后端，前端从它长出来。
+**English** | [简体中文](README.zh-CN.md)
 
-本文是项目的上下文：成品应有的形状、现在有了什么、还缺什么、往哪里走，以及开发时遵守的原则。它只描述现状，不记录过程。术语在 `GLOSSARY.md`，用词以它为准。
+A ground-up full-stack harness for AI roleplay and interactive fiction, built on **Effect v4**, **Solid 2.0**, and **Bun**.
 
-## 一、成品的形状
+Effect Tavern treats a card as declarative data plus deterministic rules rather than a bundle of prompt incantations and regex scripts. Code owns the control loop, state settlement, seeded dice, and prompt cache boundaries; the LLM is invoked only at typed stage seams to judge, narrate prose, and extract structured facts.
 
-一张卡是一段程序：schema 加确定性规则。LLM 是这段程序里带类型的函数调用，只做三件事：判断（分类、评级、概率）、渲染文字、提取事实。数值和结果由代码与带种子的随机数决定。状态不被存储，而是对一棵日志树依次结算的结果。
+---
 
-一个回合是一条固定骨架的流程，不是一次模型调用：
+## Core Architecture
 
-```
-lookup → (decide → settle)* → gate → direct → narrate → check → record
-```
+### 1. Multi-Stage Turn Spine
 
-- 结构化阶段（lookup、decide、gate、direct、check）各自配置请求形状，看到的只是事实，大多只看本轮。
-- narrate 是唯一读转录稿的阶段，正文非权威。
-- record 每轮都跑，提取 notes，它是压缩的来源。
-- 工具是能力的单位：名字、输入 schema、输出 schema、处理函数。阶段是 harness 对工具的一次调用方式：用哪些工具、强制单个还是开放选择、调完是否再来一轮。默认强制单个、一轮结束。查阅是强制调用 `read_lore`，枚举即闸门；动作是强制调用 `act`，枚举由卡的状态生成。模型从不掌握循环。
+A player turn is a typed pipeline rather than a single chat completion:
 
-一个节点等于玩家输入加系统为它产出的全部块。历史是按阶段渲染的纯函数视图，从不存储。swipe 是同一父节点下的兄弟节点。压缩是派生视图：对一段回合的 notes 与已送入的世界书文本按代码折叠，按区间缓存，跨分支共享，节点不动。折叠只是区间内各轮的函数，区间之外的任何一轮都改不了它，所以摘要的缓存断点在边界移动之间字节不变。
-
-提示词装配只有一种形状：Fragment 等于文本、位置、条件。卡在虚构（一个人、一群人或一个世界）之上有一层"框架"（文风、基调、世界原型、玩家是谁），玩家有自己的框架层，排在卡的框架之前。框架里的 id 就是槽位，玩家与卡的同名槽位如何相处（覆盖、让位、并存）是玩家按条调的设置。preset 作为提示词对象不存在，只剩 provider 配置。
-
-卡的 RPG 部分是数据：字段带边界，动作带条件、骰子、命中与落空效果，效果只有 set、add、event 三种，终局是条件，世界书条目的门也是条件。全部是封闭词汇，由解释器执行。LLM 进入结算只有两个入口：一个概率，随 decide 一起输出、记录在拍上，重掷因此保留难度只换骰子；一个选项，随 record 一起输出、记录在节点上，用于写之后才能知道的读数。
-
-作者不手写逻辑，也不手写任何配置格式。自然语言在编写时编译一次成 schema 数据，GUI 是它的视图。条件是一棵封闭的小树，所以每段文字能声明自己依赖哪些状态。
-
-## 二、设计立场
-
-这些是已经定下的立场，改动它们需要证据，不需要重新讨论。
-
-- **协议先于前端代码，前端的形状由产品决定。** 先做运行时、装配、harness，协议从它们长出来；但前端不是协议的投影，它是玩家的产品，形状由玩家的一局决定，再反过来向协议提需求（已供、缺、多余）。第一版页面定型后面的一切，所以客户端在写代码之前先过设计。检查器是开发工具，可以是 1:1 投影，它不是客户端的种子。
-- **结构化阶段全部 opt-in。** 纯聊天卡的一轮只有 narrate 和 record，其余阶段作者声明了才存在。每次新增任何东西，先问它是否破坏了这一条。
-- **玩家优先于作者。** 作者的秘密与伏笔默认只是信息闸门和"机会"，导演与护栏由作者主动开启。护栏只在事后检查，不写进叙事者的提示词，因为禁令本身就是提示。
-- **正文非权威。** 叙事者不被审查，即兴事实留在历史和 notes 里就是正史。状态是另一回事：字段的写入途径决定权责，只由动作写的字段是机械量，正文改不了它；允许叙事改动的字段挂读数。
-- **缓存是基础设施。** 让头区前缀最大是 harness 的职责，永远不为了命中缓存去约束玩法。规则按上游来，不做网关：三家都是"前缀字节一致即命中、低于最小前缀静默不缓存"（Anthropic 当前模型 512，OpenAI 1024，Gemini 2048 / 4096），没有一家靠填充补救。harness 只在请求停止逐轮稳定的三处打断点：头区末尾、折叠摘要、本轮输入之前的最后一条历史；日志树是追加式的，所以输入之前的一切下一轮都是缓存读，头区加一轮对话自己就过最小前缀。TTL 是连接配置：有人在对面就 1h，脚本跑就 5m。
-- **代码掌握循环。** 模型在固定的点回答带类型的问题，从不决定是否调用、是否继续。工具是能力层，保留并可扩展；某个阶段开放多个工具或多轮是按阶段的 opt-in，代价明确：工具定义进提示词影响缓存，调用结果必须记在节点上才能重放，有副作用的工具重放时取记录不重跑。叙述阶段不带工具，因为揭示必须在写之前送到叙事者手里。
-- **作者不写逻辑。** 模板、JSON、YAML 一律不是作者的界面。"一直都是这样"不构成理由。
-- **核心有上限。** 2026 年的 agent harness（`docs/agent-harness-survey.md` 第四节）与 ST 的大型扩展给出同一个读数：转录、压缩、记忆这层核心在每个系统里都只有几个文件、几千行，体量全长在接入层与扩展层；OpenClaw 的 263 万行与"记忆表格"的 24.5 万行是同一种病。runtime 的 `src/` 保持在一两千行量级，超出即说明有东西该是数据（卡）、该是插件（developer 模块）、或该删。规模本身是没有目标的症状，不是功能多的证据。
-- **不给模型压力提示。** 输出上限、剩余预算、"请简短"之类的话不进提示词；上限是连接配置，由 provider 层截断，harness 再处理。Hermes 删掉它的理由（让模型提前放弃）对叙事者同样成立。
-- **作者必须读得懂自己的卡。** 卡里的每一样东西都要能翻译回作者读得懂的形式：数据翻译回表单，条件翻译回一句话，视图是作者自己写的代码。一张作者本人连伪逻辑都读不懂的卡不是可接受的实践，不论它多能跑。现有变量框架（MVU、ERA）是反例：逻辑住在提示词文本里，由模型执行、正则收尾。
-
-## 三、开发原则
-
-这个项目拒绝继承两种失败：提示词装配建立在"提示词魔咒"之上，变量只是附在正文里的补丁；上下文工程停在几年前，agent、harness、缓存这些方向的工程实践一点没有吸收。两者叠加就是今天 SillyTavern 的样子。没有历史包袱是这里最大的资产，不拿它去换兼容。
-
-### 参照生态，但带着审视
-
-SillyTavern 及其生态（变量框架、世界书、导演类插件、各类 fork）是可以参照的材料：它们积累了真实的卡、真实的玩法诉求和真实的失败。开发时读它们，是为了对玩法有实感，不是为了照搬做法。
-
-对任何一个来自生态的概念，审视的方法固定：**把它去掉，在分阶段回合模型里什么会坏？** 坏了的部分才是需求，没坏的部分是历史包袱。几个已经审过的例子：
-
-| 生态里的概念                           | 去掉后坏的是什么                      | 在这里的形状                                                                                                                                                               |
-| -------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| preset                                 | 文风、基调这类常驻内容；provider 参数 | 按归属拆开：请求形状归 harness、不可开关；语言、视角、文风这类槽位归玩家层；其余进卡框架；采样等参数是 provider 配置。preset 本身消失                                      |
-| 世界书的关键词、粘性、冷却、概率、递归 | "按状态与事件露出知识"                | 世界书只剩两种：常量文本就是头区 fragment；渐进披露的条目走 lore 的 `unlock` / `offer`，一层一层露。"玩家聊到了这件事"是查找阶段换一个便宜的回答者，不是新机制             |
-| 条目上的 order、深度、锚点坐标         | 作者决定先后                          | 顺序即作者的文档顺序；跨模块的先后是模块层一张作者可见的短列表，数组下标就是顺序，条目上没有坐标。文本放历史之前还是之后若需要，是回合装配的一个字段，不是 fragment 的坐标 |
-| 在正文里写更新命令再解析               | 状态更新                              | decide 阶段输出结构化决定，代码结算                                                                                                                                        |
-| 提示词模板里的控制流                   | 按状态切换说法                        | 变体是各自带 `when` 的 fragment，文字不含逻辑                                                                                                                              |
-| 交替楼层                               | 无                                    | 一个节点一回合，历史是视图                                                                                                                                                 |
-
-### 绝不做的事
-
-- **不用新栈复刻旧逻辑。** 用现代语言、框架、工具链去重写、复刻或兼容一套老的做法，是这个项目最要避免的失败方式。看到生态里的某个机制，先过上面的审视，再决定要不要它的需求，而不是它的实现。
-- **不兼容 SillyTavern 的角色卡、插件、组件。** 不在日程上，以后也不会在日程上。它的语料、生态和用户量换不来它的工程实践，后者绝大多数是负资产。
-- **不默认约束。** 作者的 must / must-not、导演、护栏都是高门槛的主动开启，不是低层机制。自由对话留给模型。
-
-### 工作方式
-
-先讨论到一致，再写原型；每个模块留一份能跑的断言自检。
-
-## 四、现状
-
-`packages/runtime` 是运行时的核心模块，在上面的回合模型下已经能组合成一整轮。
-
-| 模块              | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/cond.ts`     | 作者可用的唯一逻辑：状态路径上的封闭条件树（is、比较、all / any / not、本轮事件），可求值、可画 GUI、可解码                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `src/fragment.ts` | Fragment 与头区装配：玩家层 → 卡框架 → 角色，槽位关系，顺序即作者的文档顺序                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `src/lore.ts`     | 分层、受状态控制的知识：隐藏层、代码地板 `unlock`、窗口 `offer`，沿路径单调；每条的派生计数（距上次露面几轮、露面几次）作为 `lore.<id>.since / shown` 路径供 `offer` 读                                                                                                                                                                                                                                                                                                                                                  |
-| `src/log.ts`      | 日志树，自包含、零 import、对节点内容泛型：节点带 parent，同父即兄弟，根的子树是一条线，`head` 是唯一的"在哪"（一个叶子或 null）。Log 是值，写（add / amend / checkout / drop）只决定一个 Change，`apply` 是唯一变更，所以副本按序 apply 等于权威方；id 取现存最大加一，子树里最大的 id 必是叶子，"最新"只有这一条规则；`hold(store)` 是权威方的持有者。runtime、server、client 用同一份                                                                                                                                 |
-| `src/journal.ts`  | 回合节点的内容：输入、读取、拍、简报、正文、触发、违规、产物、玩家钉住的揭示、玩家改的字段；只存模型输出、种子与玩家动作                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `src/product.ts`  | record 产物作为数据：封闭形状词表（text / list / record / table，列有类型，record 可嵌一层）、上限与过滤由代码施加、`fold` 声明折叠（最新 / 追加 / 按 key 列合并）、`feed` 回喂、`recall` 让模型写的行进 lookup；harness 默认表 ← 卡按 id 补丁 ← 玩家开关                                                                                                                                                                                                                                                                |
-| `src/request.ts`  | 每个阶段读的文档，一处拼出（预设在生态里干的活）：两种骨架（叙事者续写对话：头区 → 转录稿 → 玩家的话 → 本轮指令；结构化阶段判一条 user：system 行在上、被判对象在下），框架进全部七个阶段、虚构与转录稿只进 narrate，输入作为一个单元按阶段分受众（心声说明给所有读输入的阶段，note 只给导演与叙事者），缓存断点随分区，数据行的格式都在这里                                                                                                                                                                             |
-| `src/history.ts`  | 按阶段的历史视图与压缩：叙事者看转录稿，导演看事实账本，前缀折叠按区间缓存                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `src/card.ts`     | 卡作为数据：`Card` 一份 schema（版本与来源、框架与虚构 fragment、带开局效果的开场、规则、lore、护栏、导演开关、默认输入通道）；RPG 部分（字段含枚举、动作、概率、效果、终局、上限、读数）及其结算解释器                                                                                                                                                                                                                                                                                                                  |
-| `src/session.ts`  | 一局：一张卡、一个玩家层、一条连接、一棵日志树，把上面全部模块接成回合循环。接口即过线协议：玩家动作进（act、greet、checkout、swipe、reword、edit、setField、demand，每个返回它引起的事件流，以 change 收尾；act 不带 parent 就挂在 head 下；钉住不是动作，是 act 输入上的 `pin`），节点投影出（turn、折叠后状态、本轮事件、揭示正文、还没讲到的条目）。事件四种：阶段开始、narrate 逐 part 的增量、每次调用的记录（请求、答案、用量）、变化（change：落下或改过的节点、删掉的 id、head 现在在哪）。正文与产物是不同的道 |
-
-`test/` 下六个脚本是它们的断言自检，也是目前的使用示例：`lore`、`views`、`assemble`、`product` 各测一到两个模块，`card` 测数据卡与解释器，`loop` 只经 session 的接口（动作、事件、投影）跑一局，含结算循环、开窗、简报、压缩、截断恢复、产物与对节点的 demand。六个脚本对同一份模块做变异时会同时失败，这是模块能组合的证明。
-
-已验证的：
-
-- 回合骨架在类型和运行上成立，所有阶段能用同一套模块接起来。
-- 目前所有阶段都是强制单工具调用：查阅是枚举选择，动作是 decide。开放阶段（模型在多个工具里挑、或多轮）尚未实现，节点上也还没有通用的调用记录，只有拍记录 seed 与概率。
-- 数值与结果完全由代码和种子决定，LLM 只贡献一个概率（decide）或一个选项（record）。
-- 读数性状态：record 阶段向模型提作者写的选择题，选项带 set / add / event 效果，答案记在节点上，由代码施加并夹在边界内；读数的区间是带 `when` 的 fragment，叙事者读到区间的文字，看不到数字。重放不调模型。
-- 产物：record 阶段同一次调用里按声明的形状提取（`src/product.ts`）。harness 自带 notes（开）、options、inner（关）三个默认产物，卡按 id 补丁或新增，玩家按 id 开关，问法按 `product.<id>` 被 `asks` 覆盖。`feed` 产物沿路径按声明的 `fold` 折叠（list 默认追加、其余默认最新、表可按 key 列合并，每 key 取最新行）回喂给 record 的 Known / Current 行与叙事者 tail 的 `Current:` 行；`recall` 产物的行与 lore 钩子一起进 lookup 的枚举，选中即 disclosure，沿路径去重，折叠摘要里与 lore 同列。对节点的玩家动作 `demand` 向任一产物（含关着的）要一份答案挂回节点，不开回合、不进转录稿。wuxia 卡三种产物在 Haiku 上跑通：嵌套 record、enum 列、上限切割、recall 表由模型自行填入新人物。
-- 折叠在真卡上验过（伴星，八轮，Haiku）：第 1、3 轮立下的事实（面试时间、地点、通勤）在第 6 轮前被折进摘要，第 6 到 8 轮叙事者仍按它们作答，玩家原文不需要活过折叠。发现并修掉一处：没有新事实的一轮模型把 Known 原样抄回 notes，折叠里出现两遍；list 产物里路径上已有的条目由代码丢弃，与上限同一类。缓存同一局验过：第二轮起输入之前的一切是缓存读，只有折叠边界移动的那一轮重写一次。
-- 对节点的玩家动作（`docs/card-reading-2.md` 第八节第 8 条），每种在日志树里的落点：`swipe` 与 `reword` 是同父兄弟，分别从 lookup、从 narrate 起跑；`edit` 是带着玩家正文（`text`）或修订过的输入（`input`，正文留着）或两者的兄弟，check 与 record 对它重跑，叙事者不跑，玩家自己写出的揭示照样触发；`setField` 把效果记在节点的 `adjust` 上，按卡的边界与枚举当场校验，折叠时在开场、拍、读数之后最后施加，所有后代随之改变；`demand` 把产物挂回节点；钉住挂在下一次 act 的输入上（`Input.pin`）：那条 lore 或 recall 行按它下一个未读层强制开窗、进 `must`，不需要卡开导演，check 验证，没讲到就走那一次纠错重写，仍没讲到就留在未讲名单里；名单是节点投影的 `readable`（有未读层且已解锁的条目的 hook，也是 lookup 的枚举）；`options` 不是动作：客户端把选中的一条填进输入框，玩家自己发出去（2026-10-27 删掉了 `pick`，没有调用方）。loop 自检逐条断言。
-- 历史作为视图、压缩作为派生视图、swipe 作为兄弟节点，这三件事在分支与重放下一致。
-- 装配是纯函数：每个节点每个阶段发出的请求都能从日志树重算出来。trace 与溯源因此是派生视图，不另存、不另做。
-- 之前手写代码的三个 RPG 原型都能写成数据卡，断言不变。
-
-`packages/provider` 是 provider 层：连接记录（三种线上格式 anthropic / openai-compatible / gemini，端点前缀、密钥、模型、能力）编译成 ai-sdk 模型，`object` / `text` / `stream` 三个 Effect 调用，缓存断点由 harness 打在消息上，usage 四个数随每次调用返回。在真实 Anthropic 上验过：强制 schema、缓存断点写与读、签名推理往返、流与中断。设计与实测记录在 `docs/provider-reading.md`。
-
-尚未接上的：
-
-- **回合循环已在 Haiku 上跑通**（`bun run live <wuxia|banxing|ri|yandao>`，不进 `verify`；`src/session.ts` 是循环本体，`test/loop.ts` 是它的脚本化断言，`packages/runtime/cards/` 是四张卡：wuxia 自检卡、伴星纯聊天、青空 理的好感度分段加告白事件（后两张是真卡的手做编译）、盐道大世界模板（没有 persona，输入默认走 note，卡自带 pov 槽让玩家层的让位），四张都跑通，缓存在真卡上验证成立；记录在 `docs/provider-reading.md` 第十节）：全部阶段通、强制 schema 通、分层 lore 的揭示按窗口发生、护栏未触发、读数合理；decide 的问法改过一次才收敛（第一拍读输入的措辞决定要不要多拍，`again`；多拍才进每拍一问的循环），记录在 `docs/provider-reading.md` 第八节。节点已存 parts（`reply`，正文加带签名的推理，`prose(t)` 派生）。推理往返按格式：Anthropic 把 thinking 块绑定到生成时的前缀，重新渲染的历史无法重放，`reasoningBack` 对它默认关，推理只存不发；兼容端点与 Gemini 默认发回，未实测。
-- **持久化。** `packages/server/src/data.ts`：一个 SQLite 文件（`node:sqlite`，Bun 与 Node 自带，零依赖）当文档库，五张表照着类型：player 一行（写法开关与每张卡上在用的 persona 都在这一行）、persona（玩家命名的框架片段，玩家的资产，按卡选用不按局）、card（workshop 的产出，四张模板暂时仍是 TS 模块）、story（一棵日志树 = 一张卡的一局，head 与 next 存在它旁边，id 删后不回来）、node（一轮一行）。runtime 只见 log.ts 的 `Store`：`read` 整棵，`write` 每个 Change 一个事务追加。卡与 persona 以 JSON 文件为交换格式，库是安装私有的；dev 的库在 `.dev/tavern.db`，`DATA=` 换目录。
-- **流式输出。** 已接：narrate 走 provider 的流式调用，增量作为 `delta` 事件逐 part 发出，结构化阶段与产物整份随 `call` 事件到达（wuxia 五轮 live 验过）。逐 token 的 partial object 是 ceiling。
-- **服务端已有，客户端立了骨架。** `packages/server` 是 session 接缝上的线上适配器，不含逻辑：`POST /` 收一个 `Action`（`src/session.ts` 里的数据词表，在这条边界上解码），回这个动作的事件流（SSE，每种事件一个 `event:`，失败是 `error` 事件）；关掉响应就是停止，按阶段分两种：一稿的第一个字之前是取消，中断动作、中止模型请求、什么都不留；第一个字之后是收尾，narrate 在当前位置停、check 跳过、record 照跑、节点以 `end: "stopped"` 存下，"继续"就是它下面一条 note 子轮。`GET /nodes` 给快照：全部节点投影加 head；`DELETE /nodes/<id>` 删掉一个节点和它下面的全部（一条线是一个根的子树），库里这些节点的 calls 随之删，回这个 Change；`greet` 按序号开一个新的开场根，`checkout` 把 head 移到某个版本最新的叶子（整条后续一起回来）或 null（空线）。客户端的树是服务端的副本（同一份 `src/log.ts`，吃快照和 change 事件），"在哪"由服务端持有，刷新不丢。`inspect` 开着 `call` 事件带请求消息（含卡的 fragment 正文），关着只剩阶段、答案、用量、耗时；`call` 事件随 SSE 消散（停止就关掉了响应），所以 server 在节点落下时把它的 calls 记进库（`call` 表），每局只留最近两百个节点的（按最近一次调用算，修订过的旧节点也算新），`GET /calls` 读回，日志仍只存输出。一进程一局，`bun src/main.ts`（PORT、CARD、MODEL、GREETING、DATA 环境变量）在一个端口上起整座酒馆：`/api` 下是这一局，其余路径是客户端的构建产物（`packages/client` 里 `vp build` 出的 dist，带扩展名的路径是文件、其余都回 index.html），手机上跑的就是它；`test/serve.ts` 在真 socket 上用脚本模型断言。wuxia 在 Haiku 上经 HTTP 走过一轮。客户端的设计稿已回，它的形状与对协议的要求在 `docs/client-shape.md`；卡与玩家层的投影端点是 `GET /card` 与 `GET / PUT /cards/<id>/local`（PUT 在边界上按 `Local` schema 解码，写进库，下一次请求起生效，已记录的节点不变）；库的端点是 `/stories`（这张卡的故事们，哪一局开着；POST 开新局，PUT 切换，DELETE 删，`packages/server/src/library.ts` 持有开着的 session）与 `/personas`（带名字的片段，PUT / DELETE；一局用哪一个记在它的行上，新开局的默认是 `local.persona`，库每次请求把正文填进 persona 槽，所以改选、改正文都是下一次请求起生效，删掉就撤掉选用）与 `/hats`（连接戴的帽子，GLOSSARY「hat」，PUT / DELETE，`Connection.hat` 按 id 引用，每次请求读出）与 `/packs`（`[harness, ...包]`，GLOSSARY「玩家层」，PUT / DELETE，`local.mounts` 按序挂载，每次请求读出，删掉就从每张卡上摘下）（兄弟类型与 reword 的 note 已有；事件 `seq` 不要：断线即停止）。`packages/client` 是在真 server 上跑通回合的骨架：atom store（`nodes`、`active`、`draft`、`stage`）吃 SSE，路径从根按活动兄弟推出来，delta 按动画帧合并，纠错重写的第二稿从头显示，停止后回读快照拿 `stopped` 节点；页面是一列节加底部 composer，场外的话是正文框下面的第二个框（场外片段打开它，可与角色的话同发，也可单发；作者视角的卡没有它），⌘↵ 发送，IME 控制器搬自 Deckled。设计稿的其余（附注、读数面板、目录、跟底）还没有。2026-10-23：`edit` 的入口是 Swipe / Reword 旁的铅笔，正文原位变 textarea（Enter 分段，⌘↵ 发送，Escape 取消，没改或清空也是取消），发出的 `edit` 带玩家正文做兄弟，check 与 record 期间草稿显示的就是这段正文；玩家自己那句话的修订照 Cherry Studio：点气泡，那句话回到 composer（原草稿暂存、取消恢复，芯片写着是哪一轮、点它滚过去），两个发送：对号是留正文重算记录（`edit` 带 `input`，兄弟、check 与 record 重跑、拍不重判），箭头是重来（`act` 到同父）；版本列表在兄弟的输入不同时显示输入而不是正文首行。Swipe / Reword / Edit 三键带提示，Reword 的那句话的框只在点了魔棒之后出现（Enter 发，空着也发，Escape 收）；桌面上历史一轮的 Record 是居中的闭合卡，不再是手机那块顶到底的面板。"改输入必重发"不是规矩：效果可重算就不必，我们的效果是记录，两次结构化调用就重算了；重开一局按树推：日志树的根是兄弟，一条线就是一个根的子树，所以 Start over 是开一个新根（卡有开场就 `greet`，没有就等玩家的第一句，此时阅读线为空），旧线留在第一节的版本列表里；Delete story 是 `DELETE /nodes/<根>`，页面自己的 confirm 对话框把关（不用浏览器原生的）；两项在本线还没有玩家回合时都灰掉，空线无事可做；Swipe / Reword 在手机的 Record 弹层底部和桌面右栏的 Record 下面，桌面最新一节的药丸隐藏；药丸在本轮改了字段、判了拍或讲了线索时带一个点。
-- **编译。** 自然语言到卡数据的那一步没有做，现在卡是手写的数据。
-- **前端协议与编辑器。**
-- 截断恢复依赖 provider 接受末尾的 assistant 前缀。已验证：当前的 Claude 全系拒绝 prefill（400），连接能力 `prefill` 对 anthropic 默认 false；截断恢复在这类连接上要走别的路，尚未定。
-
-## 五、方向
-
-按优先级：
-
-1. **读数性状态。** 已做，见第四节。决定性的状态在写之前结算、正文渲染它；读数性的在写之后由模型在作者写的选项里选、代码施加。遗留两点：读数选项发出的事件在下一轮开窗口（上一轮的读数事件随本轮的 beat 事件一起进闸门；盐道卡发现此前根本没接上，只有读数、没有动作的卡永远开不了窗，已修并在 loop 自检里断言），同轮生效需要写之前多一次分类；模型逐轮改写的文本字段（当前所想、地点描述）是 feed 产物，已做（第四节）。带 key 的表已做：`fold: { key }` 按列合并，record 每轮只报新行与改行，折叠保留其余，feed、recall 与客户端读同一个折叠。产物余下的 ceilings：删行（行只能经某列上的 `filter` 离场）、钉行、从状态派生的上限、每 n 轮提取一次。
-2. **输入驱动的窗口。** 事件驱动的 `offer` 已是条件，但"玩家聊到了这件事"这种窗口的媒介未定。它是查找阶段换一个便宜的回答者（一次 LLM 分类）来回答 `offer`，不是新机制，也不只是对状态的比较。分类器的输入是本轮玩家输入加近几轮简报，菜单是可见条目的 hook（作者用玩家的说法写的触发描述，不是关键词），多选可空；状态闸门已把菜单压窄，hook 列表在状态不变时稳定，可进分类器自己的缓存前缀；真大就两跳，先选区域再选条目。显式读取是玩家动作"钉住某条"，直接产生 disclosure，不问模型；文风类条目不是知识，是玩家层槽位。模型从不决定调用，所以"上下文长了忘记调用"不会发生，失败模式只剩分类器漏判与窗口没开，兜底按确定性从高到低四层：代码给每个条目维护"距上次露面几轮"与"露面几次"的派生状态（已做：闸门状态里的 `lore.<id>.since / shown`，从未露面记为无穷大；生态里导演事件的"一次、黏性、冷却"都是这两个数上的条件，loop 自检里一条每隔两轮重开、最多两次的条目），作者的 `offer` 可以读它；record 阶段多一道多选题"这一幕擦到了哪几个钩子"，答案成事件、下一轮开窗；导演（作者 opt-in）读事实账本与陈旧度决定 must / may；可见条目的 hook 常驻缓存前缀。不做嵌入检索、不做关键词正则、不让叙事者写到一半去调用。
-3. **玩家直接改正文。** 已做（第四节 `edit`）：改过的正文是新兄弟节点，check 与 record 对它重跑，记入正史的只是读数与揭示。
-4. 自然语言到卡数据的编译；世界书条目的 `unlock` / `offer` 数据形状收进卡。
-5. 持久化（`effect/workflow`）、流式、provider 前缀支持的验证，以及**卡协议**。harness 是宿主，卡是客人：卡由数据（字段、动作、效果、lore、fragment、读数）与可选的视图组成，没有第三样。视图分三级：无（纯聊天）、harness 自带的标准视图（状态面板、选项、手机类重前端，作者只声明哪些字段喂进去）、作者自己写的沙盒 SPA（西西弗斯形态）。视图看得到节点状态、能发出玩家动作，永远不直接碰模型。模型每轮只产出带类型的数据，不写标记、不写 HTML；narrate 的输出形状由卡声明，默认是散文。溯源是纯函数装配的免费输出，协议直接携带。两个扩展面不混：卡协议给创作者（声明数据与视图绑定，不含逻辑），harness 插件给开发者（新阶段类型、新 provider、新标准视图，是代码）。
-
-   **卡只有一种 schema**（`src/card.ts` 的 `Card`），形式与内容都不构成分类。形式上，"纯文字卡"与"自带前端的卡"的差别只是可选附件 `view` 的有无，数据部分完全相同；暴露给前端的不是另一种格式，是同一份 schema 的投影：玩家客户端拿字段、读数、lore 的 id 与 hook、动作菜单、开场、view 绑定，不拿 fragment 正文；编辑器拿全部。内容上，一对一 RP、没有主角的大世界、玩家指导模型续写的小说，是两个坐标上的取值，不是三种卡：**玩家在虚构里是谁**，是框架槽位 `persona`（卡给默认，玩家按槽位覆盖或让位，为空就是没有玩家角色）；**输入默认走哪条通道**，`act` 进转录稿、`note` 只在本轮喂叙事者与导演、从不进历史，没有正文的 note 就是本轮的用户消息本身。第四面墙由此是结构解决的：note 不在转录稿里，不需要 OOC 咒语。"角色"不再是 schema 词：卡的虚构区就是 fragment，写一个人还是一个世界是内容。
-
-   **预设在这里不存在，剩下的叫 enhancer**（生态里的 text LoRA）：一组带名字的玩家层 fragment 加几条小剧场，再加词条、禁词和快捷输入，库里一行（`/packs`），按卡挂载（`local.mounts`），fragment 可单独开关。玩家层只有一种行（`Layer`，`runtime/src/layer.ts`）：harness 叠加行（玩家的全局行，界面词「内置」）、每个包、本卡，一个作者序，同 id 后者赢，一次 `resolve` 得出结果并带来源。它和卡作者之间隔着 harness，三方守一套协议：enhancer 只碰玩家层槽位与产物的名称、问法、默认开关（新 id 是一条小剧场，放不下的落进 `dropped`，不抛），碰不到卡的 `Cond` 与状态：不解锁、不开窗、不读 state；词条单层、无条件、首句即 hook；也碰不到请求形状。生态小剧场里的 `{{char}}` / `{{user}}` 在这里是声明的洞：卡、包、玩家各给一层代称（`names`），按条目单遍替换，洞未填的那条不发；带参数的脚本宏不做。按归属方切一份真实预设的结果在 `docs/preset-reading-2.md` 第六节，规则四条：去掉它请求形状会变的归 harness，是代码；描述虚构的归卡；描述这个玩家想怎么读的归玩家层槽位；在固定点上向模型要一样东西的（摘要、选项、后台发展、内心话）是 harness 的 record 产物，机制归 harness，问法是带默认文字的槽位，卡声明默认开哪些，其余归玩家开关，卡什么都不声明时不损失任何东西。harness 自己的提问文字也是带 id 的默认 fragment 而不是字面量（harness 的 `asks`：decide 的两问、record 的 notes 要求、改写的提示；数据行是格式，留在代码里），开关句子也在其中（`switch.<key>.<value>`），按同一个序覆盖：这个生态的用户愿意、也应该能手调文字。快捷输入（生态的 QR、输入助手）也是 harness 的基础设施而不是卡的：行的 `snippets` 是带名字的文字加通道，harness 带默认几条，客户端只填进输入框、从不代发；`⦅⦆` 包住的是心声。心声不是通道，是虚构里的感知范围：说和做在场的人都感知得到，心声只在一个人脑子里，OOC 根本不在故事里；所以它留在历史里，而每个读输入的阶段都得知道它是什么（decide 不从它取动作，narrate 不让任何人对它反应），由一条 ask（`input.thought`）说明。它是对称的：输出侧的 `inner` 产物是 NPC 的心声，大世界里是导演让写的叙述。
-
-   **模板即测试。** 四张卡沿两个坐标铺开（自检 RPG、一对一纯聊天、一对一带读数、大世界指导续写），同时是内置的创建模板、示例文档和 live 测试。两个坐标加产物默认值摆不出一张标准卡时，就是 schema 缺字段。
-
-6. 用 token 预算替代回合数作为压缩旋钮。同一步做 **notes 的撤销**：notes 只追加，百轮之后是一堆过期事实（"沈青在客栈养伤"与"沈青去了京城"并列）。record 多问一个产物，按 recall 的 ref 指向被推翻的旧条目，读 notes 的三处折叠（Known 行、摘要、账本）由代码施加。撤销是撤销那一轮的产物，只在包含它的折叠里生效，所以摘要断点不受影响（第一节）。
-7. 开放阶段。到时要定：工具参数的闸门放在 schema（枚举，最强，但每次解锁改变工具定义）还是处理函数（定义整局稳定，新解锁追加告知）；工具定义变化对缓存的处理；节点上通用的调用记录。创作者声明的"工具"（如 NPC 在手机 app 里给玩家发消息）不是模型可自由调用的工具，是卡声明的、带参数 schema 的效果类型：后果限于封闭的效果词表（set、add、event、视图事件），harness 决定在哪个阶段以什么形式问模型。作者扩展的是词表里的条目，不是词表本身。
-
-包：`runtime`、`provider`、`server`（现有），客户端待写；持久化进 `server`。
-
-**demo 的前端要求是什么性质的问题。** 前端与后端同等重要：它要承载后端的表达力，它的实际形态也会塑造我们对后端需要什么服务的认知。但这个要求首先是协议问题，不是样式、技术栈或性能问题。
-
-- **检查器与阅读器是两个页面，一个客户端。** 检查器是一轮从 harness 角度的观测，形状是 `docs/inspector-prototype.html`（2026-10-23，Gemini 按我们的数据约束出的稿，取代了 10-22 那份 one-shot 稿）：左卡是流水线，只画真正发生的调用，每行的行头写这一步定了什么（拍与掷骰、简报的 must、正文首行、check 命中或漏掉的、读数答案），耗时与 token 收在行尾；两稿的回合把每稿的 narrate 加 check 收进一个托盘，一稿废、二稿成一眼可见；没跑的阶段只在节标题旁一句灰字。一行展开是按缓存断点分区的请求（Head / Summary / History / Input 一排 tab，一个有界的滚动区，长头区推不散流水线；断点标在区上，调用的 cache read 数与断点前的字符数并排给人比对）和答案。右卡是节点：输入、未讲的 hook（只在这里出现，图钉从这里武装下一轮的 pin）、对父节点的字段差（Record 的同一套元件）、按声明形状画的产物。玩家和作者常是同一个人，没有单独的工作台，所以它从阅读线旁的 session 卡进（桌面左栏、手机标题拉起的弹层；2026-10-25 起 composer 不再有 ⋯ 菜单），不是另一个程序。门是 server 的 `inspect` 开关：关着时请求正文不上线，行保留行头、耗时、token，展开只到答案（简报不开），右卡就是玩家来看的东西；客户端没有自己的开关。作者视图的样式归作者那一层。
-- **时间轴是检查器的另一半：一轮的横切面之外，整个 session 的纵切面。** 形状是 `docs/timeline-prototype.html`（2026-10-23，Gemini 按 `docs/timeline-prototype-brief.md` 的数据与约束出的稿；此前一版塞在左栏 192px 里的 git-graph 小图被否决：线外节点没有字、阅读线永远占第一列让整张图随每次 checkout 重排，所以它不是地图）。它是和检查器同级的全幅页，从同一张 session 卡进。一个根是一个线程，竖着叠；线程里行是轮、列是分支，第一个孩子续父节点的列，其余向右开新列；同父、台词相同、各自没有子树的兄弟聚成一张版本簇卡，改了台词或长出子孙的兄弟是真分叉。坐标只由 id、parent 和台词决定（`packages/client/src/lanes.ts`，纯函数，`test/lanes.ts` 自检），不读 head：head、阅读线、正在写的草稿是叠在上面的高亮，checkout 前后图纹丝不动。没有盒子：轨道加站点，线上的站实心黑、线外的空心灰，head 是带环的站，每站两行都可读（id、成因、场景名或 HEAD / →leaf / stop，然后玩家的台词），只有选中的那一站坐在一块底色上（第二稿，Gemini 指出第一稿的左色带加白盒子是 AI 仪表盘味）。两步：点一站是选中，右卡（手机上第二个 tab）是一页排版而不是表单：标题行带动作，一行等宽小字说来历、场景、下面几节和 checkout 会落到 #N，台词是一条左线的引文，正文素排，同父的版本是一列幽灵行；动作在标题行：Checkout（head 到那一支的最新叶）、Open in reader（线上的直接滚过去，线外的先 checkout 再滚）、Inspect（开检查器）、Drop subtree（自己的确认框，列出要删的数目和 head 的去向）。它同时是 log.ts 的沙盘：在一个不动的坐标系上看 head 怎么移、drop 砍掉什么。
-- **技术栈只在两处边界上重要，两处都是协议决定。** 一是运行时与客户端共享同一份 schema 定义（节点、阶段、简报、读数），这是选 schema 工具的理由，不是选框架的理由，框架用仓库现有的。二是作者视图的沙盒边界：作者 SPA 在 iframe 里跑，与宿主只通过一份有类型的消息协议对话，宿主推节点数据、视图发玩家动作；不做同源加事后清理那种"能收拾"式隔离。
-- **性能是有界的已知问题。** 生态的性能病因清楚：整段聊天全在 DOM、每楼一个 iframe、每楼跑一遍正则、大模板每楼实例化。本项目天然避开一半：历史是视图，前端不必把所有节点放进 DOM；节点是结构化数据，视图对数据 diff。要定的一条设计是：作者视图是一个长寿实例持续喂数据，不是每回合一个 iframe，这同时是协议决定。门槛一句话：手机浏览器上，五百节点的一局，流式输出时滚动不卡、视图更新跟得上 token 速率。达到即止，再往上是优化不是设计。
-
-demo 的顺序：过线的协议已定（session 的接口，第四节），server 已把它放上线。接下来是客户端的设计回合：把玩家的一局一屏一屏、一个动作一个动作走一遍，产出客户端的形状和对协议的需求清单（已供、缺、多余）；然后才写页面。沙盒消息协议跟在客户端之后。性能按上面那句话验。
-
-## 六、仓库
-
-pnpm workspace，工具链是 Vite+（`vp`）：包管理、任务运行、oxfmt、oxlint、类型检查一个入口。前端是 Solid 2.0（RC，钉死版本）加 Vite，store 是 Effect 自己的 `Atom`，`packages/client/src/bridge.ts` 十行把 atom 桥成 Solid accessor（页面分五个模块：App.tsx 是阅读器，readings.tsx 是 Record 的元件与 sheet，composer.tsx 是输入框，inspector.tsx 是检查器，timeline.tsx 是时间轴（布局在 lanes.ts）；CSS 同样按 reader / chrome / inspector / timeline 四份进 components 层，app.css 只剩层表）；组件库是平台本身（`<dialog>`、popover 加 anchor positioning、`role=meter`），图标是 Iconify 的 `ph` 集经 unplugin-icons 编译（2026-10-19 的选型记录在 `docs/frontend-stack-reading.md`，2026-10-21 从 React 迁过来：同样的 atom、同样的 CSS，少了三个依赖）。
-
-```
-packages/runtime/   运行时模块与自检
-packages/provider/  provider 层：连接、ai-sdk 编译、三个调用；URL 断言与 Anthropic 实测
-packages/server/    session 接缝上的线上适配器：POST 动作 → SSE 事件流，GET 节点；入口起一局
-packages/client/    玩家客户端：atom store 吃事件流，路径按活动兄弟推，草稿按帧长；IME 控制器搬自 Deckled
-docs/               设计记录
-vite.config.ts      格式与 lint 配置（根配置覆盖全部包）
-CLAUDE.md           Vite+ 生成的 agent 说明
+```text
+lookup → (decide → settle)* → gate → direct → narrate → check → polish → record
 ```
 
-运行：
+- **Opt-in structured stages:** Pure chat cards run only `narrate` and `record`; `lookup`, `decide`, `direct`, `check`, and `polish` activate automatically from what the card declares.
+- **Non-authoritative prose:** Only `narrate` reads `fiction` and the dialogue `transcript`, and it never sees raw numbers—state reaches narration strictly as `when`-gated prose bands.
+- **Deterministic state & two-phase world settlement:** Scalar `fields` settle via seeded RNG (`actions`) and post-prose multiple-choice `readouts`; mutable `world` tables/records update via sparse `DomainChange` transactions (`record`), separate from append-only `chronicle` memory (`notes`) and player-facing `theater` blocks (`inner`, `options`, `<<aside>>`).
+
+### 2. Immutable Log Tree & Derived Views
+
+- Every turn is a node in an append/amend tree (`Log`), recording only player inputs, seeds, and model outputs.
+- Branching (`checkout`), retries (`swipe`, `reword`), inline prose/input revisions (`edit`), and manual state adjustments (`setField`) are tree operations—state, transcripts, ledgers, and prefix-compressed summaries are pure path folds (`Derived`) with stable prompt-cache breakpoints across Anthropic, OpenAI-compatible, and Gemini endpoints.
+
+### 3. Layered Assembly Without Presets
+
+- Legacy monolithic presets are replaced by a uniform `Layer` resolution order:
+  `harness → card → mounted packs → local card settings → persona`
+- Players customize voice, writing switches (`pov`, `echo`, `agency`, `verbosity`, `polish`), enhancers (`Pack`), continuation shells (`Hat`), snippets, and provider routing without touching card internals.
+
+### 4. Departures from Legacy Tavern Clients
+
+| Legacy Tavern Habit                       | Effect Tavern Replacement                                                      | Why                                                                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Monolithic `preset`**                   | `request.ts` + `Layer` / `Pack` / `switches` + `Hat` + `Connection`            | Separates wire roles, player prose preferences, provider continuation handshakes, and endpoint parameters by owner.        |
+| **`character card` (`V2` / `V3`)**        | Unified `Card` (`frame` + `fiction` + `participant` / `author` coordinates)    | Covers 1-on-1 roleplay, ensemble casts, RPGs, and protagonist-free worlds without shoehorning world logic into NPC fields. |
+| **Chat `depth` (`@D`) & `Author's Note`** | Strict two-zone assembly (`head` + `tail`) & non-persisted `note` channel      | Never splices prompts into mid-history, preserving 100% KV prefix-cache stability and a clean dialogue `transcript`.       |
+| **`worldbook` keyword scanning**          | State-gated `Lore` (`unlock` floor, `offer` window, `sections`) + `lookup`     | Replaces brittle substring/regex triggers with monotone plot progression, semantic lookup over hooks, and `ContextPolicy`. |
+| **Inline `<status>` / MVU + Regex**       | `decide` / `settle` + `record` (`Readout`, `Product`, `DomainChange`)          | Keeps `narrate` focused purely on prose while code and structured `record` calls own state and side blocks.                |
+| **Flat `swipes[]` & branch file copies**  | Immutable `Log` tree (`checkout`, `swipe`, `reword`, `edit`) + `Derived` folds | Zero-copy branching at any turn; state, floors, and interval summaries never desynchronize across branches.                |
+
+---
+
+## Workspace Layout
+
+```text
+packages/
+  runtime/    Turn pipeline, Card/Layer/Product schemas, log tree, derived folds, static lint & offline card CLI
+  provider/   Connection records, AI SDK compilation (Anthropic / OpenAI-compatible / Gemini), cache & stream primitives
+  server/     SQLite library, HTTP + SSE host, Workshop endpoints (compile / sort / review), and `tavern` CLI
+  client/     Solid 2.0 web client: Reader, Card Page, Status & Theater, Inspector, Timeline, Packs, Hats & Vault
+skills/
+  card-author/  Progressive-disclosure agent skill for authoring, testing, and remastering cards
+site/           Cloudflare Nimbus (Astro) documentation site (HTML + clean Markdown + llms.txt)
+docs/           Internal engineering research and design briefs
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Bun** `>= 1.4.4` and **Node.js** `>= 24`
+- **Vite+** (`vp` CLI, `pnpm@12.11.1`)
 
 ```sh
 vp install
-vp check        # oxfmt + oxlint + tsc
-pnpm verify     # 自检脚本（node:assert，不用 vitest，Bun 跑）；provider 的 Anthropic 实测需要 ANTHROPIC_API_KEY，没有就跳过
-bun packages/server/src/main.ts wuxia 7777    # 起一局
-cd packages/client && bun --bun vp dev          # 页面在 5173，/api 代理到 7777
 ```
 
-独立无头入口（无需前端构建或开发者凭据）：
+### Web Stack (Development & Single-Port Server)
 
 ```sh
-MODEL=fake DATA=/tmp/tavern-headless bun packages/server/src/headless.ts
-# 默认 127.0.0.1:7777/api；省略 MODEL=fake 时使用库内的模型路由
-cd packages/server && bun run compile:headless
-# dist/tavern-headless 内嵌四张模板卡，可在仓库外运行
+# Full-stack dev server (Vite HMR client + in-process /api session on .dev/tavern.db)
+bun --bun vp run dev
+
+# Use scripted zero-token model or a custom directory of YAML cards
+MODEL=fake CARDS=./my-cards bun --bun vp run dev
+
+# Build client & run single-port server (serves /api + built client on :7777)
+cd packages/client && bun --bun vp build
+bun run tavern serve --port 7777
 ```
 
-无头入口的默认数据目录是当前目录下的 `.tavern/`；开发入口仍用 `.dev/`。占库冲突默认报错并给出 PID 与路径，隔离运行显式指定独立 `DATA`。已安装卡优先于同 ID 模板；更新后，空闲故事重新加载，运行中的回合先用原卡结束。历史已送达文本保留，派生状态按新规则重算。CLI 路线图与进度见 [headless-cli-brief](docs/headless-cli-brief.md)。
+### CLI Host & Headless Play (`tavern`)
 
-代理是连接记录上的显式字段（不写跟运行时、`false` 直连、URL 走它），就是 Bun fetch 自带的 `proxy` 三态，逐请求带上，不再有 undici；Node 的 fetch 不认这个选项，只在 `NODE_USE_ENV_PROXY=1` 下读环境变量。
+```sh
+# Terminal play (pass MODEL=fake or --model fake for zero-token runs)
+MODEL=fake bun run tavern play wuxia --greeting 0 --input "走进竹林"
 
-运行时是 Bun 1.4.4 或更新，直接执行 `.ts`，没有构建步骤；`vp dev` 本身起的是 Node，`bun --bun vp dev` 让它也跑在 Bun 上。pnpm 钉在 12.11.1，`effect` 固定在 4.0.5。`docs/` 不参与格式化。
+# Manage stories & headless server (defaults to .tavern/tavern.db; pass --url to attach to a running server)
+bun run tavern story list
+bun run tavern serve --headless --port 7777
+```
 
-## 七、文档
+### Card Authoring & Workshop Toolchain (`card`, `unroll`, `tavern card`)
 
-`docs/state-harness-research.md` 是搬进来的原型阶段调研记录，按章节编号归档。代码注释里的 `§n` 指向它的章节。它记录的是过程，本文记录的是现状；两者冲突时以本文为准。
+```sh
+# Offline zero-token authoring loop (init, static lint, prompt preview, scenario assertions)
+bun packages/runtime/bin/card.ts init my-card --template readout
+bun packages/runtime/bin/card.ts check wuxia
+bun packages/runtime/bin/card.ts view ri --stage record --state affection=60
+bun packages/runtime/bin/card.ts test wuxia
 
-`docs/card-reading.md`、`docs/preset-reading.md`、`docs/preset-reading-2.md`、`docs/tavern-helper-reading.md`、`docs/card-reading-2.md` 是对生态材料的结构化阅读记录：五张卡、两份预设（一份代码化、一份魔咒式）、一个作者自建的运行时、一张重前端的 MVU 卡加 MVU 维护者的工具链示例（末节是对协议的要求清单）。每份末尾的"跨文件的规则"是读出来的结论，待确认后再折进本文。`docs/provider-reading.md` 是对 provider 层的同类阅读：SillyTavern 原版、API Hub 补丁、Deckled 的协议层、`effect/ai` 的现成能力，末尾是 provider 层的拟议形状。`docs/deckled-workbench-reading.md` 是对前作 Deckled 主工作面（Transcript、Composer）的阅读：哪些机制与流程能搬进玩家客户端，哪些是 agent 专属或它自己已推翻的，末尾是对协议与客户端的要求。`docs/chatbot-template-reading.md` 读 shadcn 的 chatbot-template：作为客户端骨架哪些直接能用、砍掉 agent 能力后仍错位的四处、要换的两件。`docs/memory-table-reading.md` 与 `docs/baibai-book-reading.md` 读生态里两个记忆扩展：前者（数据库 / 记忆表格）是在宿主旁再造一个宿主，后者（柏宝书）用消息 extra 当事件日志、状态由 fold 派生、压缩与状态分离，独立走到了本项目的结构；两份都先按三堆（兼容补丁 / 方向错误 / 我们已有）分，末节只列过了三问的要求。`docs/risuai-reading.md` 读 RisuAI，门类里唯一现代栈、非 ST 代码基的完整客户端，前后端一起对照：它没有后端（harness 整个跑在浏览器里），swipe 不落库、分支整条复制，记忆是存在 chat 上的模型摘要，Svelte 没有给它流式（累计全文、每 delta 重挂）；结论零协议改动，栈便宜、store 贵，客户端留下对白标记与 col-reverse 两条，插件沙箱是作者视图 iframe 协议的参照。`docs/frontend-stack-reading.md` 读四个前端对照（gpui-kit、mygo、zeron、T3 Code），回答"React 之外有没有能走多端的栈"：三个原生栈都到不了手机浏览器，zeron 的 iOS 不经 gpui；四个在转录面上收敛到同一组与框架无关的技术（块粒度行、精确高度、弹簧跟底加输入打断、只重解析最后一个开放块、paint 层淡入），T3 Code 给出 Effect 服务端到客户端的缝（seq 流项三元组、续传预算、前向兼容联合、有界快照）；结案：React 加 Vite，store 用 Effect 的 Atom 加 @effect/atom-react。`docs/pretext-reading.md` 读 chenglou 的 pretext：不碰 DOM 的精确文本布局，是一万条消息那个量级的虚拟化层，流式它明确不覆盖（按 token 重 prepare 随长度平方增长，CJK 十倍贵）；对照出三堆：流式手感的两条病根已治且与它无关，resize 钉住阅读位置浏览器自带，量级未到。
+# Inspect a legacy SillyTavern V2/V3 PNG or JSON card in assembly order
+bun packages/runtime/bin/unroll.ts path/to/card.png
+
+# AI-assisted Workshop (compile rules/bindings, sort verbatim prose, semantic review, install)
+bun run tavern card compile my-card.yaml --select fiction.setting --intent "Add a trust readout" -o candidate.yaml
+bun run tavern card install my-card.yaml
+```
+
+### Verification & Documentation Site
+
+```sh
+vp check            # oxfmt + oxlint (with Solid 2.0 rules) + type-aware tsc
+vp run verify       # Full assertion suite across runtime, provider, server, and client (including x18n check)
+
+pnpm run docs:dev   # Start the Nimbus documentation site locally
+pnpm run docs:check # Run Nimbus structural/MDX/link checks and static build
+```
+
+---
+
+## Documentation
+
+- **Documentation Site (`site/`):** Full guides in English and Chinese for architecture, card authoring, CLI & headless hosting, and layers/packs (also emits `/llms.txt` and `.md` endpoints for coding agents).
+- **[GLOSSARY.md](GLOSSARY.md):** Canonical English naming primitives mapping domain concepts directly to code identifiers.
+- **[skills/card-author/SKILL.md](skills/card-author/SKILL.md):** Agent skill for designing, linting, testing, and remastering cards.
+- **[CLAUDE.md](CLAUDE.md):** Workspace toolchain (`vp`), Solid 2.0 rules, i18n (`x18n`), and dev workflow conventions.

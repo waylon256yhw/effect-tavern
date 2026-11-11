@@ -165,7 +165,7 @@ const foldIn = (o: Partial<Layer>, r: Partial<Layer>): Partial<Layer> => {
   }
 }
 const parse = <T>(r: Row | undefined): T | undefined => (r ? (JSON.parse(r["json"] as string) as T) : undefined)
-/** A node's reply parts of a type that no longer exists (the `aside` part before #76 §二) dropped on read; no migration. */
+/** Drop unrecognized reply part types on read so only `text` and `reasoning` enter runtime nodes. */
 const known = <T>(n: T): T => {
   const reply = (n as { reply?: { type: string }[] }).reply
   return reply ? { ...n, reply: reply.filter((p) => p.type === "text" || p.type === "reasoning") } : n

@@ -33,12 +33,12 @@ const back = L.hold<N>(data.store<N>(story))
 assert.deepEqual(L.snapshot(back.log), { nodes: [{ id: 0, parent: null, text: "r" }], head: 0, next: 2 })
 assert.equal(back.commit(L.add(back.log, { parent: 0, text: "d" })).node!.id, 2)
 assert.throws(() => data.store<N>(99).read(), /no story 99/)
-// a node written before #76 §二 holds an `aside` part: read back without it
+// unrecognized reply part types on stored nodes are dropped on read
 back.commit(
   L.amend(back.log, 0, {
     reply: [
       { type: "text", text: "p" },
-      { type: "aside", text: "a" },
+      { type: "unknown", text: "a" },
     ],
   }),
 )

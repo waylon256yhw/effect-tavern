@@ -1,4 +1,4 @@
-// The player layer as one module (docs/packs-brief.md §九, GLOSSARY 玩家层): one kind of row, one author order, one pure
+// The player layer as one module (docs/packs-brief.md §九, GLOSSARY Layer): one kind of row, one author order, one pure
 // `resolve`, a result that says where each item came from. Every author writes a `Layer`: the harness's overlay (the
 // player's global row), each pack, and the player on one card (`Local`); a card is projected into a row here and never
 // stored as one.
@@ -410,7 +410,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
       slots.set(c.id, { ...c, from, compiled: true })
     }
   }
-  // A tail fragment is a per-turn directive, not a slot (GLOSSARY 尾区): its id meets the other rows' tail ids, never
+  // A tail fragment is a per-turn directive, not a slot (GLOSSARY Head / Tail): its id meets the other rows' tail ids, never
   // the card's head slots, so a tail row named `pov` neither yields to the card's pov nor knocks it out.
   const keyOf = (f: Fragment) => (f.at === "tail" ? `tail:${f.id}` : f.id)
   const cards = (f: Fragment) => f.at !== "tail" && theirs.has(f.id)

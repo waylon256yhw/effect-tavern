@@ -1,5 +1,5 @@
 import { emptyDraft, type DraftModel } from "./composition.ts"
-// The turn in flight (docs: GLOSSARY §二, review/architecture-review-2026-10-30.html card 3): the eight actions by
+// The turn in flight (docs: GLOSSARY Turn / Stop, review/architecture-review-2026-10-30.html card 3): the eight actions by
 // node id, plus stop, attach and abandon. Each one sends through the wire and lets the stream land it (store.ts
 // `apply`); the ones that run the narrator (act, swipe, reword, edit, keep) first put a draft under the node's parent.
 // The turn is the server's: a stream is only this client reading it. Stop asks the server (`POST /stop`), which
