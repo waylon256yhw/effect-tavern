@@ -137,3 +137,12 @@
 - `9db3216`：仅 aside 无正文的首稿进入重写时清除旧 products，attach 回归通过。
 - 验证：`vp run verify` 全仓通过；`vp check` 0 errors，保留既有 context.ts 字符串展开告警。实际 bun build --compile 应用成功；临时目录运行编译后二进制，嵌入前端返回 200、四张嵌入卡可读、SIGTERM 正常退出。未启动或重启用户的开发服务器。
 - 第一批完成；后续契约统一、预览读取规则共享、工坊 layout 与清扫项尚未实施。
+
+**第二批实施记录（2026-11-11）。**
+
+- `d506140`：客户端、远程 CLI 与服务端共享库读契约及 attach/draft/failure 类型；Input 复用 journal，Routing 由拥有 Phase 的 runtime 导出，模型列表条目归 provider。CardView 包含 catalogs，Routing 包含 author，持久化 Input 包含 invoke；没有增加 client → server 依赖。JSON 请求与 SSE 握手失败共用错误读取，保留服务端 code，并覆盖纯文本代理错误。
+- `1e49055`：阶段读取规则按职责收回现有模块：context materialize 可读资源，product 选择与展开 asks，lore/names 统一名称展开，derived 共享 Current 投影。预览使用真实读取权限标注索引，补齐初始 world、record 的 invoked 与状态占位符，并对齐自动注入先于玩家指定注入的顺序。原有及新增对照测试直接比较预览与真实会话的 lookup/record 消息，覆盖 player-only、always、未填名称与 world。
+- 同一提交将 workshop 应用器移入 `runtime/src/workshop.ts`，`author.checkValue(value, rows)` 提供纯值检查报告；宿主 support 只负责 YAML 及其默认玩家配置。原先 context 的 node:crypto 是浏览器复用的实际阻碍，改为 @noble/hashes 的 SHA-256，保留 canonical JSON 与十六进制 revision；纯模块按具体 provider 入口导入，避开开发机 IO 导出。新增 browser 测试构建浏览器目标包，在没有 Node/Bun 全局对象的 VM 中执行检查和 compile，并比较中文/嵌套值/键序的旧新 hash。此测试验证平台独立性，不等于浏览器页面交互验收。
+- `98114f9`：draft JSON 存 `{card?, layout?}`，无 DDL 变化；旧裸 Card 按需归一化。GET 返回 `{card, draft, layout?}`，draft 只反映内容编辑；PUT 至少提供 card/layout 一项并保留未提供的另一项。安装成功或 DELETE 只清 card，保留 layout，没有 layout 才删行。回归覆盖 HTTP 双向独立更新、非法更新与安装失败不覆盖原值、安装/放弃后保留布局、数据库重开及旧格式读取。
+- 验证：最终 `vp check`、`vp run verify`、client 的 `vp build`、`vp run docs:check` 均通过。check 为 0 errors，保留既有 context 字符串展开告警；client 构建有大 chunk 提示。本轮未调用真实供应商、未操作真实用户库、未启动或重启用户的开发服务器。
+- 第二批完成。第三批仍是 C5 工坊机械能力/路径一致性与 C6 最小版本戳；C9 的 provider 探测循环迁移保持低优先级，本轮仅统一其列表类型。未引入共享跨端 draft reducer、通用兼容框架或模型输出 Schema AST 裁剪。
