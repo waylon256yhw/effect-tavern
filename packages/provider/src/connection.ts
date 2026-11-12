@@ -4,7 +4,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import type { LanguageModel } from "ai"
+import type { Experimental_DecisionModel, LanguageModel } from "ai"
 import type { Effort, Model } from "./call.ts"
 import { capabilities, type Capabilities } from "./capabilities.ts"
 import { formatsOf, plan, type Endpoint, type Format } from "./url.ts"
@@ -128,13 +128,30 @@ export const compile = (c: Connection, o: CompileOptions = {}): LanguageModel =>
         includeUsage: true,
       })(c.model)
     case "gemini":
-      return createGoogleGenerativeAI({
-        ...common,
-        ...(cred.type === "api_key"
-          ? { apiKey: cred.key }
-          : { apiKey: PLACEHOLDER, headers: { ...c.headers, ...authHeaders(c) } }),
-      })(c.model)
+      return google(c, common)(c.model)
   }
+}
+
+const google = (c: Connection, common: { baseURL: string; headers?: Record<string, string>; fetch: typeof fetch }) =>
+  createGoogleGenerativeAI({
+    ...common,
+    ...(c.credential.type === "api_key"
+      ? { apiKey: c.credential.key }
+      : { apiKey: PLACEHOLDER, headers: { ...c.headers, ...authHeaders(c) } }),
+  })
+
+/** A decision model (decision.ts) from a connection: the same record, endpoint, key and proxy as a language model, a
+ *  different kind of model behind it (`POST {base}/decisions`, typed questions in, probabilities out, no text). Not a
+ *  fourth format: only the gemini endpoint serves one, and nothing a language model is configured with (hat, effort,
+ *  output cap, capabilities) applies. */
+export const compileDecision = (c: Connection, o: CompileOptions = {}): Experimental_DecisionModel => {
+  if (c.format !== "gemini") throw new Error(`connection "${c.id}": a decision model needs a gemini endpoint`)
+  const inner = o.fetch ?? fetchFor(c)
+  const fetch = o.onTrace ? traced(o.onTrace, o.traceBody ?? false, inner) : inner
+  const base = plan(c.format, c.endpoint, c.model).base
+  return google(c, { baseURL: base, headers: c.headers, fetch: fetch as typeof globalThis.fetch }).decisionModel(
+    c.model,
+  )
 }
 
 /** A connection bound for calls: compiled once, with the settings a stage reads off it. What the connection leaves

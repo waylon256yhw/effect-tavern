@@ -114,7 +114,7 @@ export class ModelError extends Schema.TaggedError<ModelError>()("ModelError", {
   cause: Schema.Unknown,
 }) {}
 // tryPromise wraps the rejection in an UnknownError; the ai-sdk error underneath carries the provider's message.
-const fail = (wrapped: unknown) => {
+export const modelError = (wrapped: unknown) => {
   const cause = wrapped instanceof Error && wrapped.cause instanceof Error ? wrapped.cause : wrapped
   return new ModelError({ message: cause instanceof Error ? cause.message : String(cause), cause })
 }
@@ -149,7 +149,7 @@ export const object = <S extends Schema.Top & Schema.Constraint & Schema.Constra
       ...settings(m.format, o),
     }),
   ).pipe(
-    Effect.mapError(fail),
+    Effect.mapError(modelError),
     Effect.map((r) => ({ value: r.output as S["Type"], usage: usage(r.usage), finishReason: r.finishReason })),
   )
 
@@ -162,7 +162,7 @@ export const text = (m: Model, messages: readonly Message[], o: CallOptions = {}
       ...settings(m.format, o),
     }),
   ).pipe(
-    Effect.mapError(fail),
+    Effect.mapError(modelError),
     Effect.map((r) => ({
       text: r.text,
       reasoning: r.reasoningText,
@@ -196,7 +196,7 @@ export interface Reply {
  *  would crash the process. So the iterator is never cancelled: interruption aborts the signal and the drain runs on
  *  to the `abort` part ai-sdk then emits, which is dropped. */
 export const streamed = (m: Model, messages: readonly Message[], o: CallOptions = {}) =>
-  Effect.try({ try: () => wire(m.format, messages, m.prefill), catch: fail }).pipe(
+  Effect.try({ try: () => wire(m.format, messages, m.prefill), catch: modelError }).pipe(
     Effect.map((wired) => {
       const ac = new AbortController()
       const r = streamText({
@@ -211,12 +211,12 @@ export const streamed = (m: Model, messages: readonly Message[], o: CallOptions 
           void (async () => {
             try {
               for await (const p of r.fullStream as AsyncIterable<Part>) {
-                if (p.type === "error") return void (await Effect.runPromise(Queue.fail(queue, fail(p.error))))
+                if (p.type === "error") return void (await Effect.runPromise(Queue.fail(queue, modelError(p.error))))
                 if (p.type !== "abort") await Effect.runPromise(Queue.offer(queue, p))
               }
               await Effect.runPromise(Queue.end(queue))
             } catch (e) {
-              await Effect.runPromise(Queue.fail(queue, fail(e)))
+              await Effect.runPromise(Queue.fail(queue, modelError(e)))
             }
           })()
         }),
@@ -226,7 +226,7 @@ export const streamed = (m: Model, messages: readonly Message[], o: CallOptions 
         parts: replyParts((await r.responseMessages).find((m) => m.role === "assistant") as AssistantModelMessage),
         usage: usage(await r.usage),
         finishReason: await r.finishReason,
-      })).pipe(Effect.mapError(fail))
+      })).pipe(Effect.mapError(modelError))
       return { parts, reply }
     }),
   )

@@ -8,7 +8,7 @@
     "./src/*": "./src/*"
   },
   "scripts": {
-    "verify": "bun check && bun test/url.ts && bun test/names.ts && bun test/providers.ts && bun test/bind.ts && bun test/models.ts && bun test/wire.ts && bun test/stage.ts && bun test/stage-wire.ts",
+    "verify": "bun check && bun test/url.ts && bun test/names.ts && bun test/providers.ts && bun test/bind.ts && bun test/models.ts && bun test/wire.ts && bun test/stage.ts && bun test/stage-wire.ts && bun test/decision.ts",
     "live": "bun test/anthropic.ts"
   },
   "dependencies": {
