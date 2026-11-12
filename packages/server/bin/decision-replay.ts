@@ -21,6 +21,7 @@ import {
 } from "@effect-tavern/provider"
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
 import { worldOf } from "@effect-tavern/runtime/src/layer.ts"
+import { expand } from "@effect-tavern/runtime/src/names.ts"
 import { cardNames, loadCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
 
@@ -68,16 +69,20 @@ const nodes = all("select n.story, n.id, s.card, n.json from node n join story s
   })
   .filter((x) => x.prose.trim())
 
-const questionsOf = (card: Card | undefined): Record<string, Question & { rule?: string }> =>
+/** A card text with its `{{holes}}` filled as a turn fills them (session.ts `lines`): the card's own names, and the
+ *  player as 你, which is what the proses call them. A hole nobody names stays as written. */
+const named = (card: Card, text: string): string => expand(text, { user: "你", ...card.names }) ?? text
+/** `tagged`: the state is <world> + <draft>, and the question says which of the two is judged (the check ask's "Judge
+ *  only what is written in <draft>", layer.ts). */
+const questionsOf = (card: Card | undefined, tagged: boolean): Record<string, Question> =>
   card?.guard.length
     ? Object.fromEntries(
         card.guard.map((rule, i) => [
           `g${i}`,
           {
             type: "boolean",
-            instructions: `这段正文是否违反了下面这条规则？\n规则：${rule}`,
+            instructions: `${tagged ? "只评判 <draft> 里的正文；<world> 只是背景，不算正文。<draft> " : "这段正文"}是否违反了下面这条规则？\n规则：${named(card, rule)}`,
             criteria: { true: "正文中发生了规则禁止的事。", false: "正文没有发生规则禁止的事。" },
-            rule,
           },
         ]),
       )
@@ -85,7 +90,7 @@ const questionsOf = (card: Card | undefined): Record<string, Question & { rule?:
 const worldText = (card: Card | undefined): string =>
   card
     ? worldOf(card, card.frame)
-        .map((f) => f.text ?? "")
+        .map((f) => named(card, f.text ?? ""))
         .filter(Boolean)
         .join("\n\n")
     : ""
@@ -104,7 +109,7 @@ let trace: Trace | undefined
 const model = dry ? undefined : compileDecision(config, secret, { onTrace: (t) => (trace = t) })
 
 const ask = async (at: string, variant: string, card: Card | undefined, state: string, expect?: boolean) => {
-  const qs = questionsOf(card)
+  const qs = questionsOf(card, state.startsWith("<world>"))
   if (!model) return console.log(`${at} [${variant}] ${state.length} chars, ${Object.keys(qs).length} question(s)`)
   trace = undefined
   const t0 = performance.now()
