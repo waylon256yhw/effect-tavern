@@ -37,3 +37,10 @@ minimumReleaseAgeExclude:
   - "@effect/platform-bun@4.1.4"
   - "@effect/platform-node-shared@4.1.4"
   - "@copilotkit/aimock@1.48.0"
+  - ai@7.0.170
+  - "@ai-sdk/google@4.0.118"
+  - "@ai-sdk/anthropic@4.0.102"
+  - "@ai-sdk/openai-compatible@3.0.90"
+  - "@ai-sdk/gateway@4.0.143"
+  - "@ai-sdk/provider@4.0.37"
+  - "@ai-sdk/provider-utils@5.0.79"

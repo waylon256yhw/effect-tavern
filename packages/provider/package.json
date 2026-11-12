@@ -12,10 +12,10 @@
     "live": "bun test/anthropic.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.87",
-    "@ai-sdk/google": "4.0.104",
-    "@ai-sdk/openai-compatible": "3.0.77",
-    "ai": "7.0.152",
+    "@ai-sdk/anthropic": "4.0.102",
+    "@ai-sdk/google": "4.0.118",
+    "@ai-sdk/openai-compatible": "3.0.90",
+    "ai": "7.0.170",
     "effect": "4.1.4"
   },
   "devDependencies": {
