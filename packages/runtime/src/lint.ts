@@ -7,6 +7,7 @@ import type { Card, Effect_, Field } from "./card.ts"
 import { type Cond, holds, reads, STATE_HOLE } from "./cond.ts"
 import { SLOTS } from "./fragment.ts"
 import { hook } from "./lore.ts"
+import { harness } from "./layer.ts"
 import { colsAt } from "./product.ts"
 import { HOLE, unfilled } from "./names.ts"
 import { type Entry, scan } from "./polish.ts"
@@ -29,6 +30,7 @@ const leaves = (c: Cond): Cond[] =>
 const eventsOf = (c: Cond) => leaves(c).flatMap((l) => ("event" in l ? [l.event] : []))
 /** Every Cond over state in the card, with its place. Product table filters read rows, not state, and are left out. */
 const conds = (card: Card): [string, Cond][] => [
+  ...(card.passages ?? []).map((p, i): [string, Cond] => [`passages[${i}].when`, p.when]),
   ...whenPaths("frame", card.frame),
   ...whenPaths("fiction", card.fiction),
   ...whenPaths("rules.actions", card.rules.actions),
@@ -57,9 +59,10 @@ const effects = (card: Card): [string, Effect][] => {
       q.options.flatMap((o) => at(`rules.readouts.${q.id}.options.${o.id}.do`, o.do)),
     ),
     ...card.greetings.flatMap((g, i) => at(`greetings[${i}].do`, g.do)),
+    ...(card.passages ?? []).flatMap((g, i) => at(`passages[${i}].do`, g.do)),
   ]
 }
-const written = (card: Card, by: "rules.actions." | "rules.readouts." | "greetings[") =>
+const written = (card: Card, by: "rules.actions." | "rules.readouts." | "greetings[" | "passages[") =>
   new Set(effects(card).flatMap(([p, e]) => (p.startsWith(by) && "path" in e ? [e.path] : [])))
 /** An emitted event with `{path}` interpolation names a family: `hp:{hp}` emits `hp:3`, which `{ event: "hp:3" }` reads. */
 const emits = (template: string, name: string) =>
@@ -162,13 +165,17 @@ const loreTexts = (card: Card): [string, string][] =>
     ...e.layers.map((t, i): [string, string] => [`lore.${e.id}.layers[${i}]`, t]),
     ...(e.sections ?? []).map((x): [string, string] => [`lore.${e.id}.sections.${x.id}`, x.text]),
   ])
+const openings = (card: Card) => [
+  ...card.greetings.map((g, i) => ({ ...g, path: `greetings[${i}]` })),
+  ...(card.passages ?? []).map((g, i) => ({ ...g, path: `passages[${i}]` })),
+]
 const texts = (card: Card): [string, string][] => [
   ...card.frame.flatMap((f): [string, string][] => (f.text ? [[`frame.${f.id}.text`, f.text]] : [])),
   ...card.fiction.flatMap((f): [string, string][] => (f.text ? [[`fiction.${f.id}.text`, f.text]] : [])),
   ...loreTexts(card),
-  ...card.greetings.flatMap((g, i): [string, string][] => [
-    ...(g.text ? [[`greetings[${i}].text`, g.text] as [string, string]] : []),
-    ...(g.note ? [[`greetings[${i}].note`, g.note] as [string, string]] : []),
+  ...openings(card).flatMap((g): [string, string][] => [
+    ...(g.text ? [[`${g.path}.text`, g.text] as [string, string]] : []),
+    ...(g.note ? [[`${g.path}.note`, g.note] as [string, string]] : []),
   ]),
 ]
 const prose = (card: Card, rule: string, lexicon: readonly Entry[], message: string, hint: string): Diagnostic[] =>
@@ -239,9 +246,9 @@ const rules: Rule[] = [
       ...card.frame.map((f): [string, string | undefined] => [`frame.${f.id}.text`, f.text]),
       ...card.fiction.map((f): [string, string] => [`fiction.${f.id}.text`, f.text ?? ""]),
       ...(card.asks ?? []).map((f): [string, string | undefined] => [`asks.${f.id}.text`, f.text]),
-      ...card.greetings.flatMap((g, i): [string, string | undefined][] => [
-        [`greetings[${i}].text`, g.text],
-        [`greetings[${i}].note`, g.note],
+      ...openings(card).flatMap((g): [string, string | undefined][] => [
+        [`${g.path}.text`, g.text],
+        [`${g.path}.note`, g.note],
       ]),
       ...card.guard.map((t, i): [string, string] => [`guard[${i}]`, t]),
       ...loreTexts(card),
@@ -269,19 +276,40 @@ const rules: Rule[] = [
   },
   // a greeting is shown text, a note the narrator opens from, or both: with neither there is no node 0
   (card) =>
-    card.greetings.flatMap((g, i): Diagnostic[] =>
+    openings(card).flatMap((g): Diagnostic[] =>
       !g.text?.trim() && !g.note?.trim() // session.ts `begin` reads them the same way
         ? [
             {
               rule: "empty-greeting",
               level: "error",
-              path: `greetings[${i}]`,
+              path: g.path,
               message: "greeting has neither text nor note",
               hint: "Write the opening prose as `text`, or direct the narrator's opening with `note`.",
             },
           ]
         : [],
     ),
+  (card) => {
+    const products = [
+      ...new Map(
+        [...(harness(card.input ?? "act").products ?? []), ...(card.products ?? [])].map((p) => [p.id, p]),
+      ).values(),
+    ]
+    return (card.passages ?? []).flatMap((p, i) =>
+      (p.digest ?? []).flatMap((id, j): Diagnostic[] =>
+        products.some((q) => q.id === id && (q.stage ?? "record") === "record")
+          ? []
+          : [
+              {
+                rule: "unknown-product",
+                level: "error",
+                path: `passages[${i}].digest[${j}]`,
+                message: `${id}: digest requires a visible record product`,
+              },
+            ],
+      ),
+    )
+  },
   // `lore` is the gate's derived counters, not a card field.
   (card) =>
     card.rules.fields
@@ -401,7 +429,11 @@ const rules: Rule[] = [
   // A field nothing writes in play never moves, unless a story's opening sets it (`start` or a greeting's `do`): that is
   // an opening switch. A hidden field or an opening switch nothing reads is a switch wired to nothing.
   (card) => {
-    const moved = new Set([...written(card, "rules.actions."), ...written(card, "rules.readouts.")])
+    const moved = new Set([
+      ...written(card, "rules.actions."),
+      ...written(card, "rules.readouts."),
+      ...written(card, "passages["),
+    ])
     const opening = new Set([
       ...card.rules.fields.flatMap((f) => (f.start ? [f.path] : [])),
       ...written(card, "greetings["),

@@ -17,7 +17,7 @@ import {
 import type { PackEntry } from "./layer.ts"
 import { holds, type Cond, type State as Paths } from "./cond.ts"
 import type { Beat, Check, Rpg, State, LoreEntry } from "./card.ts"
-import { folded, ledger, makeSummaries, type Policy } from "./history.ts"
+import { epoch, boundaryIndex, folded, ledger, makeSummaries, type Policy } from "./history.ts"
 import { deliveredIn, deliveredOn, notesOf, textOf as proseOf, type Turn as TurnOf } from "./journal.ts"
 import { key, type Disclosure, type Lore } from "./lore.ts"
 import { fold, render, type Product } from "./product.ts"
@@ -101,13 +101,13 @@ export const makeDerived = ({
       costs.set(t, (c = tokens([t.input.text, proseOf(t.reply), ...t.deliveries.map((d) => d.text)].join("\n"))))
     return c
   }
-  const foldOf = (path: readonly Turn[]) => folded(path, costIn, policy())
+  const foldOf = (path: readonly Turn[]) => folded(epoch(path), costIn, policy())
   /** The one summary every view of this path folds to (narrator, ledger), the same cached object. */
-  const summaryOf = (path: readonly Turn[]) => summaries.compress(path, path.length - foldOf(path))
+  const summaryOf = (path: readonly Turn[]) => summaries.compress(epoch(path), epoch(path).length - foldOf(path))
   /** Feed products folded over the path, as the two lines the model reads back: Known (notes) and Current (the rest). */
   const known = (path: readonly Turn[], recall = false) => {
     return {
-      known: `Known: ${path.flatMap(notesOf).join("; ")}`,
+      known: `Known: ${epoch(path).flatMap(notesOf).join("; ")}`,
       current: currentAt(
         products(),
         worldAt(path),
@@ -218,7 +218,7 @@ export const makeDerived = ({
   const resident = (path: readonly Turn[]) => {
     const sum = summaryOf(path)
     const resources = resourcesOn(path)
-    return residentOn(path, sum ? path.findIndex((t) => t.id === sum.to) + 1 : 0).filter(
+    return residentOn(path, Math.max(boundaryIndex(path), sum ? path.findIndex((t) => t.id === sum.to) + 1 : 0)).filter(
       (s) =>
         // Removed entities no longer provide current context; their frozen evidence remains on the original turn.
         s.source !== "memory" || resources.some((r) => r.resourceId === s.resourceId),

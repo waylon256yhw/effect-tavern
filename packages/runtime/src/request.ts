@@ -95,6 +95,7 @@ export type Ask =
   | { stage: "polish"; question: string; hints: readonly string[]; prose: string } // prose with <target> marks
   | {
       stage: "record"
+      history?: readonly Msg[]
       tools?: string
       invoked?: readonly string[] // frozen player selections, including additions on a prose-preserving edit
       known: string
@@ -225,9 +226,10 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
           : []),
         sys([a.known, ...(a.current ? [a.current] : [])].join("\n")),
         ...thoughtOf(c),
+        ...(a.history ?? []).map(toP(w)),
         tagged(
           "scene",
-          sceneBody(c.input, a.prose),
+          a.history ? "Extract from the preceding story transcript for this interval." : sceneBody(c.input, a.prose),
           [...a.asks, ...(a.tools ? [a.tools] : [])].join("\n"),
           a.questions ? `${a.readout}\nQuestions: ${a.questions.join("\n")}` : "",
         ),

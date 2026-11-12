@@ -12,7 +12,7 @@
   "scripts": {
     "card": "bun bin/card.ts",
     "unroll": "bun bin/unroll.ts",
-    "verify": "bun check && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/derived.ts && bun test/assemble.ts && bun test/request.ts && bun test/polish.ts && bun test/loop.ts && bun test/invoke.ts && bun test/lookup.ts && bun test/layer.ts && bun test/names.ts && bun test/card.ts && bun test/lint.ts && bun test/product.ts && bun test/record.ts && bun test/tokens.ts && bun test/view.ts && bun test/author.ts && bun test/browser.ts && bun test/unroll.ts",
+    "verify": "bun check && bun test/log.ts && bun test/lore.ts && bun test/views.ts && bun test/derived.ts && bun test/assemble.ts && bun test/request.ts && bun test/polish.ts && bun test/loop.ts && bun test/invoke.ts && bun test/lookup.ts && bun test/layer.ts && bun test/names.ts && bun test/card.ts && bun test/lint.ts && bun test/product.ts && bun test/record.ts && bun test/passages.ts && bun test/tokens.ts && bun test/view.ts && bun test/author.ts && bun test/browser.ts && bun test/unroll.ts",
     "live": "bun test/live.ts"
   },
   "dependencies": {

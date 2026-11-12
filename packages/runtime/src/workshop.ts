@@ -37,6 +37,7 @@ export const mechanical = (card: Card) => {
     fiction: card.fiction.map(fragment),
     asks: card.asks?.map(fragment),
     greetings: card.greetings.map((g) => ({ do: g.do })),
+    ...(card.passages && { passages: card.passages.map(({ text: _text, note: _note, ...p }) => p) }),
     rules: {
       ...card.rules,
       fields: card.rules.fields.map(({ label: _l, group: _g, ...wiring }) => wiring),

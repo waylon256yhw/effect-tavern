@@ -12,6 +12,13 @@
 import type { Msg } from "./fragment.ts"
 import { notesOf, prose, type Turn } from "./journal.ts"
 
+export const boundaryIndex = <B>(path: readonly Turn<B>[]) =>
+  Math.max(
+    0,
+    path.findLastIndex((t) => t.boundary === true),
+  )
+export const epoch = <B>(path: readonly Turn<B>[]) => path.slice(boundaryIndex(path))
+
 export interface Summary {
   from: number
   to: number
@@ -85,6 +92,7 @@ const tailOf = <B>(path: readonly Turn<B>[], sum?: Summary) =>
  *  `sum` is the summary the POLICY chose for this path (what `compress` returned); the side table is a cache and a cache
  *  never decides what a view contains, so the view is a function of (path, policy) and identical across branches. */
 export const narratorHistory = <B>(path: readonly Turn<B>[], sum?: Summary): Msg[] => {
+  path = epoch(path)
   return [
     ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
     ...tailOf(path, sum).flatMap((t): Msg[] => [
@@ -103,7 +111,7 @@ export const ledger = <B>(
   eventsOf: (t: Turn<B>) => readonly string[],
   sum?: Summary,
 ): Msg[] => {
-  const tail = tailOf(path, sum)
+  const tail = tailOf(epoch(path), sum)
   return [
     ...(sum ? [{ role: "system", text: sum.text } as Msg] : []),
     ...(tail.length

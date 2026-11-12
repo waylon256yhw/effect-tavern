@@ -294,6 +294,13 @@ export const Greeting = Schema.Struct({
   do: Schema.optionalKey(Schema.Array(Effect_)),
 })
 export type Greeting = typeof Greeting.Type
+export const Passage = Schema.Struct({
+  ...Greeting.fields,
+  when: Cond,
+  digest: Schema.optionalKey(Schema.Array(Schema.String)),
+  end: Schema.optionalKey(Schema.Boolean),
+})
+export type Passage = typeof Passage.Type
 /** A greeting as a client draws it: its shown line (the note's first line when it has no text); the note itself stays
  *  on the server like every other direction to the narrator. */
 export const shownGreeting = ({ note, ...g }: Greeting) => ({ ...g, text: g.text ?? note?.split("\n")[0] ?? "" })
@@ -308,6 +315,7 @@ export const Card = Schema.Struct({
   frame: Schema.Array(Fragment), // slots: persona, voice, style, setting …
   fiction: Schema.Array(Fragment), // a character, a cast or a world; variants carry `when`
   greetings: Schema.Array(Greeting),
+  passages: Schema.optionalKey(Schema.Array(Passage)),
   rules: Rules,
   lore: Schema.Array(LoreEntry),
   guard: Schema.Array(Schema.String), // checked after the prose, never shown to the narrator

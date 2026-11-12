@@ -60,7 +60,7 @@ import {
 import { Deferred, Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
 import { Effect_, makeCard, shownGreeting, type Beat, type Card, type Greeting, type State } from "./card.ts"
-import { expandState, type State as Paths } from "./cond.ts"
+import { holds, expandState, type State as Paths } from "./cond.ts"
 import { gateOf, makeDerived, type Node } from "./derived.ts"
 import { head as headOf, type Hat } from "./fragment.ts"
 import { narratorHistory, policyFor, type Policy } from "./history.ts"
@@ -374,6 +374,7 @@ export const makeSession = ({
     state: State,
     scene: Pick<Turn, "input" | "reply" | "deliveries">,
     qs?: { schema: Schema.Top; lines: string[] }, // readouts on the post-settlement state, when the card declares any
+    interval = false,
   ) =>
     Effect.gen(function* () {
       const context = derived.at(path).context(state)
@@ -399,7 +400,8 @@ export const makeSession = ({
         tools: wording("record.tools"),
         readout: wording("record.readout"),
         questions: qs?.lines,
-        prose: proseOf(scene.reply),
+        prose: interval ? "" : proseOf(scene.reply),
+        ...(interval && { history: narratorHistory(path, derived.at(path).summary()) }),
       })
       const result = yield* native(emit, "record", msgs, {
         tools: tx.tools,
@@ -447,6 +449,31 @@ export const makeSession = ({
       return capped({ [p.id]: blocks[p.id] ?? proseOf(reply).trim() })
     })
 
+  // An ungenerated passage contributes its digest and boundary to derived context, never to the transcript or log.
+  const passageView = (path: readonly Turn[], seed: Partial<Turn>): readonly Turn[] => [
+    ...path,
+    {
+      id: -1,
+      parent: path.at(-1)?.id ?? null,
+      input: { text: "" },
+      read: [],
+      deliveries: [],
+      opportunities: [],
+      beats: [],
+      answers: {},
+      end: "end",
+      brief: { must: [], may: [] },
+      reply: [],
+      fired: [],
+      violated: [],
+      settlementStatus: "committed",
+      settlementVersion: 0,
+      boundary: seed.boundary,
+      products: seed.products ?? {},
+      changes: seed.changes ?? [],
+    },
+  ]
+
   // ───────── The turn ─────────
   /** `from` is where a sibling starts: lookup (a swipe), narrate (a reword: lookup, beats and brief kept from `base`),
    *  check (an edit: the player's prose stands in for the narrator's, check and record run over it). */
@@ -459,7 +486,8 @@ export const makeSession = ({
     base?: Turn,
     stop?: Stop,
     start?: readonly (typeof Effect_.Type)[], // a new root's opening (a dynamic greet); a sibling carries its base's
-  ) =>
+    transition?: Partial<Pick<Turn, "boundary" | "passage" | "end" | "products" | "changes">>,
+  ): Effect.Effect<void, ModelError> =>
     Effect.gen(function* () {
       // no line and no note: nothing to run the narrator from (an act of nothing, or a sibling of an opening; an edit
       // of the prose alone starts at check and needs none)
@@ -467,9 +495,17 @@ export const makeSession = ({
         throw new Error(base ? `node ${base.id}: nothing to rerun` : "empty input")
       fresh()
       const path = chain(parent)
+      if (parent !== null && turnOf(parent).end === "over") throw new Error("terminal node cannot accept children")
       if (path.some((t) => t.settlementStatus === "pending" || t.settlementStatus === "failed"))
         throw new Error("parent settlement must be completed or explicitly skipped")
-      const here = derived.at(path)
+      if (
+        path.some(
+          (t) => (t.passageStatus === "pending" || t.passageStatus === "failed") && !(transition && t.id === parent),
+        )
+      )
+        throw new Error("parent passage must be completed before continuing")
+      const viewPath = transition ? passageView(path, transition) : path
+      const here = derived.at(viewPath)
       // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
       const guard = lines(card.guard, layer().names)
       // a root's opening settles first, as the fold does (derived.ts `settleFresh`); its events reach this turn's gate
@@ -585,7 +621,7 @@ export const makeSession = ({
       const { s: s1, events } = rpg.fold(s0, beats, here.context(s0))
       // gate: after settlement, on this turn's beat events plus what the turn before emitted after its own gate
       // (derived.ts `gate`). Director only if the card has one and something is open.
-      const gateEvents = [...o.events, ...events, ...here.post]
+      const gateEvents = [...o.events, ...events, ...derived.at(path).post]
       const gate = here.gate({
         state: s1,
         events: [...o.events, ...events],
@@ -688,7 +724,7 @@ export const makeSession = ({
           const msgs = ask(here.context(s1), input, {
             stage: "narrate",
             fiction: fictionAt(here.context(s1)),
-            history: narratorHistory(path, sum),
+            history: transition?.boundary ? [] : narratorHistory(path, sum),
             summarized: sum !== undefined,
             told: latest([...resident, ...deliveries]).map(deliveryText),
             outcome: events,
@@ -790,26 +826,44 @@ export const makeSession = ({
           violated,
           ...(opening && { opening }),
           ...(base && { sibling: SIBLING[from] }),
-          products: capped(written),
           changes: [],
           settlementStatus: "pending",
           settlementVersion: 0,
+          ...(base?.passage && { passage: true as const }),
+          ...(base?.boundary && { boundary: true as const }),
+          ...transition,
+          products: { ...capped(written), ...transition?.products },
         }),
       )
+      // Once the passage exists, its own settlement owns recovery. The parent is no longer blocked.
+      if (transition && parent !== null) {
+        const completed = held.commit(
+          Log.amend(held.log, parent, { passageStatus: "committed", settlementError: undefined }),
+        )
+        yield* emit({ kind: "change", ...change(completed) })
+      }
       yield* emit({ kind: "change", ...change(c) })
       yield* settleRecord(emit, c.node!.id)
     })
   const attempts = new Map<number, Deferred.Deferred<void>>()
-  const settleRecord = (emit: Emit, nodeId: number) =>
+  const settleRecord = (emit: Emit, nodeId: number): Effect.Effect<void, ModelError> =>
     Effect.gen(function* () {
       fresh()
       const original = turnOf(nodeId)
+      if (
+        original.settlementStatus === "committed" &&
+        (original.passageStatus === "pending" || original.passageStatus === "failed")
+      ) {
+        yield* pass(emit, nodeId)
+        return
+      }
       if (original.settlementStatus === "committed" || original.settlementStatus === "skipped")
         throw new Error("settlement is already closed; create a revision branch")
       if (attempts.has(nodeId)) throw new Error("settlement is already running")
       const path = chain(original.parent)
       const pre = derived.at(path).settle(original).pre
-      const context = derived.at(path).context(pre)
+      const viewPath = original.passage ? passageView(path, original) : path
+      const context = derived.at(viewPath).context(pre)
       const asked = askedAt(products(), "record", context)
       const N = layer().names
       const qs = rpg.readoutSchema(pre, N, context)
@@ -840,7 +894,7 @@ export const makeSession = ({
         const rec = yield* record(
           emit,
           asked,
-          path,
+          viewPath,
           pre,
           original,
           qs ? { schema: qs, lines: rpg.questions(pre, N, context) } : undefined,
@@ -849,7 +903,7 @@ export const makeSession = ({
         const c = held.commit(
           Log.amend(held.log, nodeId, {
             products: { ...original.products, ...rec.products },
-            changes: rec.changes,
+            changes: [...original.changes, ...rec.changes],
             answers: rec.answers,
             settlementStatus: "committed",
             settlementAttempt: undefined,
@@ -857,6 +911,13 @@ export const makeSession = ({
           }),
         )
         yield* emit({ kind: "change", ...change(c) })
+        const settled = derived.at(chain(nodeId))
+        if (rpg.over(settled.state, settled.context()) && turnOf(nodeId).end !== "over") {
+          const over = held.commit(Log.amend(held.log, nodeId, { end: "over" }))
+          yield* emit({ kind: "change", ...change(over) })
+        }
+        if ((original.parent !== null || !!original.input.text) && !original.passage && turnOf(nodeId).end !== "over")
+          yield* pass(emit, nodeId)
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {
@@ -886,12 +947,16 @@ export const makeSession = ({
   }
 
   /** A greeting node: the card's opening as a root, with no player input; its `do` is the node's opening. */
-  const greet = (g: Greeting): Change => {
+  const greet = (
+    g: Greeting,
+    parent: number | null = null,
+    transition?: Partial<Pick<Turn, "boundary" | "passage" | "end" | "products" | "changes">>,
+  ): Change => {
     fresh()
     return change(
       held.commit(
         Log.add(held.log, {
-          parent: null,
+          parent,
           input: { text: "" },
           read: [],
           deliveries: [],
@@ -908,10 +973,85 @@ export const makeSession = ({
           changes: [],
           settlementStatus: "committed",
           settlementVersion: 0,
+          ...transition,
         }),
       ),
     )
   }
+
+  const transitions = new Map<number, Deferred.Deferred<void>>()
+  const pass = (emit: Emit, nodeId: number): Effect.Effect<void, ModelError> =>
+    Effect.gen(function* () {
+      if (transitions.has(nodeId)) throw new Error("passage is already running")
+      const cancel = yield* Deferred.make<void>()
+      transitions.set(nodeId, cancel)
+      return yield* Effect.gen(function* () {
+        const path = chain(nodeId)
+        const here = derived.at(path)
+        const p = card.passages?.find((p) => holds(p.when, here.context()))
+        if (!p) return
+        const pending = held.commit(
+          Log.amend(held.log, nodeId, { passageStatus: "pending", settlementError: undefined }),
+        )
+        yield* emit({ kind: "change", ...change(pending) })
+        const child = [...held.log.nodes.values()].find((t) => t.parent === nodeId && t.passage)
+        if (child) {
+          if (child.settlementStatus === "pending" || child.settlementStatus === "failed")
+            yield* settleRecord(emit, child.id)
+        } else {
+          const snapshot = chain(nodeId)
+          const asked = products().filter((q) => p.digest?.includes(q.id) && (q.stage ?? "record") === "record")
+          const digest = yield* record(
+            emit,
+            asked,
+            path,
+            here.state,
+            { input: { text: "" }, reply: [], deliveries: [] },
+            undefined,
+            true,
+          )
+          if (snapshot.some((t) => held.log.nodes.get(t.id) !== t)) throw new Error("stale passage attempt")
+          const transition = {
+            passage: true as const,
+            ...(p.digest !== undefined && { boundary: true as const }),
+            ...(p.end && { end: "over" as const }),
+            products: digest.products,
+            changes: digest.changes,
+          }
+          if (p.note?.trim())
+            yield* turn(
+              emit,
+              nodeId,
+              { text: "", note: named("opening", p.note) },
+              "lookup",
+              undefined,
+              undefined,
+              p.do,
+              transition,
+            )
+          else yield* emit({ kind: "change", ...greet(p, nodeId, transition) })
+        }
+        const done = held.commit(
+          Log.amend(held.log, nodeId, { passageStatus: "committed", settlementError: undefined }),
+        )
+        yield* emit({ kind: "change", ...change(done) })
+        const landed = [...held.log.nodes.values()].find((t) => t.parent === nodeId && t.passage)!
+        yield* emit({ kind: "change", node: project(landed), head: held.log.head })
+      }).pipe(
+        Effect.raceFirst(Deferred.await(cancel).pipe(Effect.andThen(Effect.interrupt))),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            transitions.delete(nodeId)
+            if (held.log.nodes.get(nodeId)?.passageStatus === "pending") {
+              const failed = held.commit(
+                Log.amend(held.log, nodeId, { passageStatus: "failed", settlementError: "passage did not complete" }),
+              )
+              yield* emit({ kind: "change", ...change(failed) })
+            }
+          }),
+        ),
+      )
+    })
 
   return {
     greet,
@@ -942,13 +1082,21 @@ export const makeSession = ({
       )
     },
     cancelRecord: (nodeId: number): boolean => {
-      const cancel = attempts.get(nodeId)
+      const cancel = transitions.get(nodeId) ?? attempts.get(nodeId)
       if (cancel) Deferred.doneUnsafe(cancel, Effect.void)
       return cancel !== undefined
     },
     retryRecord: (nodeId: number): Events => emitting((emit) => settleRecord(emit, nodeId)),
     skipRecord: (nodeId: number): Change => {
       const t = turnOf(nodeId)
+      if (t.passageStatus === "pending" || t.passageStatus === "failed") {
+        const c = change(
+          held.commit(Log.amend(held.log, nodeId, { passageStatus: "skipped", settlementError: undefined })),
+        )
+        const cancel = transitions.get(nodeId)
+        if (cancel) Deferred.doneUnsafe(cancel, Effect.void)
+        return c
+      }
       if (t.settlementStatus !== "pending" && t.settlementStatus !== "failed")
         throw new Error("settlement is already closed")
       const c = change(

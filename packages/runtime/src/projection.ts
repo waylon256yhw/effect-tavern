@@ -89,7 +89,10 @@ export const timelineNode = (n: Node, before: State, rules: Rules, products: rea
   heading: n.heading,
   end: n.turn.end,
   sibling: n.turn.sibling,
-  settlementStatus: n.turn.settlementStatus,
+  settlementStatus:
+    n.turn.passageStatus === "pending" || n.turn.passageStatus === "failed" || n.turn.passageStatus === "skipped"
+      ? n.turn.passageStatus
+      : n.turn.settlementStatus,
   settlementError: n.turn.settlementError,
   deliverySummary: n.delivered.map(({ resourceId, title, source, revision }) => ({
     resourceId,
