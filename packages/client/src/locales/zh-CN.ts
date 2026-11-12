@@ -570,5 +570,17 @@ const zh = {
     window: "窗口内保留",
     turn: "仅本回合",
   },
+  decision: {
+    title: "Decision 模型",
+    kind: "工具模型",
+    what: "判断型模型：读一段文本，回答是非、单选或评分，返回概率，不生成文字。它不是对话模型，有自己的服务地址和密钥，不会出现在默认模型的选择里。",
+    unused: "目前还没有阶段使用它；这里只保存连接并检测。",
+    enable: "启用 Decision 模型",
+    service: "服务类型",
+    model: "模型 ID",
+    noKey: "未选择密钥",
+    test: "检测 Decision 模型",
+    reached: "已应答 · {ms} ms",
+  },
 } as const
 export default zh

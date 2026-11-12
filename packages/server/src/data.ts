@@ -15,7 +15,8 @@
 // write is one Change in one transaction. Cards and personas travel as JSON files; the library is the install's own.
 // A library file has one process: `open` locks it; a second process fails unless isolateOnBusy is explicit.
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
-// Unversioned libraries upgrade atomically to user_version=1; subsequent opens skip all legacy probes.
+// Unversioned libraries upgrade atomically to user_version=1 (`rebase`), then every library walks `steps` to the latest;
+// an open at the latest version skips all of it. `decision`: one row, the decision model's connection.
 // A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
 // for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`), and so does a `base` row (`foldIn`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
 // the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
@@ -248,10 +249,21 @@ const lock = (file: string, isolateOnBusy: boolean): string => {
 
 // One baseline for all previously unversioned libraries, not a reconstruction of historical releases.
 const baseline = 1
+// Steps after the baseline, in order: step i takes a library from version baseline + i to the next.
+const steps = [
+  // the decision model's connection (provider decision.ts), one row
+  "create table if not exists decision (id integer primary key check (id = 1), json text not null)",
+]
+const latest = baseline + steps.length
 const upgrade = (db: DatabaseSync) => {
   const version = (db.prepare("pragma user_version").get() as { user_version: number }).user_version
-  if (version === baseline) return
-  if (version > baseline) throw new Error(`library version ${version} is newer than supported ${baseline}`)
+  if (version === latest) return
+  if (version > latest) throw new Error(`library version ${version} is newer than supported ${latest}`)
+  if (version < baseline) rebase(db)
+  for (let v = Math.max(version, baseline); v < latest; v++)
+    db.exec(`begin immediate; ${steps[v - baseline]!}; pragma user_version = ${v + 1}; commit;`)
+}
+const rebase = (db: DatabaseSync) => {
   // FK mode must change before BEGIN so rebuilding story cannot cascade-delete its nodes.
   db.exec("pragma foreign_keys = off; begin immediate;")
   try {
@@ -449,6 +461,11 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
     routing: {
       read: (): unknown => parse<unknown>(q("select json from routing where id = 1").get() as Row | undefined),
       write: (r: unknown) => void q("insert or replace into routing (id, json) values (1, ?)").run(JSON.stringify(r)),
+    },
+    /** The decision model's connection, one row; what it holds is decoded by the caller. */
+    decision: {
+      read: (): unknown => parse<unknown>(q("select json from decision where id = 1").get() as Row | undefined),
+      write: (c: unknown) => void q("insert or replace into decision (id, json) values (1, ?)").run(JSON.stringify(c)),
     },
     /** The model-name table (names.ts) as last fetched, one row, with the ETag it came with. */
     names: {

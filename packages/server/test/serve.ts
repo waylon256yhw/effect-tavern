@@ -652,6 +652,18 @@ await run(false)
     assert.deepEqual((await call("PUT", "/routing", { stages: { narrate: pair } })).body, { stages: { narrate: pair } })
     assert.deepEqual((await call("GET", "/routing")).body, { stages: { narrate: pair } })
     assert.equal((await call("PUT", "/routing", { default: "relay" })).status, 400)
+    // the decision model's connection: its own row, tested through what was saved, a key only as a secret id
+    assert.equal((await call("GET", "/decision")).body, null)
+    assert.equal((await call("POST", "/decision/test")).status, 400) // nothing saved
+    assert.equal((await call("PUT", "/decision", { enabled: true, driver: "cohere", model: "x" })).status, 400)
+    const dec = { enabled: false, driver: "google", model: "gemini-decision-1", url: "http://127.0.0.1:1/v1beta" }
+    assert.deepEqual((await call("PUT", "/decision", dec)).body, dec)
+    assert.equal((await call("POST", "/decision/test")).status, 400) // no key
+    assert.deepEqual((await call("PUT", "/decision", { ...dec, secret: made.id })).body, { ...dec, secret: made.id })
+    const probe = (await call("POST", "/decision/test")).body
+    assert.equal(probe.url, "http://127.0.0.1:1/v1beta/decisions")
+    assert.equal(probe.status, 0) // nothing answered: a finding, not a 400
+    assert.equal(probe.ok, false)
     // the model-name table: the vendored baseline while the library has no fetched row
     assert.equal(
       ((await call("GET", "/models/names")).body as Record<string, { name: string }>)["meta/muse-spark-1.1"]?.name,

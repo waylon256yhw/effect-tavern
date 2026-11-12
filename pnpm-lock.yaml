@@ -251,9 +251,15 @@ importers:
       '@ai-sdk/google':
         specifier: 4.0.118
         version: 4.0.118(zod@4.6.7)
+      '@ai-sdk/openai':
+        specifier: 4.0.115
+        version: 4.0.115(zod@4.6.7)
       '@ai-sdk/openai-compatible':
         specifier: 3.0.90
         version: 3.0.90(zod@4.6.7)
+      '@ai-sdk/typesafe-ai':
+        specifier: 3.0.38
+        version: 3.0.38(zod@4.6.7)
       ai:
         specifier: 7.0.170
         version: 7.0.170(zod@4.6.7)
@@ -344,6 +350,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/openai@4.0.115':
+    resolution: {integrity: sha512-q0tHPKxPLPwaTVY318Z/FvGWV98bnYrr2mqKz9qTtw4xwshykzkMZcxiSSv5K8y2152GSrB1ts9Up9l5J2w0qA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider-utils@5.0.79':
     resolution: {integrity: sha512-IYu6MT0NDE3JFWBWEJWAXjhskHTSj6NfRp9FuEAOcyS2Jrj3qBePu7OEoXVmoCWT3pYPgrF4DBKzjjjOMRyw9Q==}
     engines: {node: '>=22'}
@@ -353,6 +365,12 @@ packages:
   '@ai-sdk/provider@4.0.37':
     resolution: {integrity: sha512-4uPgZ3qiX/JaQFr0dQoibUzHImZit9u05ro2BxGUnJwU4fV28BOAbKUa2OjQvqtM1tMac3bTKkaXdyzGovQXqg==}
     engines: {node: '>=22'}
+
+  '@ai-sdk/typesafe-ai@3.0.38':
+    resolution: {integrity: sha512-d6laoOte1eds2dBeayL6eERwql8ABcZFSTgZ3FMMNnHEWZrVm+8Qd6EwjRwREuBq8CGGoeeWlYNT/qNqIvyNYw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
 
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
@@ -2806,6 +2824,12 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.79(zod@4.6.7)
       zod: 4.6.7
 
+  '@ai-sdk/openai@4.0.115(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.37
+      '@ai-sdk/provider-utils': 5.0.79(zod@4.6.7)
+      zod: 4.6.7
+
   '@ai-sdk/provider-utils@5.0.79(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 4.0.37
@@ -2818,6 +2842,12 @@ snapshots:
   '@ai-sdk/provider@4.0.37':
     dependencies:
       json-schema: 0.4.0
+
+  '@ai-sdk/typesafe-ai@3.0.38(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.37
+      '@ai-sdk/provider-utils': 5.0.79(zod@4.6.7)
+      zod: 4.6.7
 
   '@ampproject/remapping@2.3.0':
     dependencies:

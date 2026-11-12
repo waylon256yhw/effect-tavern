@@ -1,34 +1,36 @@
-// A decision call: typed questions about one shared text, answered as probabilities, with no text generated
-// (ai-sdk `experimental_decide`). A different kind of model from the one a stage calls: no messages, no hat, no
-// output. `compileDecision` (connection.ts) makes the model from a gemini connection; this file is the call.
-//
-// Three question kinds. `boolean` answers P(true); `choice` picks one option id; `score` places the text on an ordered
-// rubric. Questions are judged independently of each other. A native decision model returns a distribution for choice
-// and score; an adapter over a language model does not, so `probabilities` is optional and a caller checks for it.
-// A safety block refuses every question of the request at once: the call fails as a ModelError, never a partial answer.
-import { experimental_decide, type Experimental_DecisionModel, type Experimental_DecisionQuestion } from "ai"
-import { Experimental_DecisionMockModelV4 } from "ai/test"
-import { Effect } from "effect"
-import { modelError, type Usage } from "./call.ts"
+// A decision model is a second kind of model, beside the language models of providers.ts: it takes one text and typed
+// questions (yes/no, pick one, rate on a rubric) and answers with probabilities, generating no text. It has its own
+// connection because it is its own service: a relay or gateway that serves chat rarely serves decisions, a decision
+// model has nothing a language model is configured with (hat, effort, output cap, context, capabilities), and it must
+// never appear where a stage's model is picked. One per install, optional; the key is a vault secret like a provider's.
+// No ai-sdk here: the client imports these types (decide.ts is the call).
+import { Schema } from "effect"
 
-export type DecisionModel = Experimental_DecisionModel
-export type Question = Exclude<Experimental_DecisionQuestion, { type: "box" }>
+/** Who serves it: each driver is one API shape, with the address and model a blank config falls back to, and the path
+ *  its SDK appends to the address. */
+export const DRIVERS = {
+  google: {
+    name: "Google Gemini Decisions",
+    url: "https://generativelanguage.googleapis.com/v1beta",
+    path: "/decisions",
+    model: "gemini-decision-1",
+  },
+  openai: { name: "OpenAI Decisions", url: "https://api.openai.com/v1", path: "/decisions", model: "gpt-6-luna" },
+  typesafe: { name: "TypeSafe Jev", url: "https://api.typesafe.ai/v1", path: "/systemone", model: "jev-latest" },
+} as const
+export type Driver = keyof typeof DRIVERS
 
-export const decide = <const Q extends Record<string, Question>>(model: DecisionModel, state: string, questions: Q) =>
-  Effect.tryPromise((abortSignal) => experimental_decide({ model, state, questions, abortSignal })).pipe(
-    Effect.mapError(modelError),
-    Effect.map((r) => ({
-      answers: r.answers,
-      // input only: a decision generates nothing, and the endpoint has no cache
-      usage: { input: r.usage.inputTokens ?? 0, output: 0, cacheRead: 0, cacheWrite: 0 } satisfies Usage,
-    })),
-  )
+export const DecisionConfig = Schema.Struct({
+  enabled: Schema.Boolean,
+  driver: Schema.Literals(["google", "openai", "typesafe"]),
+  model: Schema.String,
+  url: Schema.optionalKey(Schema.String), // the API base the driver appends its path to; unset = the driver's own
+  secret: Schema.optionalKey(Schema.String), // a secret id; none = no key
+  proxy: Schema.optionalKey(Schema.Union([Schema.String, Schema.Literal(false)])), // Connection.proxy's three states
+  headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+})
+export type DecisionConfig = typeof DecisionConfig.Type
 
-type Call = Parameters<Experimental_DecisionMockModelV4["doDecide"]>[0]
-type Answers = Awaited<ReturnType<Experimental_DecisionMockModelV4["doDecide"]>>["answers"]
-/** A scripted decision model for self-checks, as `fake` is for a stage's model: answers by a function of the request. */
-export const fakeDecision = (answer: (call: Call) => Answers): DecisionModel =>
-  new Experimental_DecisionMockModelV4({
-    supportedQuestionTypes: ["boolean", "choice", "score"],
-    doDecide: async (call) => ({ answers: answer(call), warnings: [] }),
-  })
+/** The address a config's requests go to: what the settings page shows and a probe that never reached a fetch reports. */
+export const decisionUrl = (c: Pick<DecisionConfig, "driver" | "url">): string =>
+  `${(c.url?.trim() || DRIVERS[c.driver].url).replace(/\/+$/, "")}${DRIVERS[c.driver].path}`

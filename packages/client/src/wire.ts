@@ -16,6 +16,7 @@ type Change = L.Change<Node>
 // The turn is the server's, not the response's: closing a stream only stops reading it. `POST /stop` is the stop
 // (before the first character the turn is withdrawn, after it the prose halts and the node comes down the same
 // stream); `GET /turn` picks up the turn in flight on a story the client lands on (204 when there is none).
+import type { DecisionConfig } from "@effect-tavern/provider/src/decision.ts"
 import type { Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import type { Layer, Local } from "@effect-tavern/runtime/src/layer.ts"
@@ -38,6 +39,7 @@ import {
   registry,
   routing,
   secrets,
+  decision,
   stories,
   type CardView,
   type Routing,
@@ -223,6 +225,11 @@ export const secretValue = async (id: string): Promise<string> =>
   (await got<{ value: string }>(call(`${base}/secrets/${enc(id)}/value`))).value
 export const deleteSecret = async (id: string): Promise<void> =>
   registry.set(secrets, await got(call(`${base}/secrets/${enc(id)}`, { method: "DELETE" })))
+export const fetchDecision = async (): Promise<void> => registry.set(decision, await got(call(`${base}/decision`)))
+export const putDecision = async (c: DecisionConfig): Promise<void> =>
+  registry.set(decision, await got(call(`${base}/decision`, json("PUT", c))))
+/** One minimal real request through the saved config (POST /decision/test); a refusal is its configuration. */
+export const testDecision = (): Promise<Probe> => got(call(`${base}/decision/test`, { method: "POST" }))
 export const fetchRouting = async (): Promise<void> => registry.set(routing, await got(call(`${base}/routing`)))
 export const putRouting = async (r: Routing): Promise<void> =>
   registry.set(routing, await got(call(`${base}/routing`, json("PUT", r))))
@@ -253,6 +260,7 @@ export const fetchSettings = (): Promise<unknown> =>
     fetchProviders(),
     fetchSecrets(),
     fetchRouting(),
+    fetchDecision(),
     fetchHats(),
     fetchPacks(),
     fetchCards().then(fetchLocals),

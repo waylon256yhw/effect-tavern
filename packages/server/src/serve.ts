@@ -66,6 +66,11 @@
 //                 settings lists name and group a model id by, without the network.
 //   GET  /routing which (provider, model) runs each stage: {default?, stages?}; PUT /routing replaces it (in force
 //                 from the next request).
+//   GET  /decision  the decision model's connection (provider decision.ts `DecisionConfig`: {enabled, driver, model,
+//                 url?, secret?, proxy?, headers?}), or null when none was ever saved; a key only as a secret id.
+//                 PUT /decision replaces it. POST /decision/test sends one minimal real request through the saved
+//                 config, enabled or not, and answers one Probe (200 whatever it found); a 400 {error} is the
+//                 configuration (nothing saved, no key, no model).
 //   DELETE /nodes/<id>  the node and everything under it gone (a thread is a root's subtree); the reply is the Change.
 //   GET  /nodes/<id>/trace  the selected node's `call` events: the inspector's trace. The turn files them in the library
 //                 under the node they made once it lands (turn.ts), whoever listened; they go with the node, and only
@@ -86,7 +91,7 @@
 //   GET  /card    the same for the story's own card.
 // Calls never travel on SSE. `inspect` includes request and result bodies in the selected trace; otherwise only
 // phase and metrics leave this endpoint, since tool arguments and results can contain private card text.
-import { Provider, Secret } from "@effect-tavern/provider"
+import { DecisionConfig, Provider, Secret } from "@effect-tavern/provider"
 import { Hat } from "@effect-tavern/runtime/src/fragment.ts"
 import { Effect, Fiber, Schema, Stream, Struct } from "effect"
 import { readFile } from "node:fs/promises"
@@ -126,6 +131,7 @@ const SecretMeta = Schema.decodeUnknownSync(
 )
 const TestBody = Schema.decodeUnknownSync(Schema.Struct({ model: Schema.optionalKey(Schema.String) }))
 const RoutingBody = Schema.decodeUnknownSync(Routing)
+const DecisionBody = Schema.decodeUnknownSync(DecisionConfig)
 const StoryBody = Schema.decodeUnknownSync(
   Schema.Struct({
     title: Schema.optionalKey(Schema.NullOr(Schema.String)),
@@ -276,6 +282,10 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
         return reply(async () => lib.providers.test(id, (await read(TestBody, "{}")).model))
     }
     if (req.method === "GET" && req.url === "/models/names") return json(200, lib.names())
+    if (req.method === "GET" && req.url === "/decision") return json(200, lib.decision.read() ?? null)
+    if (req.method === "PUT" && req.url === "/decision")
+      return reply(async () => (lib.decision.write(await read(DecisionBody)), lib.decision.read()))
+    if (req.method === "POST" && req.url === "/decision/test") return reply(() => lib.decision.test())
     if (req.method === "GET" && req.url === "/routing") return json(200, lib.routing.read())
     if (req.method === "PUT" && req.url === "/routing")
       return reply(async () => (lib.routing.write(await read(RoutingBody)), lib.routing.read()))

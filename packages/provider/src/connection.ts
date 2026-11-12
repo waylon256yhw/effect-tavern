@@ -4,7 +4,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import type { Experimental_DecisionModel, LanguageModel } from "ai"
+import type { LanguageModel } from "ai"
 import type { Effort, Model } from "./call.ts"
 import { capabilities, type Capabilities } from "./capabilities.ts"
 import { formatsOf, plan, type Endpoint, type Format } from "./url.ts"
@@ -66,11 +66,11 @@ export const authHeaders = (c: Connection): Record<string, string> => {
 }
 
 // the call signature, not `typeof fetch`: under Bun types that also carries `preconnect`, which a wrapper does not have
-type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+export type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
 /** The fetch this connection sends through: the runtime's, with `proxy` set on each request when the connection names
  *  one (`proxy` is not in the DOM RequestInit type, hence the cast). */
-const fetchFor = (c: Connection): Fetch =>
+export const fetchFor = (c: Pick<Connection, "proxy">): Fetch =>
   c.proxy === undefined
     ? globalThis.fetch
     : (input, init) => globalThis.fetch(input, { ...init, proxy: c.proxy } as RequestInit)
@@ -78,7 +78,7 @@ const fetchFor = (c: Connection): Fetch =>
 /** Wraps fetch so the inspector can see what was actually sent: URL, status, latency, optionally the converted body.
  *  A fetch that throws (no route, a closed proxy, a timeout) is traced too, as status 0 with the time it took, and the
  *  error goes on up: the trace is how a probe tells "nothing answered" from "the answer was no". */
-const traced =
+export const traced =
   (onTrace: (t: Trace) => void, withBody: boolean, inner: Fetch): Fetch =>
   async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
@@ -128,30 +128,13 @@ export const compile = (c: Connection, o: CompileOptions = {}): LanguageModel =>
         includeUsage: true,
       })(c.model)
     case "gemini":
-      return google(c, common)(c.model)
+      return createGoogleGenerativeAI({
+        ...common,
+        ...(cred.type === "api_key"
+          ? { apiKey: cred.key }
+          : { apiKey: PLACEHOLDER, headers: { ...c.headers, ...authHeaders(c) } }),
+      })(c.model)
   }
-}
-
-const google = (c: Connection, common: { baseURL: string; headers?: Record<string, string>; fetch: typeof fetch }) =>
-  createGoogleGenerativeAI({
-    ...common,
-    ...(c.credential.type === "api_key"
-      ? { apiKey: c.credential.key }
-      : { apiKey: PLACEHOLDER, headers: { ...c.headers, ...authHeaders(c) } }),
-  })
-
-/** A decision model (decision.ts) from a connection: the same record, endpoint, key and proxy as a language model, a
- *  different kind of model behind it (`POST {base}/decisions`, typed questions in, probabilities out, no text). Not a
- *  fourth format: only the gemini endpoint serves one, and nothing a language model is configured with (hat, effort,
- *  output cap, capabilities) applies. */
-export const compileDecision = (c: Connection, o: CompileOptions = {}): Experimental_DecisionModel => {
-  if (c.format !== "gemini") throw new Error(`connection "${c.id}": a decision model needs a gemini endpoint`)
-  const inner = o.fetch ?? fetchFor(c)
-  const fetch = o.onTrace ? traced(o.onTrace, o.traceBody ?? false, inner) : inner
-  const base = plan(c.format, c.endpoint, c.model).base
-  return google(c, { baseURL: base, headers: c.headers, fetch: fetch as typeof globalThis.fetch }).decisionModel(
-    c.model,
-  )
 }
 
 /** A connection bound for calls: compiled once, with the settings a stage reads off it. What the connection leaves

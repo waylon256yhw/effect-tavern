@@ -7,6 +7,7 @@ export type { CardView, StoryRow, Persona, CardRow as ShelfCard } from "@effect-
 import type { Routing } from "@effect-tavern/runtime/src/session.ts"
 export type { Pair, Routing } from "@effect-tavern/runtime/src/session.ts"
 import { emptyDraft, hasDraft, type DraftModel } from "./composition.ts"
+import type { DecisionConfig } from "@effect-tavern/provider/src/decision.ts"
 import type { Names } from "@effect-tavern/provider/src/names.ts"
 import type { Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Hat } from "@effect-tavern/runtime/src/fragment.ts"
@@ -62,6 +63,9 @@ export const secrets = Atom.make<readonly SecretView[]>([]).pipe(Atom.keepAlive)
 /** The model-name table (GET /models/names), read through provider names.ts `lookup`: a model id's name, owner, family. */
 export const names = Atom.make<Names>({}).pipe(Atom.keepAlive)
 export const routing = Atom.make<Routing>({}).pipe(Atom.keepAlive)
+/** The decision model's connection (GET /decision; provider decision.ts): a second kind of model with its own address
+ *  and key, never among the stage models. null until one is saved. */
+export const decision = Atom.make<DecisionConfig | null>(null).pipe(Atom.keepAlive)
 export const hats = Atom.make<readonly Hat[]>([]).pipe(Atom.keepAlive)
 export const packs = Atom.make<readonly Layer[]>([]).pipe(Atom.keepAlive)
 export const composition = Atom.make<DraftModel>(emptyDraft())

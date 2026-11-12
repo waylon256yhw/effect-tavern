@@ -23,7 +23,13 @@ export type { CardRow } from "@effect-tavern/runtime/src/library.ts"
 export { Routing } from "@effect-tavern/runtime/src/session.ts"
 import {
   bind,
+  compileDecision,
   connection,
+  decisionUrl,
+  probeDecision,
+  type CompileOptions,
+  type DecisionConfig,
+  type DecisionModel,
   listModels,
   plan,
   text,
@@ -134,6 +140,8 @@ export const library = ({
     return p
   }
   const secretOf = (p: Provider) => data.secrets.list().find((s) => s.id === p.secret)
+  const decision = (): DecisionConfig | undefined => data.decision.read() as DecisionConfig | undefined
+  const decisionKey = (c: DecisionConfig) => data.secrets.list().find((s) => s.id === c.secret)
   /** A pair as the session runs it: the flattened connection, bound. */
   const resolve = (pair: Pair): Model => {
     const p = providerOf(pair.provider)
@@ -183,7 +191,6 @@ export const library = ({
    *  cause chain (ai-sdk wraps the fetch error, call.ts wraps that). */
   const probed = async (
     formats: Format[],
-    c: Connection,
     url: string,
     go: (onTrace: (t: Trace) => void) => Promise<unknown>,
   ): Promise<Probe> => {
@@ -538,7 +545,7 @@ export const library = ({
         if (model !== undefined) {
           const c = probe(id, p.models.find((m) => m.id === model) ?? { id: model })
           return [
-            await probed([c.format], c, plan(c.format, c.endpoint, c.model).generate, async (onTrace) => {
+            await probed([c.format], plan(c.format, c.endpoint, c.model).generate, async (onTrace) => {
               const failed = await Effect.runPromise(
                 text(bind(c, { onTrace }), [{ role: "user", content: "Hi" }], { maxOutputTokens: PROBE_TOKENS }).pipe(
                   Effect.match({ onFailure: (e) => e, onSuccess: () => undefined }),
@@ -548,12 +555,36 @@ export const library = ({
             }),
           ]
         }
-        return Promise.all(
-          listings(id).map((g) => probed(g.formats, g.c, g.url, (onTrace) => listModels(g.c, { onTrace }))),
-        )
+        return Promise.all(listings(id).map((g) => probed(g.formats, g.url, (onTrace) => listModels(g.c, { onTrace }))))
       },
     },
     routing: { read: routing, write: data.routing.write },
+    /** The decision model's connection (provider decision.ts): its own row, not a provider and not a routing pair. */
+    decision: {
+      read: decision,
+      write: (c: DecisionConfig) => data.decision.write(c),
+      /** The model, when it is switched on and has what it needs; what is missing throws, naming it. */
+      model: (o?: CompileOptions): DecisionModel => {
+        const c = decision()
+        if (!c?.enabled) throw new Error("decision model: not enabled")
+        return compileDecision(c, decisionKey(c), o)
+      },
+      /** One minimal real request (a yes/no question about one word) as a Probe, enabled or not; a 400's worth of
+       *  configuration (nothing saved, no key, no model) throws instead. */
+      test: async (): Promise<Probe> => {
+        const c = decision()
+        if (!c) throw new Error("decision model: not configured")
+        let trace: (t: Trace) => void = () => {}
+        const model = compileDecision(c, decisionKey(c), { onTrace: (t) => trace(t) })
+        return probed([], decisionUrl(c), async (onTrace) => {
+          trace = onTrace
+          const failed = await Effect.runPromise(
+            probeDecision(model).pipe(Effect.match({ onFailure: (e) => e, onSuccess: () => undefined })),
+          )
+          if (failed) throw failed
+        })
+      },
+    },
     /** The model-name table in force (names.ts). */
     names: () => names(data),
     /** Every card the install knows, by id and title (`Cards`). */

@@ -2,6 +2,7 @@
 // probes of probe.ts), its two drawers (request settings, the service's model list) and the dialog that adds a
 // provider. The key vault's drawer is vault.tsx, the dialogs about one model are models.tsx. Every write goes through
 // wire.ts and comes back as the list; the drafts here are the drawer's and the dialog's, written on Save and on submit.
+import { DRIVERS, decisionUrl, type DecisionConfig, type Driver } from "@effect-tavern/provider/src/decision.ts"
 import { lookup } from "@effect-tavern/provider/src/names.ts"
 import type { ModelEntry, Probe, Provider, SecretView } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
@@ -44,17 +45,19 @@ import {
 } from "./icons.tsx"
 import { AddModelDialog, addModels, ModelDialog, removeModels } from "./models.tsx"
 import { applied, correctedModels, FORMATS, requestOf, staleModels, type Request } from "./connections.ts"
-import { createProbing, IDLE, result, type Slot } from "./probe.ts"
-import { names, providers, registry, secrets } from "./store.ts"
+import { clear, createProbing, IDLE, land, refused, result, start, type Slot } from "./probe.ts"
+import { decision, names, providers, registry, secrets } from "./store.ts"
 import { VaultDrawer } from "./vault.tsx"
 import { t } from "./i18n.ts"
 import {
   addSecret,
   deleteProvider,
   listModels,
+  putDecision,
   putProvider,
   secretValue,
   setSecret,
+  testDecision,
   testProvider,
   type Listed,
 } from "./wire.ts"
@@ -141,7 +144,9 @@ export const Providers = (props: Pane) => {
   const list = read(providers)
   const [search, setSearch] = createSignal("")
   const shown = () => list().filter((p) => p.name.toLowerCase().includes(search().toLowerCase()))
-  const current = () => list().find((p) => p.id === props.picked) ?? list()[0]
+  const dec = read(decision)
+  const onDecision = () => props.picked === DECISION
+  const current = () => (onDecision() ? undefined : (list().find((p) => p.id === props.picked) ?? list()[0]))
   let openAdd: () => void = () => {}
   // the vault drawer: the section's, so it opens with no provider too; `vaultFor` is the provider it was opened from
   const [vaultOpen, setVaultOpen] = createSignal(false)
@@ -177,6 +182,20 @@ export const Providers = (props: Pane) => {
             )}
           </For>
         </div>
+        {/* not a provider: a second kind of model, under its own heading, never in the list above or a stage's menu */}
+        <div class="master-fixed">
+          <span class="label">{t("decision.kind")}</span>
+          <button
+            type="button"
+            class="p-row"
+            aria-selected={onDecision() ? "true" : "false"}
+            onClick={() => props.onPick(DECISION)}
+          >
+            <Avatar name="D" />
+            <span class="p-name">{t("decision.title")}</span>
+            <span class={{ dot: true, on: !!dec()?.enabled }} />
+          </button>
+        </div>
         <div class="master-foot row">
           <button type="button" class="btn" onClick={() => openAdd()}>
             <Plus /> <span>{t("providers.addProvider")}</span>
@@ -193,14 +212,190 @@ export const Providers = (props: Pane) => {
       </aside>
       <section class="detail-card" aria-label={t("providers.providerDetail")}>
         {/* keyed by id: another provider is a fresh detail (key, probe, search, drawer start over), a save is not */}
-        <Show when={current()?.id} keyed fallback={<div class="empty">{t("providers.none")}</div>}>
-          {(id) => <ProviderDetail id={id} onBack={props.onBack} onVault={() => openVault(id)} />}
+        <Show
+          when={!onDecision()}
+          fallback={<DecisionDetail onBack={props.onBack} onVault={() => openVault(undefined)} />}
+        >
+          <Show when={current()?.id} keyed fallback={<div class="empty">{t("providers.none")}</div>}>
+            {(id) => <ProviderDetail id={id} onBack={props.onBack} onVault={() => openVault(id)} />}
+          </Show>
         </Show>
         <Drawer open={vaultOpen()} label={t("common.vault")} onClose={() => setVaultOpen(false)}>
           <VaultDrawer for={vaultFor()} onClose={() => setVaultOpen(false)} />
         </Drawer>
       </section>
       <AddProviderDialog opener={(f) => (openAdd = () => f(undefined))} onAdded={props.onPick} />
+    </>
+  )
+}
+
+/** The list's fixed entry: a `picked` no provider id can be (`newId` makes none with an "@"). */
+const DECISION = "@decision"
+const BLANK: DecisionConfig = { enabled: false, driver: "google", model: DRIVERS.google.model }
+const DRIVER_OPTIONS = (Object.keys(DRIVERS) as Driver[]).map((d) => ({ value: d, label: DRIVERS[d].name }))
+const without = (c: DecisionConfig, k: "url" | "secret" | "proxy"): DecisionConfig => {
+  const { [k]: _, ...rest } = c
+  return rest
+}
+
+/** The decision model's connection (provider decision.ts): which service, its key from the vault, the model id, the
+ *  address and proxy, and one real request to test it. Every edit is one write of the whole config; nothing is saved
+ *  until the first edit. A custom proxy is saved once its address is typed. */
+const DecisionDetail = (props: { onBack: () => void; onVault: () => void }) => {
+  const saved = read(decision)
+  const vault = read(secrets)
+  const c = () => saved() ?? BLANK
+  const [probe, setProbe] = createSignal<Slot<Probe>>(IDLE)
+  const [custom, setCustom] = createSignal(false)
+  const save = (f: (c: DecisionConfig) => DecisionConfig) => (setProbe((s) => clear(s)), putDecision(f(c())))
+  const proxyMode = () =>
+    typeof c().proxy === "string" || custom() ? "custom" : c().proxy === false ? "direct" : "env"
+  const test = async () => {
+    const s = start(probe())
+    setProbe(s)
+    if (!saved()) await putDecision(BLANK) // the test is of what is saved
+    const r = await testDecision().catch(refused)
+    setProbe((now) => land(now, s.run, r) ?? now)
+  }
+  return (
+    <>
+      <header class="detail-header">
+        <ToList onBack={props.onBack} />
+        <h2>{t("decision.title")}</h2>
+        <span class="spacer" />
+        <Switch
+          on={c().enabled}
+          label={t("decision.enable")}
+          onFlip={() => void save((x) => ({ ...x, enabled: !x.enabled }))}
+        />
+      </header>
+      <div class="detail-scroll scroller">
+        <div class="setting-card none">
+          <span>{t("decision.what")}</span>
+          <span>{t("decision.unused")}</span>
+        </div>
+        <div class="block">
+          <div class="block-title">
+            <h3>{t("decision.service")}</h3>
+          </div>
+          <Menu
+            label={t("decision.service")}
+            value={c().driver}
+            options={DRIVER_OPTIONS}
+            onPick={(driver) => void save((x) => ({ ...without(x, "url"), driver, model: DRIVERS[driver].model }))}
+          />
+        </div>
+        <div class="block">
+          <div class="block-title">
+            <h3>{t("providers.apiKey")}</h3>
+          </div>
+          <div class="row">
+            <Menu
+              label={t("providers.apiKey")}
+              value={c().secret ?? ""}
+              placeholder={t("decision.noKey")}
+              options={[
+                { value: "", label: t("decision.noKey") },
+                ...vault().map((s) => ({ value: s.id, label: `${s.name} · ${s.hint}` })),
+              ]}
+              stale={c().secret ? { value: c().secret!, label: t("settings.removed") } : undefined}
+              onPick={(k) => void save((x) => (k ? { ...x, secret: k } : without(x, "secret")))}
+            />
+            <button type="button" class="icon boxed" aria-label={t("common.vault")} onClick={() => props.onVault()}>
+              <Key />
+            </button>
+            <button
+              type="button"
+              class="icon boxed"
+              aria-label={t("decision.test")}
+              disabled={probe().state === "running"}
+              onClick={() => void test()}
+            >
+              <Lightning />
+            </button>
+          </div>
+          <Show when={result(probe())}>
+            {(pr) => (
+              <Show when={pr().ok} fallback={<ProbeError probe={pr()} />}>
+                <span class="tag mono">{t("decision.reached", { ms: pr().ms })}</span>
+              </Show>
+            )}
+          </Show>
+        </div>
+        <div class="block">
+          <div class="block-title">
+            <h3>{t("decision.model")}</h3>
+          </div>
+          <div class="input-box">
+            <input
+              type="text"
+              class="mono"
+              autocomplete="off"
+              value={c().model}
+              placeholder={DRIVERS[c().driver].model}
+              aria-label={t("decision.model")}
+              onChange={(e) => {
+                const model = e.currentTarget.value.trim()
+                void save((x) => ({ ...x, model: model || DRIVERS[x.driver].model }))
+              }}
+            />
+          </div>
+        </div>
+        <div class="block">
+          <div class="block-title">
+            <h3>{t("providers.apiUrl")}</h3>
+          </div>
+          <div class="input-box">
+            <input
+              type="url"
+              class="mono"
+              value={c().url ?? ""}
+              placeholder={DRIVERS[c().driver].url}
+              aria-label={t("providers.apiUrl")}
+              onChange={(e) => {
+                const url = e.currentTarget.value.trim()
+                void save((x) => (url ? { ...x, url } : without(x, "url")))
+              }}
+            />
+          </div>
+          <span class="tag mono">POST {decisionUrl(c())}</span>
+        </div>
+        <div class="block">
+          <div class="field-group">
+            <span class="label">{t("providers.proxy")}</span>
+            <Menu
+              small
+              label={t("providers.proxy")}
+              value={proxyMode()}
+              options={[
+                { value: "env", label: t("providers.proxySystem") },
+                { value: "direct", label: t("providers.proxyDirect") },
+                { value: "custom", label: t("providers.proxyCustom") },
+              ]}
+              onPick={(mode) => {
+                setCustom(mode === "custom")
+                if (mode === "direct") void save((x) => ({ ...x, proxy: false }))
+                else if (mode === "env" || typeof c().proxy !== "string") void save((x) => without(x, "proxy"))
+              }}
+            />
+          </div>
+          <Show when={proxyMode() === "custom"}>
+            <div class="input-box sm">
+              <input
+                type="url"
+                class="mono"
+                placeholder="http://127.0.0.1:7890"
+                aria-label={t("providers.proxyUrl")}
+                value={typeof c().proxy === "string" ? (c().proxy as string) : ""}
+                onChange={(e) => {
+                  const proxy = e.currentTarget.value.trim()
+                  void save((x) => (proxy ? { ...x, proxy } : without(x, "proxy")))
+                }}
+              />
+            </div>
+          </Show>
+        </div>
+      </div>
     </>
   )
 }
