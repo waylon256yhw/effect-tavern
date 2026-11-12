@@ -184,7 +184,6 @@ export const Providers = (props: Pane) => {
         </div>
         {/* not a provider: a second kind of model, under its own heading, never in the list above or a stage's menu */}
         <div class="master-fixed">
-          <span class="label">{t("decision.kind")}</span>
           <button
             type="button"
             class="p-row"
@@ -270,10 +269,6 @@ const DecisionDetail = (props: { onBack: () => void; onVault: () => void }) => {
         />
       </header>
       <div class="detail-scroll scroller">
-        <div class="setting-card none">
-          <span>{t("decision.what")}</span>
-          <span>{t("decision.unused")}</span>
-        </div>
         <div class="block">
           <div class="block-title">
             <h3>{t("decision.service")}</h3>
@@ -304,42 +299,46 @@ const DecisionDetail = (props: { onBack: () => void; onVault: () => void }) => {
             <button type="button" class="icon boxed" aria-label={t("common.vault")} onClick={() => props.onVault()}>
               <Key />
             </button>
-            <button
-              type="button"
-              class="icon boxed"
-              aria-label={t("decision.test")}
-              disabled={probe().state === "running"}
-              onClick={() => void test()}
-            >
-              <Lightning />
-            </button>
           </div>
-          <Show when={result(probe())}>
-            {(pr) => (
-              <Show when={pr().ok} fallback={<ProbeError probe={pr()} />}>
-                <span class="tag mono">{t("decision.reached", { ms: pr().ms })}</span>
-              </Show>
-            )}
-          </Show>
         </div>
         <div class="block">
           <div class="block-title">
             <h3>{t("decision.model")}</h3>
           </div>
-          <div class="input-box">
-            <input
-              type="text"
-              class="mono"
-              autocomplete="off"
-              value={c().model}
-              placeholder={DRIVERS[c().driver].model}
-              aria-label={t("decision.model")}
-              onChange={(e) => {
-                const model = e.currentTarget.value.trim()
-                void save((x) => ({ ...x, model: model || DRIVERS[x.driver].model }))
-              }}
-            />
+          <div class="row">
+            <div class="input-box grow">
+              <input
+                type="text"
+                class="mono"
+                autocomplete="off"
+                value={c().model}
+                placeholder={DRIVERS[c().driver].model}
+                aria-label={t("decision.model")}
+                onChange={(e) => {
+                  const model = e.currentTarget.value.trim()
+                  void save((x) => ({ ...x, model: model || DRIVERS[x.driver].model }))
+                }}
+              />
+            </div>
+            {/* a model check, the same control as a provider's model row: a real question answered by this model with
+                this key, not a connectivity probe (a decision service has no listing to reach) */}
+            <button
+              type="button"
+              class={{ "m-probe": true, ok: !!result(probe())?.ok, bad: result(probe())?.ok === false }}
+              aria-label={t("providers.probeOne", { model: c().model })}
+              disabled={probe().state === "running"}
+              onClick={() => void test()}
+            >
+              {probe().state === "idle"
+                ? t("providers.probe")
+                : probe().state === "running"
+                  ? "…"
+                  : result(probe())?.ok
+                    ? took(result(probe())!.ms)
+                    : t("providers.failed")}
+            </button>
           </div>
+          <Show when={result(probe())?.ok === false && result(probe())}>{(pr) => <ProbeError probe={pr()} />}</Show>
         </div>
         <div class="block">
           <div class="block-title">
@@ -358,7 +357,7 @@ const DecisionDetail = (props: { onBack: () => void; onVault: () => void }) => {
               }}
             />
           </div>
-          <span class="tag mono">POST {decisionUrl(c())}</span>
+          <div class="resolved">{decisionUrl(c())}</div>
         </div>
         <div class="block">
           <div class="field-group">

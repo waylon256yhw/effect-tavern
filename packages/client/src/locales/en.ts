@@ -574,15 +574,10 @@ const en: Dict = {
   },
   decision: {
     title: "Decision model",
-    kind: "Tool model",
-    what: "A judging model: it reads one text and answers yes/no, pick-one or rating questions with probabilities, and writes no text. It is not a chat model: it has its own address and key, and never appears among the default models.",
-    unused: "No stage uses it yet; this only saves the connection and tests it.",
     enable: "Enable the decision model",
     service: "Service",
     model: "Model ID",
     noKey: "No key",
-    test: "Test the decision model",
-    reached: "Answered · {ms} ms",
   },
 }
 export default en
