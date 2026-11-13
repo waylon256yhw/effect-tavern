@@ -122,7 +122,8 @@ export const refreshActiveCard = async (): Promise<void> => {
 }
 /** The card's page over a story in progress: it is about the story Begin makes, on the card's default persona and not
  *  the open story's (#170). Read once the tab's story is in the slots. */
-export const begun = (t: Tab): boolean => t.page === "card" && registry.get(log).nodes.size > 0
+export const begun = (t: Tab): boolean =>
+  (t.page === "card" || t.under.includes("card")) && registry.get(log).nodes.size > 0
 /** A tab's card view: its story's own (the story's persona in force), or the card by id (one browsed on the tab, or
  *  `begun`). The one place that decides, for a refresh and for a tab switched back to. */
 export const fetchTabCard = async (t: Tab, valid: () => boolean): Promise<void> => {
@@ -158,6 +159,9 @@ export const nameStory = async (id: number, title: string): Promise<void> =>
 export const starStory = async (id: number, starred: boolean): Promise<void> =>
   keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ starred }) })))
 /** The persona on this story alone (none: the card's own): the same write as a star. */
+/** The story back on the persona its card is on (the card's pick, or the install's default), as a new one takes it. */
+export const followStoryPersona = async (id: number): Promise<void> =>
+  keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ follow: true }) })))
 export const pickStoryPersona = async (id: number, persona: string | null): Promise<void> =>
   keep(await got(call(`${base}/stories/${id}`, { method: "PUT", body: JSON.stringify({ persona }) })))
 /** The manager's search: the stories whose turns hold `q`, as hits by story (stories.ts `Hit`). */

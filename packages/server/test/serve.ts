@@ -259,7 +259,7 @@ const run = async (inspect: boolean) => {
         method: v === undefined ? "DELETE" : "PUT",
         body: v === undefined ? undefined : JSON.stringify(v),
       })
-    const monk = { id: "monk", name: "行脚僧", text: "你是路过的行脚僧。" }
+    const monk = { id: "monk", name: "行脚僧", text: "你是路过的行脚僧。", default: true } // the first: the default
     assert.deepEqual(await (await persona("monk", { name: monk.name, text: monk.text })).json(), [monk])
     assert.equal((await persona("monk", { name: 1 })).status, 400)
     assert.deepEqual(await (await fetch(`${base}/personas`)).json(), [monk])

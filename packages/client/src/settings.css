@@ -179,6 +179,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* the install's default persona */
+.p-row .p-mark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+}
 .p-row .dot {
   flex: none;
   width: 7px;

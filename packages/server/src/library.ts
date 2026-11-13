@@ -6,8 +6,9 @@
 // (`story.persona`, none: the card's own), and the library hands it to `resolve` on every
 // request (the card's default overridden by the slot rules, nothing else in the card touched), so an edit of the
 // persona is in force from the next request and a change of pick is one head rewrite, no new story. A pick on one story
-// leaves the card's other stories alone. `local.persona` is the card's default: a new story starts on it, copied
-// at creation. Deleting a persona drops it from every story and every card default (no silent fallback). The
+// leaves the card's other stories alone. A new story starts on the card's persona (`personaFor`: `local.persona`, or
+// the install's default where the card leaves it open and has no player character of its own), copied at creation.
+// Deleting a persona drops it from every story, every card pick and the default mark (no silent fallback). The
 // library holds no "open story": each request names its own (serve.ts reads `x-tavern-story`) and `session(id)` opens
 // that story's session on first use and keeps it, so two clients on two stories never move each other. What every story shares is
 // the install's: the player's rows, personas, hats, providers and routing. A hat is the player's too, named by a
@@ -18,7 +19,7 @@
 // from the tables on every call the same way: a routing or provider edit is in force from the next request. A pair
 // that does not resolve (provider gone, disabled, no key, no endpoint) fails that request naming the provider. A stage
 // the row does not name runs on `model`, the environment's (dev.ts); `pinned` puts it over the row (MODEL=fake).
-import type { CardView, CardRow, StoryRow } from "@effect-tavern/runtime/src/library.ts"
+import type { CardView, CardRow, Persona, StoryRow } from "@effect-tavern/runtime/src/library.ts"
 export type { CardRow } from "@effect-tavern/runtime/src/library.ts"
 export { Routing } from "@effect-tavern/runtime/src/session.ts"
 import {
@@ -243,8 +244,21 @@ export const library = ({
     }
     return [...byUrl.values()]
   }
-  const personaOf = (pid: string | null | undefined) =>
-    pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
+  const personaOf = (pid: string | null | undefined, yields = false) => {
+    const p = pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
+    return p && { ...p, yields }
+  }
+  /** THE persona a card is on with no story: what a new story copies, and what the card's view wears. The card's pick
+   *  (`local.persona`) when it makes one (an id, or null: none), else the install's default, inherited: it `yields`
+   *  (layer.ts: a `persona` slot the card writes stays, the default's name fills `user` where nothing else does). An
+   *  author-mode card (`input: note`, nobody in the fiction is the player) inherits nothing: a persona there is only
+   *  ever the player's explicit pick. */
+  const personaFor = (card: Card, pick: string | null | undefined): { id: string | null; yields: boolean } =>
+    pick !== undefined
+      ? { id: pick, yields: false }
+      : card.input === "note"
+        ? { id: null, yields: false }
+        : { id: data.personas.fallback(), yields: true }
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   const overlayIn = (rows: readonly Layer[]) => rows.find((p) => p.id === "harness") ?? given
   /** The player's rows on a card, as `resolve` takes them: read on every request, a session keeps none. */
@@ -279,7 +293,7 @@ export const library = ({
     const store = data.store<Logged>(id)
     const session = makeSession({
       card,
-      rows: () => rowsOf(card.id, personaOf(row(id)?.persona)),
+      rows: () => rowsOf(card.id, personaOf(row(id)?.persona, row(id)?.yields)),
       model,
       store,
       hat,
@@ -391,10 +405,20 @@ export const library = ({
       star: (id: Id, starred: boolean) => data.stories.star(id, starred),
       /** On this story alone (none: the card's own persona), in force from its next request. */
       persona: (id: Id, persona: string | null) => data.stories.persona(id, persona),
-      /** A new, empty story of `card`, on the card's default persona; throws when there is no such card. */
+      /** Back on the persona its card is on (`personaFor`), as a new story would take it: an empty story the card's
+       *  page is about to begin follows the card's pick. */
+      follow: (id: Id) => {
+        const r = row(id)
+        if (!r) throw new Error(`no story ${id}`)
+        const p = personaFor(cards.get(r.card), data.locals.get(r.card)?.persona)
+        data.stories.persona(id, p.id, p.yields)
+      },
+      /** A new, empty story of `card`, on the persona the card is on (`personaFor`), copied: a later change of the
+       *  card's pick or the install's default leaves it alone. Throws when there is no such card. */
       create: (card: string): Id => {
-        const id = cards.get(card).id
-        return data.stories.create(id, data.locals.get(id)?.persona ?? null)
+        const c = cards.get(card)
+        const p = personaFor(c, data.locals.get(c.id)?.persona)
+        return data.stories.create(c.id, p.id, p.yields)
       },
       /** Refused (throws) while a turn runs on the story: its writes would land on nothing. */
       del: (id: Id) => {
@@ -427,19 +451,21 @@ export const library = ({
       },
     },
     /** What a client draws a card by (session.ts `cardView`, the meta at the top) under the player's rows and the story's
-     *  persona, with no story the card's default: the local row as it stands, the mounted packs by name, and the one
-     *  merge. A client merges nothing. Throws on no card. */
+     *  persona, with no story the one the card is on (`personaFor`, answered as `persona`): the local row as it stands,
+     *  the mounted packs by name, and the one merge. A client merges nothing. Throws on no card. */
     view: (card: string, story?: Id): CardView => {
       const c = cards.get(card)
       const local = localOf(card)
-      const picked = personaOf(story === undefined ? local.persona : row(story)?.persona)
+      const on =
+        story === undefined ? personaFor(c, local.persona) : { id: row(story)?.persona, yields: row(story)?.yields }
+      const picked = personaOf(on.id, on.yields)
       const rows = rowsOf(card, picked)
       const { meta, ...rest } = cardView(c, rows)
       const mounts = [...new Set(local.mounts)].flatMap((id) => {
         const p = rows.packs!.find((x) => x.id === id)
         return p ? [{ id: p.id, name: p.name }] : []
       })
-      return { ...meta, ...rest, local, mounts }
+      return { ...meta, ...rest, local, mounts, persona: picked?.id ?? null, follows: personaFor(c, undefined).id }
     },
     hats: data.hats,
     packs: {
@@ -606,9 +632,21 @@ export const library = ({
       },
     },
     personas: {
-      ...data.personas,
-      /** Gone from the table, and from every story and card default it was picked on: the card's own persona is back in
-       *  force there. */
+      /** By name, the install's default marked. */
+      list: (): Persona[] => {
+        const mark = data.personas.fallback()
+        return data.personas.list().map((p) => (p.id === mark ? { ...p, default: true } : p))
+      },
+      /** Written; `default` true marks it the install's default, false clears the mark when it is this one's, absent
+       *  leaves the mark as it is. The first persona the install has takes the mark unless told not to. */
+      put: ({ default: mark, ...p }: Persona) => {
+        const first = data.personas.list().length === 0
+        data.personas.put(p)
+        if (mark ?? first) data.personas.mark(p.id)
+        else if (mark === false && data.personas.fallback() === p.id) data.personas.mark(null)
+      },
+      /** Gone from the table, from the install's default, and from every story and card pick it was on: the card's own
+       *  persona is back in force there, or the default on a card that follows it. */
       del: (id: string) => {
         data.personas.del(id)
         data.stories.dropPersona(id)

@@ -24,7 +24,7 @@ import {
 import { extraOf, withExtra } from "./requirements.ts"
 import { openSettings } from "./settings.tsx"
 import { close, open } from "./pages.ts"
-import { card, locals, packs, page, personas, stories } from "./store.ts"
+import { card, packs, page, personas, stories } from "./store.ts"
 import { personaOn } from "./stories.ts"
 import { openPicker } from "./dialogs.tsx"
 import { kindOf } from "./record.ts"
@@ -57,10 +57,9 @@ const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
 const UserChip = (props: { cardId: string; unfilled: boolean }) => {
   const view = read(card)
   const lib = read(stories)
-  const allLocals = read(locals)
   const people = read(personas)
   const pg = read(page)
-  const persona = () => people().find((p) => p.id === personaOn(lib(), allLocals(), props.cardId, pg()))
+  const persona = () => people().find((p) => p.id === personaOn(lib(), view(), props.cardId, pg()))
   return (
     <span class="name-chip" data-unfilled={props.unfilled ? "true" : "false"}>
       <span class="hole-key mono">{"{{user}}"}</span>

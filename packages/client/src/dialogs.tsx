@@ -13,9 +13,9 @@ import { dropTag, renameTag, tagCounts, tagsOfLocals, withTags } from "./query.t
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
-import { focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
-import { openOn, personaOn } from "./stories.ts"
-import { exportUrl, nameStory, pickStoryPersona, putLocal, refreshActiveCard } from "./wire.ts"
+import { card, focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
+import { openOn } from "./stories.ts"
+import { exportUrl, followStoryPersona, nameStory, pickStoryPersona, putLocal, refreshActiveCard } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const bound = {
@@ -43,18 +43,29 @@ export const StoryDialogs = () => {
   const cardId = read(focus)
   const pg = read(page)
   const nodes = read(log)
-  // the persona in force: the open story's when it is of the focused card, and the pick writes that story alone; on
-  // the card's page or with none open there, the card's default (`Local.persona`), which a new story of the card
-  // starts on
-  const current = () => people().find((p) => p.id === personaOn(lib(), allLocals(), cardId(), pg()))
+  // what is picked: the open story's own when it is of the focused card (none or a persona), and the pick writes that
+  // story alone; on the card's page or with none open there, the card's pick (`Local.persona`: absent follows the
+  // install's default, null is none, or a persona), which a new story of the card starts on
+  const story = () => openOn(lib(), cardId(), pg())
+  const picked = (): string | null | undefined => {
+    const s = story()
+    return s ? s.persona : allLocals()[cardId() ?? ""]?.persona
+  }
+  // what following gives on this card (the view's `follows`): none on a card that does not inherit the default
+  const view = read(card)
+  const fallback = () => people().find((p) => view()?.id === cardId() && p.id === view()?.follows)
   // the picker: the search over name and text, the rows it leaves; opened from the workspace's row, closed by a pick
   const [q, setQ] = createSignal("")
   const hits = createMemo(() => {
     const t = q().trim().toLowerCase()
     return t ? people().filter((p) => p.name.toLowerCase().includes(t) || p.text.toLowerCase().includes(t)) : people()
   })
-  /** The card's own row stays while the search is empty or names it; the rule under it only when rows follow. */
-  const showDefault = () => !q().trim() || t("side.cardDefault").includes(q().trim())
+  /** A fixed row stays while the search is empty or names it. */
+  const named = (word: string) => !q().trim() || word.includes(q().trim())
+  // not on an author-mode card: nobody in its fiction is the player, so there is no default to follow
+  const showFollow = () =>
+    !story() && !(view()?.id === cardId() && view()?.input === "note") && named(t("side.followDefault"))
+  const showNone = () => named(t("side.noPersona"))
   let picker!: HTMLDialogElement
   let search!: HTMLInputElement
   bound.picker = () => {
@@ -68,18 +79,21 @@ export const StoryDialogs = () => {
     picker.close()
     openSettings("personas")
   }
-  const pick = (id: string | undefined) => {
+  /** A persona's id, null for none, undefined to follow the install's default (the card's pick only). */
+  const pick = (id: string | null | undefined) => {
     const c = cardId()
     if (c === null) return
-    const s = openOn(lib(), c, pg())
+    const s = story()
     if (s) return void pickStoryPersona(s.id, id ?? null).then(refreshActiveCard)
     // the card's page: Begin lands in the open story when it is empty and of this card (card.tsx `fresh`), so that one
-    // takes the new default too
+    // takes the card's new persona too, as the server resolves it
     const kept = openOn(lib(), c, "reader")
-    if (kept && nodes().nodes.size === 0) void pickStoryPersona(kept.id, id ?? null)
-    void putLocal(c, ({ persona: _p, ...rest }) => (id === undefined ? rest : { ...rest, persona: id })).then(
-      refreshActiveCard,
-    )
+    const fresh = kept && nodes().nodes.size === 0 ? kept : undefined
+    void putLocal(c, ({ persona: _p, ...rest }) => (id === undefined ? rest : { ...rest, persona: id }))
+      .then(async () => {
+        if (fresh) await (id === undefined ? followStoryPersona(fresh.id) : pickStoryPersona(fresh.id, id))
+      })
+      .then(refreshActiveCard)
   }
   // the rename dialog: the confirm's shape with a field; Enter or Save names it, blank clears the name back to
   // "New story", Escape or Cancel keeps it
@@ -313,15 +327,28 @@ export const StoryDialogs = () => {
             />
           </div>
           <div class="list scroller" role="menu" onKeyDown={roam}>
-            <Show when={showDefault()}>
+            <Show when={showFollow()}>
               <button
                 type="button"
                 role="menuitemradio"
                 class="item"
-                aria-checked={current() ? "false" : "true"}
+                aria-checked={picked() === undefined ? "true" : "false"}
                 onClick={() => (picker.close(), pick(undefined))}
               >
-                <span class="name">{t("side.cardDefault")}</span>
+                <span class="name">{t("side.followDefault")}</span>
+                <Check class="check" aria-hidden="true" />
+                <Show when={fallback()}>{(p) => <span class="bio">{p().name}</span>}</Show>
+              </button>
+            </Show>
+            <Show when={showNone()}>
+              <button
+                type="button"
+                role="menuitemradio"
+                class="item"
+                aria-checked={picked() === null ? "true" : "false"}
+                onClick={() => (picker.close(), pick(null))}
+              >
+                <span class="name">{t("side.noPersona")}</span>
                 <Check class="check" aria-hidden="true" />
               </button>
             </Show>
@@ -333,7 +360,7 @@ export const StoryDialogs = () => {
                     type="button"
                     role="menuitemradio"
                     class="item"
-                    aria-checked={p().id === current()?.id ? "true" : "false"}
+                    aria-checked={p().id === picked() ? "true" : "false"}
                     onClick={() => (picker.close(), pick(p().id))}
                   >
                     <span class="name">{p().name}</span>
@@ -343,7 +370,7 @@ export const StoryDialogs = () => {
                 )
               }}
             </For>
-            <Show when={q().trim() && !hits().length && !showDefault()}>
+            <Show when={q().trim() && !hits().length && !showFollow() && !showNone()}>
               <div class="empty">
                 <span>{t("side.noPersonaMatch", { q: q().trim() })}</span>
               </div>

@@ -98,15 +98,18 @@ assert.equal(empty(row(7, { turns: 0 })), true)
 assert.deepEqual(rows.map(unnamed), [true, false, true, true, false, true]) // starred or named is kept
 assert.deepEqual([turnLabel({ ...hits.get(3)!, turn: 0 }), turnLabel(hits.get(3)!)], ["开场白", "第 2 轮"])
 
-// The workspace's persona row: the open story's own when it is of the card, else the card's default.
+// The workspace's persona row: the open story's own when it is of the card, else the one the server says the card is on
+// (its view's `persona`), and nothing from a view of another card.
 {
   const lib = { current: 2, stories: [row(1, { persona: "monk" }), row(2), row(3, { card: "other", persona: "nun" })] }
-  const defaults = { wuxia: { persona: "friend" }, other: { persona: "monk" } }
-  assert.equal(personaOn(lib, defaults, "wuxia", "reader"), undefined) // story 2 is open, on the card's own
-  assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia", "reader"), "monk")
-  // the card's page: the tab keeps story 1 for Escape, but the row is the card's default
+  const view = { id: "wuxia", persona: "friend" }
+  assert.equal(personaOn(lib, view, "wuxia", "reader"), undefined) // story 2 is open, on the card's own
+  assert.equal(personaOn({ ...lib, current: 1 }, view, "wuxia", "reader"), "monk")
+  // the card's page: the tab keeps story 1 for Escape, but the row is the card's
   assert.equal(openOn({ ...lib, current: 1 }, "wuxia", "card"), undefined)
-  assert.equal(personaOn({ ...lib, current: 1 }, defaults, "wuxia", "card"), "friend")
-  assert.equal(personaOn(lib, defaults, "other", "reader"), "monk") // the open story is another card's: the default
+  assert.equal(personaOn({ ...lib, current: 1 }, view, "wuxia", "card"), "friend")
+  assert.equal(personaOn(lib, { id: "other", persona: "monk" }, "other", "reader"), "monk") // another card's story is open
+  assert.equal(personaOn(lib, view, "other", "reader"), undefined) // the view is another card's
+  assert.equal(personaOn({ ...lib, current: 1 }, { id: "wuxia", persona: null }, "wuxia", "card"), undefined)
 }
 console.log("ok")
