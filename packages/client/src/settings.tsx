@@ -404,6 +404,7 @@ const Personas = (props: Pane) => {
   const create = async () => {
     const id = newId("persona")
     await putPersona({ id, name: t("settings.newPersona"), text: "" })
+    void refreshActiveCard() // the install's first persona is its default: the card under this page may wear it now
     props.onPick(id)
   }
   return (

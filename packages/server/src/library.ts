@@ -244,18 +244,21 @@ export const library = ({
     }
     return [...byUrl.values()]
   }
-  const personaOf = (pid: string | null | undefined) =>
-    pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
-  /** THE persona a card is on with no story: what a new story copies, and what the card's view wears. The card's pick
-   *  (`local.persona`) when it makes one (an id, or null: none), else the install's default, except on a card with a
-   *  player character of its own: author mode (`input: note`, nobody in the fiction is the player) or a frame that writes
-   *  its own `persona` slot. There a persona is only ever the player's explicit pick. */
-  const personaFor = (card: Card, pick: string | null | undefined): string | null => {
-    if (pick !== undefined) return pick
-    const own =
-      card.input === "note" || card.frame.some((f) => f.id === "persona" && f.enabled !== false && !!f.text?.trim())
-    return own ? null : data.personas.fallback()
+  const personaOf = (pid: string | null | undefined, yields = false) => {
+    const p = pid == null ? undefined : data.personas.list().find((x) => x.id === pid)
+    return p && { ...p, yields }
   }
+  /** THE persona a card is on with no story: what a new story copies, and what the card's view wears. The card's pick
+   *  (`local.persona`) when it makes one (an id, or null: none), else the install's default, inherited: it `yields`
+   *  (layer.ts: a `persona` slot the card writes stays, the default's name fills `user` where nothing else does). An
+   *  author-mode card (`input: note`, nobody in the fiction is the player) inherits nothing: a persona there is only
+   *  ever the player's explicit pick. */
+  const personaFor = (card: Card, pick: string | null | undefined): { id: string | null; yields: boolean } =>
+    pick !== undefined
+      ? { id: pick, yields: false }
+      : card.input === "note"
+        ? { id: null, yields: false }
+        : { id: data.personas.fallback(), yields: true }
   const hat = (id: string) => data.hats.list().find((h) => h.id === id)
   const overlayIn = (rows: readonly Layer[]) => rows.find((p) => p.id === "harness") ?? given
   /** The player's rows on a card, as `resolve` takes them: read on every request, a session keeps none. */
@@ -290,7 +293,7 @@ export const library = ({
     const store = data.store<Logged>(id)
     const session = makeSession({
       card,
-      rows: () => rowsOf(card.id, personaOf(row(id)?.persona)),
+      rows: () => rowsOf(card.id, personaOf(row(id)?.persona, row(id)?.yields)),
       model,
       store,
       hat,
@@ -402,11 +405,20 @@ export const library = ({
       star: (id: Id, starred: boolean) => data.stories.star(id, starred),
       /** On this story alone (none: the card's own persona), in force from its next request. */
       persona: (id: Id, persona: string | null) => data.stories.persona(id, persona),
+      /** Back on the persona its card is on (`personaFor`), as a new story would take it: an empty story the card's
+       *  page is about to begin follows the card's pick. */
+      follow: (id: Id) => {
+        const r = row(id)
+        if (!r) throw new Error(`no story ${id}`)
+        const p = personaFor(cards.get(r.card), data.locals.get(r.card)?.persona)
+        data.stories.persona(id, p.id, p.yields)
+      },
       /** A new, empty story of `card`, on the persona the card is on (`personaFor`), copied: a later change of the
        *  card's pick or the install's default leaves it alone. Throws when there is no such card. */
       create: (card: string): Id => {
         const c = cards.get(card)
-        return data.stories.create(c.id, personaFor(c, data.locals.get(c.id)?.persona))
+        const p = personaFor(c, data.locals.get(c.id)?.persona)
+        return data.stories.create(c.id, p.id, p.yields)
       },
       /** Refused (throws) while a turn runs on the story: its writes would land on nothing. */
       del: (id: Id) => {
@@ -444,14 +456,16 @@ export const library = ({
     view: (card: string, story?: Id): CardView => {
       const c = cards.get(card)
       const local = localOf(card)
-      const picked = personaOf(story === undefined ? personaFor(c, local.persona) : row(story)?.persona)
+      const on =
+        story === undefined ? personaFor(c, local.persona) : { id: row(story)?.persona, yields: row(story)?.yields }
+      const picked = personaOf(on.id, on.yields)
       const rows = rowsOf(card, picked)
       const { meta, ...rest } = cardView(c, rows)
       const mounts = [...new Set(local.mounts)].flatMap((id) => {
         const p = rows.packs!.find((x) => x.id === id)
         return p ? [{ id: p.id, name: p.name }] : []
       })
-      return { ...meta, ...rest, local, mounts, persona: picked?.id ?? null, follows: personaFor(c, undefined) }
+      return { ...meta, ...rest, local, mounts, persona: picked?.id ?? null, follows: personaFor(c, undefined).id }
     },
     hats: data.hats,
     packs: {

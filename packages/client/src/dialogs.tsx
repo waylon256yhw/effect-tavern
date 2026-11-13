@@ -15,7 +15,7 @@ import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
 import { card, focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
 import { openOn } from "./stories.ts"
-import { cardPersona, exportUrl, nameStory, pickStoryPersona, putLocal, refreshActiveCard } from "./wire.ts"
+import { exportUrl, followStoryPersona, nameStory, pickStoryPersona, putLocal, refreshActiveCard } from "./wire.ts"
 import { t } from "./i18n.ts"
 
 const bound = {
@@ -62,7 +62,9 @@ export const StoryDialogs = () => {
   })
   /** A fixed row stays while the search is empty or names it. */
   const named = (word: string) => !q().trim() || word.includes(q().trim())
-  const showFollow = () => !story() && named(t("side.followDefault"))
+  // not on an author-mode card: nobody in its fiction is the player, so there is no default to follow
+  const showFollow = () =>
+    !story() && !(view()?.id === cardId() && view()?.input === "note") && named(t("side.followDefault"))
   const showNone = () => named(t("side.noPersona"))
   let picker!: HTMLDialogElement
   let search!: HTMLInputElement
@@ -89,7 +91,7 @@ export const StoryDialogs = () => {
     const fresh = kept && nodes().nodes.size === 0 ? kept : undefined
     void putLocal(c, ({ persona: _p, ...rest }) => (id === undefined ? rest : { ...rest, persona: id }))
       .then(async () => {
-        if (fresh) await pickStoryPersona(fresh.id, id === undefined ? await cardPersona(c) : id)
+        if (fresh) await (id === undefined ? followStoryPersona(fresh.id) : pickStoryPersona(fresh.id, id))
       })
       .then(refreshActiveCard)
   }

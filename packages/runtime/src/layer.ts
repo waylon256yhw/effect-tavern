@@ -314,7 +314,9 @@ export interface Rows {
   harness?: Layer | undefined // the overlay: the player's global row
   packs?: readonly Layer[] | undefined // the library; `local.mounts` says which stand here, and in what order
   local?: Local | undefined
-  persona?: { name: string; text: string } | undefined
+  // `yields`: worn by inheritance (the install's default), not picked: its text leaves a `persona` slot the card writes
+  // alone and its name is the lowest `user`, under the card's and the player's own
+  persona?: { name: string; text: string; yields?: boolean } | undefined
 }
 export type From = string // "harness" | "card" | "local" | a pack's id
 export type Item<T> = T & { from: From; compiled?: true; unasked?: true }
@@ -385,7 +387,10 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
               ...local,
               // a persona with no text only names `user`: an empty fragment would blank the card's own persona slot
               ...(rows.persona?.text.trim() && {
-                fragments: [...(local.fragments ?? []), { id: "persona", text: rows.persona.text }],
+                fragments: [
+                  ...(local.fragments ?? []),
+                  { id: "persona", text: rows.persona.text, ...(rows.persona.yields && { mode: "yield" as const }) },
+                ],
               }),
             }) as Layer,
           },
@@ -411,8 +416,9 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     if (nameOk(v)) pairs.push([k, v])
     else dropped.push({ from, kind: "name", id: k, why: "a name is one line with no {{" })
   }
+  if (rows.persona?.yields) name("local", "user", rows.persona.name)
   for (const { from, row } of up) for (const [k, v] of Object.entries(row.names ?? {})) name(from, k, v)
-  if (rows.persona) name("local", "user", rows.persona.name)
+  if (rows.persona && !rows.persona.yields) name("local", "user", rows.persona.name)
   const names: Names = Object.fromEntries(pairs)
 
   // ───────── asks: down the chain to the first that goes out (names.ts); the code's own has no hole ─────────

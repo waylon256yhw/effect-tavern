@@ -177,10 +177,10 @@ const over = (data: Data, m: () => Model = model) =>
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), false)
   await run(lib.turn(r).start(act("who")))
   assert.equal(seen.at(-1)!.includes("你是路过的行脚僧。"), true)
-  // its name is `user`: the story's own pick on the story's view, with no story the card's default
+  // its name is `user`: the story's own pick on the story's view, with no story the install's default (the first persona made)
   assert.deepEqual(
     [lib.view(chat.id, r).layer.names.user, lib.view(chat.id, p).layer.names.user, lib.view(chat.id).layer.names.user],
-    ["行脚僧", undefined, undefined],
+    ["行脚僧", undefined, "行脚僧"],
   )
   lib.locals.write({ ...lib.locals.read(chat.id), persona: "monk" })
   assert.equal(lib.view(chat.id).layer.names.user, "行脚僧")
@@ -197,7 +197,8 @@ const over = (data: Data, m: () => Model = model) =>
 }
 
 // The install's default persona (#170): the first persona made takes the mark; a new story on a card that leaves the pick
-// open takes it, copied; an explicit none, an author-mode card and a card with its own frame persona do not; a change of
+// open takes it, copied; an explicit none and an author-mode card do not; on a card with its own frame persona the
+// default yields (the card's text stays, the default's name fills `user`) and an explicit pick overrides; a change of
 // default leaves a running story alone; deleting the default clears the mark and moves it to nobody.
 {
   const plain: Card = { ...chat, id: "plain", frame: chat.frame.filter((f) => f.id !== "persona") }
@@ -213,13 +214,22 @@ const over = (data: Data, m: () => Model = model) =>
   const first = lib.stories.create(plain.id)
   assert.deepEqual(
     [persona(first), persona(lib.stories.create(note.id)), persona(lib.stories.create(chat.id))],
-    ["monk", null, null],
+    ["monk", null, "monk"],
   )
   assert.deepEqual(
     [lib.view(plain.id).persona, lib.view(note.id).persona, lib.view(chat.id).persona],
-    ["monk", null, null],
+    ["monk", null, "monk"],
   )
+  assert.deepEqual([lib.view(plain.id).follows, lib.view(note.id).follows], ["monk", null])
   assert.equal(lib.view(plain.id).layer.names.user, "行脚僧")
+  // inherited, the default yields to the card's own persona slot and still names `user`; picked, it overrides
+  const slot = (id: number) => lib.session(id).layer.frame.find((f) => f.id === "persona")!
+  const worn = lib.stories.create(chat.id)
+  assert.deepEqual([slot(worn).from, lib.session(worn).layer.names.user], ["card", "行脚僧"])
+  lib.stories.persona(worn, "monk")
+  assert.deepEqual([slot(worn).from, slot(worn).text], ["local", "你是路过的行脚僧。"])
+  lib.stories.follow(worn) // back on what the card gives: inherited again
+  assert.equal(slot(worn).from, "card")
   // an explicit pick stands over the default on any card, an explicit none on a card that would inherit
   lib.locals.write({ ...lib.locals.read(note.id), persona: "nun" })
   assert.equal(persona(lib.stories.create(note.id)), "nun")

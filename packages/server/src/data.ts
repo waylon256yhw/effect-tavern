@@ -257,6 +257,8 @@ const steps = [
   // the install's default persona (a new story's when its card leaves the pick to it, library.ts `personaFor`), one row
   // or none; a persona's delete takes it with it
   "create table if not exists persona_default (id integer primary key check (id = 1), persona text not null)",
+  // a story on the default by inheritance, not by a pick: its persona yields to the card's own (layer.ts `yields`)
+  "alter table story add column yields integer not null default 0",
 ]
 const latest = baseline + steps.length
 const upgrade = (db: DatabaseSync) => {
@@ -528,10 +530,17 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
      *  line is walked once, each node read by its key and only its input extracted. */
     stories: {
       /** The row's own columns that a request needs (identity, card, persona): never a walk of the story's line. */
-      get: (id: Id): { id: Id; card: string; persona: string | null } | undefined =>
-        q("select id, card, persona from story where id = ?").get(id) as
-          | { id: Id; card: string; persona: string | null }
-          | undefined,
+      get: (id: Id): { id: Id; card: string; persona: string | null; yields: boolean } | undefined => {
+        const r = q("select id, card, persona, yields from story where id = ?").get(id) as Row | undefined
+        return (
+          r && {
+            id: r["id"] as Id,
+            card: r["card"] as string,
+            persona: r["persona"] as string | null,
+            yields: r["yields"] === 1,
+          }
+        )
+      },
       /** The card's rows (every card's when `card` is absent), or the one of them `only` names (none when that is
        *  another card's or no story): the walk starts from that story's head alone, so one row costs one line. */
       list: (card?: string, only?: Id): StoryRow[] =>
@@ -567,14 +576,20 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
       /** Starred or not; `updated` untouched like a rename. The client puts the starred first. */
       star: (id: Id, starred: boolean) => void q("update story set starred = ? where id = ?").run(starred ? 1 : 0, id),
       /** The persona in force on this story alone (none: the card's own); `updated` untouched like a rename. */
-      persona: (id: Id, persona: string | null) => void q("update story set persona = ? where id = ?").run(persona, id),
+      persona: (id: Id, persona: string | null, yields = false) =>
+        void q("update story set persona = ?, yields = ? where id = ?").run(persona, yields ? 1 : 0, id),
       /** Every story naming `persona` back on its card's own: a deleted persona leaves no stale id behind. */
-      dropPersona: (persona: string) => void q("update story set persona = null where persona = ?").run(persona),
+      dropPersona: (persona: string) =>
+        void q("update story set persona = null, yields = 0 where persona = ?").run(persona),
       /** A new story, on `persona` from its first request (the card's default pick, copied: after this it is the story's own). */
-      create: (card: string, persona: string | null = null): Id =>
+      create: (card: string, persona: string | null = null, yields = false): Id =>
         Number(
-          q("insert into story (card, updated, persona) values (?, ?, ?)").run(card, Date.now(), persona)
-            .lastInsertRowid,
+          q("insert into story (card, updated, persona, yields) values (?, ?, ?, ?)").run(
+            card,
+            Date.now(),
+            persona,
+            yields ? 1 : 0,
+          ).lastInsertRowid,
         ),
       del: (id: Id) => void q("delete from story where id = ?").run(id), // its nodes cascade
       /** Several at once, one transaction: the batch cleanup. Only the card's own go (any card's when it is absent);

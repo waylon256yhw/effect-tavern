@@ -25,6 +25,7 @@
 //                 POST /stories {card} makes a new one of that card (400 when there is none), on the card's
 //                 persona (library.ts `personaFor`), and answers it as `current`, PUT /stories/<id> answers that one (404
 //                 when there is none), with a body {title?: string | null, starred?: boolean, persona?: string | null}
+//                 (or {follow: true}: back on the persona its card is on, as a new story takes it)
 //                 names, stars or picks its persona instead (this story's alone; blank title = null, null persona = the
 //                 card's own; `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
 //                 {ids: number[]} removes those among them in one go. Every one answers the listing.
@@ -143,6 +144,7 @@ const StoryBody = Schema.decodeUnknownSync(
     title: Schema.optionalKey(Schema.NullOr(Schema.String)),
     starred: Schema.optionalKey(Schema.Boolean),
     persona: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    follow: Schema.optionalKey(Schema.Literal(true)), // back on the persona its card is on, as a new story takes it
   }),
 )
 const IdsBody = Schema.decodeUnknownSync(Schema.Struct({ ids: Schema.Array(Schema.Number) }))
@@ -217,6 +219,7 @@ export const handle = (lib: Library, { inspect = false } = {}) => {
           if (b.title !== undefined) lib.stories.title(id, b.title)
           if (b.starred !== undefined) lib.stories.star(id, b.starred)
           if (b.persona !== undefined) lib.stories.persona(id, b.persona)
+          if (b.follow) lib.stories.follow(id)
           return stories()
         })
       return reply(() => (lib.stories.del(id), stories()), 409) // busy: a turn runs on it
