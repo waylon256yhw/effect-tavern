@@ -45,7 +45,6 @@ const en: Dict = {
     searchOpenings: "Search openings…",
     specState: "State",
     tokens: "tokens",
-    namesFirst: "Fill these names to begin",
   },
   common: {
     add: "Add",
@@ -102,7 +101,6 @@ const en: Dict = {
     localTools: "Local writing skills",
     noMatches: "No matching actions available",
     removeInvocation: "Remove {title}",
-    unnamed: "This card has names to fill",
   },
   controls: {
     backToList: "Back to the list",

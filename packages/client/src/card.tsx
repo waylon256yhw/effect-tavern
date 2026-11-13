@@ -12,8 +12,7 @@ import { read } from "./bridge.ts"
 import { Back, Change, Clue, Next, Prev, Up } from "./icons.tsx"
 import { admitsOpening, chips, firstLine, openingTags } from "./manifest.ts"
 import { Prose } from "./prose.tsx"
-import { fillKnown, requiredNameKeys, unnamed, withPackName } from "./pack.ts"
-import { leaveInput, localSettled, putLocalAndRefresh, UserChip } from "./writing.tsx"
+import { fillKnown } from "./pack.ts"
 import { openSettings } from "./settings.tsx"
 import { backOf, close, newStory, open } from "./pages.ts"
 import { activeOf, card, log, routing, stories, tabs, working } from "./store.ts"
@@ -73,19 +72,6 @@ export const CardPage = () => {
     const cur = l?.stories.find((s) => s.id === l.current)
     return !inStory() && cur !== undefined && cur.card === view()?.id
   }
-  // #170: who the player is and the card's names, before Begin. The identity chip shows where the card has a player
-  // character: participant mode (a persona is worn there whether or not the text says `{{user}}`), or an author-mode
-  // card that asks for `user` or was given one here. A `user` named in a pack alone does not put a character on a
-  // card with none. Begin waits on `cardHoles`.
-  const layer = () => view()?.layer
-  const identity = () => {
-    const c = view()
-    if (!c) return false
-    const here = c.local.names?.user !== undefined || c.local.persona !== undefined
-    return c.facets.mode !== "note" || c.layer.cardHoles.includes("user") || here
-  }
-  const nameKeys = () => requiredNameKeys(layer()?.cardHoles, view()?.local.names)
-  const blocked = () => unnamed(layer())
   const openings = () => view()?.greetings ?? []
   const opening = () => openings()[at()]
   const listed = createMemo(() => {
@@ -102,10 +88,6 @@ export const CardPage = () => {
     // a story in progress, none yet (an empty library), or an empty story of another card (this one was browsed from
     // the shelf): a new, empty one of this card, landing on the card page
     try {
-      // the click that lands here blurred the name field just typed in: its write is in flight, and the view it
-      // changes says whether Begin may go
-      await localSettled()
-      if (blocked()) return
       if (!fresh() && !(await newStory(view()!.id))) return
       turn.greet(at())
       open("reader") // a draft is a reason to be in the reader, whatever the log holds yet and whatever was browsed before
@@ -197,40 +179,6 @@ export const CardPage = () => {
                   </button>
                 </p>
               </Show>
-              <Show when={identity() || nameKeys().length > 0}>
-                <div class="card-names">
-                  <span class="lbl">{t("packs.names")}</span>
-                  <div class="name-chips">
-                    <Show when={identity()}>
-                      <UserChip cardId={c().id} unfilled={!!layer()?.cardHoles.includes("user")} />
-                    </Show>
-                    <For each={nameKeys()} keyed={(k) => k}>
-                      {(k) => (
-                        <label class="name-chip" data-unfilled={layer()?.cardHoles.includes(k()) ? "true" : "false"}>
-                          <span class="hole-key mono">{`{{${k()}}}`}</span>
-                          <input
-                            value={c().local.names?.[k()] ?? ""}
-                            placeholder={t("packs.unfilled")}
-                            aria-label={k()}
-                            required
-                            onChange={(e) => {
-                              const cid = c().id
-                              const key = k()
-                              const val = e.currentTarget.value
-                              void putLocalAndRefresh(cid, (l) => withPackName(l, key, val))
-                            }}
-                            onKeyDown={leaveInput}
-                          />
-                        </label>
-                      )}
-                    </For>
-                  </div>
-                  {/* the reason Begin waits, beside the fields that lift it */}
-                  <Show when={blocked()}>
-                    <p class="nomodel">{t("card.namesFirst")}</p>
-                  </Show>
-                </div>
-              </Show>
               <Size label={t("card.prompt")} n={c().tokens.head} />
             </section>
             <Show when={openings().length > 1}>
@@ -299,7 +247,7 @@ export const CardPage = () => {
                   <div class="well">
                     <div class="wscroll">
                       {/* the names in force; a hole still unfilled stays literal, marked (prose.tsx) */}
-                      <Prose text={fillKnown(g().text.trim(), layer()?.names)} />
+                      <Prose text={fillKnown(g().text.trim(), view()?.layer.names)} />
                     </div>
                   </div>
                 )}
@@ -389,7 +337,6 @@ export const CardPage = () => {
                   type="button"
                   class={{ begin: true, primary: fresh() }}
                   disabled={busy() || starting()}
-                  aria-disabled={blocked() ? "true" : undefined} // not `disabled`: that would swallow the click above
                   onClick={() => void begin()}
                 >
                   {fresh() ? t("card.begin") : t("stories.newStory")}
