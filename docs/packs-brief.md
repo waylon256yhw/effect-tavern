@@ -120,7 +120,7 @@ export const Theater = Schema.Struct({
 - **代称（names）**：`Record<string, string>`，键是纯标识符，值是一个名字（人名、地名、作品名）。字段叫 `names`，不叫 `vars` / `macros`：它装的是专有名词，不是变量；"宏"留作生态词。GLOSSARY 加 **代称** 条，README 的 `{{char}}` 那句与 docs/card-reading.md "harness 里没有它的工作"一句改成"是一个声明的洞"。
 - **洞（hole）**：文本里的 `{{key}}`。`user` / `char` 是两个约定键名，不是引擎特例。
 - **三层声明**：`Card.names?`（作者默认，伴星写 `{ char: "依瑞丝" }`）、`Pack.names?`（包带的默认，诡秘包写 `{ char_place: "贝克兰德" }`）、`Player.names?: Record<cardId, Record<string, string>>`（玩家按卡指定或覆盖，同 persona / packs / tags 的模式）。
-- **合并序**：`{ user: "玩家", ...card.names, ...挂载的包按序, ...player.names[card] }`，最后若有生效的人设则 `user = persona.name`（玩家覆盖卡的默认，与 persona 槽位一致）。
+- **合并序**：`{ ...card.names, ...挂载的包按序, ...player.names[card] }`，最后若有生效的人设则 `user = persona.name`（玩家覆盖卡的默认，与 persona 槽位一致）。
 
 ### 2. 纯函数（runtime，一个新文件 `names.ts`，导出给客户端共用）
 
@@ -225,7 +225,7 @@ export interface Resolved {
 - 入库解码剥掉 `when` / `role`（harness 与卡除外）。
 - 词条 id 加行前缀；单层；`unlock: () => 1`。
 - **产物补丁按等级**：harness 与卡可以写整条；基底 / 包 / 本卡的补丁只取 `label` / `text` / `on`，**落在任何已有 id 上**（notes、options 的问法由此可见可改，形状、阶段、折叠不动）；新 id 编译成 `stage: "narrate"`、`shape: text`，缺 `text` 则丢弃。卡自己的形状错误仍在 session 打开时抛。
-- 名字一行、不含 `{{`；`names.user` 缺省 "玩家"。
+- 名字一行、不含 `{{`；`names.user` 没有缺省值（#170）：卡自身生效文本里有未填的洞时，故事不运行（`cardHoles`）。
 - 洞：按条目填；片段 / 词条 / 快捷输入未填则不出；产物未填则本轮不问；问法沿链回退；开局与索取仍拒绝并报洞名。
 - 开关句子：`asks` 里 id 为 `switch.<key>.<value>` 的默认文本就是 `SENTENCES`；叠加行按 id 改一句即生效；整槽自由文本仍整组接管。`SENTENCES` 常量从 fragment.ts 搬进 harness 行。
 

@@ -220,17 +220,20 @@ export const makeSession = ({
   const layer = () => current().R
   const L = () => current().I
   const fresh = () => void (now = undefined)
+  const refuse = (what: string, keys: readonly string[]) =>
+    new Error(`${what}: unfilled ${keys.map((k) => `{{${k}}}`).join(", ")}`)
   /** A text that must go out whole, or the action is refused, naming the hole. */
   const named = (what: string, text: string) => {
     const N = layer().names
     const out = expand(text, N)
-    if (out === undefined)
-      throw new Error(
-        `${what}: unfilled ${unfilled(text, N)
-          .map((k) => `{{${k}}}`)
-          .join(", ")}`,
-      )
+    if (out === undefined) throw refuse(what, unfilled(text, N))
     return out
+  }
+  /** The turn lock: a card whose own text has an open hole is a broken card (a guard drops, a passage refuses mid-story),
+   *  so nothing runs on it until the player names it (a persona, a local name). A player row's entry only stays out. */
+  const ready = () => {
+    const holes = layer().cardHoles
+    if (holes.length) throw refuse("card", holes)
   }
   const held = Log.hold<Turn>(store)
   for (const t of held.log.nodes.values())
@@ -496,6 +499,7 @@ export const makeSession = ({
       if (from !== "check" && !input.text && !input.note && !input.invoke?.length)
         throw new Error(base ? `node ${base.id}: nothing to rerun` : "empty input")
       fresh()
+      ready()
       const path = chain(parent)
       if (parent !== null && turnOf(parent).end === "over") throw new Error("terminal node cannot accept children")
       if (path.some((t) => t.settlementStatus === "pending" || t.settlementStatus === "failed"))
@@ -508,7 +512,7 @@ export const makeSession = ({
         throw new Error("parent passage must be completed before continuing")
       const viewPath = transition ? passageView(path, transition) : path
       const here = derived.at(viewPath)
-      // the guard lines expanded, one with an unfilled hole skipped: what the director and check read, and check's enum
+      // the guard lines expanded (every hole filled: `ready` above): what the director and check read, and check's enum
       const guard = lines(card.guard, layer().names)
       // a root's opening settles first, as the fold does (derived.ts `settleFresh`); its events reach this turn's gate
       const opening = start ?? base?.opening
@@ -955,6 +959,7 @@ export const makeSession = ({
     transition?: Partial<Pick<Turn, "boundary" | "passage" | "end" | "products" | "changes">>,
   ): Change => {
     fresh()
+    ready()
     return change(
       held.commit(
         Log.add(held.log, {
@@ -1075,6 +1080,7 @@ export const makeSession = ({
       }
       const opening = [...(g.do ?? []), ...(a.opening ?? [])]
       fresh()
+      ready() // before the note's own refusal: the card names every hole it holds, not the opening's only
       // text and note count when they say something (lint `empty-greeting` reads them the same way)
       const note = [g.note?.trim() && named("opening", g.note), a.note?.trim() && a.note].filter(Boolean).join("\n\n")
       if (g.text?.trim() && !note)

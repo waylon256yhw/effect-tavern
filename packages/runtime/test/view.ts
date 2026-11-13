@@ -221,7 +221,12 @@ assert.doesNotMatch(section(recorded, "gates")!, /lore\./)
   assert.doesNotMatch(listed, /manual[^\n]*in the index|auto[^\n]*in the index|missing/)
   assert.doesNotMatch(preview("narrate").doc.map(text).join("\n"), /PLAYER ONLY/)
   assert.match(preview("record", "manual").doc.map(text).join("\n"), /PLAYER ONLY/)
-  const runtime = makeSession({ card, rows: () => player, model })
+  // the entry with the open hole is the preview's to drop; a session on it would refuse the turn (session.ts `ready`)
+  const runtime = makeSession({
+    card: { ...card, lore: card.lore.filter((e) => e.id !== "missing") },
+    rows: () => player,
+    model,
+  })
   calls.clear()
   await Effect.runPromise(
     Stream.runForEach(

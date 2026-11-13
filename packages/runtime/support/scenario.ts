@@ -46,7 +46,9 @@ export const runScenario = async (card: Card, value: unknown = { steps: [{ text:
     }
     return defaultAnswer(doc, { notes: "", options: [] })
   })
-  const session = makeSession({ card, rows: () => plain, model: () => model, seed: scenario.seed })
+  // the player the run stands in for has a name, at the lowest rank: a card that leaves `user` to the player still runs
+  const rows = { harness: { ...plain.harness!, names: { user: "阿青" } } }
+  const session = makeSession({ card, rows: () => rows, model: () => model, seed: scenario.seed })
   if (scenario.greeting !== undefined) {
     const greeting = card.greetings[scenario.greeting]
     if (!greeting) throw new Error(`unknown greeting ${scenario.greeting}`)

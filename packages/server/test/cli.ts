@@ -28,7 +28,10 @@ const ok = async (...args: string[]) => {
   return result.out
 }
 const file = join(dir, "cli.yaml")
-writeFileSync(file, scaffold("cli", "chat"))
+// the template leaves `user` to the player, and the CLI names no one: the card names its player here
+const named = (id: string) =>
+  Bun.YAML.stringify({ ...(Bun.YAML.parse(scaffold(id, "chat")) as object), names: { user: "阿青" } })
+writeFileSync(file, named("cli"))
 let server: ReturnType<typeof Bun.spawn> | undefined
 try {
   await ok("card", "check", file)
@@ -39,7 +42,7 @@ try {
   assert.equal(missing.code, 1)
   assert.match(missing.err, /no story 999999/)
   const numericFile = join(dir, "numeric.yaml")
-  writeFileSync(numericFile, scaffold(String(story), "chat"))
+  writeFileSync(numericFile, named(String(story)))
   await ok("card", "install", numericFile)
   const numericEvents = (await ok("play", String(story), "--card", "--input", "/greet", "--jsonl"))
     .trim()

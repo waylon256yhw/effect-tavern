@@ -20,9 +20,9 @@ import {
   type Trace,
 } from "@effect-tavern/provider"
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
-import { worldOf } from "@effect-tavern/runtime/src/layer.ts"
+import { resolve, worldOf, type Layer, type Local } from "@effect-tavern/runtime/src/layer.ts"
 import { tag, worldBlock } from "@effect-tavern/runtime/src/request.ts"
-import { expand } from "@effect-tavern/runtime/src/names.ts"
+import { fill, lines, type Names } from "@effect-tavern/runtime/src/names.ts"
 import { cardNames, loadCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
 
@@ -57,43 +57,61 @@ interface Node {
   reply?: { type: string; text?: string }[]
   violated?: string[]
 }
-const nodes = all("select n.story, n.id, s.card, n.json from node n join story s on s.id = n.story order by 1, 2")
+const nodes = all(
+  "select n.story, n.id, s.card, s.persona, n.json from node n join story s on s.id = n.story order by 1, 2",
+)
   .map((r) => {
     const n = json<Node>(r)!
     const prose = (n.reply ?? []).map((p) => (p.type === "text" ? (p.text ?? "") : "")).join("")
     return {
       at: `${r["card"] as string} ${r["story"] as number}/${r["id"] as number}`,
       card: r["card"] as string,
+      persona: r["persona"] as string | null,
       prose,
       n,
     }
   })
   .filter((x) => x.prose.trim())
 
-/** A card text with its `{{holes}}` filled as a turn fills them (session.ts `lines`): the card's own names, and the
- *  player as 你, which is what the proses call them. A hole nobody names stays as written. */
-const named = (card: Card, text: string): string => expand(text, { user: "你", ...card.names }) ?? text
-/** `tagged`: the state is <world> + <draft>, and the question says which of the two is judged (the check ask's "Judge
- *  only what is written in <draft>", layer.ts). */
-const questionsOf = (card: Card | undefined, tagged: boolean): Record<string, Question> =>
-  card?.guard.length
+/** The story's names as a turn has them: layer.ts `resolve` over the player's rows, the story's persona last. */
+const packs = all("select id, name, json from pack").map(
+  (r) => ({ ...json<object>(r), id: r["id"], name: r["name"] }) as Layer,
+)
+const personas = new Map(
+  all("select id, name, json from persona").map((r) => [
+    r["id"] as string,
+    { name: r["name"] as string, text: json<string>(r)! },
+  ]),
+)
+const namesOf = (card: Card, persona: string | null): Names =>
+  resolve(card, {
+    harness: packs.find((p) => p.id === "harness"),
+    packs: packs.filter((p) => p.id !== "harness"),
+    local: json<Local>(db.prepare("select json from local where card = ?").get(card.id) as Row | undefined),
+    persona: persona === null ? undefined : personas.get(persona),
+  }).names
+/** `guard`: the card's lines filled as a turn fills them (session.ts `lines`, one with an open hole dropped). `tagged`:
+ *  the state is <world> + <draft>, and the question says which of the two is judged (the check ask's "Judge only what is
+ *  written in <draft>", layer.ts). */
+const questionsOf = (guard: readonly string[], tagged: boolean): Record<string, Question> =>
+  guard.length
     ? Object.fromEntries(
-        card.guard.map((rule, i) => [
+        guard.map((rule, i) => [
           `g${i}`,
           {
             type: "boolean",
-            instructions: `${tagged ? "只评判 <draft> 里的正文；<world> 只是背景，不算正文。<draft> " : "这段正文"}是否违反了下面这条规则？\n规则：${named(card, rule)}`,
+            instructions: `${tagged ? "只评判 <draft> 里的正文；<world> 只是背景，不算正文。<draft> " : "这段正文"}是否违反了下面这条规则？\n规则：${rule}`,
             criteria: { true: "正文中发生了规则禁止的事。", false: "正文没有发生规则禁止的事。" },
           },
         ]),
       )
     : { generic: { type: "boolean", instructions: GENERIC } }
 /** The card's `<world>` block as the off-stage stages read it (request.ts `worldBlock`), or "" when it has none. */
-const worldText = (card: Card | undefined): string =>
+const worldText = (card: Card | undefined, names: Names): string =>
   card
     ? worldBlock(
-        worldOf(card, card.frame).flatMap((f) =>
-          f.text ? [{ id: f.id, role: "system" as const, text: named(card, f.text) }] : [],
+        fill(worldOf(card, card.frame), names).flatMap((f) =>
+          f.text ? [{ id: f.id, role: "system" as const, text: f.text }] : [],
         ),
       )
     : ""
@@ -112,8 +130,8 @@ const runs: Run[] = []
 let trace: Trace | undefined
 const model = dry ? undefined : compileDecision(config, secret, { onTrace: (t) => (trace = t) })
 
-const ask = async (at: string, variant: string, card: Card | undefined, state: string, expect?: boolean) => {
-  const qs = questionsOf(card, state.startsWith("<world>"))
+const ask = async (at: string, variant: string, guard: readonly string[], state: string, expect?: boolean) => {
+  const qs = questionsOf(guard, state.startsWith("<world>"))
   if (!model) return console.log(`${at} [${variant}] ${state.length} chars, ${Object.keys(qs).length} question(s)`)
   trace = undefined
   const t0 = performance.now()
@@ -153,16 +171,18 @@ console.log(`${config.driver} ${config.model} · ${nodes.length} proses from ${d
 const controlled = new Set<string>()
 for (const x of nodes) {
   const card = cards.get(x.card)
-  const world = worldText(card)
+  const names = card ? namesOf(card, x.persona) : {}
+  const guard = card ? lines(card.guard, names) : []
+  const world = worldText(card, names)
   // the label: a guard line the node recorded as broken; a generic question has none
-  const expect = card?.guard.length ? (x.n.violated ?? []).length > 0 : undefined
-  await ask(x.at, "bare", card, x.prose, expect)
-  if (world) await ask(x.at, "world", card, withWorld(world, x.prose), expect)
+  const expect = guard.length ? (x.n.violated ?? []).length > 0 : undefined
+  await ask(x.at, "bare", guard, x.prose, expect)
+  if (world) await ask(x.at, "world", guard, withWorld(world, x.prose), expect)
   const breach = CONTROLS[x.card]
-  if (breach && card?.guard.length && !controlled.has(x.card)) {
+  if (breach && guard.length && !controlled.has(x.card)) {
     controlled.add(x.card)
-    await ask(x.at, "control", card, x.prose + breach, true)
-    if (world) await ask(x.at, "control+world", card, withWorld(world, x.prose + breach), true)
+    await ask(x.at, "control", guard, x.prose + breach, true)
+    if (world) await ask(x.at, "control+world", guard, withWorld(world, x.prose + breach), true)
   }
 }
 

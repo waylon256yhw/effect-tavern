@@ -1,7 +1,9 @@
 // Names (GLOSSARY): a dictionary of proper nouns behind `{{key}}` holes, one plain pass of replacement, not a template
-// language. `user` and `char` are conventional keys, no special case here. A value is one line with no `{{`, so a value
-// holding a template does not exist by definition, and the single pass rules out recursion besides. The session expands
-// per entry before a request is assembled (docs/packs-brief.md §八); history and the player's input are never expanded.
+// language. `user` and `char` are conventional keys, no special case here: `user` has no fallback value either. A value
+// is one line with no `{{`, so a value holding a template does not exist by definition, and the single pass rules out
+// recursion besides. The session expands per entry before a request is assembled (docs/packs-brief.md §八); history and
+// the player's input are never expanded. A player row's entry with an open hole stays out; an open hole in the card's
+// own text locks the turn (layer.ts `cardHoles`, session.ts `ready`).
 import { Schema } from "effect"
 
 /** A value's lock: one line, no `{{`. The schema holds it at a boundary, layer.ts again over whatever a row holds. */

@@ -180,7 +180,7 @@ const over = (data: Data, m: () => Model = model) =>
   // its name is `user`: the story's own pick on the story's view, with no story the card's default
   assert.deepEqual(
     [lib.view(chat.id, r).layer.names.user, lib.view(chat.id, p).layer.names.user, lib.view(chat.id).layer.names.user],
-    ["行脚僧", "玩家", "玩家"],
+    ["行脚僧", undefined, undefined],
   )
   lib.locals.write({ ...lib.locals.read(chat.id), persona: "monk" })
   assert.equal(lib.view(chat.id).layer.names.user, "行脚僧")
