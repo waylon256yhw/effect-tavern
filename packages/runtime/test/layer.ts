@@ -417,6 +417,16 @@ const packs = [packB, packA]
   const bad = resolve(chat, { persona: { name: "两\n行", text: "T" } })
   assert.equal(bad.names.user, undefined)
   assert.deepEqual(bad.dropped, [{ from: "local", kind: "name", id: "user", why: "a name is one line with no {{" }])
+  // a persona with no text names `user` and nothing else: the card's own persona slot stands
+  const blank = resolve(
+    { ...card, frame: [{ id: "persona", text: "CARD-P" }] },
+    { persona: { name: "阿青", text: " \n" } },
+  )
+  assert.deepEqual(
+    blank.frame.map((f) => [f.id, f.text, f.from]),
+    [["persona", "CARD-P", "card"]],
+  )
+  assert.equal(blank.names.user, "阿青")
 }
 
 // ───────── The locks: at the boundary, and again in resolve; `dropped`, never a throw ─────────

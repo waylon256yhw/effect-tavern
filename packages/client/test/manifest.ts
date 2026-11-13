@@ -19,6 +19,7 @@ const view = (over: Partial<CardView>): CardView => ({
   rules: { fields: [], actions: [] },
   local: { id: "local", name: "local", card: "t" },
   mounts: [],
+  persona: null,
   layer: {
     frame: [],
     tail: [],

@@ -103,6 +103,9 @@ export const fetchCardOf = async (id: string, current: () => boolean = () => tru
     registry.update(locals, (m) => ({ ...m, [view.id]: view.local }))
   }
 }
+/** The persona a card is on with no story open, as the server resolves it (its view's `persona`), not drawn. */
+export const cardPersona = async (id: string): Promise<string | null> =>
+  (await got<CardView>(call(`${base}/cards/${encodeURIComponent(id)}`))).persona
 export const dropNodes = async (id: number): Promise<void> => {
   const c = (await got(call(`${base}/nodes/${id}`, { method: "DELETE" }))) as Change
   registry.update(log, (l) => L.apply(l, c))

@@ -39,16 +39,17 @@ export const openOn = (
   page: Page,
 ): StoryRow | undefined =>
   page === "card" ? undefined : lib?.stories.find((s) => s.id === lib.current && s.card === card)
-/** The persona id the workspace's row shows: the open story's own, else the card's default; none = the card's own. */
+/** The persona id the workspace's row shows: the open story's own, else the one the card is on as the server resolved
+ *  it (its view's `persona`: the card's pick or the install's default); none = the card's own. */
 export const personaOn = (
   lib: { current: number | null; stories: readonly StoryRow[] } | null,
-  defaults: Readonly<Record<string, { persona?: string }>> | undefined,
+  view: { id: string; persona: string | null } | null | undefined,
   card: string | null,
   page: Page,
 ): string | undefined => {
   const s = openOn(lib, card, page)
   if (s) return s.persona ?? undefined
-  return defaults?.[card ?? ""]?.persona
+  return (view?.id === card && view.persona) || undefined
 }
 export const busyOn = (rows: readonly StoryRow[], card: string): boolean =>
   rows.some((s) => s.card === card && s.busy !== null)

@@ -16,7 +16,8 @@
 // A library file has one process: `open` locks it; a second process fails unless isolateOnBusy is explicit.
 // Only what has a caller is here: the rest of the tables get their reads and writes with the endpoint that needs them.
 // Unversioned libraries upgrade atomically to user_version=1 (`rebase`), then every library walks `steps` to the latest;
-// an open at the latest version skips all of it. `decision`: one row, the decision model's connection.
+// an open at the latest version skips all of it. `decision`: one row, the decision model's connection. `persona_default`:
+// one row or none, the persona a new story takes when its card leaves the pick to the install.
 // A column added after a library was made (`story.starred`, `story.persona`) is added to it on open (`migrate`): the schema's create is
 // for a fresh file. The `player` table of a library from before layer.ts goes once, on open (`fromPlayer`), and so does a `base` row (`foldIn`). The stories' search (`stories.search`) walks each story's line and reads the player's lines and
 // the prose with `instr`, enough for a phone's stories. A story listing, search or batch delete takes a card as an optional
@@ -253,6 +254,9 @@ const baseline = 1
 const steps = [
   // the decision model's connection (provider decision.ts), one row
   "create table if not exists decision (id integer primary key check (id = 1), json text not null)",
+  // the install's default persona (a new story's when its card leaves the pick to it, library.ts `personaFor`), one row
+  // or none; a persona's delete takes it with it
+  "create table if not exists persona_default (id integer primary key check (id = 1), persona text not null)",
 ]
 const latest = baseline + steps.length
 const upgrade = (db: DatabaseSync) => {
@@ -451,7 +455,21 @@ export const open = (asked: string, { isolateOnBusy = false } = {}) => {
           p.name,
           JSON.stringify(p.text),
         ),
-      del: (id: string) => void q("delete from persona where id = ?").run(id),
+      del: (id: string) =>
+        tx(() => {
+          q("delete from persona where id = ?").run(id)
+          q("delete from persona_default where persona = ?").run(id)
+        }),
+      /** The persona marked the install's default, or none. */
+      fallback: (): string | null =>
+        ((q("select persona from persona_default where id = 1").get() as Row | undefined)?.["persona"] as
+          | string
+          | undefined) ?? null,
+      /** Marked (`id`), or cleared (null). */
+      mark: (id: string | null) =>
+        void (id === null
+          ? q("delete from persona_default").run()
+          : q("insert or replace into persona_default (id, persona) values (1, ?)").run(id)),
     },
     hats: named<Hat>("hat"),
     packs: named<Layer>("pack"),

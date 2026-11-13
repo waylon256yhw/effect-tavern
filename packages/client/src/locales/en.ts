@@ -283,6 +283,7 @@ const en: Dict = {
     confirmDeleteHat: "Delete template “{name}”?",
     confirmDeletePersona: "Delete persona “{name}”?",
     deleteHat: "Delete template",
+    defaultPersona: "Default persona",
     deletePersona: "Delete persona",
     disabled: "disabled",
     followMain: "Follow the main default",
@@ -330,6 +331,7 @@ const en: Dict = {
     confirmDeleteOne: "Delete “{title}”? Every turn in it is gone for good.",
     darkTheme: "Dark theme",
     expand: "Expand the sidebar",
+    followDefault: "Follow the default persona",
     exportHint:
       "The reading joins the opening, your lines and the prose of the current line; the whole tree is a JSON backup of every branch.",
     exportJson: "Whole tree .json",
@@ -343,6 +345,7 @@ const en: Dict = {
     newStory: "New story",
     noCardMatch: "No card matches",
     noCards: "No card on the shelf yet",
+    noPersona: "No persona",
     noPersonaMatch: "No persona matches “{q}”",
     noStories: "No story of this card yet",
     noStoryMatch: "No story matches",

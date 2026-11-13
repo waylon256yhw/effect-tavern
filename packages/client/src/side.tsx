@@ -124,8 +124,7 @@ export const Sidebar = (props: {
   const allLocals = read(locals)
   const view = read(cardAtom)
   const people = read(personas)
-  const persona = () =>
-    people().find((p) => p.id === personaOn(lib(), allLocals(), at(), pg()))?.name ?? t("side.cardDefault")
+  const persona = () => people().find((p) => p.id === personaOn(lib(), view(), at(), pg()))?.name ?? t("side.noPersona")
   const writing = createMemo(() => {
     const cid = at()
     const v = cid && view()?.id === cid ? view() : undefined

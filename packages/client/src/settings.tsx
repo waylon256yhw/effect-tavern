@@ -12,7 +12,19 @@ import { Dynamic, type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
-import { Back, Close, Package, Plugs, Sliders, Snippets as Plus, Template, Trash, User } from "./icons.tsx"
+import {
+  Back,
+  Close,
+  Package,
+  Plugs,
+  Sliders,
+  Snippets as Plus,
+  Star,
+  StarFill,
+  Template,
+  Trash,
+  User,
+} from "./icons.tsx"
 import { pairKey, pairOf, stalePair } from "./connections.ts"
 import { Packs } from "./packs.tsx"
 import { Providers } from "./providers.tsx"
@@ -409,6 +421,9 @@ const Personas = (props: Pane) => {
                 <Avatar name={x().name} />
                 <span class="p-name">{x().name}</span>
                 <For each={onCards(x().id)}>{(t) => <span class="tag">{t}</span>}</For>
+                <Show when={x().default}>
+                  <StarFill class="p-mark" aria-label={t("settings.defaultPersona")} />
+                </Show>
               </button>
             )}
           </For>
@@ -432,6 +447,17 @@ const Personas = (props: Pane) => {
                 />
                 <For each={onCards(x().id)}>{(t) => <span class="tag">{t}</span>}</For>
                 <span class="spacer" />
+                <button
+                  type="button"
+                  class="icon sm"
+                  aria-label={t("settings.defaultPersona")}
+                  aria-pressed={x().default ? "true" : "false"}
+                  onClick={() => void putPersona({ ...x(), default: !x().default }).then(refreshActiveCard)}
+                >
+                  <Show when={x().default} fallback={<Star aria-hidden="true" />}>
+                    <StarFill aria-hidden="true" />
+                  </Show>
+                </button>
                 <button
                   type="button"
                   class="icon sm"

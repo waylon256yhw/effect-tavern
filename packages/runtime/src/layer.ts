@@ -46,12 +46,13 @@ export const Layer = Schema.Struct({
   names: Schema.optionalKey(Names),
 })
 export type Layer = typeof Layer.Type
-/** This player on this card: one row a card. `persona` is the default a new story takes; a story's own pick is its row's. */
+/** This player on this card: one row a card. `persona` is the pick a new story takes (a persona's id, null: none, absent:
+ *  the install's default, server library.ts `personaFor`); a story's own pick is its row's. */
 export const Local = Schema.Struct({
   ...Layer.fields,
   card: Schema.String,
   mounts: Schema.optionalKey(Schema.Array(Schema.String)), // the packs on this card, in mount order
-  persona: Schema.optionalKey(Schema.String),
+  persona: Schema.optionalKey(Schema.NullOr(Schema.String)),
   tags: Schema.optionalKey(Schema.Array(Schema.String)), // the player's filing words (#133); the harness never reads, generates or translates them
 })
 export type Local = typeof Local.Type
@@ -382,7 +383,8 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
             from: "local",
             row: locked({
               ...local,
-              ...(rows.persona && {
+              // a persona with no text only names `user`: an empty fragment would blank the card's own persona slot
+              ...(rows.persona?.text.trim() && {
                 fragments: [...(local.fragments ?? []), { id: "persona", text: rows.persona.text }],
               }),
             }) as Layer,

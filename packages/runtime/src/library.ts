@@ -23,6 +23,7 @@ export interface CardView {
   rules: Rules
   local: Local
   mounts: readonly { id: string; name: string }[]
+  persona: string | null // the persona this view wears: its story's, with no story the card's (server library.ts `personaFor`)
   layer: ReturnType<typeof shown>
 }
 export interface StoredStory {
@@ -54,4 +55,5 @@ export interface Persona {
   id: string
   name: string
   text: string
+  default?: boolean // on the wire: the listing's mark (one persona or none), a write's mark or unmark
 }

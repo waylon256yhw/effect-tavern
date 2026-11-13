@@ -22,8 +22,8 @@
 //                 so a greeting is none, last: the last turn's input or null, updated, busy: the phase of a turn in
 //                 flight or null), newest first, and `current`: the story the client is to be on (the one it named
 //                 while that one is there, else the newest, null on an empty library).
-//                 POST /stories {card} makes a new one of that card (400 when there is none), on the card's default
-//                 persona (`local.persona`), and answers it as `current`, PUT /stories/<id> answers that one (404
+//                 POST /stories {card} makes a new one of that card (400 when there is none), on the card's
+//                 persona (library.ts `personaFor`), and answers it as `current`, PUT /stories/<id> answers that one (404
 //                 when there is none), with a body {title?: string | null, starred?: boolean, persona?: string | null}
 //                 names, stars or picks its persona instead (this story's alone; blank title = null, null persona = the
 //                 card's own; `updated` untouched), DELETE /stories/<id> removes it, DELETE /stories with
@@ -34,10 +34,13 @@
 //                 `Hit`; the title is the client's to match). GET /stories/<id>/export.md is the head's line as a
 //                 reading copy, GET /stories/<id>/export.json the tree whole as a backup (export.ts), both as
 //                 attachments named by the title.
-//   GET  /personas  the player's personas; PUT /personas/<id> {name, text} writes one (in force from the next request
-//                 where it is picked), DELETE /personas/<id> removes it and its picks, the stories' and the card
-//                 defaults' (the client re-reads the card and /stories). Both answer the list. Which persona is in force
-//                 is the story's (`persona` on its row); `local.persona` is the card's default a new story takes.
+//   GET  /personas  the player's personas, the install's default marked `default: true`; PUT /personas/<id>
+//                 {name, text, default?} writes one (in force from the next request where it is picked; `default` true
+//                 marks it, false unmarks it; the install's first persona is marked unless told not to), DELETE
+//                 /personas/<id> removes it, the mark and its picks, the stories' and the cards' (the client re-reads
+//                 the card and /stories). Both answer the list. Which persona is in force is the story's (`persona` on
+//                 its row); a new story takes the card's (library.ts `personaFor`: `local.persona`, null = none,
+//                 absent = the install's default where the card has no player character of its own).
 //   GET  /hats    the player's hats; PUT /hats/<id> {name, narrate?, review?} writes one (decoded as `Hat`, in force
 //                 from the next request on a connection that names it), DELETE /hats/<id> removes it. Both answer the list.
 //   GET  /packs   the player's rows, one template (runtime layer.ts `Layer`): [harness, ...packs], the harness row
@@ -81,7 +84,8 @@
 //                 story of it exists: id, title and summary, the default channel, the rules as data (field bounds,
 //                 options, action ids), the openings whole, the fiction's modules without their text, the guard and
 //                 lore as counts, what the card's text costs each turn, estimated (session.ts `cardView`); `local`, the
-//                 player's row on the card; `mounts`, its packs as {id, name}; `layer`, the one merge (layer.ts
+//                 player's row on the card; `mounts`, its packs as {id, name}; `persona`, the persona the view wears (the
+//                 story's on /card, else library.ts `personaFor`) or null; `layer`, the one merge (layer.ts
 //                 `Resolved`: frame, tail, asks, products, entries, lexicon, snippets, format, names, holes, switches,
 //                 dropped, each item with its `from`), a card's item without its `text`, a card's lexicon entry not at all.
 //                 A client merges nothing.
@@ -116,7 +120,9 @@ const body = (req: IncomingMessage, limit = 1 << 20) =>
     req.on("error", reject)
   })
 // The body besides Action and the player's rows, decoded here like them.
-const PersonaBody = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, text: Schema.String }))
+const PersonaBody = Schema.decodeUnknownSync(
+  Schema.Struct({ name: Schema.String, text: Schema.String, default: Schema.optionalKey(Schema.Boolean) }),
+)
 const HatBody = Schema.decodeUnknownSync(Hat.mapFields(Struct.omit(["id"])))
 const ProviderBody = Schema.decodeUnknownSync(Provider.mapFields(Struct.omit(["id"])))
 const SecretBody = Schema.decodeUnknownSync(
