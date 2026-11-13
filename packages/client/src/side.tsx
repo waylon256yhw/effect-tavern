@@ -124,7 +124,11 @@ export const Sidebar = (props: {
   const allLocals = read(locals)
   const view = read(cardAtom)
   const people = read(personas)
-  const persona = () => people().find((p) => p.id === personaOn(lib(), view(), at(), pg()))?.name ?? t("side.noPersona")
+  // with none in force the card's own character is (a `persona` slot the card writes), or nobody
+  const own = () => view()?.id === at() && view()?.layer.frame.some((f) => f.id === "persona" && f.from === "card")
+  const persona = () =>
+    people().find((p) => p.id === personaOn(lib(), view(), at(), pg()))?.name ??
+    t(own() ? "side.cardDefault" : "side.noPersona")
   const writing = createMemo(() => {
     const cid = at()
     const v = cid && view()?.id === cid ? view() : undefined

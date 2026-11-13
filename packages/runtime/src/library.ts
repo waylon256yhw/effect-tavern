@@ -24,6 +24,7 @@ export interface CardView {
   local: Local
   mounts: readonly { id: string; name: string }[]
   persona: string | null // the persona this view wears: its story's, with no story the card's (server library.ts `personaFor`)
+  follows: string | null // what following the install's default gives on this card: that persona, or none where the card does not inherit
   layer: ReturnType<typeof shown>
 }
 export interface StoredStory {

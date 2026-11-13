@@ -451,7 +451,7 @@ export const library = ({
         const p = rows.packs!.find((x) => x.id === id)
         return p ? [{ id: p.id, name: p.name }] : []
       })
-      return { ...meta, ...rest, local, mounts, persona: picked?.id ?? null }
+      return { ...meta, ...rest, local, mounts, persona: picked?.id ?? null, follows: personaFor(c, undefined) }
     },
     hats: data.hats,
     packs: {

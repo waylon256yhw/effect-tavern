@@ -20,6 +20,7 @@ const view = (over: Partial<CardView>): CardView => ({
   local: { id: "local", name: "local", card: "t" },
   mounts: [],
   persona: null,
+  follows: null,
   layer: {
     frame: [],
     tail: [],

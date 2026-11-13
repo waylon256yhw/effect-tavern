@@ -13,7 +13,7 @@ import { dropTag, renameTag, tagCounts, tagsOfLocals, withTags } from "./query.t
 import { Sheet } from "./readings.tsx"
 import { openSettings } from "./settings.tsx"
 import { deleteStories, deleteStory, openStory } from "./pages.ts"
-import { focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
+import { card, focus, locals, log, page, personas, stories, type StoryRow } from "./store.ts"
 import { openOn } from "./stories.ts"
 import { cardPersona, exportUrl, nameStory, pickStoryPersona, putLocal, refreshActiveCard } from "./wire.ts"
 import { t } from "./i18n.ts"
@@ -51,7 +51,9 @@ export const StoryDialogs = () => {
     const s = story()
     return s ? s.persona : allLocals()[cardId() ?? ""]?.persona
   }
-  const fallback = () => people().find((p) => p.default)
+  // what following gives on this card (the view's `follows`): none on a card that does not inherit the default
+  const view = read(card)
+  const fallback = () => people().find((p) => view()?.id === cardId() && p.id === view()?.follows)
   // the picker: the search over name and text, the rows it leaves; opened from the workspace's row, closed by a pick
   const [q, setQ] = createSignal("")
   const hits = createMemo(() => {
