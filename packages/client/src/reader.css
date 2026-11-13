@@ -599,7 +599,7 @@ button {
   cursor: pointer;
   transition: background var(--dur-3) var(--ease);
 }
-button:disabled {
+button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.35;
   cursor: default;
 }
@@ -977,4 +977,10 @@ button:focus-visible {
   text-align: center;
   color: var(--ink-3);
   font-size: var(--text-footnote);
+}
+/* a `{{hole}}` nothing fills, left literal (#170): only the new-story page's preview ever has one */
+.md mark.hole {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
 }

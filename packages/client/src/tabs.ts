@@ -42,10 +42,8 @@ const show = async (id: number, current: () => boolean): Promise<void> => {
   seen(t.story)
   await reading.activate(t.story) // none: the slots empty, no story named
   if (!current()) return
-  if (t.card !== null && registry.get(card)?.id !== t.card) {
-    const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
-    await (own ? wire.fetchCard(current) : wire.fetchCardOf(t.card, current)) // the story's card, or one browsed on this tab
-  }
+  // `activate` read the story's own view: a card page over it reads the card's again (wire.ts `begun`)
+  if (registry.get(card)?.id !== t.card || wire.begun(t)) await wire.fetchTabCard(t, current)
   if (!current()) return
   else if (t.page === "settings") await wire.fetchSettings()
   if (!current()) return

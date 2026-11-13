@@ -46,6 +46,7 @@ import {
   type Wire,
   activeOf,
   tabs,
+  type Tab,
 } from "./store.ts"
 
 const base = "/api"
@@ -117,10 +118,17 @@ export const fetchPersonas = async (): Promise<void> => registry.set(personas, a
  *  snippets, format keys. A tab switched meanwhile keeps the read from landing on the wrong card. */
 export const refreshActiveCard = async (): Promise<void> => {
   const cur = activeOf(registry.get(tabs))
-  const valid = () => activeOf(registry.get(tabs)) === cur
-  if (cur.card === null) return
-  const own = registry.get(stories)?.stories.find((s) => s.id === cur.story)?.card === cur.card
-  await (own ? fetchCard(valid) : fetchCardOf(cur.card, valid))
+  await fetchTabCard(cur, () => activeOf(registry.get(tabs)) === cur)
+}
+/** The card's page over a story in progress: it is about the story Begin makes, on the card's default persona and not
+ *  the open story's (#170). Read once the tab's story is in the slots. */
+export const begun = (t: Tab): boolean => t.page === "card" && registry.get(log).nodes.size > 0
+/** A tab's card view: its story's own (the story's persona in force), or the card by id (one browsed on the tab, or
+ *  `begun`). The one place that decides, for a refresh and for a tab switched back to. */
+export const fetchTabCard = async (t: Tab, valid: () => boolean): Promise<void> => {
+  if (t.card === null) return
+  const own = registry.get(stories)?.stories.find((s) => s.id === t.story)?.card === t.card
+  await (own && !begun(t) ? fetchCard(valid) : fetchCardOf(t.card, valid))
 }
 export const fetchLocal = async (cardId: string): Promise<Local> => {
   const l = await got<Local>(call(`${base}/cards/${encodeURIComponent(cardId)}/local`))

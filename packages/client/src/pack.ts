@@ -14,7 +14,7 @@ export const fillKnown = (text: string, names?: Readonly<Record<string, string>>
 /** `harness` is a fixed rank in `GET /packs`, not a user-deletable or card-mounted pack. */
 export const isReservedPack = (id: string): boolean => id === "harness"
 
-/** The proper-noun holes in a row's own texts, plus any keys already in `p.names` (excluding `user`). */
+/** The proper-noun holes in a row's own texts, plus any keys already in `p.names`. */
 export const packHoles = (p: Partial<Layer>): string[] => {
   const text = [
     ...(p.fragments ?? []).map((x) => x.text ?? ""),
@@ -23,8 +23,8 @@ export const packHoles = (p: Partial<Layer>): string[] => {
     ...(p.products ?? []).map((x) => x.text ?? ""),
     ...(p.snippets ?? []).flatMap((x) => [x.text, x.after ?? ""]),
   ].join("\n")
-  const found = holes(text).filter((k) => k !== "user")
-  for (const k of Object.keys(p.names ?? {})) if (k !== "user" && !found.includes(k)) found.push(k)
+  const found = holes(text)
+  for (const k of Object.keys(p.names ?? {})) if (!found.includes(k)) found.push(k)
   return found
 }
 
@@ -36,15 +36,23 @@ export const withPackName = <R extends Layer>(p: R, key: string, value: string):
   return (Object.keys(next).length ? { ...base, names: next } : base) as R
 }
 
-/** The proper-noun keys shown on the Writing page: `holes ∪ (Object.keys(names) \ {"user"})`, strictly from `GET /card`. */
+/** The proper-noun keys shown on the Writing page: `holes ∪ Object.keys(names)`, strictly from `GET /card`, sorted: a
+ *  key filled leaves `holes` for `names`, and its field stays where it was. */
 export const cardNameKeys = (
   unfilledHoles: readonly string[] | undefined,
   mergedNames: Readonly<Record<string, string>> | undefined,
-): string[] => {
-  const hs = (unfilledHoles ?? []).filter((k) => k !== "user")
-  const filled = Object.keys(mergedNames ?? {}).filter((k) => k !== "user" && !hs.includes(k))
-  return [...hs, ...filled]
-}
+): string[] => [...new Set([...(unfilledHoles ?? []), ...Object.keys(mergedNames ?? {})])].sort()
+
+/** The new-story page's name fields (#170): the card's own unfilled holes and what the player already named on this
+ *  card (`local.names`, so a field does not vanish once filled), `user` left out (the identity control holds it). */
+export const requiredNameKeys = (
+  cardHoles: readonly string[] | undefined,
+  localNames: Readonly<Record<string, string>> | undefined,
+): string[] => cardNameKeys(cardHoles, localNames).filter((k) => k !== "user")
+
+/** The card's own text has a hole nothing fills: the server refuses an opening or a turn, so Begin and Send wait. */
+export const unnamed = (layer: { readonly cardHoles: readonly string[] } | undefined): boolean =>
+  (layer?.cardHoles.length ?? 0) > 0
 
 /** Mountable user packs (`all` excluding `harness`): mounted first in their mount order, then the rest. */
 export const orderedPacks = (all: readonly Layer[], mountedIds: readonly string[] = []): Layer[] => {

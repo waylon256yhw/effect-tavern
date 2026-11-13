@@ -74,10 +74,11 @@ export const toReader = (): void => {
   if (isHome(t)) return edit({ page: "home", under: [] })
   const cur = registry.get(stories)?.stories.find((s) => s.id === t.story) // the tab can change before its reads finish
   if (t.story === null || !cur) return
+  const fromCard = t.page === "card" || t.under.includes("card") // its view was the card's default's (showCard)
   edit({ page: "reader", under: [], card: cur.card })
   void navigate(async (valid) => {
     await reading.activate(t.story)
-    if (valid() && registry.get(card)?.id !== cur.card) await wire.fetchCard(valid)
+    if (valid() && (fromCard || registry.get(card)?.id !== cur.card)) await wire.fetchCard(valid)
   })
 }
 /** A card's page, by id: the open story's card as the view holds it, another read by id (no story of it needed). The
@@ -89,7 +90,9 @@ export const showCard = (id: string): Promise<void> => {
   const target = tab()
   return navigate(async (valid) => {
     await reading.activate(target.story)
-    if (valid() && registry.get(card)?.id !== id) await wire.fetchCardOf(id, valid)
+    // over a story in progress the view is by id too: Begin's new story starts on the card's default persona (#170)
+    if (valid() && (registry.get(card)?.id !== id || registry.get(log).nodes.size > 0))
+      await wire.fetchCardOf(id, valid)
     if (valid() && tab() === target) open("card") // never reopen over a page chosen while the card loaded
   })
 }

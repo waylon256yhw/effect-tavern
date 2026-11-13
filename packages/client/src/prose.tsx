@@ -15,10 +15,17 @@ const SAFE = /^(https?:|mailto:)/i
 /** The slot after the last glyph: read inside JSX, so it is reactive where it lands. */
 type Tail = () => JSX.Element
 
+/** A text with any `{{hole}}` left in it marked: the server refuses one in what it sends or saves (#170), so only the
+ *  new-story page's preview, expanded with the names in force, ever shows one. */
+const marked = (s: string): JSX.Element => {
+  const parts = s.split(/(\{\{\s*[A-Za-z_]\w*\s*\}\})/)
+  return parts.length === 1 ? s : parts.map((p, i) => (i % 2 ? <mark class="hole">{p}</mark> : p))
+}
+
 const inline = (n: PhrasingContent): JSX.Element => {
   switch (n.type) {
     case "text":
-      return n.value
+      return marked(n.value)
     case "strong":
       return <strong>{n.children.map(inline)}</strong>
     case "emphasis":
