@@ -44,7 +44,6 @@ const zh = {
     searchOpenings: "搜索开场白…",
     specState: "状态",
     tokens: "tokens",
-    namesFirst: "填好这些名字后才能开始",
   },
   common: {
     add: "添加",
@@ -101,7 +100,6 @@ const zh = {
     localTools: "本地写作技能",
     noMatches: "没有可调用的匹配项",
     removeInvocation: "移除 {title}",
-    unnamed: "本卡还有名字未填写",
   },
   controls: {
     backToList: "返回列表",

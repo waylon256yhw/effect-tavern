@@ -90,7 +90,7 @@ const layerOf = (card: Card, persona: string | null): Resolved =>
     local: json<Local>(db.prepare("select json from local where card = ?").get(card.id) as Row | undefined),
     persona: persona === null ? undefined : personas.get(persona),
   })
-/** `guard`: the card's lines filled as a turn fills them (session.ts `lines`, one with an open hole dropped). `tagged`:
+/** `guard`: the card's lines filled as a turn fills them (names.ts `lines`, a hole nothing fills kept as written). `tagged`:
  *  the state is <world> + <draft>, and the question says which of the two is judged (the check ask's "Judge only what is
  *  written in <draft>", layer.ts). */
 const questionsOf = (guard: readonly string[], tagged: boolean): Record<string, Question> =>
@@ -168,7 +168,7 @@ const controlled = new Set<string>()
 for (const x of nodes) {
   const card = cards.get(x.card)
   const layer = card && layerOf(card, x.persona)
-  const guard = card && layer ? lines(card.guard, layer.names) : []
+  const guard = card && layer ? lines(card.guard, layer.names, "card") : []
   const world = card && layer ? worldText(card, layer) : ""
   // the label: a guard line the node recorded as broken; a generic question has none
   const expect = guard.length ? (x.n.violated ?? []).length > 0 : undefined

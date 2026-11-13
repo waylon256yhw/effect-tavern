@@ -34,32 +34,27 @@ import { t } from "./i18n.ts"
 
 export const openWriting = () => open("writing")
 
-let written: Promise<void> = Promise.resolve()
-/** The last local write, its refresh landed (or failed): a click that blurred a name field waits on it before reading
- *  the view the write changes (card.tsx `begin`). */
-export const localSettled = (): Promise<void> => written.catch(() => {})
-export const putLocalAndRefresh = (cardId: string, edit: (l: Local) => Local): Promise<void> =>
-  (written = (async () => {
-    if (!cardId) return
-    await putLocal(cardId, edit)
-    await refreshActiveCard()
-  })())
+const putLocalAndRefresh = async (cardId: string, edit: (l: Local) => Local) => {
+  if (!cardId) return
+  await putLocal(cardId, edit)
+  await refreshActiveCard()
+}
 
 const leaveArea = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
   if (e.key !== "Escape") return
   e.preventDefault()
   e.currentTarget.blur()
 }
-export const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
   if (e.isComposing || (e.key !== "Enter" && e.key !== "Escape")) return
   e.preventDefault()
   e.currentTarget.blur()
 }
 
-/** `{{user}}` as a name chip (#170), here and on the new-story page: the persona in force (the open story's, else the
- *  card's default: the picker's own `current`) fills it last and wins, so with one picked the chip shows that name and
- *  takes no typing; with none, the name typed here (`local.names.user`). The person key opens the persona picker. */
-export const UserChip = (props: { cardId: string; unfilled: boolean }) => {
+/** `{{user}}` as a name chip (#170): the persona in force (the open story's, else the card's default: the picker's own
+ *  `current`) fills it last and wins, so with one picked the chip shows that name and takes no typing; with none, the
+ *  name typed here (`local.names.user`). The person key opens the persona picker. */
+const UserChip = (props: { cardId: string; unfilled: boolean }) => {
   const view = read(card)
   const lib = read(stories)
   const allLocals = read(locals)

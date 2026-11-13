@@ -78,7 +78,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
   const world = initialWorld(R.products)
   const context = { fields: s, world }
   const events = [...opened.events, ...(o.events ?? [])]
-  const fiction = fill(card.fiction, R.names)
+  const fiction = fill(card.fiction, R.names, "card")
   const layers = [...R.frame, ...R.tail]
   const frag = (zone: string, f: Fragment) => {
     const on = head([f], { state: context })
@@ -100,8 +100,8 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
       Math.max(...[rpg.initial, opened.s, s].map((x) => floorAt(e.unlock, { fields: x, world }))),
     ]),
   )
-  // the index as the session builds it (session.ts `current`): the card's entries expanded, one with an unfilled hole left
-  // out. Pack resources stay separate from story disclosure, as in derived.ts.
+  // the index as the session builds it (session.ts `current`): the card's entries expanded, a hole nothing fills left as
+  // written. Pack resources stay separate from story disclosure, as in derived.ts.
   const own = namedLore(card.lore, R.names)
   const L = makeLore<Record<string, unknown>, readonly string[]>(
     own.map((e) => ({
@@ -190,7 +190,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
           stage,
           question: R.asks["direct"]!.text,
           ledger: [],
-          rules: lines(card.guard, R.names),
+          rules: lines(card.guard, R.names, "card"),
           open: offered.map((d) => ({ id: d.id, text: d.text! })),
           events,
         }

@@ -34,6 +34,8 @@
 // a record product arrives whole with record's `call`. The node's reply and blocks come from the landed split.
 // Errors: a model failure is a `ModelError` on the stream; an action that names what does not exist (a node, an
 // option, a product, a value outside a field) is a defect, the caller's bug.
+// Names (names.ts): no action waits for a name. A hole the card's own text leaves open goes out as the literal `{{key}}`
+// (an opening, a guard line, the fiction); only a player's entry with one stays out, and `demand` on such a product refuses.
 import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } from "./projection.ts"
 import {
   contextLookup,
@@ -220,21 +222,8 @@ export const makeSession = ({
   const layer = () => current().R
   const L = () => current().I
   const fresh = () => void (now = undefined)
-  const refuse = (what: string, keys: readonly string[]) =>
-    new Error(`${what}: unfilled ${keys.map((k) => `{{${k}}}`).join(", ")}`)
-  /** A text that must go out whole, or the action is refused, naming the hole. */
-  const named = (what: string, text: string) => {
-    const N = layer().names
-    const out = expand(text, N)
-    if (out === undefined) throw refuse(what, unfilled(text, N))
-    return out
-  }
-  /** The turn lock: a card whose own text has an open hole is a broken card (a guard drops, a passage refuses mid-story),
-   *  so nothing runs on it until the player names it (a persona, a local name). A player row's entry only stays out. */
-  const ready = () => {
-    const holes = layer().cardHoles
-    if (holes.length) throw refuse("card", holes)
-  }
+  /** The card's own text with the names in force: a hole nothing fills stays as written (names.ts). */
+  const named = (text: string) => expand(text, layer().names, "card")!
   const held = Log.hold<Turn>(store)
   for (const t of held.log.nodes.values())
     if (!t.settlementStatus || !t.changes || !t.deliveries || !t.opportunities)
@@ -299,15 +288,15 @@ export const makeSession = ({
         ...(worn && {
           hat: {
             ...worn,
-            narrate: { head: fill(worn.narrate?.head ?? [], N), tail: fill(worn.narrate?.tail ?? [], N) },
-            review: { head: fill(worn.review?.head ?? [], N) },
+            narrate: { head: fill(worn.narrate?.head ?? [], N, "hat"), tail: fill(worn.narrate?.tail ?? [], N, "hat") },
+            review: { head: fill(worn.review?.head ?? [], N, "hat") },
           },
         }),
       },
     )
   }
   /** The fiction at this state, expanded: narrate's alone. */
-  const fictionAt = (state: Paths) => headOf(fill(card.fiction, layer().names), { state })
+  const fictionAt = (state: Paths) => headOf(fill(card.fiction, layer().names, "card"), { state })
 
   // ───────── Calls, each announced before and reported after ─────────
   const obj = <S extends Schema.Top & Schema.Constraint & Schema.ConstraintDecoder<unknown>>(
@@ -499,7 +488,6 @@ export const makeSession = ({
       if (from !== "check" && !input.text && !input.note && !input.invoke?.length)
         throw new Error(base ? `node ${base.id}: nothing to rerun` : "empty input")
       fresh()
-      ready()
       const path = chain(parent)
       if (parent !== null && turnOf(parent).end === "over") throw new Error("terminal node cannot accept children")
       if (path.some((t) => t.settlementStatus === "pending" || t.settlementStatus === "failed"))
@@ -512,8 +500,8 @@ export const makeSession = ({
         throw new Error("parent passage must be completed before continuing")
       const viewPath = transition ? passageView(path, transition) : path
       const here = derived.at(viewPath)
-      // the guard lines expanded (every hole filled: `ready` above): what the director and check read, and check's enum
-      const guard = lines(card.guard, layer().names)
+      // the guard lines expanded, an unnamed hole as written: what the director and check read, and check's enum
+      const guard = lines(card.guard, layer().names, "card")
       // a root's opening settles first, as the fold does (derived.ts `settleFresh`); its events reach this turn's gate
       const opening = start ?? base?.opening
       const o = opening ? rpg.apply(here.state, opening) : { s: here.state, events: [] as string[] }
@@ -959,7 +947,6 @@ export const makeSession = ({
     transition?: Partial<Pick<Turn, "boundary" | "passage" | "end" | "products" | "changes">>,
   ): Change => {
     fresh()
-    ready()
     return change(
       held.commit(
         Log.add(held.log, {
@@ -973,7 +960,7 @@ export const makeSession = ({
           answers: {},
           end: "end",
           brief: { must: [], may: [] },
-          reply: [{ type: "text", text: named("opening", g.text ?? "") }], // the transcript holds the names as they stand now
+          reply: [{ type: "text", text: named(g.text ?? "") }], // the transcript holds the names as they stand now
           fired: [],
           violated: [],
           products: {},
@@ -1006,7 +993,6 @@ export const makeSession = ({
           if (child.settlementStatus === "pending" || child.settlementStatus === "failed")
             yield* settleRecord(emit, child.id)
         } else {
-          ready() // before the digest's model call, not after it (`turn` and `greet` below would refuse)
           const snapshot = chain(nodeId)
           const asked = products().filter((q) => p.digest?.includes(q.id) && (q.stage ?? "record") === "record")
           const digest = yield* record(
@@ -1030,7 +1016,7 @@ export const makeSession = ({
             yield* turn(
               emit,
               nodeId,
-              { text: "", note: named("opening", p.note) },
+              { text: "", note: named(p.note) },
               "lookup",
               undefined,
               undefined,
@@ -1081,9 +1067,8 @@ export const makeSession = ({
       }
       const opening = [...(g.do ?? []), ...(a.opening ?? [])]
       fresh()
-      ready() // before the note's own refusal: the card names every hole it holds, not the opening's only
       // text and note count when they say something (lint `empty-greeting` reads them the same way)
-      const note = [g.note?.trim() && named("opening", g.note), a.note?.trim() && a.note].filter(Boolean).join("\n\n")
+      const note = [g.note?.trim() && named(g.note), a.note?.trim() && a.note].filter(Boolean).join("\n\n")
       if (g.text?.trim() && !note)
         return Stream.succeed<Event>({ kind: "change", ...greet({ ...g, ...(opening.length && { do: opening }) }) })
       return emitting((emit) =>
@@ -1264,7 +1249,13 @@ export const makeSession = ({
       const p = products().find((x) => x.id === productId)
       if (!p) throw new Error(`${productId}: not a product of this card`)
       if (p.role !== "theater") throw new Error("demand is only available for theater products")
-      named(productId, p.text) // an unasked product keeps its raw text: the refusal names the hole
+      // a player's product that does not fill is unasked, its raw text kept (names.ts): the refusal names the hole
+      if (p.unasked)
+        throw new Error(
+          `${productId}: unfilled ${unfilled(p.text, layer().names)
+            .map((k) => `{{${k}}}`)
+            .join(", ")}`,
+        )
       return emitting((emit) =>
         Effect.gen(function* () {
           const up = chain(t.parent)

@@ -50,16 +50,20 @@ try {
   assert.equal(JSON.parse(await ok("story", "export", String(numericId), "--json")).card.id, String(story))
   assert.deepEqual(JSON.parse(await ok("story", "drop", String(numericId), "--json")), { id: numericId, deleted: true })
   assert.match(await ok("story", "show", String(story)), /Story .*head root/)
-  // the template leaves `{{user}}` to the player: unnamed, the turn is refused; `--user` names them on the card, kept
-  assert.match((await run("play", String(story), "--input", "hello", "--model", "fake")).err, /unfilled \{\{user\}\}/)
-  const events = (await ok("play", String(story), "--user", "阿青", "--input", "hello", "--model", "fake", "--jsonl"))
-    .trim()
-    .split("\n")
-    .map((s) => JSON.parse(s))
+  // the template leaves `{{user}}` to the player: unnamed, the turn goes through with the literal (names.ts); `--user`
+  // names them on the card, kept (the card's resolved names, read from the server below)
+  const turn = async (...flags: string[]) =>
+    (await ok("play", String(story), ...flags, "--input", "hello", "--model", "fake", "--jsonl"))
+      .trim()
+      .split("\n")
+      .map((s) => JSON.parse(s))
+  const unnamed = await turn()
+  assert.ok(unnamed.some((e) => e.kind === "change" && e.node?.settlementStatus === "committed"))
+  const events = await turn("--user", "阿青")
   assert.ok(events.some((e) => e.kind === "delta"))
   assert.ok(events.some((e) => e.kind === "change" && e.node?.settlementStatus === "committed"))
   const saved = JSON.parse(await ok("story", "export", String(story), "--format", "json"))
-  assert.equal(saved.snapshot.nodes.length, 1)
+  assert.equal(saved.snapshot.nodes.length, 2)
   assert.match(await ok("story", "export", String(story)), /hello world/)
   await ok("play", String(story), "--input", "/greet")
   const before = JSON.parse(await ok("story", "show", String(story), "--json"))
@@ -86,6 +90,8 @@ try {
   }
   const url = await ready()
   assert.equal((await fetch(url.replace(/\/api$/, "/"))).status, 404)
+  const named = (await (await fetch(`${url}/cards/cli`)).json()) as { layer: { names: { user?: string } } }
+  assert.equal(named.layer.names.user, "阿青")
   const busy = await run("story", "list")
   assert.equal(busy.code, 1)
   assert.match(busy.err, /--url/)

@@ -30,7 +30,6 @@ const view = (over: Partial<CardView>): CardView => ({
     format: [],
     names: {},
     holes: [],
-    cardHoles: [],
     switches: { value: {}, sentences: {}, taken: { pov: null, verbosity: null } },
     dropped: [],
   },

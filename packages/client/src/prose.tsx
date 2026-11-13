@@ -15,8 +15,8 @@ const SAFE = /^(https?:|mailto:)/i
 /** The slot after the last glyph: read inside JSX, so it is reactive where it lands. */
 type Tail = () => JSX.Element
 
-/** A text with any `{{hole}}` left in it marked: the server refuses one in what it sends or saves (#170), so only the
- *  new-story page's preview, expanded with the names in force, ever shows one. */
+/** A text with any `{{hole}}` left in it marked: a hole the card's own text leaves open goes out and lands as written
+ *  (#170, runtime names.ts), in an opening and in the new-story page's preview alike; the player sees it and may name it. */
 const marked = (s: string): JSX.Element => {
   const parts = s.split(/(\{\{\s*[A-Za-z_]\w*\s*\}\})/)
   return parts.length === 1 ? s : parts.map((p, i) => (i % 2 ? <mark class="hole">{p}</mark> : p))

@@ -498,10 +498,10 @@ const run = async (inspect: boolean) => {
     await local({ names: { char: "依瑞丝" } })
     assert.deepEqual(((await (await local()).json()) as { names: unknown }).names, { char: "依瑞丝" })
     const view = (await (await fetch(`${base}/cards/${chat.id}`)).json()) as {
-      layer: { names: unknown; holes: unknown; cardHoles: unknown }
+      layer: { names: unknown; holes: unknown }
     }
     assert.deepEqual(view.layer.names, { char: "依瑞丝" })
-    assert.deepEqual([view.layer.holes, view.layer.cardHoles], [[], []])
+    assert.deepEqual(view.layer.holes, [])
     await local({})
   } finally {
     server.close()
