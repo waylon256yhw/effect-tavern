@@ -198,7 +198,8 @@ for (const x of nodes) {
     "turn",
     asked(world, guard, x.prose, layer, open),
     expect,
-    card && layer ? { guard, n: x.n } : undefined,
+    // a turn with no guard line and nothing open runs no check: the generic question is not a fast pass
+    card && layer && (guard.length || open.length) ? { guard, n: x.n } : undefined,
   )
   const breach = CONTROLS[x.card]
   if (breach && guard.length && !controlled.has(x.card)) {
