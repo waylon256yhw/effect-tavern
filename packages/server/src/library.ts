@@ -382,7 +382,10 @@ export const library = ({
         .get(node)
         .map((v) => {
           const c = v as Call
-          return inspect ? c : { ...c, msgs: [], out: undefined }
+          if (inspect) return c
+          // a fast pass's verdict is no one's text: it stays, so the row reads pass / escalate without the bodies
+          const verdict = c.via === "decision" ? (c.out as { verdict?: unknown } | undefined)?.verdict : undefined
+          return { ...c, msgs: [], out: verdict === undefined ? undefined : { verdict } }
         })
     },
     exists,

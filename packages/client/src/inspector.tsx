@@ -172,7 +172,9 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
       </Match>
       <Match when={props.row.call.via === "decision"}>
         {/* check's fast pass (runtime decision.ts): settled here, or handed to the LLM check on the next row */}
-        <span class={{ pill: true, ok: out().verdict === "pass" }}>{String(out().verdict)}</span>
+        <Show when={out().verdict}>
+          <span class={{ pill: true, ok: out().verdict === "pass" }}>{String(out().verdict)}</span>
+        </Show>
         <Show when={out().error}>
           <span class="dtext">{String(out().error)}</span>
         </Show>
