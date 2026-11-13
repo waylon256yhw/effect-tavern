@@ -10,7 +10,9 @@ import {
   orderedPacks,
   packHoles,
   productEdit,
+  requiredNameKeys,
   toggleMount,
+  unnamed,
   withoutProductPatch,
   withoutProductText,
   withPackName,
@@ -174,16 +176,29 @@ const samplePack: Layer = {
   snippets: [{ name: "重逢", text: "{{char1}}见{{char2}}" }],
   names: { extra_key: "默认" },
 }
-assert.deepEqual(packHoles(samplePack), ["char_place", "char", "char1", "char2", "extra_key"])
+// #170: `user` is a hole like any other, no hidden value behind it
+assert.deepEqual(packHoles(samplePack), ["char_place", "char", "user", "char1", "char2", "extra_key"])
+assert.deepEqual(packHoles({ names: { user: "林默" } }), ["user"])
 const pNamed = withPackName(samplePack, "char_place", " 临安 ")
 assert.deepEqual(pNamed.names, { extra_key: "默认", char_place: "临安" })
 assert.deepEqual(withPackName(withPackName(pNamed, "char_place", ""), "extra_key", "").names, undefined)
 
-assert.deepEqual(cardNameKeys(["char", "user", "char2"], { user: "玩家", char: "伴星", char_place: "新艾利都" }), [
+assert.deepEqual(cardNameKeys(["char", "user", "char2"], { char: "伴星", char_place: "新艾利都" }), [
   "char",
+  "user",
   "char2",
   "char_place",
 ])
+assert.deepEqual(cardNameKeys([], { user: "林默", char: "伴星" }), ["user", "char"])
+assert.deepEqual(cardNameKeys(undefined, undefined), [])
+
+// the new-story page: the card's own holes, then what was already named here, `user` held by the identity control
+assert.deepEqual(requiredNameKeys(["user", "place"], { npc: "老周", user: "林默" }), ["place", "npc"])
+assert.deepEqual(requiredNameKeys(undefined, undefined), [])
+// Begin and Send wait on the card's own holes only
+assert.equal(unnamed({ cardHoles: ["user"] }), true)
+assert.equal(unnamed({ cardHoles: [] }), false)
+assert.equal(unnamed(undefined), false)
 
 const pkHarness: Layer = { id: "harness", name: "内置" }
 const pkA: Layer = { id: "a", name: "A" }

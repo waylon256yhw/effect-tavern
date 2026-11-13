@@ -978,3 +978,9 @@ button:focus-visible {
   color: var(--ink-3);
   font-size: var(--text-footnote);
 }
+/* a `{{hole}}` nothing fills, left literal (#170): only the new-story page's preview ever has one */
+.md mark.hole {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+}

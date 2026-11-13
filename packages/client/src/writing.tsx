@@ -10,7 +10,7 @@ import { unfilled } from "@effect-tavern/runtime/src/names.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Modal, newId, Switch } from "./controls.tsx"
-import { Back, Next, Prev, Snippets as Plus } from "./icons.tsx"
+import { Back, Next, Prev, Snippets as Plus, User } from "./icons.tsx"
 import {
   cardNameKeys,
   orderedPacks,
@@ -24,7 +24,9 @@ import {
 import { extraOf, withExtra } from "./requirements.ts"
 import { openSettings } from "./settings.tsx"
 import { close, open } from "./pages.ts"
-import { card, packs } from "./store.ts"
+import { card, locals, packs, page, personas, stories } from "./store.ts"
+import { personaOn } from "./stories.ts"
+import { openPicker } from "./dialogs.tsx"
 import { kindOf } from "./record.ts"
 import { moot, pressing, sentence, SWITCHES, takenBy, type SwitchKey } from "./switches.ts"
 import { putLocal, refreshActiveCard } from "./wire.ts"
@@ -32,7 +34,7 @@ import { t } from "./i18n.ts"
 
 export const openWriting = () => open("writing")
 
-const putLocalAndRefresh = async (cardId: string, edit: (l: Local) => Local) => {
+export const putLocalAndRefresh = async (cardId: string, edit: (l: Local) => Local) => {
   if (!cardId) return
   await putLocal(cardId, edit)
   await refreshActiveCard()
@@ -47,6 +49,52 @@ const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
   if (e.isComposing || (e.key !== "Enter" && e.key !== "Escape")) return
   e.preventDefault()
   e.currentTarget.blur()
+}
+
+/** `{{user}}` as a name chip (#170), here and on the new-story page: the persona in force (the open story's, else the
+ *  card's default: the picker's own `current`) fills it last and wins, so with one picked the chip shows that name and
+ *  takes no typing; with none, the name typed here (`local.names.user`). The person key opens the persona picker. */
+export const UserChip = (props: { cardId: string; unfilled: boolean }) => {
+  const view = read(card)
+  const lib = read(stories)
+  const allLocals = read(locals)
+  const people = read(personas)
+  const pg = read(page)
+  const persona = () => people().find((p) => p.id === personaOn(lib(), allLocals(), props.cardId, pg()))
+  return (
+    <span class="name-chip" data-unfilled={props.unfilled ? "true" : "false"}>
+      <span class="hole-key mono">{"{{user}}"}</span>
+      <Show
+        when={persona()}
+        fallback={
+          <input
+            value={view()?.local.names?.user ?? view()?.layer.names.user ?? ""}
+            placeholder={t("packs.unfilled")}
+            aria-label="user"
+            disabled={!props.cardId}
+            onChange={(e) => {
+              const cid = props.cardId
+              const val = e.currentTarget.value
+              void putLocalAndRefresh(cid, (l) => withPackName(l, "user", val))
+            }}
+            onKeyDown={leaveInput}
+          />
+        }
+      >
+        {(p) => <span class="persona-name">{p().name}</span>}
+      </Show>
+      <button
+        type="button"
+        class="icon"
+        aria-label={t("side.pickPersona")}
+        aria-pressed={persona() ? "true" : "false"}
+        disabled={!props.cardId}
+        onClick={openPicker}
+      >
+        <User />
+      </button>
+    </span>
+  )
 }
 
 export const WritingPage = () => {
@@ -131,27 +179,31 @@ export const WritingPage = () => {
             <div class="wcard">
               <div class="block-title">
                 <h3>{t("packs.names")}</h3>
-                <span class="tag mono">{`{{user}} = ${layer()?.names.user ?? ""}`}</span>
               </div>
               <div class="name-chips">
                 <For each={nameKeys()} keyed={(k) => k}>
                   {(k) => (
-                    <label class="name-chip" data-unfilled={layer()?.holes.includes(k()) ? "true" : "false"}>
-                      <span class="hole-key mono">{`{{${k()}}}`}</span>
-                      <input
-                        value={loc()?.names?.[k()] ?? layer()?.names[k()] ?? ""}
-                        placeholder={t("packs.unfilled")}
-                        aria-label={k()}
-                        disabled={!cardId()}
-                        onChange={(e) => {
-                          const cid = cardId()
-                          const key = k()
-                          const val = e.currentTarget.value
-                          void putLocalAndRefresh(cid, (l) => withPackName(l, key, val))
-                        }}
-                        onKeyDown={leaveInput}
-                      />
-                    </label>
+                    <Show
+                      when={k() !== "user"}
+                      fallback={<UserChip cardId={cardId()} unfilled={!!layer()?.holes.includes("user")} />}
+                    >
+                      <label class="name-chip" data-unfilled={layer()?.holes.includes(k()) ? "true" : "false"}>
+                        <span class="hole-key mono">{`{{${k()}}}`}</span>
+                        <input
+                          value={loc()?.names?.[k()] ?? layer()?.names[k()] ?? ""}
+                          placeholder={t("packs.unfilled")}
+                          aria-label={k()}
+                          disabled={!cardId()}
+                          onChange={(e) => {
+                            const cid = cardId()
+                            const key = k()
+                            const val = e.currentTarget.value
+                            void putLocalAndRefresh(cid, (l) => withPackName(l, key, val))
+                          }}
+                          onKeyDown={leaveInput}
+                        />
+                      </label>
+                    </Show>
                   )}
                 </For>
               </div>

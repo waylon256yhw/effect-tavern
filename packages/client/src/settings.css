@@ -1229,6 +1229,19 @@
 .name-chip input::placeholder {
   color: var(--ink-3);
 }
+/* `{{user}}` (writing.tsx `UserChip`): the persona's name stands where the input would, one line like it */
+.name-chip .persona-name {
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-footnote);
+}
+.name-chip .icon {
+  width: var(--control-sm);
+  height: var(--control-sm);
+  margin-right: -6px;
+}
 .pack-row {
   display: flex;
   align-items: center;

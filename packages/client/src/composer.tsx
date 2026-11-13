@@ -9,10 +9,11 @@ import { addInvocation, backspaceInvocation, removeInvocation } from "./composit
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { createSignal, onSettled, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Check, Close, Edit, Insert, Send, Snippets, Stop } from "./icons.tsx"
+import { Check, Close, Edit, Insert, Send, Snippets, Stop, Write } from "./icons.tsx"
 import { imeController } from "./ime.ts"
 import { roam } from "./controls.tsx"
-import { fillKnown } from "./pack.ts"
+import { fillKnown, unnamed } from "./pack.ts"
+import { openWriting } from "./writing.tsx"
 import {
   acting,
   composition,
@@ -55,8 +56,11 @@ export const Composer = () => {
   const selected = () => model().invocations
   const [menuOpen, setMenuOpen] = createSignal(false)
   const line = read(path)
+  // the card's own text has a hole nothing fills (#170): the server would refuse the turn, so it is not sent; the strip
+  // over the box goes to the Writing page, where the names and the persona are
+  const nameless = () => unnamed(view()?.layer)
   const blocked = () =>
-    !revise() && line().some((n) => n.settlementStatus === "pending" || n.settlementStatus === "failed")
+    nameless() || (!revise() && line().some((n) => n.settlementStatus === "pending" || n.settlementStatus === "failed"))
   const locate = () =>
     document.getElementById(`node-${revise()!.node}`)?.scrollIntoView({ block: "start", behavior: "instant" })
   // An empty line on a card with openings: the story starts from one of them (the card page), not from a typed root.
@@ -158,6 +162,14 @@ export const Composer = () => {
         {/* the attachments on the box's top edge, each a thin strip that is there only while it is in use (#117): the
             line being revised (a tap scrolls to its turn, × cancels), and the note to the narrator (its own box, on
             the line's text axis, × closes it; Escape on an empty one closes it too) */}
+        <Show when={nameless()}>
+          <div class="attach">
+            <button type="button" class="bare" onPointerDown={keep} onClick={openWriting}>
+              <Write aria-hidden="true" />
+              {t("composer.unnamed")}
+            </button>
+          </div>
+        </Show>
         <Show when={revise()}>
           {(r) => (
             <div class="attach revise">

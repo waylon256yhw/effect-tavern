@@ -120,7 +120,10 @@ export const refreshActiveCard = async (): Promise<void> => {
   const valid = () => activeOf(registry.get(tabs)) === cur
   if (cur.card === null) return
   const own = registry.get(stories)?.stories.find((s) => s.id === cur.story)?.card === cur.card
-  await (own ? fetchCard(valid) : fetchCardOf(cur.card, valid))
+  // the card's page over a story in progress is about the story Begin makes: the card's default persona, not the
+  // open story's (#170), so the read is by id there
+  const begun = cur.page === "card" && registry.get(log).nodes.size > 0
+  await (own && !begun ? fetchCard(valid) : fetchCardOf(cur.card, valid))
 }
 export const fetchLocal = async (cardId: string): Promise<Local> => {
   const l = await got<Local>(call(`${base}/cards/${encodeURIComponent(cardId)}/local`))
