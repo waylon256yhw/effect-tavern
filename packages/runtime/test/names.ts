@@ -1,6 +1,7 @@
 // 代称 (docs/packs-brief.md §八): the pure functions, the value's lock, the merge order, every expansion point on a session
-// over a scripted model (an entry with an unfilled hole skipped, its neighbour sent), the refusals, history untouched,
-// and the holes a client is told of. The two lint rules are in test/lint.ts, the wire in server test/serve.ts.
+// over a scripted model (a player row's entry with an unfilled hole skipped, its neighbour sent), the card's own open
+// hole locking the turn (#170), the refusals, history untouched, and the holes a client is told of. The two lint rules
+// are in test/lint.ts, the wire in server test/serve.ts.
 import { fake, type Message } from "@effect-tavern/provider"
 import { Effect, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
@@ -8,7 +9,7 @@ import { decodeCard, type Card } from "../src/card.ts"
 import { decodeLayer, decodeLocal, resolve, type Layer, type Rows } from "../src/layer.ts"
 import { expand, holes, Names } from "../src/names.ts"
 import { makeSession, type Event } from "../src/session.ts"
-import { chat, plain } from "./cards/index.ts"
+import { chat, loadCard, plain } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "../support/script.ts"
 
 // ───────── The pure functions ─────────
@@ -31,19 +32,13 @@ for (const bad of ["两\n行", "两\r行", "含 {{x}} 洞", "{{"]) {
 
 const persona = { name: "阿青", text: "P {{user}}" }
 
-// ───────── A session: every point, the unfilled neighbour skipped ─────────
+// ───────── A session: every point, a player row's unfilled neighbour skipped ─────────
 const card: Card = {
   ...chat,
   names: { char: "依瑞丝" },
   greetings: [{ text: "G {{char}}" }],
-  frame: [
-    { id: "style", text: "FRAME {{char}}" },
-    { id: "voice", text: "FRAME-NO {{missing}}" },
-  ],
-  fiction: [
-    { id: "a", text: "FICTION {{char}}" },
-    { id: "b", text: "FICTION-NO {{missing}}" },
-  ],
+  frame: [{ id: "style", text: "FRAME {{char}}" }],
+  fiction: [{ id: "a", text: "FICTION {{char}}" }],
   lore: [
     {
       id: "li",
@@ -52,24 +47,11 @@ const card: Card = {
       unlock: [{ all: [] }, { all: [] }],
       offer: { any: [] },
     },
-    { id: "un", layers: ["UNFILLED {{missing}}."], unlock: { all: [] }, offer: { any: [] } },
-    // a section's hole drops its entry, face and all (an always-on face would otherwise be told unasked)
-    {
-      id: "secno",
-      layers: ["FACE-NO."],
-      sections: [{ id: "s", text: "SECTION-NO {{missing}}." }],
-      activation: "always",
-      unlock: { all: [] },
-      offer: { any: [] },
-    },
-    { id: "late", layers: ["LATE.", "LATE-NO {{missing}}."], unlock: { all: [] }, offer: { any: [] } }, // any layer
     { id: "held", layers: ["HELD {{given}}."], unlock: { all: [] }, offer: { any: [] } },
   ],
   products: [
     { role: "theater" as const, id: "kept", text: "ASK {{char}}", shape: { kind: "text" } },
-    { role: "theater" as const, id: "skipped", text: "ASK-NO {{missing}}", shape: { kind: "text" } },
     { role: "theater" as const, id: "blk", text: "BLOCK {{char}}", shape: { kind: "text" }, stage: "narrate" },
-    { role: "theater" as const, id: "blkno", text: "BLOCK-NO {{missing}}", shape: { kind: "text" }, stage: "narrate" },
   ],
 }
 const pack: Layer = {
@@ -189,14 +171,13 @@ assert.ok(has(narrate, "{{char}} typed")) // the player's line goes as typed
 // Lookup no longer enumerates the catalog (including unavailable/unexpanded entries).
 assert.ok(!doc(first, "lookup").some((m) => m.includes("Index:")))
 
-// the record asks: expanded, the unfilled one not asked and not on the node; review wears its hat expanded
+// the record asks: expanded; the pack's unfilled theater not asked and not on the node; review wears its hat expanded
 const record = doc(first, "record")
 assert.ok(has(record, "kept: ASK 依瑞丝"))
 assert.ok(has(record, "REVIEW 依瑞丝"))
-assert.ok(!has(record, "skipped:"))
 const n1 = nodeOf(first)
 assert.equal(n1.turn.products.kept, "K")
-assert.equal("skipped" in n1.turn.products, false)
+assert.equal("gone" in n1.turn.products, false)
 assert.equal(n1.turn.input.text, "{{char}} typed")
 assert.deepEqual(
   n1.delivered.map((d) => d.text),
@@ -213,7 +194,6 @@ assert.ok(has(history, "HELD 玩家给的."))
 const n2 = nodeOf(second)
 
 // A demand: refused by name when the question has a hole unfilled; asked expanded otherwise
-assert.throws(() => S.demand(n2.id, "skipped"), /skipped: unfilled \{\{missing\}\}/)
 assert.throws(() => S.demand(n2.id, "gone"), /gone: unfilled \{\{missing\}\}/)
 prose.text = "DEMANDED"
 const asked = await collect(S.demand(n2.id, "blk"))
@@ -221,80 +201,123 @@ assert.ok(has(doc(asked, "narrate"), "blk: BLOCK 依瑞丝"))
 assert.equal(nodeOf(asked).turn.products.blk, "DEMANDED")
 prose.text = "said {{char}}"
 
-// Replay: the name that filled a told entry taken away, the old node reads "" (§二) and nothing throws; the transcript
-// and the next index go on without it.
+// Replay: the name that filled a told entry taken away, the old node reads "" (§二) and nothing throws; the card's
+// own text now has an open hole, so the next turn is refused, naming it, and runs again once the name is back.
 rows = { ...player, local }
 assert.deepEqual(
   S.node(n2.id).delivered.map((d) => d.text),
   ["HELD 玩家给的."],
 )
 assert.ok(S.snapshot().nodes.length >= 3)
+await assert.rejects(collect(S.act(n2.id, { text: "on" })), /^Error: card: unfilled \{\{given\}\}$/)
+rows = player
 const third = await collect(S.act(n2.id, { text: "on" }))
 assert.ok(has(doc(third, "narrate"), "HELD 玩家给的."))
 
-// A Cond reading the counters of an entry that left the index still has an answer.
+// ───────── The card's own open hole: no turn runs, anywhere a turn starts (#170) ─────────
 {
-  const counted: Card = {
-    ...chat,
-    lore: [
-      { id: "un", layers: ["U {{missing}}."], unlock: { all: [] }, offer: { any: [] } },
-      {
-        id: "w",
-        layers: ["W.", "WINDOW."],
-        unlock: { all: [] },
-        offer: { path: "lore.un.shown", op: "lte", value: 0 },
-      },
-    ],
+  const at = (c: Partial<Card>, r: Rows = plain) =>
+    makeSession({ card: { ...chat, greetings: [{ text: "G" }], ...c }, rows: () => r, model: () => scripted })
+  const refused = /card: unfilled \{\{missing\}\}/
+  for (const c of [
+    { frame: [{ id: "style", text: "F {{missing}}" }] },
+    { fiction: [{ id: "f", text: "F {{missing}}" }] },
+    { lore: [{ id: "l", layers: ["L.", "L2 {{missing}}."] }] },
+    { lore: [{ id: "l", layers: ["L."], sections: [{ id: "s", text: "S {{missing}}." }] }] }, // a section counts too
+    { guard: ["RULE {{missing}}"] },
+    {
+      rules: { ...chat.rules, readouts: [{ id: "r", text: "R", options: [{ id: "a", text: "{{missing}}", do: [] }] }] },
+    },
+    { products: [{ role: "theater" as const, id: "q", text: "Q {{missing}}", shape: { kind: "text" as const } }] },
+    { passages: [{ when: { all: [] }, text: "P {{missing}}" }] },
+  ] as Partial<Card>[]) {
+    const C = at(c)
+    assert.throws(() => C.greet(C.greetings[0]!), refused, JSON.stringify(c))
+    await assert.rejects(collect(C.act(null, { text: "hi" })), refused, JSON.stringify(c))
+    assert.equal(C.log.nodes.size, 0)
   }
-  const C = makeSession({ card: counted, rows: () => plain, model: () => scripted })
-  picks.push(["w"])
-  const es = await collect(C.act(null, { text: "hi" }))
-  assert.ok(has(doc(es, "narrate"), "WINDOW."))
+  // a disabled fragment is not in force; a player's slot text over the card's leaves the card's out of the count
+  const off = at({ frame: [{ id: "style", text: "F {{missing}}", enabled: false }] })
+  assert.ok(off.greet(off.greetings[0]!).node)
+  const over = at(
+    { frame: [{ id: "style", text: "F {{missing}}" }] },
+    {
+      ...plain,
+      local: { id: "local", name: "local", card: chat.id, fragments: [{ id: "style", text: "MINE" }] },
+    },
+  )
+  assert.ok(over.greet(over.greetings[0]!).node)
+
+  // `{{user}}` has no fallback: no persona, no name, the opening is refused and every list names it
+  const hello = { greetings: [{ text: "早安，{{user}}" }] }
+  const bare = at(hello)
+  assert.deepEqual([bare.layer.cardHoles, bare.layer.holes, bare.layer.names.user], [["user"], ["user"], undefined])
+  assert.throws(() => bare.begin({}), /^Error: card: unfilled \{\{user\}\}$/)
+  // a persona, or a local name, fills it
+  const worn = at(hello, { ...plain, persona: { name: "林默", text: "P" } })
+  assert.deepEqual(worn.greet(worn.greetings[0]!).node!.turn.reply, [{ type: "text", text: "早安，林默" }])
+  const local = at(hello, { ...plain, local: { id: "local", name: "local", card: chat.id, names: { user: "阿青" } } })
+  assert.deepEqual(local.greet(local.greetings[0]!).node!.turn.reply, [{ type: "text", text: "早安，阿青" }])
+  // an old saved opening's plain text is still the player's to fix before naming anyone (an edit of an opening runs nothing)
+  rows = { ...plain, local: { id: "local", name: "local", card: chat.id, names: { user: "玩家" } } }
+  const fix = makeSession({ card: { ...chat, ...hello }, rows: () => rows, model: () => scripted })
+  const saved = fix.greet(fix.greetings[0]!).node!
+  rows = plain
+  assert.deepEqual(fix.layer.cardHoles, ["user"])
+  const fixed = await collect(fix.edit(saved.id, { text: "早安" }))
+  assert.deepEqual(nodeOf(fixed).turn.reply, [{ type: "text", text: "早安" }])
+  // and anything that runs a model on it is refused
+  await assert.rejects(collect(fix.act(saved.id, { text: "hi" })), /card: unfilled \{\{user\}\}/)
+
+  // an ensemble card with no names under a global theater holding `{{char}}`: the theater stays out, the turn runs
+  const yandao = await loadCard("yandao")
+  const Y = makeSession({
+    card: yandao,
+    rows: () => ({
+      ...plain,
+      harness: { ...plain.harness!, products: [{ id: "aside", text: "{{char}} 的旁白", on: true }] },
+    }),
+    model: () => scripted,
+  })
+  assert.deepEqual([Y.layer.cardHoles, Y.layer.holes], [[], ["char"]])
+  const ran = await collect(Y.begin({ note: "开始" }))
+  assert.ok(nodeOf(ran))
 }
 
-// Guard lines, per line: expanded for check and its enum, an unfilled one skipped; none left, no check at all.
+// Guard lines, per line: expanded for check and its enum; none, no check at all.
 {
   const violating = fake((o) => {
     const d = readStage(o)
     if (d.phase === "check") return { text: JSON.stringify({ violated: d.rules.slice(0, 1) }) }
     return d.phase === "narrate" ? prose : defaultAnswer(d, canned)
   })
-  const guarded: Card = { ...card, lore: [], guard: ["RULE {{char}}", "RULE-NO {{missing}}"] }
+  const guarded: Card = { ...card, lore: [], guard: ["RULE {{char}}"] }
   const G = makeSession({ card: guarded, rows: () => plain, model: () => violating })
   const es = await collect(G.act(null, { text: "hi" }))
   assert.ok(has(doc(es, "check"), "Rule: RULE 依瑞丝"))
-  assert.ok(!has(doc(es, "check"), "RULE-NO"))
   assert.deepEqual(nodeOf(es).turn.violated, ["RULE 依瑞丝"])
   const none = makeSession({
-    card: { ...guarded, guard: ["RULE-NO {{missing}}"] },
+    card: { ...guarded, guard: [] },
     rows: () => plain,
     model: () => violating,
   })
   assert.equal(doc(await collect(none.act(null, { text: "hi" })), "check").length, 0)
 }
 
-// Readouts, per readout: the question and its options expanded, a hole unfilled in either and it is not asked this turn.
+// Readouts: the question and its options expanded.
 {
   const opt = (text: string) => [{ id: "a", text, do: [] }]
   const R = makeSession({
     card: {
       ...chat,
       names: { char: "依瑞丝" },
-      rules: {
-        ...chat.rules,
-        readouts: [
-          { id: "r", text: "READ {{char}}", options: opt("OPT {{char}}") },
-          { id: "no", text: "READ-NO {{missing}}", options: opt("x") },
-          { id: "optno", text: "READ-OPT", options: opt("{{missing}}") },
-        ],
-      },
+      rules: { ...chat.rules, readouts: [{ id: "r", text: "READ {{char}}", options: opt("OPT {{char}}") }] },
     },
     rows: () => plain,
     model: () => scripted,
   })
   const es = await collect(R.act(null, { text: "hi" }))
   assert.ok(has(doc(es, "record"), "r: READ 依瑞丝 [a: OPT 依瑞丝]"))
-  assert.ok(!has(doc(es, "record"), "READ-"))
   assert.deepEqual(nodeOf(es).turn.answers, { r: "a" })
 }
 
@@ -349,19 +372,11 @@ assert.ok(has(doc(third, "narrate"), "HELD 玩家给的."))
     names: { h: "H" },
   }
   const on = { id: "local", name: "local", card: chat.id }
-  // in order of appearance, `user` filled, the disabled fragment and the pack's own name out
-  assert.deepEqual(view(shelf, { packs: [kit], local: { ...on, mounts: ["k"] } }), [
-    "g",
-    "a",
-    "b",
-    "c",
-    "d",
-    "e",
-    "f",
-    "i",
-    "j",
-    "k",
-  ])
+  // in order of appearance, `user` a hole like any other, the disabled fragment and the pack's own name out
+  const mounted = { packs: [kit], local: { ...on, mounts: ["k"] } }
+  assert.deepEqual(view(shelf, mounted), ["g", "a", "user", "b", "c", "d", "e", "f", "i", "j", "k"])
+  // the ones that lock the turn: the card's own text in force (an off product is not run, only demanded)
+  assert.deepEqual(resolve(shelf, mounted).cardHoles, ["a", "user", "b", "c", "d", "e"])
   // a player's name fills it; a slot the player's fragment overrides does not go out, so its hole is not one
   const mine = { ...on, fragments: [{ id: "style", text: "plain" }], names: { b: "B" } }
   assert.deepEqual(view(shelf, { local: mine }), ["c", "d", "e", "f"])

@@ -234,8 +234,12 @@ const playing = Command.make(
       Flag.optional,
     ),
     note: Flag.String("note").pipe(Flag.withDescription("a note to the narrator for the opening"), Flag.optional),
+    user: Flag.String("user").pipe(
+      Flag.withDescription("the player's name on this card ({{user}}), kept for its later stories"),
+      Flag.optional,
+    ),
   },
-  ({ target, card, url, input, jsonl, model, greeting, set, note }) =>
+  ({ target, card, url, input, jsonl, model, greeting, set, note, user }) =>
     task(() =>
       withHost(
         url,
@@ -247,6 +251,7 @@ const playing = Command.make(
             greeting: Option.getOrUndefined(greeting),
             set: Option.getOrUndefined(set),
             note: Option.getOrUndefined(note),
+            user: Option.getOrUndefined(user),
           }),
         Option.isSome(model) ? true : undefined,
       ),

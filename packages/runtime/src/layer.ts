@@ -326,6 +326,7 @@ export interface Resolved {
   format: Item<Format>[]
   names: Names
   holes: string[] // the holes nothing fills yet, in order of first appearance
+  cardHoles: string[] // those of `holes` in the card's own text still in force: while one is open no turn runs (session.ts)
   switches: {
     value: Writing
     sentences: Record<string, string> // by ask id, `switch.<key>.<value>`
@@ -402,7 +403,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   const down = [...up].reverse() // the highest rank first: a menu, the polish hints, the ask chain
 
   // ───────── names ─────────
-  const pairs: [string, string][] = [["user", "玩家"]]
+  const pairs: [string, string][] = []
   const name = (from: From, k: string, v: string) => {
     if (nameOk(v)) pairs.push([k, v])
     else dropped.push({ from, kind: "name", id: k, why: "a name is one line with no {{" })
@@ -414,12 +415,14 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   // ───────── asks: down the chain to the first that fills whole; the code's own has no hole ─────────
   const asks = new Map<string, Item<{ text: string }>>()
   const worded: string[] = [] // every ask that could go out, what `holes` scans; the ones under a filled one never do
+  const cardAsks: string[] = [] // the card's asks nothing above fills: still in force, so an open hole in one is the card's
   for (const { from, row } of [...down, { from: "harness", row: code }])
     for (const a of row.asks ?? []) {
       if (a.id.startsWith("product.") || asks.has(a.id)) continue
       worded.push(a.text)
       const text = expand(a.text, names)
       if (text !== undefined) asks.set(a.id, { text, from })
+      else if (from === "card") cardAsks.push(a.text)
     }
   const sentenceOf: Record<string, string> = Object.fromEntries(
     [...asks].flatMap(([id, a]) => (id.startsWith("switch.") ? [[id, a.text]] : [])),
@@ -558,13 +561,26 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     return [{ ...s, text, ...(after !== undefined && { after }) }]
   })
 
+  // the card's own text still in force (no player row wrote over it): an open hole here breaks the card mid-story, so
+  // the session refuses the turn; a player row's entry with one only stays out (docs/packs-brief.md §八)
+  const cardOut = [
+    ...zone.flatMap((x) => (x.from === "card" && x.enabled !== false ? (x.text ?? []) : [])),
+    ...card.fiction.flatMap((x) => x.text ?? []),
+    ...card.greetings.flatMap((g) => [g.text ?? "", g.note ?? ""]),
+    ...(card.passages ?? []).flatMap((g) => [g.text ?? "", g.note ?? ""]),
+    ...card.lore.flatMap((e) => [...e.layers, ...(e.sections ?? []).map((x) => x.text)]),
+    ...card.guard,
+    ...(card.rules.readouts ?? []).flatMap((q) => [q.text, ...q.options.map((o) => o.text)]),
+    ...raw.flatMap((p) => (p.from === "card" && p.on !== false ? [p.text] : [])),
+    ...cardAsks,
+  ]
   // every text that goes out, or that a client fills and sends: what a player may be asked to name
   const out = [
     ...zone.flatMap((x) => (x.enabled === false ? [] : (x.text ?? []))),
     ...card.fiction.flatMap((x) => x.text ?? []),
     ...card.greetings.flatMap((g) => [g.text ?? "", g.note ?? ""]),
     ...(card.passages ?? []).flatMap((g) => [g.text ?? "", g.note ?? ""]),
-    ...card.lore.flatMap((e) => e.layers),
+    ...card.lore.flatMap((e) => [...e.layers, ...(e.sections ?? []).map((x) => x.text)]),
     ...written.map((e) => e.text),
     ...card.guard,
     ...(card.rules.readouts ?? []).flatMap((q) => [q.text, ...q.options.map((o) => o.text)]),
@@ -586,6 +602,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     ),
     names,
     holes: unfilled(out.join("\n"), names),
+    cardHoles: unfilled(cardOut.join("\n"), names),
     switches: {
       value,
       sentences: sentenceOf,

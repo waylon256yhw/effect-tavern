@@ -86,7 +86,7 @@ function here(r: Partial<Local> = {}): Local {
   assert.deepEqual([act.snippets, act.format], [h.snippets, h.format])
   // nothing to draw on an empty layer
   const R = resolve(chat, {})
-  assert.deepEqual([R.dropped, R.holes, R.names], [[], [], { user: "玩家" }])
+  assert.deepEqual([R.dropped, R.holes, R.cardHoles, R.names], [[], [], [], {}])
   assert.deepEqual([R.switches.value, R.switches.taken], [{}, { pov: null, verbosity: null }])
 }
 
@@ -415,7 +415,7 @@ const packs = [packB, packA]
   assert.equal(resolve(chat, { persona }).frame[0]!.text, "P 阿青")
   // the lock holds on it too: `user` stays what it was, in the ledger
   const bad = resolve(chat, { persona: { name: "两\n行", text: "T" } })
-  assert.equal(bad.names.user, "玩家")
+  assert.equal(bad.names.user, undefined)
   assert.deepEqual(bad.dropped, [{ from: "local", kind: "name", id: "user", why: "a name is one line with no {{" }])
 }
 
@@ -431,7 +431,7 @@ const packs = [packB, packA]
   for (const bad of ["两\n行", "两\r行", "含 {{x}} 洞", "{{"])
     assert.throws(() => decodeLayer({ id: "d", name: "D", names: { k: bad } }))
   const named = resolve(chat, { harness: row("harness", { names: { k: "两\n行", ok: "好" } }) })
-  assert.deepEqual(named.names, { user: "玩家", ok: "好" })
+  assert.deepEqual(named.names, { ok: "好" })
   assert.deepEqual(
     named.dropped.map((d) => [d.from, d.kind, d.id]),
     [["harness", "name", "k"]],
@@ -729,6 +729,64 @@ const packs = [packB, packA]
   assert.deepEqual([R.asks["lookup"]!.from, /Find only the context/.test(R.asks["lookup"]!.text)], ["harness", true])
   // `holes`: what nothing fills, in order of appearance, the same list whether or not the entry was dropped
   assert.deepEqual(R.holes, ["missing", "ask", "after"])
+  // all of it a player row's: the card's own text is whole, nothing locks the turn
+  assert.deepEqual(R.cardHoles, [])
+}
+
+// ───────── The card's own holes (#170): in force, they lock the turn; written over, they do not count ─────────
+{
+  const card: Card = {
+    ...chat,
+    frame: [
+      { id: "setting", text: "S {{place}}" },
+      { id: "off", text: "OFF {{offhole}}", enabled: false },
+    ],
+    greetings: [{ text: "早安，{{user}}" }],
+    lore: [
+      {
+        id: "l",
+        layers: ["L."],
+        sections: [{ id: "s", text: "SEC {{sec}}" }],
+        unlock: { all: [] },
+        offer: { any: [] },
+      },
+    ],
+  }
+  const R = resolve(card, {})
+  // no fallback name: `user` is a hole like any other; a disabled fragment is not in force; a section is scanned
+  assert.deepEqual(R.cardHoles, ["place", "user", "sec"])
+  assert.deepEqual(R.holes, ["place", "user", "sec"])
+  // a persona, a local name, a player's slot text over the card's: each closes its hole
+  const named = resolve(card, {
+    local: {
+      id: "local",
+      name: "local",
+      card: card.id,
+      names: { sec: "节" },
+      fragments: [{ id: "setting", text: "S" }],
+    },
+    persona: { name: "阿青", text: "P" },
+  })
+  assert.deepEqual([named.cardHoles, named.holes], [[], []])
+  // a product's ask reworded by a player row: the card's wording is no longer in force
+  const asked: Card = {
+    ...chat,
+    products: [
+      { id: "q", text: "Q {{x}}", shape: { kind: "text" }, role: "theater", stage: "narrate" },
+    ] as Card["products"],
+  }
+  assert.deepEqual(resolve(asked, {}).cardHoles, ["x"])
+  const reworded = resolve(asked, {
+    local: { id: "local", name: "local", card: chat.id, asks: [{ id: "product.q", text: "Q" }] },
+  })
+  assert.deepEqual([reworded.cardHoles, reworded.holes], [[], []])
+  // a nameless card under a global theater holding {{char}}: the theater stays out, the card runs (packs-brief §八)
+  const ensemble = resolve(
+    { ...chat, frame: [], greetings: [], lore: [] },
+    { harness: row("harness", { products: [{ id: "aside", text: "{{char}} 的旁白" }] }) },
+  )
+  assert.deepEqual([ensemble.cardHoles, ensemble.holes], [[], ["char"]])
+  assert.equal(ensemble.products.find((p) => p.id === "aside")!.unasked, true)
 }
 
 // ───────── The overlay: the row a client edits is the merge, what is stored is the difference ─────────

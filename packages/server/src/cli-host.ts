@@ -1,6 +1,7 @@
 // Only the operations the terminal uses. No retry policy or independent client package.
 import { Effect, Stream } from "effect"
 import type { Card } from "@effect-tavern/runtime/src/card.ts"
+import type { Local } from "@effect-tavern/runtime/src/layer.ts"
 import type { ActiveContextView, TimelineNode, TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
 import type { Action } from "@effect-tavern/runtime/src/session.ts"
 import type { Library, PublicEvent } from "./library.ts"
@@ -9,6 +10,7 @@ import type { Listing, CardView } from "@effect-tavern/runtime/src/library.ts"
 import { backup, markdown } from "./export.ts"
 import { openHost } from "./host.ts"
 
+const named = (l: Local, user: string): Local => ({ ...l, names: { ...l.names, user } })
 export type CliEvent = PublicEvent | Attach
 type Emit = (event: CliEvent) => void
 export interface CliHost {
@@ -16,6 +18,8 @@ export interface CliHost {
   install(card: Card): Promise<void>
   list(): Promise<Listing["stories"]>
   create(card: string): Promise<number>
+  /** The player's own name on a card (`local.names.user`): what fills `{{user}}` where no persona does. */
+  name(card: string, user: string): Promise<void>
   drop(id: number): Promise<void>
   export(id: number, format: "md" | "json"): Promise<string>
   timeline(id: number): Promise<{ head: number | null; nodes: readonly TimelineNode[] }>
@@ -68,6 +72,7 @@ export const connect = async (url?: string, fakeModel?: boolean): Promise<CliHos
       },
       list: async () => lib.stories.list(),
       create: async (card) => lib.stories.create(card),
+      name: async (card, user) => lib.locals.write(named(lib.locals.read(card), user)),
       drop: async (id) => {
         lib.stories.del(id)
       },
@@ -120,6 +125,10 @@ export const connect = async (url?: string, fakeModel?: boolean): Promise<CliHos
     },
     list: async () => (await json<Listing>("/stories")).stories,
     create: async (card) => (await json<Listing>("/stories", "POST", { card })).current!,
+    name: async (card, user) => {
+      const at = `/cards/${encodeURIComponent(card)}/local`
+      await request(at, "PUT", named(await json<Local>(at), user))
+    },
     drop: async (id) => {
       await request(`/stories/${id}`, "DELETE")
     },
