@@ -31,6 +31,7 @@ export const play = async (
     greeting?: number
     set?: Record<string, string>
     note?: string
+    user?: string // the player's name on this card, kept: `local.names.user`
   },
 ) => {
   const numeric = /^\d+$/.test(target) && !options.card
@@ -38,6 +39,10 @@ export const play = async (
   if (numeric && opens) throw new Error("--greeting, --set and --note open a new story: pass a card")
   if (numeric && !(await host.list()).some((s) => s.id === Number(target))) throw new Error(`no story ${target}`)
   const story = numeric ? Number(target) : await host.create(target)
+  if (options.user?.trim()) {
+    const card = numeric ? (await host.list()).find((s) => s.id === story)!.card : target
+    await host.name(card, options.user.trim())
+  }
   let head = (await host.timeline(story)).head
   const channel = await host.input(story)
   const emit = (event: CliEvent) => {

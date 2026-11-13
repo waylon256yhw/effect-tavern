@@ -20,9 +20,9 @@ import {
   type Trace,
 } from "@effect-tavern/provider"
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
-import { resolve, worldOf, type Layer, type Local } from "@effect-tavern/runtime/src/layer.ts"
+import { resolve, worldOf, type Layer, type Local, type Resolved } from "@effect-tavern/runtime/src/layer.ts"
 import { tag, worldBlock } from "@effect-tavern/runtime/src/request.ts"
-import { fill, lines, type Names } from "@effect-tavern/runtime/src/names.ts"
+import { lines } from "@effect-tavern/runtime/src/names.ts"
 import { cardNames, loadCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
 
@@ -73,7 +73,7 @@ const nodes = all(
   })
   .filter((x) => x.prose.trim())
 
-/** The story's names as a turn has them: layer.ts `resolve` over the player's rows, the story's persona last. */
+/** The story's layer as a turn has it: layer.ts `resolve` over the player's rows, the story's persona last. */
 const packs = all("select id, name, json from pack").map(
   (r) => ({ ...json<object>(r), id: r["id"], name: r["name"] }) as Layer,
 )
@@ -83,13 +83,13 @@ const personas = new Map(
     { name: r["name"] as string, text: json<string>(r)! },
   ]),
 )
-const namesOf = (card: Card, persona: string | null): Names =>
+const layerOf = (card: Card, persona: string | null): Resolved =>
   resolve(card, {
     harness: packs.find((p) => p.id === "harness"),
     packs: packs.filter((p) => p.id !== "harness"),
     local: json<Local>(db.prepare("select json from local where card = ?").get(card.id) as Row | undefined),
     persona: persona === null ? undefined : personas.get(persona),
-  }).names
+  })
 /** `guard`: the card's lines filled as a turn fills them (session.ts `lines`, one with an open hole dropped). `tagged`:
  *  the state is <world> + <draft>, and the question says which of the two is judged (the check ask's "Judge only what is
  *  written in <draft>", layer.ts). */
@@ -107,14 +107,10 @@ const questionsOf = (guard: readonly string[], tagged: boolean): Record<string, 
       )
     : { generic: { type: "boolean", instructions: GENERIC } }
 /** The card's `<world>` block as the off-stage stages read it (request.ts `worldBlock`), or "" when it has none. */
-const worldText = (card: Card | undefined, names: Names): string =>
-  card
-    ? worldBlock(
-        fill(worldOf(card, card.frame), names).flatMap((f) =>
-          f.text ? [{ id: f.id, role: "system" as const, text: f.text }] : [],
-        ),
-      )
-    : ""
+const worldText = (card: Card, layer: Resolved): string =>
+  worldBlock(
+    worldOf(card, layer.frame).flatMap((f) => (f.text ? [{ id: f.id, role: "system" as const, text: f.text }] : [])),
+  )
 const withWorld = (world: string, prose: string) => `${world}\n\n${tag("draft", prose)}`
 
 interface Run {
@@ -171,9 +167,9 @@ console.log(`${config.driver} ${config.model} · ${nodes.length} proses from ${d
 const controlled = new Set<string>()
 for (const x of nodes) {
   const card = cards.get(x.card)
-  const names = card ? namesOf(card, x.persona) : {}
-  const guard = card ? lines(card.guard, names) : []
-  const world = worldText(card, names)
+  const layer = card && layerOf(card, x.persona)
+  const guard = card && layer ? lines(card.guard, layer.names) : []
+  const world = card && layer ? worldText(card, layer) : ""
   // the label: a guard line the node recorded as broken; a generic question has none
   const expect = guard.length ? (x.n.violated ?? []).length > 0 : undefined
   await ask(x.at, "bare", guard, x.prose, expect)

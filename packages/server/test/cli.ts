@@ -28,10 +28,7 @@ const ok = async (...args: string[]) => {
   return result.out
 }
 const file = join(dir, "cli.yaml")
-// the template leaves `user` to the player, and the CLI names no one: the card names its player here
-const named = (id: string) =>
-  Bun.YAML.stringify({ ...(Bun.YAML.parse(scaffold(id, "chat")) as object), names: { user: "阿青" } })
-writeFileSync(file, named("cli"))
+writeFileSync(file, scaffold("cli", "chat"))
 let server: ReturnType<typeof Bun.spawn> | undefined
 try {
   await ok("card", "check", file)
@@ -42,9 +39,9 @@ try {
   assert.equal(missing.code, 1)
   assert.match(missing.err, /no story 999999/)
   const numericFile = join(dir, "numeric.yaml")
-  writeFileSync(numericFile, named(String(story)))
+  writeFileSync(numericFile, scaffold(String(story), "chat"))
   await ok("card", "install", numericFile)
-  const numericEvents = (await ok("play", String(story), "--card", "--input", "/greet", "--jsonl"))
+  const numericEvents = (await ok("play", String(story), "--card", "--user", "阿青", "--input", "/greet", "--jsonl"))
     .trim()
     .split("\n")
     .map((s) => JSON.parse(s))
@@ -53,7 +50,9 @@ try {
   assert.equal(JSON.parse(await ok("story", "export", String(numericId), "--json")).card.id, String(story))
   assert.deepEqual(JSON.parse(await ok("story", "drop", String(numericId), "--json")), { id: numericId, deleted: true })
   assert.match(await ok("story", "show", String(story)), /Story .*head root/)
-  const events = (await ok("play", String(story), "--input", "hello", "--model", "fake", "--jsonl"))
+  // the template leaves `{{user}}` to the player: unnamed, the turn is refused; `--user` names them on the card, kept
+  assert.match((await run("play", String(story), "--input", "hello", "--model", "fake")).err, /unfilled \{\{user\}\}/)
+  const events = (await ok("play", String(story), "--user", "阿青", "--input", "hello", "--model", "fake", "--jsonl"))
     .trim()
     .split("\n")
     .map((s) => JSON.parse(s))

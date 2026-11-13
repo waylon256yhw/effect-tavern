@@ -1006,6 +1006,7 @@ export const makeSession = ({
           if (child.settlementStatus === "pending" || child.settlementStatus === "failed")
             yield* settleRecord(emit, child.id)
         } else {
+          ready() // before the digest's model call, not after it (`turn` and `greet` below would refuse)
           const snapshot = chain(nodeId)
           const asked = products().filter((q) => p.digest?.includes(q.id) && (q.stage ?? "record") === "record")
           const digest = yield* record(
