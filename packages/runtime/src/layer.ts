@@ -37,7 +37,7 @@ export const Layer = Schema.Struct({
   name: Schema.String,
   fragments: Schema.optionalKey(Schema.Array(Fragment)), // the id is a slot or its own, `at` head or tail, `mode` vs the lower ranks
   switches: Schema.optionalKey(Writing), // compiled to `pov` / `verbosity` before this row's own fragments, yielding
-  asks: Schema.optionalKey(Schema.Array(Ask)), // lookup, direct, decide.*, record.*, narrate.*, polish, input.thought; switch.<key>.<value>; product.<id> is a text patch
+  asks: Schema.optionalKey(Schema.Array(Ask)), // lookup, direct, decide.*, check, check.decision.*, record.*, narrate.*, polish, input.thought; switch.<key>.<value>; product.<id> is a text patch
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // whole on the code's defaults and the card; on a player's row label, text and on
   entries: Schema.optionalKey(Schema.Array(PackEntry)), // indexed as `<row>/<entry>`: one layer, no Cond
   lexicon: Schema.optionalKey(Schema.Array(LexiconEntry)),
@@ -126,6 +126,17 @@ const words: readonly Ask[] = [
   {
     id: "check",
     text: `Check <draft> against the Rule and Open lines above. Put in "fired" each Open entry id whose substance <draft> conveyed, and in "violated" each Rule text that <draft> broke; leave either empty when none applies. Judge only what is written in <draft>; do not rewrite or continue the story.`,
+  },
+  // The decision model's two questions in front of check (decision.ts `checkQuestions`), one per guard rule and one per
+  // open entry, each followed by the rule or the entry's text. Measured in Chinese by server bin/decision-replay.ts and
+  // decision-probe.ts; their wording is kept as measured.
+  {
+    id: "check.decision.rule",
+    text: "只评判 <draft> 里的正文；<world> 只是背景，不算正文。<draft> 是否违反了下面这条规则？\n规则：",
+  },
+  {
+    id: "check.decision.open",
+    text: "只看 <draft> 里的正文，<world> 只是背景。正文是否向读者传达了下面这条设定的实质内容？转述或清楚的暗示都算，只是气氛相近不算。\n设定：",
   },
   // The readouts' rule of evidence, once, before the Questions line. Without it the first ri run judged the confession
   // refused on the turn it was made: the prose ended on the question, the player had not answered, and the model took

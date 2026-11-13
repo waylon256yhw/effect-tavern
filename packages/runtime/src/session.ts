@@ -47,6 +47,8 @@ import {
   type DeliverySnapshot,
 } from "./context.ts"
 import {
+  blocked,
+  decide,
   object,
   runStageTools,
   ModelError,
@@ -58,6 +60,7 @@ import {
   type Usage,
   type StageEvent,
   type StageOptions,
+  type DecisionModel,
 } from "@effect-tavern/provider"
 import { Deferred, Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
@@ -72,7 +75,8 @@ import { resolve, shown, worldOf, type Resolved, type Rows } from "./layer.ts"
 import { makeLore, namedLore, type Disclosure, type Lore } from "./lore.ts"
 import { lines, expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
-import { request, type Ask, type Told } from "./request.ts"
+import { request, worldBlock, type Ask, type Told } from "./request.ts"
+import { checkQuestions, checkVerdict } from "./decision.ts"
 import { cap, withCatalogs, askedAt, productAsks, type Product } from "./product.ts"
 import { recordTransaction, worldValue, type RecordResult } from "./world.ts"
 
@@ -93,7 +97,8 @@ export type { Node } from "./derived.ts" // internal complete projection; client
 export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part | ProductDelta }
-  | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number }
+  // `via: "decision"`: check's fast pass on the decision model (decision.ts), not a language model call
+  | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number; via?: "decision" }
   | ({ kind: "change" } & Change) // the log moved: a node landed or was amended, nodes dropped, and where head is now
 /** A narrate block's text as it streams, beside the provider's `text-delta`: the block `<<aside>> <id>` opened. */
 export type ProductDelta = { type: "product-delta"; id: string; text: string }
@@ -190,6 +195,7 @@ export const makeSession = ({
   card,
   rows,
   model: modelFor,
+  decision: decisionFor,
   store,
   hat,
   policy: P = policyFor(),
@@ -202,6 +208,9 @@ export const makeSession = ({
    *  from the next request. lookup and check can take a light model; record answers readouts (state judgement), not
    *  pure extraction: never route it down by default. */
   model: (phase: Phase) => Model
+  /** The decision model, read per check like `model` (library.ts: the saved config when enabled); none = check runs on
+   *  its language model alone. A throw here (a config missing its key) is a failed fast pass, not a failed turn. */
+  decision?: () => DecisionModel | undefined
   store?: Log.Store<Turn> // the log's persistence; none = in memory
   hat?: (id: string) => Hat | undefined // a connection's hat by id, read per request (library.ts); none = no hat
   // the fold boundary, a value or read on every fold (library.ts: the narrate model's window, so a routing edit is in
@@ -740,7 +749,53 @@ export const makeSession = ({
       let fired: Disclosure[] = []
       let violated: string[] = []
       if (!cut && (guard.length > 0 || open.length > 0)) {
-        const check = (text: string) =>
+        // The decision model first, when there is one (decision.ts): it settles check only when every answer is clear.
+        // Anything else (a middle answer, no probability, a failed or blocked call) runs the LLM check, whose verdict
+        // stands whole; the prose is written by now, so the fast pass never fails the turn. Its call is on the trace.
+        const fast = (text: string) =>
+          Effect.gen(function* () {
+            let M: DecisionModel | undefined
+            let error: string | undefined
+            try {
+              M = decisionFor?.()
+            } catch (e) {
+              error = e instanceof Error ? e.message : String(e)
+            }
+            if (!M && error === undefined) return undefined
+            yield* emit({ kind: "stage", phase: "check" })
+            const t0 = Date.now()
+            const { state, questions } = checkQuestions({
+              world: worldBlock(headOf(worldOf(card, layer().frame), { state: here.context(s1) })),
+              draft: text,
+              rules: guard,
+              open,
+              wording,
+            })
+            const r = M
+              ? yield* decide(M, state, questions, { maxRetries: 0 }).pipe(
+                  Effect.match({
+                    onSuccess: (ok) => ({ ok }),
+                    onFailure: (e) => ({ error: blocked(e) ? `blocked:${blocked(e)}` : e.message }),
+                  }),
+                )
+              : { error: error ?? "" }
+            const v = "ok" in r ? checkVerdict(r.ok.answers, guard, openIds, brief.must) : undefined
+            yield* emit({
+              kind: "call",
+              phase: "check",
+              via: "decision",
+              msgs: [{ role: "user", content: state }],
+              out: {
+                ...(v && { p: v.p }),
+                verdict: v?.pass ? "pass" : "escalate",
+                ...("error" in r && { error: r.error }),
+              },
+              usage: "ok" in r ? r.ok.usage : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              ms: Date.now() - t0,
+            })
+            return v?.pass ? { fired: v.fired, violated: [] as string[] } : undefined
+          })
+        const llm = (text: string) =>
           obj(
             emit,
             "check",
@@ -759,6 +814,7 @@ export const makeSession = ({
               return { fired: r.fired ?? [], violated: r.violated ?? [] }
             }),
           )
+        const check = (text: string) => fast(text).pipe(Effect.flatMap((c) => (c ? Effect.succeed(c) : llm(text))))
         let c = yield* check(proseOf(reply))
         const missed = brief.must.filter((id) => !c.fired.includes(id))
         // the player's own prose (an edit) is never rewritten: its verdict is recorded and stands

@@ -129,6 +129,7 @@ const zh = {
     noSuchNode: "没有这个节点",
     nothingLeft: "没有可揭示的了",
     nothingRead: "未读取",
+    decision: "判定模型",
     ok: "通过",
     pipeline: "流水线",
     prevNode: "上一个节点",

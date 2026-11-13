@@ -295,6 +295,12 @@ export const library = ({
       card,
       rows: () => rowsOf(card.id, personaOf(row(id)?.persona, row(id)?.yields)),
       model,
+      // check's fast pass (#171): the saved decision model while it is switched on; what it lacks throws on the turn's
+      // fast pass, which records it and falls back to the LLM check
+      decision: () => {
+        const c = decision()
+        return c?.enabled ? compileDecision(c, decisionKey(c)) : undefined
+      },
       store,
       hat,
       policy,

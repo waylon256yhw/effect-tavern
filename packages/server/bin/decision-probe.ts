@@ -1,8 +1,8 @@
 // Hand-written scenes with known answers, asked of the saved decision model: `bun bin/decision-probe.ts [DATA dir]
 // [file …]`. Where decision-replay.ts replays what a library holds, this probes what the library has no labels for,
 // on the Life of Pi card (samples/life-of-pi): its three readouts as `choice` questions, its four lore layers as
-// "did the draft convey this" yes/no questions (what check's `fired` asks of an open entry), each scene bare and under
-// the card's world. Then a ladder of darker passages with one neutral question each, to see what the service blocks;
+// "did the draft convey this" yes/no questions built as check's fast pass builds them (runtime decision.ts
+// `checkQuestions`), each scene under the card's world. Then a ladder of darker passages with one neutral question each, to see what the service blocks;
 // every extra file argument is one more rung (your own material: the script ships none past cruelty).
 // SENDS ALL OF IT TO THE DECISION SERVICE.
 import { DatabaseSync } from "node:sqlite"
@@ -16,8 +16,9 @@ import {
   type Question,
   type Secret,
 } from "@effect-tavern/provider"
-import { worldOf } from "@effect-tavern/runtime/src/layer.ts"
-import { tag, worldBlock } from "@effect-tavern/runtime/src/request.ts"
+import { checkQuestions, checkVerdict } from "@effect-tavern/runtime/src/decision.ts"
+import { harness, worldOf } from "@effect-tavern/runtime/src/layer.ts"
+import { worldBlock } from "@effect-tavern/runtime/src/request.ts"
 import { expand } from "@effect-tavern/runtime/src/names.ts"
 import { readCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
@@ -48,29 +49,31 @@ const layers = card.lore.find((l) => l.id === "timeline")!.layers.map(named)
 
 /** The record stage's rule of evidence for readouts (layer.ts `record.readout`), in the card's language. */
 const EVIDENCE = "只按这一幕里已经写定的事回答，不按它将要走向哪里；这一幕没有涉及的，选表示没有发生的那一项。"
-const questions = (tagged: boolean): Record<string, Question> => {
-  const where = tagged ? "只看 <draft> 里的正文，<world> 只是背景。" : ""
-  return {
+const ids = layers.map((_, i) => `L${i + 1}`)
+/** The readouts as `choice` questions, and the lore layers as check's fast pass asks them (runtime decision.ts
+ *  `checkQuestions`, the code's own `check.decision.open`; no player rows on this card). */
+const questionsFor = (draft: string) => {
+  const q = checkQuestions({
+    world,
+    draft,
+    rules: [],
+    open: layers.map((text, i) => ({ id: ids[i]!, text })),
+    wording: (id) => harness("act").asks!.find((a) => a.id === id)!.text,
+  })
+  const questions: Record<string, Question> = {
     ...Object.fromEntries(
       (card.rules.readouts ?? []).map((r) => [
         r.id,
         {
           type: "choice",
-          instructions: `${where}${named(r.text)}？${EVIDENCE}`,
+          instructions: `只看 <draft> 里的正文，<world> 只是背景。${named(r.text)}？${EVIDENCE}`,
           criteria: Object.fromEntries(r.options.map((o) => [o.id, named(o.text)])),
         },
       ]),
     ),
-    ...Object.fromEntries(
-      layers.map((text, i) => [
-        `L${i + 1}`,
-        {
-          type: "boolean",
-          instructions: `${where}正文是否向读者传达了下面这条设定的实质内容？转述或清楚的暗示都算，只是气氛相近不算。\n设定：${text}`,
-        },
-      ]),
-    ),
+    ...q.questions,
   }
+  return { state: q.state, questions }
 }
 
 /** Each scene's known answers: the three readouts' option ids, and the lore layers (1-4) it conveys. `probe` is left
@@ -144,30 +147,27 @@ const ask = (state: string, qs: Record<string, Question>) => {
   )
 }
 
-console.log(`${config.driver} ${config.model} · Life of Pi: ${SCENES.length} scenes × (bare, world), 7 questions each`)
+console.log(`${config.driver} ${config.model} · Life of Pi: ${SCENES.length} scenes under the world, 7 questions each`)
 let right = 0
 let asked = 0
 const mark = (ok: boolean) => (asked++, ok ? (right++, "") : "✗")
-for (const s of SCENES)
-  for (const variant of ["bare", "world"] as const) {
-    const tagged = variant === "world"
-    const r = await ask(tagged ? `${world}\n\n${tag("draft", s.text)}` : s.text, questions(tagged))
-    if ("error" in r) {
-      console.log(`${s.id} ${variant}: ${r.error}`)
-      continue
-    }
-    const a = r.answers
-    const readout = (["elapsed", "probe", "glitch"] as const)
-      .map((k) => `${k}=${a[k]?.choice}${s[k] === undefined ? "?" : mark(a[k]?.choice === s[k])}`)
-      .join(" ")
-    const fired = layers
-      .map((_, i) => {
-        const p = a[`L${i + 1}`]?.probability ?? 0
-        return `L${i + 1}=${p.toFixed(2)}${mark(p >= 0.5 === s.fired.includes(i + 1))}`
-      })
-      .join(" ")
-    console.log(`${s.id.padEnd(4, "　")} ${variant.padEnd(5)} ${String(r.ms).padStart(4)}ms  ${readout}  |  ${fired}`)
+for (const s of SCENES) {
+  const { state, questions } = questionsFor(s.text)
+  const r = await ask(state, questions)
+  if ("error" in r) {
+    console.log(`${s.id}: ${r.error}`)
+    continue
   }
+  const a = r.answers
+  const readout = (["elapsed", "probe", "glitch"] as const)
+    .map((k) => `${k}=${a[k]?.choice}${s[k] === undefined ? "?" : mark(a[k]?.choice === s[k])}`)
+    .join(" ")
+  const p = checkVerdict(a, [], ids, []).p.open // read back by id, as the turn reads it
+  const fired = ids
+    .map((id, i) => `${id}=${(p[id] ?? 0).toFixed(2)}${mark((p[id] ?? 0) >= 0.5 === s.fired.includes(i + 1))}`)
+    .join(" ")
+  console.log(`${s.id.padEnd(4, "　")} ${String(r.ms).padStart(4)}ms  ${readout}  |  ${fired}`)
+}
 console.log(`\n${right}/${asked} answers as expected (✗ marks the others; ? = no expectation set)\n`)
 
 for (const [name, text] of LADDER) {

@@ -21,7 +21,7 @@ import { DatabaseSync } from "node:sqlite"
 import { open, type Data } from "../src/data.ts"
 import { library, NoModel } from "../src/library.ts"
 import { shelf } from "../src/tavern.ts"
-import { makeTurn, type Out } from "../src/turn.ts"
+import { makeTurn, type Call, type Out } from "../src/turn.ts"
 
 // the localhost upstreams below stay off a shell proxy: through one, a refused socket comes back as the proxy's 502
 process.env.NO_PROXY = "localhost,127.0.0.1"
@@ -698,4 +698,44 @@ for (const skip of [false, true]) {
     ),
   )
   assert.equal(checked, true)
+}
+
+// Check's fast pass (#171): the saved decision model reaches a story's session only while it is switched on, read per
+// turn. Off, check runs on its language model alone; on (here an address nothing answers), the fast pass's failed call
+// is filed on the node beside the LLM check that took over.
+{
+  const guarded: Card = { ...chat, id: "guarded", guard: ["Rule."] }
+  const M = fake((o) => defaultAnswer(readStage(o), canned))
+  const lib = library({ data: open(":memory:"), cards: shelf([guarded]), overlay: player.harness, model: () => M })
+  const key = lib.secrets.add({ name: "D", value: "decision-test-key" })
+  const dec = {
+    enabled: false,
+    driver: "google",
+    model: "gemini-decision-1",
+    url: "http://127.0.0.1:1/v1beta",
+  } as const
+  lib.decision.write({ ...dec, secret: key.id })
+  const id = lib.stories.create(guarded.id)
+  const checks = async (parent: number | null) => {
+    const es = [
+      ...(await Effect.runPromise(
+        Stream.runCollect(lib.turn(id).start({ kind: "act", parent, input: { text: "go" } })),
+      )),
+    ]
+    const node = es.flatMap((e) => (e.kind === "change" && e.node ? [e.node.id] : [])).at(-1)!
+    return { node, calls: (lib.calls(id).list()[node] as Call[]).filter((c) => c.phase === "check") }
+  }
+  const off = await checks(null)
+  assert.deepEqual(
+    off.calls.map((c) => c.via),
+    [undefined],
+  )
+  lib.decision.write({ ...dec, enabled: true, secret: key.id })
+  const on = await checks(off.node)
+  assert.deepEqual(
+    on.calls.map((c) => c.via),
+    ["decision", undefined],
+  )
+  assert.equal((on.calls[0]!.out as { verdict: string }).verdict, "escalate")
+  assert.ok((on.calls[0]!.out as { error?: string }).error)
 }

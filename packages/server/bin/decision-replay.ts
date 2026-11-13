@@ -3,9 +3,10 @@
 // so a running dev session is untouched) and SENDS EVERY NODE'S PROSE TO THE DECISION SERVICE; `--dry` prints what
 // would be asked and sends nothing.
 //
-// Per node with prose, one request bare and one with the card's world (its frame less the writing slots, layer.ts
-// `worldOf`) above the prose: each of the card's guard lines as a yes/no "does the passage break it", or one generic
-// question when the card has none, so the block rate and latency are measured on every prose. A node's stored
+// Per node with prose, one request as the turn's check fast pass sends it (runtime decision.ts `checkQuestions`): the
+// card's world (its frame less the writing slots, layer.ts `worldOf`) above the prose, each of the card's guard lines as
+// a yes/no "does the draft break it", or one generic question when the card has none, so the block rate and latency
+// are measured on every prose. A node's stored
 // `violated` is the label. CONTROLS append a hand-written violation to a real prose: the same question must then say yes.
 // Reports per request: answered / blocked (with the service's code) / failed, the latency, the input tokens, P(yes).
 import { DatabaseSync } from "node:sqlite"
@@ -21,7 +22,8 @@ import {
 } from "@effect-tavern/provider"
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
 import { resolve, worldOf, type Layer, type Local, type Resolved } from "@effect-tavern/runtime/src/layer.ts"
-import { tag, worldBlock } from "@effect-tavern/runtime/src/request.ts"
+import { worldBlock } from "@effect-tavern/runtime/src/request.ts"
+import { checkQuestions } from "@effect-tavern/runtime/src/decision.ts"
 import { lines } from "@effect-tavern/runtime/src/names.ts"
 import { cardNames, loadCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
@@ -90,28 +92,24 @@ const layerOf = (card: Card, persona: string | null): Resolved =>
     local: json<Local>(db.prepare("select json from local where card = ?").get(card.id) as Row | undefined),
     persona: persona === null ? undefined : personas.get(persona),
   })
-/** `guard`: the card's lines filled as a turn fills them (names.ts `lines`, a hole nothing fills kept as written). `tagged`:
- *  the state is <world> + <draft>, and the question says which of the two is judged (the check ask's "Judge only what is
- *  written in <draft>", layer.ts). */
-const questionsOf = (guard: readonly string[], tagged: boolean): Record<string, Question> =>
-  guard.length
-    ? Object.fromEntries(
-        guard.map((rule, i) => [
-          `g${i}`,
-          {
-            type: "boolean",
-            instructions: `${tagged ? "只评判 <draft> 里的正文；<world> 只是背景，不算正文。<draft> " : "这段正文"}是否违反了下面这条规则？\n规则：${rule}`,
-            criteria: { true: "正文中发生了规则禁止的事。", false: "正文没有发生规则禁止的事。" },
-          },
-        ]),
-      )
-    : { generic: { type: "boolean", instructions: GENERIC } }
 /** The card's `<world>` block as the off-stage stages read it (request.ts `worldBlock`), or "" when it has none. */
 const worldText = (card: Card, layer: Resolved): string =>
   worldBlock(
     worldOf(card, layer.frame).flatMap((f) => (f.text ? [{ id: f.id, role: "system" as const, text: f.text }] : [])),
   )
-const withWorld = (world: string, prose: string) => `${world}\n\n${tag("draft", prose)}`
+/** What the turn's check fast pass sends (runtime decision.ts `checkQuestions`, the asks the story's layer resolves):
+ *  <world> + <draft>, one yes/no "does the draft break it" per guard line (`g0`, `g1`, …), filled as a turn fills
+ *  them (names.ts `lines`). A card with no guard line gets one generic question instead, so the block rate and latency
+ *  are measured on every prose. */
+const asked = (
+  world: string,
+  guard: readonly string[],
+  prose: string,
+  layer: Resolved | undefined,
+): { state: string; questions: Record<string, Question> } => {
+  const q = checkQuestions({ world, draft: prose, rules: guard, open: [], wording: (id) => layer!.asks[id]!.text })
+  return guard.length ? q : { state: q.state, questions: { generic: { type: "boolean", instructions: GENERIC } } }
+}
 
 interface Run {
   at: string
@@ -126,8 +124,12 @@ const runs: Run[] = []
 let trace: Trace | undefined
 const model = dry ? undefined : compileDecision(config, secret, { onTrace: (t) => (trace = t) })
 
-const ask = async (at: string, variant: string, guard: readonly string[], state: string, expect?: boolean) => {
-  const qs = questionsOf(guard, state.startsWith("<world>"))
+const ask = async (
+  at: string,
+  variant: string,
+  { state, questions: qs }: { state: string; questions: Record<string, Question> },
+  expect?: boolean,
+) => {
   if (!model) return console.log(`${at} [${variant}] ${state.length} chars, ${Object.keys(qs).length} question(s)`)
   trace = undefined
   const t0 = performance.now()
@@ -172,13 +174,11 @@ for (const x of nodes) {
   const world = card && layer ? worldText(card, layer) : ""
   // the label: a guard line the node recorded as broken; a generic question has none
   const expect = guard.length ? (x.n.violated ?? []).length > 0 : undefined
-  await ask(x.at, "bare", guard, x.prose, expect)
-  if (world) await ask(x.at, "world", guard, withWorld(world, x.prose), expect)
+  await ask(x.at, "turn", asked(world, guard, x.prose, layer), expect)
   const breach = CONTROLS[x.card]
   if (breach && guard.length && !controlled.has(x.card)) {
     controlled.add(x.card)
-    await ask(x.at, "control", guard, x.prose + breach, true)
-    if (world) await ask(x.at, "control+world", guard, withWorld(world, x.prose + breach), true)
+    await ask(x.at, "control", asked(world, guard, x.prose + breach, layer), true)
   }
 }
 

@@ -954,6 +954,14 @@
         "text": "Check <draft> against the Rule and Open lines above. Put in \"fired\" each Open entry id whose substance <draft> conveyed, and in \"violated\" each Rule text that <draft> broke; leave either empty when none applies. Judge only what is written in <draft>; do not rewrite or continue the story."
       },
       {
+        "id": "check.decision.rule",
+        "text": "只评判 <draft> 里的正文；<world> 只是背景，不算正文。<draft> 是否违反了下面这条规则？\n规则："
+      },
+      {
+        "id": "check.decision.open",
+        "text": "只看 <draft> 里的正文，<world> 只是背景。正文是否向读者传达了下面这条设定的实质内容？转述或清楚的暗示都算，只是气氛相近不算。\n设定："
+      },
+      {
         "id": "record.tools",
         "text": "Use the native tools only for facts already established in <scene>; never continue the story, write prose, or infer events beyond <scene>. Read current values before updating. Insert creates an entity with a host-generated ID; patch changes defined fields; remove deletes an entity. Omit unchanged data. Finish by calling finish_record once with the required fields, even if no world data changed."
       },
