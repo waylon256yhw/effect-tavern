@@ -123,7 +123,6 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
     ...resources.filter((r) => r.activation === "always" && r.access.model).map((r) => freeze(r)),
     ...(pinned ? [freeze(pinned)] : []),
   ])
-  const injected = frozen.map(deliveryText)
   const held = [...frozen, ...fedResources(resources, R.products).map((r) => freeze(r))]
   const lookupContext = contextLookup(resources, held)
   const readable = new Set(lookupContext.readable().map((r) => r.resourceId))
@@ -220,7 +219,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
               fiction: head(fiction, { state: context }),
               history: [],
               summarized: false,
-              told: injected,
+              told: frozen,
               current: currentAt(R.products, world),
               outcome: events,
               must: [],
@@ -232,6 +231,8 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
       frame: head(R.frame, { state: context }),
       world: head(worldOf(card, R.frame), { state: context }),
       role: R.asks["stage.role"]!.text,
+      narrator: R.asks["narrate.role"]!.text,
+      directions: R.asks["narrate.turn"]!.text,
       tail: head(R.tail, { state: context }),
       input: { text: "" },
       thought: R.asks["input.thought"]!.text,

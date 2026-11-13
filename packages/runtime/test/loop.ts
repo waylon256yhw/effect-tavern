@@ -70,7 +70,7 @@ function script(o: FakeCall): FakeReply {
         break
       }
       const how = narrations.shift() ?? "plain"
-      const mayReveal = o.prompt.some((m) => /^(MAY|MUST) reveal/.test(fakeText(m)))
+      const mayReveal = o.prompt.some((m) => /^(MAY|MUST) reveal/m.test(fakeText(m)))
       out = `PROSE#${++n}${how === "fire" && mayReveal ? " the sleeve tears, a crane tattoo" : ""}${how === "kill" ? " KILL" : ""}`
       if (how === "cut") {
         out += " partial"
@@ -248,14 +248,17 @@ const program = Effect.gen(function* () {
   assert.ok(!v3.includes("NOTE#2") && !v3.includes(t2.brief.tone!))
   assert.ok(v3.includes(full.fiction[1]!.text!)) // bond was 4 when this head was built; the answer lands after the prose
   assert.equal(S.node(t3.id).state.bond, 8)
-  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5), prompts("narrate").at(-2)!.slice(0, 5))
-  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5).map(msgText), [
-    player.harness!.fragments![0]!.text!,
-    full.frame[0]!.text!,
-    full.frame[1]!.text!,
-    full.frame[2]!.text!,
-    full.fiction[0]!.text!,
-  ]) // player zone → frame → fiction
+  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 3), prompts("narrate").at(-2)!.slice(0, 3))
+  const [frameTag, fictionTag] = ["persona", "setting"].map((id) => full.frame.find((f) => f.id === id)!.text!)
+  assert.deepEqual(prompts("narrate").at(-1)!.slice(1, 3).map(msgText), [
+    [
+      `<persona>\n${frameTag}\n</persona>`,
+      `<setting>\n${fictionTag}\n</setting>`,
+      player.harness!.fragments![0]!.text!,
+      full.frame.find((f) => f.id === "style")!.text!,
+    ].join("\n\n"),
+    `<fiction>\n${full.fiction[0]!.text!}\n\n${full.fiction[1]!.text!}\n</fiction>`,
+  ]) // narrate.role → frame (persona, setting tagged; player zone and style after) → fiction
   assert.deepEqual(since(i), ["lookup", "decide", "narrate", "check", "record"])
   assert.deepEqual(t3.brief, { must: [], may: [] }) // no beat event this turn, t2's readout emitted none: no window
   // Cache breakpoints: the head's last message and the last history message (t2's reply, what next turn resends
@@ -265,8 +268,13 @@ const program = Effect.gen(function* () {
     .map((m) => (m.providerOptions?.anthropic as { cacheControl?: unknown } | undefined)?.cacheControl !== undefined)
   const at = (i: number) => msgText(prompts("narrate").at(-1)![i]!)
   assert.deepEqual(
-    [marks.at(-1), marks.filter(Boolean).length, at(marks.indexOf(true)), at(marks.lastIndexOf(true))],
-    [false, 2, full.fiction[1]!.text!, prose(t2)],
+    [
+      marks.at(-1),
+      marks.filter(Boolean).length,
+      at(marks.indexOf(true)).includes(full.fiction[1]!.text!),
+      at(marks.lastIndexOf(true)),
+    ],
+    [false, 2, true, prose(t2)],
   )
 
   // Truncation: one node, prose concatenated, two narrate calls, second prompt ends with the partial as assistant.
@@ -290,7 +298,9 @@ const program = Effect.gen(function* () {
   // The band switched: bond reached 8 at t3's record, so t5's head reads the warm fragment and not the cool one.
   const v5 = str(lastNarr())
   assert.ok(v5.includes(full.fiction[2]!.text!) && !v5.includes(full.fiction[1]!.text!))
-  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 5), prompts("narrate").at(-3)!.slice(0, 5)) // prefix intact
+  // prefix intact: the role and frame messages, and the fiction block's text up to the band
+  assert.deepEqual(prompts("narrate").at(-1)!.slice(0, 2), prompts("narrate").at(-3)!.slice(0, 2))
+  assert.ok(msgText(prompts("narrate").at(-1)![2]!).startsWith(`<fiction>\n${full.fiction[0]!.text!}\n\n`))
   // A stop that fires while check runs (the client closed after the whole first draft): the rewrite halts before its
   // first character, the first draft stands as the stopped reply with its verdict, and no second check runs.
   i = calls().length

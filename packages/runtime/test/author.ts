@@ -153,7 +153,9 @@ try {
     packs: [{ id: "p", name: "P", entries: [{ id: "secret", text: "PACK BODY" }] }],
   }
   const preview = view(collision, rows, { pin: "pack:p/secret" })
-  const document = JSON.stringify(preview.doc)
+  // narrate reads both bodies, no ids; lookup, which reads by id, keeps them apart
+  assert.match(JSON.stringify(preview.doc), /<context>\\nCARD BODY\\n\\nPACK BODY\\n<\/context>/)
+  const document = JSON.stringify(view(collision, rows, { pin: "pack:p/secret", stage: "lookup" }).doc)
   assert.match(document, /\[card:p\/secret revision=.*CARD BODY/)
   assert.match(document, /\[pack:p\/secret revision=.*PACK BODY/)
   assert.throws(() => view(collision, rows, { pin: "card:p/secret" }), /not available/)

@@ -17,6 +17,7 @@ import {
   type Secret,
 } from "@effect-tavern/provider"
 import { worldOf } from "@effect-tavern/runtime/src/layer.ts"
+import { tag, worldBlock } from "@effect-tavern/runtime/src/request.ts"
 import { expand } from "@effect-tavern/runtime/src/names.ts"
 import { readCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
@@ -38,10 +39,11 @@ const model = compileDecision(config, secret)
 
 const card = readCard(join(import.meta.dir, "../../../samples/life-of-pi/life-of-pi.yaml"))
 const named = (text: string) => expand(text, { user: "你", ...card.names }) ?? text
-const world = worldOf(card, card.frame)
-  .map((f) => named(f.text ?? ""))
-  .filter(Boolean)
-  .join("\n\n")
+const world = worldBlock(
+  worldOf(card, card.frame).flatMap((f) =>
+    f.text ? [{ id: f.id, role: "system" as const, text: named(f.text) }] : [],
+  ),
+)
 const layers = card.lore.find((l) => l.id === "timeline")!.layers.map(named)
 
 /** The record stage's rule of evidence for readouts (layer.ts `record.readout`), in the card's language. */
@@ -149,10 +151,7 @@ const mark = (ok: boolean) => (asked++, ok ? (right++, "") : "✗")
 for (const s of SCENES)
   for (const variant of ["bare", "world"] as const) {
     const tagged = variant === "world"
-    const r = await ask(
-      tagged ? `<world>\n${world}\n</world>\n\n<draft>\n${s.text}\n</draft>` : s.text,
-      questions(tagged),
-    )
+    const r = await ask(tagged ? `${world}\n\n${tag("draft", s.text)}` : s.text, questions(tagged))
     if ("error" in r) {
       console.log(`${s.id} ${variant}: ${r.error}`)
       continue

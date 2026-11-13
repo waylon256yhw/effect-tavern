@@ -551,6 +551,8 @@ const zh = {
     askDecideAgain: "行动判定（续拍）",
     askRecordReadout: "读数判据",
     askNarrateCorrection: "重写引导",
+    askNarrateRole: "叙述者定调",
+    askNarrateTurn: "本轮指示引导",
     askNarrateBlocks: "小剧场块格式",
     askNarrateDemand: "单索取小剧场",
     askInputThought: "心声记号说明",

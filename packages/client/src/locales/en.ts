@@ -553,6 +553,8 @@ const en: Dict = {
     askDecideAgain: "Action roll (follow-up)",
     askRecordReadout: "Readout rule",
     askNarrateCorrection: "Correction lead",
+    askNarrateRole: "Narrator framing",
+    askNarrateTurn: "Turn directions lead",
     askNarrateBlocks: "Aside block format",
     askNarrateDemand: "On-demand aside",
     askInputThought: "Thought mark rule",

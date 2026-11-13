@@ -54,6 +54,8 @@ const stageAskLabels = (): [string, string][] => [
   ["polish", t("settings.stagePolish")],
   ["record.tools", t("packs.askRecordTools")],
   ["record.readout", t("packs.askRecordReadout")],
+  ["narrate.role", t("packs.askNarrateRole")],
+  ["narrate.turn", t("packs.askNarrateTurn")],
   ["narrate.correction", t("packs.askNarrateCorrection")],
   ["narrate.blocks", t("packs.askNarrateBlocks")],
   ["narrate.demand", t("packs.askNarrateDemand")],

@@ -21,6 +21,7 @@ import {
 } from "@effect-tavern/provider"
 import { decodeCard, type Card } from "@effect-tavern/runtime/src/card.ts"
 import { worldOf } from "@effect-tavern/runtime/src/layer.ts"
+import { tag, worldBlock } from "@effect-tavern/runtime/src/request.ts"
 import { expand } from "@effect-tavern/runtime/src/names.ts"
 import { cardNames, loadCard } from "@effect-tavern/runtime/support/cards.ts"
 import { Effect } from "effect"
@@ -87,13 +88,16 @@ const questionsOf = (card: Card | undefined, tagged: boolean): Record<string, Qu
         ]),
       )
     : { generic: { type: "boolean", instructions: GENERIC } }
+/** The card's `<world>` block as the off-stage stages read it (request.ts `worldBlock`), or "" when it has none. */
 const worldText = (card: Card | undefined): string =>
   card
-    ? worldOf(card, card.frame)
-        .map((f) => named(card, f.text ?? ""))
-        .filter(Boolean)
-        .join("\n\n")
+    ? worldBlock(
+        worldOf(card, card.frame).flatMap((f) =>
+          f.text ? [{ id: f.id, role: "system" as const, text: named(card, f.text) }] : [],
+        ),
+      )
     : ""
+const withWorld = (world: string, prose: string) => `${world}\n\n${tag("draft", prose)}`
 
 interface Run {
   at: string
@@ -153,19 +157,12 @@ for (const x of nodes) {
   // the label: a guard line the node recorded as broken; a generic question has none
   const expect = card?.guard.length ? (x.n.violated ?? []).length > 0 : undefined
   await ask(x.at, "bare", card, x.prose, expect)
-  if (world) await ask(x.at, "world", card, `<world>\n${world}\n</world>\n\n<draft>\n${x.prose}\n</draft>`, expect)
+  if (world) await ask(x.at, "world", card, withWorld(world, x.prose), expect)
   const breach = CONTROLS[x.card]
   if (breach && card?.guard.length && !controlled.has(x.card)) {
     controlled.add(x.card)
     await ask(x.at, "control", card, x.prose + breach, true)
-    if (world)
-      await ask(
-        x.at,
-        "control+world",
-        card,
-        `<world>\n${world}\n</world>\n\n<draft>\n${x.prose + breach}\n</draft>`,
-        true,
-      )
+    if (world) await ask(x.at, "control+world", card, withWorld(world, x.prose + breach), true)
   }
 }
 

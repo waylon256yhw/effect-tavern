@@ -89,12 +89,16 @@ export const Hat = Schema.Struct({
 })
 export type Hat = typeof Hat.Type
 
+/** A head message with its fragment's id: in the frame the id is the slot, which request.ts tags (`persona`, `setting`). */
+export interface Slotted extends Msg {
+  id?: string
+}
 /** Head messages: `enabled`/options and `when` evaluated, in zone then document order. Order is the author's; a
  * `when` flip costs one cache miss on a rare event, not a reordering of the document. */
 export const head = (
   layers: readonly Fragment[],
   { state = {} as State, options = {} as Record<string, boolean> } = {},
-): Msg[] =>
+): Slotted[] =>
   layers
     .filter((f) => (options[f.id] ?? f.enabled ?? true) && (!f.when || holds(f.when, state)))
-    .flatMap((f) => (f.text ? [{ role: f.role ?? "system", text: expandState(f.text, state) }] : []))
+    .flatMap((f) => (f.text ? [{ id: f.id, role: f.role ?? "system", text: expandState(f.text, state) }] : []))

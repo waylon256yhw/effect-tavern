@@ -56,7 +56,11 @@ const head = on.map((f) =>
     .join("\n"),
 )
 assert.equal(head.length, 8) // language, pov, style; town, sides, now, tense (局势 ≥ 6), blood (起点 血案)
-assert.deepEqual(sent("narrate").slice(0, 8), head)
+// after narrate.role: the frame as one message (no persona or setting here to tag), the fiction as one <fiction>
+assert.deepEqual(sent("narrate").slice(1, 3), [
+  head.slice(0, 3).join("\n\n"),
+  `<fiction>\n${head.slice(3).join("\n\n")}\n</fiction>`,
+])
 // lookup and record: preview has no path ledger; the final message is the session's note/prose (empty in preview).
 assert.deepEqual(
   sent("lookup")

@@ -4,14 +4,15 @@
 import { wire } from "@effect-tavern/provider/src/call.ts"
 import type { FakeCall, Message } from "@effect-tavern/provider"
 import assert from "node:assert/strict"
-import type { Hat, Msg } from "../src/fragment.ts"
-import { request, type Ask, type Common } from "../src/request.ts"
+import type { Hat, Msg, Slotted } from "../src/fragment.ts"
+import { request, worldBlock as renderWorld, type Ask, type Common } from "../src/request.ts"
 import { readStage } from "../support/script.ts"
 
-const frame: Msg[] = [
-  { role: "system", text: "Write in Chinese." },
-  { role: "system", text: "你是新来到小镇的牧师。" },
-  { role: "system", text: "用第二人称写玩家。" },
+const frame: Slotted[] = [
+  { id: "language", role: "system", text: "Write in Chinese." },
+  { id: "persona", role: "system", text: "你是新来到小镇的牧师。" },
+  { id: "setting", role: "system", text: "边境小镇。" },
+  { id: "pov", role: "system", text: "用第二人称写玩家。" },
 ]
 const fiction: Msg[] = [{ role: "system", text: "A: swordsman" }]
 const reply: Msg = {
@@ -29,11 +30,23 @@ const open = [
 ]
 const thought = "Text between ⦅ and ⦆ is a thought."
 const role = "Off-stage pass; never reply in character."
-// what a stage other than narrate reads of the frame: who and where, no line on how to write (layer.ts `worldOf`)
-const world = frame.slice(0, 2)
-const worldBlock = `<world>\n${world.map((f) => f.text).join("\n\n")}\n</world>`
+const narrator = "You narrate."
+const directions = "Directions, not story."
+// what a stage other than narrate reads of the frame: who and where, no line on how to write (layer.ts `worldOf`);
+// persona and setting tagged first, the other slots untagged after them
+const world = frame.slice(0, 3)
+const worldBlock =
+  "<world>\n<persona>\n你是新来到小镇的牧师。\n</persona>\n\n<setting>\n边境小镇。\n</setting>\n\nWrite in Chinese.\n</world>"
+assert.equal(renderWorld(world), worldBlock)
+assert.equal(renderWorld([]), "")
 const offHead = [role, worldBlock]
-const c = (input: Common["input"]): Common => ({ frame, world, role, input, thought })
+// narrate's head: what the call is, the whole frame as one message (tags first), the fiction run as one <fiction>
+const narrateHead = [
+  narrator,
+  "<persona>\n你是新来到小镇的牧师。\n</persona>\n\n<setting>\n边境小镇。\n</setting>\n\nWrite in Chinese.\n\n用第二人称写玩家。",
+  "<fiction>\nA: swordsman\n</fiction>",
+]
+const c = (input: Common["input"]): Common => ({ frame, world, role, narrator, directions, input, thought })
 
 const text = (m: Message) =>
   typeof m.content === "string" ? m.content : m.content.map((p) => ("text" in p ? p.text : "")).join("")
@@ -62,7 +75,7 @@ const asks: Record<Ask["stage"], Ask> = {
     fiction,
     history,
     summarized: false,
-    told: ["Li: A's lost friend."],
+    told: [{ title: "Li", text: "A's lost friend." }],
     outcome: ["strike:hit"],
     current: "Current: scene=place: P",
     must: [open[0]!],
@@ -123,15 +136,34 @@ for (const format of ["anthropic", "gemini"] as const) assert.doesNotThrow(() =>
 const line = all({ text: "我拔剑。", note: "虚晃一招" })
 // narrate reads the whole frame; every other stage opens with stage.role + <world> (never a naked "你是……" command and
 // never a line on how to write), while fiction and transcript reach narrate alone.
-assert.deepEqual(
-  line.narrate.slice(0, frame.length).map(text),
-  frame.map((f) => f.text),
-)
+assert.deepEqual(line.narrate.slice(0, narrateHead.length).map(text), narrateHead)
 for (const s of stages.filter((s) => s !== "narrate")) {
   assert.deepEqual(line[s].slice(0, offHead.length).map(text), offHead, s)
   assert.ok(!doc(line[s]).includes("用第二人称写玩家"), s)
 }
 assert.ok(!doc(line.narrate).includes(role) && !doc(line.narrate).includes("<world>"))
+for (const s of stages.filter((s) => s !== "narrate")) assert.ok(!doc(line[s]).includes(narrator), s)
+// no persona or setting in the frame: no empty tag; the other slots stay plain lines
+const plain = request({ ...c({ text: "x" }), frame: [frame[0]!, frame[3]!] }, asks.narrate)
+assert.equal(text(plain[1]!), "Write in Chinese.\n\n用第二人称写玩家。")
+// a user/assistant fiction fragment stays its own message in place; only adjacent system fragments share a <fiction>
+const mixed = request(c({ text: "x" }), {
+  ...asks.narrate,
+  fiction: [
+    { role: "system", text: "F1" },
+    { role: "system", text: "F2" },
+    { role: "user", text: "U" },
+    { role: "system", text: "F3" },
+  ],
+} as Ask)
+assert.deepEqual(
+  mixed.slice(2, 5).map((m) => [m.role, text(m)]),
+  [
+    ["system", "<fiction>\nF1\n\nF2\n</fiction>"],
+    ["user", "U"],
+    ["system", "<fiction>\nF3\n</fiction>"],
+  ],
+)
 for (const s of stages) {
   assert.equal(/A: swordsman/.test(doc(line[s])), s === "narrate", s)
   assert.equal(/PROSE#1/.test(doc(line[s])), s === "narrate", s)
@@ -146,22 +178,61 @@ for (const s of stages.filter((s) => s !== "narrate")) {
 
 // ───────── Two skeletons ─────────
 // The narrator continues a conversation: head, the transcript ending in the last reply, the player's line as the user
-// message, then this turn's directives as system lines in a fixed order, the correction last.
-assert.equal(
-  roles(line.narrate),
-  "system system system system user assistant user " + Array(8).fill("system").join(" "),
-)
-assert.deepEqual(line.narrate.slice(6).map(text), [
+// message, then one system message: <context> (title and text, no id or revision) and <turn> (its lead, then the
+// directives in a fixed order); the correction after it.
+assert.equal(roles(line.narrate), "system system system user assistant user system system")
+assert.deepEqual(line.narrate.slice(5).map(text), [
   "我拔剑。",
-  "Li: A's lost friend.",
-  "Outcome: strike:hit",
-  "Current: scene=place: P",
-  "MUST reveal: B is Li.",
-  "MAY reveal: E2, with a comma",
-  "Tone: quiet",
-  "Player note: 虚晃一招",
+  [
+    "<context>\nLi\nA's lost friend.\n</context>",
+    "",
+    "<turn>",
+    directions,
+    "Outcome: strike:hit",
+    "Current: scene=place: P",
+    "MUST reveal: B is Li.",
+    "MAY reveal: E2, with a comma",
+    "Tone: quiet",
+    "Player note: 虚晃一招",
+    "</turn>",
+  ].join("\n"),
   "Previous draft broke: rule",
 ])
+assert.ok(!/revision=|\[li|supersedes/.test(doc(line.narrate)))
+// a lore entry's title is its first sentence: the text alone, never the sentence twice
+assert.equal(
+  text(
+    request(c({ text: "x" }), {
+      ...asks.narrate,
+      told: [{ title: "Li is A's friend.", text: "Li is A's friend. He is gone." }],
+      outcome: [],
+      current: undefined,
+      must: [],
+      may: [],
+      tone: undefined,
+      correction: undefined,
+    } as Ask).at(-1)!,
+  ),
+  "<context>\nLi is A's friend. He is gone.\n</context>",
+)
+// nothing delivered: <turn> alone; nothing to direct: <context> alone; neither: no block (the bare narrate above)
+assert.ok(
+  text(request(c({ text: "x" }), { ...asks.narrate, told: [] } as Ask)[6]!).startsWith(`<turn>\n${directions}\n`),
+)
+assert.equal(
+  text(
+    request(c({ text: "x" }), {
+      ...asks.narrate,
+      outcome: [],
+      current: undefined,
+      must: [],
+      may: [],
+      tone: undefined,
+      correction: undefined,
+    } as Ask).at(-1)!,
+  ),
+  "<context>\nLi\nA's lost friend.\n</context>",
+)
 // Off-stage passes judge one user message under system lines only: tagged material first, task instruction at the very end.
 for (const s of stages.filter((s) => s !== "narrate")) {
   const ms = line[s]
@@ -221,7 +292,7 @@ for (const s of stages)
 const note = all({ text: "", note: "继续。" })
 for (const s of ["lookup", "decide", "direct"] as const)
   assert.match(text(note[s].at(-1)!), /^<input>\n继续。\n<\/input>\n\n/, s)
-assert.equal(text(note.narrate[6]!), "继续。")
+assert.equal(text(note.narrate[5]!), "继续。")
 assert.ok(!/Player note:/.test(doc(note.narrate)))
 assert.match(text(note.record.at(-1)!), /^<scene>\nPROSE#2\n<\/scene>\n\n/)
 // A thought in the line: every stage that reads the line hears what it is; check and polish read <draft> and do not.
@@ -245,26 +316,26 @@ assert.equal(
       may: [],
     }),
   ),
-  "system system system system user",
+  "system system system user",
 )
 
 // ───────── Breakpoints and the wire ─────────
 // Structured: the off-stage head's last message. Narrate: the head's last (frame + fiction), the summary, the last history message.
 for (const s of stages.filter((s) => s !== "narrate")) assert.deepEqual(marks(line[s]), [offHead.length - 1], s)
-assert.deepEqual(marks(line.narrate), [3, 5])
+assert.deepEqual(marks(line.narrate), [2, 4])
 const summarized = request(c({ text: "x" }), {
   ...asks.narrate,
   history: [{ role: "system", text: "Summary: N1" }, ...history],
   summarized: true,
 } as Ask)
-assert.deepEqual(marks(summarized), [3, 4, 6])
-assert.equal(text(summarized[4]!), "Summary: N1")
+assert.deepEqual(marks(summarized), [2, 3, 5])
+assert.equal(text(summarized[3]!), "Summary: N1")
 // The connection's TTL rides on the head's breakpoint only; past parts go back only when the connection takes them.
 const wired = request(c({ text: "x" }), asks.narrate, { ttl: "1h", reasoningBack: true })
 const cc = (m: Message) => (m.providerOptions!.anthropic as { cacheControl: { ttl?: string } }).cacheControl
-assert.deepEqual([cc(wired[3]!).ttl, cc(wired[5]!).ttl], ["1h", undefined])
-assert.deepEqual(wired[5]!.content, reply.parts)
-assert.equal(line.narrate[5]!.content, "PROSE#1")
+assert.deepEqual([cc(wired[2]!).ttl, cc(wired[4]!).ttl], ["1h", undefined])
+assert.deepEqual(wired[4]!.content, reply.parts)
+assert.equal(line.narrate[4]!.content, "PROSE#1")
 
 // ───────── The connection's hat and the player's tail ─────────
 const drawn = { text: "我拔剑。", note: "虚晃一招" }
@@ -296,19 +367,18 @@ const worn = (s: Ask["stage"]) =>
 // narrate: frame, fiction, the hat's system, its handshake, history, the line, directives, the player's tail, the hat's tail
 const n = worn("narrate")
 assert.deepEqual(n.map(text), [
-  ...frame.map((f) => f.text),
-  "A: swordsman",
+  ...narrateHead,
   "HAT-SYS",
   "HS-U",
   "HS-A",
   "hello",
   "PROSE#1",
-  ...line.narrate.slice(6).map(text),
+  ...line.narrate.slice(5).map(text),
   "PLAYER-TAIL",
   "TAIL-A",
   "TAIL-U",
 ])
-assert.deepEqual(marks(n), [6, 8]) // the head's breakpoint on the last head message: the handshake is in the prefix
+assert.deepEqual(marks(n), [5, 7]) // the head's breakpoint on the last head message: the handshake is in the prefix
 // check, polish, record wear review.head after <world>, the breakpoint on it, nothing of narrate's hat
 for (const s of ["check", "polish", "record"] as const) {
   assert.equal(text(worn(s)[offHead.length]!), "REVIEW", s)

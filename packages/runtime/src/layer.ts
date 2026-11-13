@@ -85,14 +85,24 @@ export const decodeLocal = (u: unknown): Local => {
 
 // ───────── The harness's own row ─────────
 // Every instruction the loop says to the model, with ids, in the open. Data lines (State:, Actions:, Open:, Known:,
-// Questions:) and the XML wrappers (<world>, <input>, <draft>, <scene>) are format and stay in code (request.ts); these
-// are the prose around them. Every non-narrate stage opens with `stage.role` before `<world>` and closes with its own
-// task ask after the closing material tag (#167: without both, reasoning models read a second-person persona at the top
-// and a bare scene/line at the bottom as a roleplay turn to continue). Direct names `tone`'s genre too (#90).
+// Questions:) and the XML wrappers (<world>, <persona>, <setting>, <fiction>, <context>, <turn>, <input>, <draft>,
+// <scene>) are format and stay in code (request.ts); these are the prose around them. Narrate opens with `narrate.role`
+// before its frame and leads `<turn>` with `narrate.turn`. Every non-narrate stage opens with `stage.role` before
+// `<world>` and closes with its own task ask after the closing material tag (#167: without both, reasoning models read
+// a second-person persona at the top and a bare scene/line at the bottom as a roleplay turn to continue). Direct names
+// `tone`'s genre too (#90).
 const words: readonly Ask[] = [
   {
     id: "stage.role",
-    text: 'You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns ("you" / "你") in the reference material refer to the player character, not to you.',
+    text: 'You are running an off-stage analysis pass for an interactive story, never writing or continuing the story itself. Never reply in character or address the player. Second-person pronouns ("you" / "你") in the reference material refer to the player character, not to you. In <persona>, "you" / "你" / "我" describes the player character, not you.',
+  },
+  {
+    id: "narrate.role",
+    text: 'You are the narrator of an interactive story, writing its next scene. In <persona>, "you" / "你" / "我" describes the player character, not you. <context> holds background lore and recalled facts for reference when relevant.',
+  },
+  {
+    id: "narrate.turn",
+    text: "This turn's stage directions to you as the narrator; they are not story text.",
   },
   {
     id: "lookup",
