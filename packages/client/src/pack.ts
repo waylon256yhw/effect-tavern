@@ -36,16 +36,14 @@ export const withPackName = <R extends Layer>(p: R, key: string, value: string):
   return (Object.keys(next).length ? { ...base, names: next } : base) as R
 }
 
-/** The proper-noun keys shown on the Writing page: `holes ∪ Object.keys(names)`, strictly from `GET /card`. */
+/** The proper-noun keys shown on the Writing page: `holes ∪ Object.keys(names)`, strictly from `GET /card`, sorted: a
+ *  key filled leaves `holes` for `names`, and its field stays where it was. */
 export const cardNameKeys = (
   unfilledHoles: readonly string[] | undefined,
   mergedNames: Readonly<Record<string, string>> | undefined,
-): string[] => {
-  const hs = unfilledHoles ?? []
-  return [...hs, ...Object.keys(mergedNames ?? {}).filter((k) => !hs.includes(k))]
-}
+): string[] => [...new Set([...(unfilledHoles ?? []), ...Object.keys(mergedNames ?? {})])].sort()
 
-/** The new-story page's name fields (#170): the card's own unfilled holes, then what the player already named on this
+/** The new-story page's name fields (#170): the card's own unfilled holes and what the player already named on this
  *  card (`local.names`, so a field does not vanish once filled), `user` left out (the identity control holds it). */
 export const requiredNameKeys = (
   cardHoles: readonly string[] | undefined,

@@ -34,18 +34,23 @@ import { t } from "./i18n.ts"
 
 export const openWriting = () => open("writing")
 
-export const putLocalAndRefresh = async (cardId: string, edit: (l: Local) => Local) => {
-  if (!cardId) return
-  await putLocal(cardId, edit)
-  await refreshActiveCard()
-}
+let written: Promise<void> = Promise.resolve()
+/** The last local write, its refresh landed (or failed): a click that blurred a name field waits on it before reading
+ *  the view the write changes (card.tsx `begin`). */
+export const localSettled = (): Promise<void> => written.catch(() => {})
+export const putLocalAndRefresh = (cardId: string, edit: (l: Local) => Local): Promise<void> =>
+  (written = (async () => {
+    if (!cardId) return
+    await putLocal(cardId, edit)
+    await refreshActiveCard()
+  })())
 
 const leaveArea = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
   if (e.key !== "Escape") return
   e.preventDefault()
   e.currentTarget.blur()
 }
-const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+export const leaveInput = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
   if (e.isComposing || (e.key !== "Enter" && e.key !== "Escape")) return
   e.preventDefault()
   e.currentTarget.blur()

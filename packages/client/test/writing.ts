@@ -185,15 +185,17 @@ assert.deepEqual(withPackName(withPackName(pNamed, "char_place", ""), "extra_key
 
 assert.deepEqual(cardNameKeys(["char", "user", "char2"], { char: "伴星", char_place: "新艾利都" }), [
   "char",
-  "user",
   "char2",
   "char_place",
+  "user",
 ])
-assert.deepEqual(cardNameKeys([], { user: "林默", char: "伴星" }), ["user", "char"])
+// one order whether a key is filled or not: a field does not move when its name is typed
+assert.deepEqual(cardNameKeys(["npc"], { place: "临安" }), cardNameKeys(["place", "npc"], {}))
+assert.deepEqual(cardNameKeys([], { user: "林默", char: "伴星" }), ["char", "user"])
 assert.deepEqual(cardNameKeys(undefined, undefined), [])
 
 // the new-story page: the card's own holes, then what was already named here, `user` held by the identity control
-assert.deepEqual(requiredNameKeys(["user", "place"], { npc: "老周", user: "林默" }), ["place", "npc"])
+assert.deepEqual(requiredNameKeys(["user", "place"], { npc: "老周", user: "林默" }), ["npc", "place"])
 assert.deepEqual(requiredNameKeys(undefined, undefined), [])
 // Begin and Send wait on the card's own holes only
 assert.equal(unnamed({ cardHoles: ["user"] }), true)

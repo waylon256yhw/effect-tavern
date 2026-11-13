@@ -599,7 +599,7 @@ button {
   cursor: pointer;
   transition: background var(--dur-3) var(--ease);
 }
-button:disabled {
+button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.35;
   cursor: default;
 }
