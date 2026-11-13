@@ -295,6 +295,12 @@ export const library = ({
       card,
       rows: () => rowsOf(card.id, personaOf(row(id)?.persona, row(id)?.yields)),
       model,
+      // check's fast pass (#171): the saved decision model while it is switched on; what it lacks throws on the turn's
+      // fast pass, which records it and falls back to the LLM check
+      decision: () => {
+        const c = decision()
+        return c?.enabled ? compileDecision(c, decisionKey(c)) : undefined
+      },
       store,
       hat,
       policy,
@@ -376,7 +382,10 @@ export const library = ({
         .get(node)
         .map((v) => {
           const c = v as Call
-          return inspect ? c : { ...c, msgs: [], out: undefined }
+          if (inspect) return c
+          // a fast pass's verdict is no one's text: it stays, so the row reads pass / escalate without the bodies
+          const verdict = c.via === "decision" ? (c.out as { verdict?: unknown } | undefined)?.verdict : undefined
+          return { ...c, msgs: [], out: verdict === undefined ? undefined : { verdict } }
         })
     },
     exists,

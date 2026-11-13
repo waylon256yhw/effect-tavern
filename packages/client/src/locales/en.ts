@@ -130,6 +130,7 @@ const en: Dict = {
     noSuchNode: "No such node",
     nothingLeft: "nothing left to tell",
     nothingRead: "nothing read",
+    decision: "decision model",
     ok: "ok",
     pipeline: "Pipeline",
     prevNode: "Previous node",

@@ -170,6 +170,15 @@ const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
         </For>
         <span class="dprose">{cut().line}</span>
       </Match>
+      <Match when={props.row.call.via === "decision"}>
+        {/* check's fast pass (runtime decision.ts): settled here, or handed to the LLM check on the next row */}
+        <Show when={out().verdict}>
+          <span class={{ pill: true, ok: out().verdict === "pass" }}>{String(out().verdict)}</span>
+        </Show>
+        <Show when={out().error}>
+          <span class="dtext">{String(out().error)}</span>
+        </Show>
+      </Match>
       <Match when={props.row.phase === "check"}>
         <Show
           when={props.dev}
@@ -266,6 +275,7 @@ const Step = (props: {
           <span class="nm">
             {props.row.phase}
             <Show when={props.row.phase === "lookup" || props.row.phase === "decide"}> {props.nth + 1}</Show>
+            <Show when={c().via === "decision"}> · {t("inspector.decision")}</Show>
           </span>
           <Show when={hits()}>{(h) => <span class="hits">{h()}</span>}</Show>
         </span>
