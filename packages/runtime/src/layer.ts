@@ -14,6 +14,8 @@
 //
 // The locks are all here and never throw for a player's row (a throw would kill a card at session open for what a pack
 // happens to declare): what they refuse lands in `dropped`, for a client to draw. Only the card's own bad product throws.
+// Names are filled per item by its `from` (names.ts `expand`): a player's entry with a hole nothing fills stays out, the
+// card's goes out with the literal `{{key}}`; `holes` lists what nothing fills, either way.
 import { ContextPolicy, checkContextPolicies } from "./lore.ts"
 import { Schema } from "effect"
 import type { Card } from "./card.ts"
@@ -316,17 +318,16 @@ export interface Rows {
 export type From = string // "harness" | "card" | "local" | a pack's id
 export type Item<T> = T & { from: From; compiled?: true; unasked?: true }
 export interface Resolved {
-  frame: Item<Fragment>[] // the head, holes filled; an entry with one unfilled is not here
+  frame: Item<Fragment>[] // the head, names filled (names.ts: a player's entry with a hole nothing fills is not here)
   tail: Item<Fragment>[]
-  asks: Record<string, Item<{ text: string }>> // every id: the highest on the chain that fills whole
-  products: Item<Product>[] // `on` decided; the question filled, or `unasked` with its raw text when it does not fill
+  asks: Record<string, Item<{ text: string }>> // every id: the highest on the chain that goes out
+  products: Item<Product>[] // `on` decided; the question filled, or a player's `unasked` with its raw text when it does not fill
   entries: Item<PackEntry>[] // the lookup index's player-layer entries
   lexicon: Item<LexiconEntry>[] // no id, so no merge: every rank's stands, the highest first
   snippets: Item<Snippet>[]
   format: Item<Format>[]
   names: Names
   holes: string[] // the holes nothing fills yet, in order of first appearance
-  cardHoles: string[] // those of `holes` in the card's own text still in force: while one is open no turn runs (session.ts)
   switches: {
     value: Writing
     sentences: Record<string, string> // by ask id, `switch.<key>.<value>`
@@ -412,17 +413,15 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   if (rows.persona) name("local", "user", rows.persona.name)
   const names: Names = Object.fromEntries(pairs)
 
-  // ───────── asks: down the chain to the first that fills whole; the code's own has no hole ─────────
+  // ───────── asks: down the chain to the first that goes out (names.ts); the code's own has no hole ─────────
   const asks = new Map<string, Item<{ text: string }>>()
   const worded: string[] = [] // every ask that could go out, what `holes` scans; the ones under a filled one never do
-  const cardAsks: string[] = [] // the card's asks nothing above fills: still in force, so an open hole in one is the card's
   for (const { from, row } of [...down, { from: "harness", row: code }])
     for (const a of row.asks ?? []) {
       if (a.id.startsWith("product.") || asks.has(a.id)) continue
       worded.push(a.text)
-      const text = expand(a.text, names)
+      const text = expand(a.text, names, from)
       if (text !== undefined) asks.set(a.id, { text, from })
-      else if (from === "card") cardAsks.push(a.text)
     }
   const sentenceOf: Record<string, string> = Object.fromEntries(
     [...asks].flatMap(([id, a]) => (id.startsWith("switch.") ? [[id, a.text]] : [])),
@@ -467,7 +466,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
       .map((f) => ({ ...f, from: "card" })),
   ]
   const filled = fill(zone, names)
-  // who holds a head slot: a tail directive is not a slot; an empty or disabled entry, or one with an unfilled hole, holds nothing
+  // who holds a head slot: a tail directive is not a slot; an empty or disabled entry, or a player's with an unfilled hole, holds nothing
   const holder = (id: string) =>
     filled.find((f) => f.id === id && f.at !== "tail" && f.text && f.enabled !== false)?.from ?? null
 
@@ -525,7 +524,7 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
   }
   const raw = [...stock.values()].map((p) => validate(p) as Item<Product>)
   const asked = raw.map((p) => {
-    const text = expand(p.text, names)
+    const text = expand(p.text, names, p.from)
     return text === undefined ? { ...p, unasked: true as const } : { ...p, text }
   })
 
@@ -552,8 +551,8 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     (s) => s.name,
   )
   const quick = allSnippets.flatMap((s) => {
-    const text = expand(s.text, names)
-    const after = s.after === undefined ? undefined : expand(s.after, names)
+    const text = expand(s.text, names, s.from)
+    const after = s.after === undefined ? undefined : expand(s.after, names, s.from)
     if (text === undefined || (s.after !== undefined && after === undefined)) return []
     // in author mode every send is already a note and nobody in the story thinks: the channel switch and the thought
     // mark have nothing to do there
@@ -561,19 +560,6 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     return [{ ...s, text, ...(after !== undefined && { after }) }]
   })
 
-  // the card's own text still in force (no player row wrote over it): an open hole here breaks the card mid-story, so
-  // the session refuses the turn; a player row's entry with one only stays out (docs/packs-brief.md §八)
-  const cardOut = [
-    ...zone.flatMap((x) => (x.from === "card" && x.enabled !== false ? (x.text ?? []) : [])),
-    ...card.fiction.flatMap((x) => x.text ?? []),
-    ...card.greetings.flatMap((g) => [g.text ?? "", g.note ?? ""]),
-    ...(card.passages ?? []).flatMap((g) => [g.text ?? "", g.note ?? ""]),
-    ...card.lore.flatMap((e) => [...e.layers, ...(e.sections ?? []).map((x) => x.text)]),
-    ...card.guard,
-    ...(card.rules.readouts ?? []).flatMap((q) => [q.text, ...q.options.map((o) => o.text)]),
-    ...raw.flatMap((p) => (p.from === "card" && p.on !== false ? [p.text] : [])),
-    ...cardAsks,
-  ]
   // every text that goes out, or that a client fills and sends: what a player may be asked to name
   const out = [
     ...zone.flatMap((x) => (x.enabled === false ? [] : (x.text ?? []))),
@@ -602,7 +588,6 @@ export const resolve = (card: Card, rows: Rows): Resolved => {
     ),
     names,
     holes: unfilled(out.join("\n"), names),
-    cardHoles: unfilled(cardOut.join("\n"), names),
     switches: {
       value,
       sentences: sentenceOf,

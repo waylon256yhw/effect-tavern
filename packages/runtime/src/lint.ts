@@ -334,8 +334,8 @@ const rules: Rule[] = [
         message: `${f.id} is not a frame slot (${SLOTS.join(", ")}); every stage reads it as part of the frame`,
         hint: "a person, a cast or a world goes in fiction; keep it in the frame only as a slot the player may fill",
       })),
-  // A hole with no default: no turn runs on the card (session.ts `ready`) until a pack or the player names it. A warn,
-  // since leaving one to the player may be the card's design. `user` is exempt: it is the player's to name (a persona or
+  // A hole with no default: it goes out as the literal `{{key}}` (names.ts) until a pack or the player names it, so a typo
+  // (`{{chr}}`) reaches the model as written. A warn, since leaving one to the player may be the card's design. `user` is exempt: it is the player's to name (a persona or
   // a local name), and a warning would push an author to invent a stand-in word.
   (card) =>
     named(card).flatMap(([path, t]) =>

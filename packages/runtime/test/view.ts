@@ -218,12 +218,13 @@ assert.doesNotMatch(section(recorded, "gates")!, /lore\./)
     view(card, player, { stage, pin, lore: true })
   const listed = section(preview("lookup"), "lore")!
   assert.match(listed, /quiet  layer 1\/1  in the index/)
-  assert.doesNotMatch(listed, /manual[^\n]*in the index|auto[^\n]*in the index|missing/)
+  assert.doesNotMatch(listed, /manual[^\n]*in the index|auto[^\n]*in the index/)
+  // the card's entry with an open hole stays, the hole as written (names.ts)
+  assert.match(listed, /missing  layer 1\/1  in the index\n {4}\{\{unknown_name\}\}/)
   assert.doesNotMatch(preview("narrate").doc.map(text).join("\n"), /PLAYER ONLY/)
   assert.match(preview("record", "manual").doc.map(text).join("\n"), /PLAYER ONLY/)
-  // the entry with the open hole is the preview's to drop; a session on it would refuse the turn (session.ts `ready`)
   const runtime = makeSession({
-    card: { ...card, lore: card.lore.filter((e) => e.id !== "missing") },
+    card,
     rows: () => player,
     model,
   })

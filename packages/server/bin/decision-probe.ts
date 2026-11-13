@@ -38,7 +38,7 @@ const secret = all("select id, name, json from secret")
 const model = compileDecision(config, secret)
 
 const card = readCard(join(import.meta.dir, "../../../samples/life-of-pi/life-of-pi.yaml"))
-const named = (text: string) => expand(text, { user: "你", ...card.names }) ?? text
+const named = (text: string) => expand(text, { user: "你", ...card.names }, "card")!
 const world = worldBlock(
   worldOf(card, card.frame).flatMap((f) =>
     f.text ? [{ id: f.id, role: "system" as const, text: named(f.text) }] : [],

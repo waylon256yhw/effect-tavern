@@ -212,16 +212,14 @@ export const makeCard = (r: Rules) => {
         `${a.id}: ${expandState(a.text, { ...context, fields: s })}${a.roll && typeof a.roll === "object" && "judge" in a.roll ? ` (estimate chance: ${a.roll.judge})` : ""}`,
     )
   // Readouts: asked on the post-settlement state; the enum per question is the gate. Nothing asked → no schema.
-  // With `names`, the wording expanded; a readout with an unfilled hole in its question or an option is not asked.
+  // With `names`, the wording expanded; a hole nothing fills stays as written (names.ts).
   const asked = (s: State, names?: Names, context: Paths = s) =>
     (r.readouts ?? [])
       .filter((q) => !q.when || holds(q.when, { ...context, fields: s }))
-      .flatMap((q) => {
-        if (!names) return [q]
-        const [text, ...options] = [q.text, ...q.options.map((o) => o.text)].map((t) => expand(t, names))
-        return text === undefined || options.includes(undefined)
-          ? []
-          : [{ ...q, text, options: q.options.map((o, i) => ({ ...o, text: options[i]! })) }]
+      .map((q) => {
+        if (!names) return q
+        const named = (t: string) => expand(t, names, "card")!
+        return { ...q, text: named(q.text), options: q.options.map((o) => ({ ...o, text: named(o.text) })) }
       })
   const readoutSchema = (s: State, names?: Names, context: Paths = s) => {
     const qs = asked(s, names, context)

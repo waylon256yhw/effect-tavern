@@ -64,6 +64,10 @@ const e = await Effect.runPromise(outcome(E.act(e0.head, { text: "end" })))
 assert.equal(e.end, "over")
 await assert.rejects(Effect.runPromise(outcome(E.act(e.id, { text: "again" }))), /terminal node/)
 await Effect.runPromise(outcome(E.swipe(e.parent!)))
+// a passage's text with a hole nothing fills commits with the literal (#170: names.ts)
+const U = create({ ...card, passages: [{ when: { all: [] }, text: "ending {{user}}", end: true }] })
+const u = await Effect.runPromise(outcome(U.act(U.greet(card.greetings[0]!).head, { text: "end" })))
+assert.deepEqual(u.reply, [{ type: "text", text: "ending {{user}}" }])
 const O = create({
   ...card,
   passages: undefined,

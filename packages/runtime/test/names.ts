@@ -1,7 +1,7 @@
 // 代称 (docs/packs-brief.md §八): the pure functions, the value's lock, the merge order, every expansion point on a session
 // over a scripted model (a player row's entry with an unfilled hole skipped, its neighbour sent), the card's own open
-// hole locking the turn (#170), the refusals, history untouched, and the holes a client is told of. The two lint rules
-// are in test/lint.ts, the wire in server test/serve.ts.
+// hole going out as written (#170), the demand refusal, history untouched, and the holes a client is told of. The two
+// lint rules are in test/lint.ts, the wire in server test/serve.ts.
 import { fake, type Message } from "@effect-tavern/provider"
 import { Effect, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
@@ -13,11 +13,17 @@ import { chat, loadCard, plain } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "../support/script.ts"
 
 // ───────── The pure functions ─────────
-assert.equal(expand("{{char}} 与 {{ user }}，{{char}}", { char: "依瑞丝", user: "阿青" }), "依瑞丝 与 阿青，依瑞丝")
-assert.equal(expand("{{char}} {{x}}", { char: "依瑞丝" }), undefined) // one hole without a value: the whole text stays home
-assert.equal(expand("no holes", {}), "no holes")
-assert.equal(expand("{{constructor}}", {}), undefined) // own keys only
-assert.equal(expand("{{a}}", { a: "$& {{b}}", b: "x" }), "$& {{b}}") // one pass, a value is taken literally
+assert.equal(
+  expand("{{char}} 与 {{ user }}，{{char}}", { char: "依瑞丝", user: "阿青" }, "pk"),
+  "依瑞丝 与 阿青，依瑞丝",
+)
+// one hole without a value: a player's whole text stays home; the card's goes out, the hole as written
+assert.equal(expand("{{char}} {{x}}", { char: "依瑞丝" }, "pk"), undefined)
+assert.equal(expand("{{char}} {{ x }}", { char: "依瑞丝" }, "card"), "依瑞丝 {{ x }}")
+assert.equal(expand("no holes", {}, "local"), "no holes")
+assert.equal(expand("{{constructor}}", {}, "local"), undefined) // own keys only
+assert.equal(expand("{{constructor}}", {}, "card"), "{{constructor}}")
+assert.equal(expand("{{a}}", { a: "$& {{b}}", b: "x" }, "card"), "$& {{b}}") // one pass, a value is taken literally
 assert.deepEqual(holes("{{b}} {{a}} {{ b }} {{setvar::x::1}} {{1x}}"), ["b", "a"])
 
 // ───────── The value's lock, at every layer's boundary ─────────
@@ -137,11 +143,11 @@ const doc = (es: readonly Event[], phase: string) =>
 const nodeOf = (es: readonly Event[]) => es.flatMap((e) => (e.kind === "change" && e.node ? [e.node] : [])).at(-1)!
 
 const S = session()
-// the opening is stored expanded; an unfilled one is refused, by name, and leaves no node
+// the opening is stored expanded; a hole nothing fills stays in it as written
 const root = S.greet(card.greetings[0]!).node!
 assert.deepEqual(root.turn.reply, [{ type: "text", text: "G 依瑞丝" }])
-assert.throws(() => S.greet({ text: "G {{missing}} {{other}}" }), /\{\{missing\}\}, \{\{other\}\}/)
-assert.equal(S.log.nodes.size, 1)
+const open = session().greet({ text: "G {{char}} {{missing}}" }).node!
+assert.deepEqual(open.turn.reply, [{ type: "text", text: "G 依瑞丝 {{missing}}" }])
 
 picks.push(["li", "li#s", "pk/x"])
 const first = await collect(S.act(root.id, { text: "{{char}} typed" }))
@@ -201,87 +207,93 @@ assert.ok(has(doc(asked, "narrate"), "blk: BLOCK 依瑞丝"))
 assert.equal(nodeOf(asked).turn.products.blk, "DEMANDED")
 prose.text = "said {{char}}"
 
-// Replay: the name that filled a told entry taken away, the old node reads "" (§二) and nothing throws; the card's
-// own text now has an open hole, so the next turn is refused, naming it, and runs again once the name is back.
+// Replay: the name that filled a told entry taken away, the old node keeps what it was told and nothing throws; the
+// card's own text now has an open hole, and the next turn still runs.
 rows = { ...player, local }
 assert.deepEqual(
   S.node(n2.id).delivered.map((d) => d.text),
   ["HELD 玩家给的."],
 )
 assert.ok(S.snapshot().nodes.length >= 3)
-await assert.rejects(collect(S.act(n2.id, { text: "on" })), /^Error: card: unfilled \{\{given\}\}$/)
+assert.ok(nodeOf(await collect(S.act(n2.id, { text: "on" }))))
 rows = player
 const third = await collect(S.act(n2.id, { text: "on" }))
 assert.ok(has(doc(third, "narrate"), "HELD 玩家给的."))
 
-// ───────── The card's own open hole: no turn runs, anywhere a turn starts (#170) ─────────
+// ───────── The card's own open hole goes out as written: nothing of the card's is dropped or refused (#170) ─────────
 {
   const at = (c: Partial<Card>, r: Rows = plain) =>
     makeSession({ card: { ...chat, greetings: [{ text: "G" }], ...c }, rows: () => r, model: () => scripted })
-  const refused = /card: unfilled \{\{missing\}\}/
-  for (const c of [
-    { frame: [{ id: "style", text: "F {{missing}}" }] },
-    { fiction: [{ id: "f", text: "F {{missing}}" }] },
-    { lore: [{ id: "l", layers: ["L.", "L2 {{missing}}."] }] },
-    { lore: [{ id: "l", layers: ["L."], sections: [{ id: "s", text: "S {{missing}}." }] }] }, // a section counts too
-    { guard: ["RULE {{missing}}"] },
-    {
-      rules: { ...chat.rules, readouts: [{ id: "r", text: "R", options: [{ id: "a", text: "{{missing}}", do: [] }] }] },
-    },
-    { products: [{ role: "theater" as const, id: "q", text: "Q {{missing}}", shape: { kind: "text" as const } }] },
-    { passages: [{ when: { all: [] }, text: "P {{missing}}" }] },
-  ] as Partial<Card>[]) {
+  const always = { unlock: { all: [] }, offer: { any: [] }, activation: "always" as const }
+  for (const [c, phase, seen] of [
+    [{ frame: [{ id: "style", text: "F {{missing}}" }] }, "narrate", "F {{missing}}"],
+    [{ fiction: [{ id: "f", text: "F {{missing}}" }] }, "narrate", "F {{missing}}"],
+    [{ guard: ["别替 {{user}} 说话"] }, "check", "Rule: 别替 {{user}} 说话"], // the guard line kept, the literal in it
+    [
+      {
+        rules: {
+          ...chat.rules,
+          readouts: [{ id: "r", text: "R {{missing}}", options: [{ id: "a", text: "{{missing}}", do: [] }] }],
+        },
+      },
+      "record",
+      "r: R {{missing}} [a: {{missing}}]",
+    ],
+    [{ lore: [{ id: "l", layers: ["L {{missing}}."], ...always }] }, "narrate", "L {{missing}}."],
+    [{ lore: [{ id: "l", layers: ["L."], sections: [{ id: "s", text: "S {{missing}}." }], ...always }] }, "", ""],
+  ] as [Partial<Card>, string, string][]) {
     const C = at(c)
-    assert.throws(() => C.greet(C.greetings[0]!), refused, JSON.stringify(c))
-    await assert.rejects(collect(C.act(null, { text: "hi" })), refused, JSON.stringify(c))
-    assert.equal(C.log.nodes.size, 0)
+    assert.ok(C.greet(C.greetings[0]!).node, JSON.stringify(c))
+    const es = await collect(C.act(null, { text: "hi" }))
+    assert.ok(nodeOf(es), JSON.stringify(c))
+    if (seen) assert.ok(has(doc(es, phase), seen), seen)
   }
-  // a disabled fragment is not in force; a player's slot text over the card's leaves the card's out of the count
-  const off = at({ frame: [{ id: "style", text: "F {{missing}}", enabled: false }] })
-  assert.ok(off.greet(off.greetings[0]!).node)
-  const over = at(
-    { frame: [{ id: "style", text: "F {{missing}}" }] },
-    {
-      ...plain,
-      local: { id: "local", name: "local", card: chat.id, fragments: [{ id: "style", text: "MINE" }] },
-    },
-  )
-  assert.ok(over.greet(over.greetings[0]!).node)
+  // a card's product with an open hole is asked with the literal, on demand too
+  const Q = at({
+    products: [
+      {
+        role: "theater" as const,
+        id: "q",
+        text: "Q {{missing}}",
+        shape: { kind: "text" as const },
+        stage: "narrate" as const,
+        on: false,
+      },
+    ],
+  })
+  const qn = nodeOf(await collect(Q.act(null, { text: "hi" })))
+  assert.ok(has(doc(await collect(Q.demand(qn.id, "q")), "narrate"), "q: Q {{missing}}"))
 
-  // `{{user}}` has no fallback: no persona, no name, the opening is refused and every list names it
+  // `{{user}}` has no fallback: no persona, no name, the static opening commits with the literal and the lists name it
   const hello = { greetings: [{ text: "早安，{{user}}" }] }
   const bare = at(hello)
-  assert.deepEqual([bare.layer.cardHoles, bare.layer.holes, bare.layer.names.user], [["user"], ["user"], undefined])
-  assert.throws(() => bare.begin({}), /^Error: card: unfilled \{\{user\}\}$/)
+  assert.deepEqual([bare.layer.holes, bare.layer.names.user], [["user"], undefined])
+  assert.deepEqual(nodeOf(await collect(bare.begin({}))).turn.reply, [{ type: "text", text: "早安，{{user}}" }])
   // a persona, or a local name, fills it
   const worn = at(hello, { ...plain, persona: { name: "林默", text: "P" } })
   assert.deepEqual(worn.greet(worn.greetings[0]!).node!.turn.reply, [{ type: "text", text: "早安，林默" }])
   const local = at(hello, { ...plain, local: { id: "local", name: "local", card: chat.id, names: { user: "阿青" } } })
   assert.deepEqual(local.greet(local.greetings[0]!).node!.turn.reply, [{ type: "text", text: "早安，阿青" }])
-  // an old saved opening's plain text is still the player's to fix before naming anyone (an edit of an opening runs nothing)
-  rows = { ...plain, local: { id: "local", name: "local", card: chat.id, names: { user: "玩家" } } }
-  const fix = makeSession({ card: { ...chat, ...hello }, rows: () => rows, model: () => scripted })
-  const saved = fix.greet(fix.greetings[0]!).node!
-  rows = plain
-  assert.deepEqual(fix.layer.cardHoles, ["user"])
-  const fixed = await collect(fix.edit(saved.id, { text: "早安" }))
-  assert.deepEqual(nodeOf(fixed).turn.reply, [{ type: "text", text: "早安" }])
-  // and anything that runs a model on it is refused
-  await assert.rejects(collect(fix.act(saved.id, { text: "hi" })), /card: unfilled \{\{user\}\}/)
 
-  // an ensemble card with no names under a global theater holding `{{char}}`: the theater stays out, the turn runs
+  // a player's row keeps the silent drop: a pack entry and a global theater holding `{{char}}` on a card that names
+  // no `char` (an ensemble card) stay out, and the turn runs
   const yandao = await loadCard("yandao")
+  const kit: Layer = { id: "k", name: "K", entries: [{ id: "e", text: "{{char}} 的往事。" }] }
   const Y = makeSession({
     card: yandao,
     rows: () => ({
       ...plain,
       harness: { ...plain.harness!, products: [{ id: "aside", text: "{{char}} 的旁白", on: true }] },
+      packs: [kit],
+      local: { id: "local", name: "local", card: yandao.id, mounts: ["k"] },
     }),
     model: () => scripted,
   })
-  assert.deepEqual([Y.layer.cardHoles, Y.layer.holes], [[], ["char"]])
+  assert.deepEqual([Y.layer.holes, Y.layer.entries], [["char"], []])
+  assert.equal(Y.layer.products.find((p) => p.id === "aside")!.unasked, true)
   const ran = await collect(Y.begin({ note: "开始" }))
   assert.ok(nodeOf(ran))
+  assert.ok(!doc(ran, "narrate").some((m) => m.includes("{{char}}")))
 }
 
 // Guard lines, per line: expanded for check and its enum; none, no check at all.
@@ -375,8 +387,6 @@ assert.ok(has(doc(third, "narrate"), "HELD 玩家给的."))
   // in order of appearance, `user` a hole like any other, the disabled fragment and the pack's own name out
   const mounted = { packs: [kit], local: { ...on, mounts: ["k"] } }
   assert.deepEqual(view(shelf, mounted), ["g", "a", "user", "b", "c", "d", "e", "f", "i", "j", "k"])
-  // the ones that lock the turn: the card's own text in force (an off product is not run, only demanded)
-  assert.deepEqual(resolve(shelf, mounted).cardHoles, ["a", "user", "b", "c", "d", "e"])
   // a player's name fills it; a slot the player's fragment overrides does not go out, so its hole is not one
   const mine = { ...on, fragments: [{ id: "style", text: "plain" }], names: { b: "B" } }
   assert.deepEqual(view(shelf, { local: mine }), ["c", "d", "e", "f"])

@@ -86,7 +86,7 @@ function here(r: Partial<Local> = {}): Local {
   assert.deepEqual([act.snippets, act.format], [h.snippets, h.format])
   // nothing to draw on an empty layer
   const R = resolve(chat, {})
-  assert.deepEqual([R.dropped, R.holes, R.cardHoles, R.names], [[], [], [], {}])
+  assert.deepEqual([R.dropped, R.holes, R.names], [[], [], {}])
   assert.deepEqual([R.switches.value, R.switches.taken], [{}, { pov: null, verbosity: null }])
 }
 
@@ -729,11 +729,9 @@ const packs = [packB, packA]
   assert.deepEqual([R.asks["lookup"]!.from, /Find only the context/.test(R.asks["lookup"]!.text)], ["harness", true])
   // `holes`: what nothing fills, in order of appearance, the same list whether or not the entry was dropped
   assert.deepEqual(R.holes, ["missing", "ask", "after"])
-  // all of it a player row's: the card's own text is whole, nothing locks the turn
-  assert.deepEqual(R.cardHoles, [])
 }
 
-// ───────── The card's own holes (#170): in force, they lock the turn; written over, they do not count ─────────
+// ───────── The card's own holes (#170): they stay in its text as written; written over, they do not count ─────────
 {
   const card: Card = {
     ...chat,
@@ -754,8 +752,8 @@ const packs = [packB, packA]
   }
   const R = resolve(card, {})
   // no fallback name: `user` is a hole like any other; a disabled fragment is not in force; a section is scanned
-  assert.deepEqual(R.cardHoles, ["place", "user", "sec"])
   assert.deepEqual(R.holes, ["place", "user", "sec"])
+  assert.equal(R.frame.find((f) => f.id === "setting")!.text, "S {{place}}")
   // a persona, a local name, a player's slot text over the card's: each closes its hole
   const named = resolve(card, {
     local: {
@@ -767,25 +765,28 @@ const packs = [packB, packA]
     },
     persona: { name: "阿青", text: "P" },
   })
-  assert.deepEqual([named.cardHoles, named.holes], [[], []])
-  // a product's ask reworded by a player row: the card's wording is no longer in force
+  assert.deepEqual(named.holes, [])
+  // a card's product and ask keep their wording with the hole in it; a player row's rewording takes the product over
   const asked: Card = {
     ...chat,
     products: [
       { id: "q", text: "Q {{x}}", shape: { kind: "text" }, role: "theater", stage: "narrate" },
     ] as Card["products"],
+    asks: [{ id: "lookup", text: "LOOK {{y}}" }],
   }
-  assert.deepEqual(resolve(asked, {}).cardHoles, ["x"])
+  const A = resolve(asked, {})
+  const q = A.products.find((p) => p.id === "q")!
+  assert.deepEqual([q.text, q.unasked, A.asks["lookup"]!.text], ["Q {{x}}", undefined, "LOOK {{y}}"])
   const reworded = resolve(asked, {
-    local: { id: "local", name: "local", card: chat.id, asks: [{ id: "product.q", text: "Q" }] },
+    local: { id: "local", name: "local", card: chat.id, asks: [{ id: "product.q", text: "Q {{z}}" }] },
   })
-  assert.deepEqual([reworded.cardHoles, reworded.holes], [[], []])
+  assert.deepEqual(reworded.products.find((p) => p.id === "q")!.unasked, true)
   // a nameless card under a global theater holding {{char}}: the theater stays out, the card runs (packs-brief §八)
   const ensemble = resolve(
     { ...chat, frame: [], greetings: [], lore: [] },
     { harness: row("harness", { products: [{ id: "aside", text: "{{char}} 的旁白" }] }) },
   )
-  assert.deepEqual([ensemble.cardHoles, ensemble.holes], [[], ["char"]])
+  assert.deepEqual(ensemble.holes, ["char"])
   assert.equal(ensemble.products.find((p) => p.id === "aside")!.unasked, true)
 }
 

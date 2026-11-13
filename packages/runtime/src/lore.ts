@@ -93,15 +93,13 @@ export const makeLore = <S, C>(entries: readonly Entry<S, C>[]) => {
 }
 export type Lore<S, C> = ReturnType<typeof makeLore<S, C>>
 
-/** An unresolved name in any layer or section hides the complete entry from every stage. */
+/** The card's entries with its names filled in every layer and section; a hole nothing fills stays as written (names.ts). */
 export const namedLore = <T extends { layers: readonly string[]; sections?: readonly { id: string; text: string }[] }>(
   entries: readonly T[],
   names: Names,
 ): T[] =>
-  entries.flatMap((e) => {
-    const layers = e.layers.map((text) => expand(text, names))
-    const sections = e.sections && fill(e.sections, names)
-    return layers.includes(undefined) || sections?.length !== e.sections?.length
-      ? []
-      : [{ ...e, layers: layers as string[], ...(sections && { sections }) }]
-  })
+  entries.map((e) => ({
+    ...e,
+    layers: e.layers.map((text) => expand(text, names, "card")!),
+    ...(e.sections && { sections: fill(e.sections, names, "card") }),
+  }))

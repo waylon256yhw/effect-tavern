@@ -138,13 +138,15 @@ export const holes = (text: string): string[]
 
 Gemini 核过 request.ts：`toP` 只套在 `Msg` 上，小剧场块指令（`blocks.asks`）、投递的 `told` / `must` / `may`、record 的 `asks` 全走 `sys(...)` 拼接，所以**不在 `toP` 做**，也不能在拼好的消息级丢弃（会把同一条 system 里正常的 `inner` 一起丢掉、或留下没有列表的悬空指令）。按条目展开，洞未填的那一条跳过：
 
+**（#170 修订）未填的洞按作者分，规则只在 `names.ts` `expand` 一处。** 卡自己的文本（frame、fiction、开场、passage、lore 层与小节、guard、读数、卡的产物与问法）照发，没人填的洞以字面 `{{key}}` 留在原处，不丢、不拒；玩家看到字面，自己去绑名字或人设。玩家层（叠加行、包、本卡行、hat）的条目未填则照旧跳过。下表"未填则……"只说玩家层的条目。
+
 | 条目 | 在哪展开 |
 |---|---|
 | frame / fiction 的 fragment、tail、hat 的 `Said` | 进 `head()` / 尾区 / hat 之前，对 `text` 逐条；未填则该条不发 |
 | 产物问法 `question(p)`（record 的 `asks`、小剧场的 `blocks.asks`） | `asked` / `penned` 过滤时：`expand` 为 `undefined` 的产物本轮不问、不写块 |
 | lore 与包词条的 hook（`index`）和层文本（`told` / `must` / `may`、`derived.ts` `textIn` 出口） | 进索引与投递时；未填的条目不进索引（不可被 lookup 挑中），已投递的旧节点回放同 §二 的空串规则 |
-| 开场 `greet` | 落根节点时展开后存（节点是转录稿，存展开后的文字）；**洞未填则拒绝开局**，错误里带洞名 |
-| `demand` | 洞未填则拒绝索取，错误里带洞名 |
+| 开场 `greet` | 落根节点时展开后存（节点是转录稿，存展开后的文字）；未填的洞以字面存（#170） |
+| `demand` | 玩家层的产物洞未填则拒绝索取，错误里带洞名；卡的产物带字面照问 |
 | 玩家输入、history | **不展开**。输入由客户端在发送前用同一函数填（存进历史的是名字） |
 | lexicon | 不展开（扫正文，不出门） |
 
@@ -225,8 +227,8 @@ export interface Resolved {
 - 入库解码剥掉 `when` / `role`（harness 与卡除外）。
 - 词条 id 加行前缀；单层；`unlock: () => 1`。
 - **产物补丁按等级**：harness 与卡可以写整条；基底 / 包 / 本卡的补丁只取 `label` / `text` / `on`，**落在任何已有 id 上**（notes、options 的问法由此可见可改，形状、阶段、折叠不动）；新 id 编译成 `stage: "narrate"`、`shape: text`，缺 `text` 则丢弃。卡自己的形状错误仍在 session 打开时抛。
-- 名字一行、不含 `{{`；`names.user` 没有缺省值（#170）：卡自身生效文本里有未填的洞时，故事不运行（`cardHoles`）。
-- 洞：按条目填；片段 / 词条 / 快捷输入未填则不出；产物未填则本轮不问；问法沿链回退；开局与索取仍拒绝并报洞名。
+- 名字一行、不含 `{{`；`names.user` 没有缺省值（#170）：卡自己文本里没人填的洞以字面 `{{key}}` 发出，故事照常运行。
+- 洞：按条目填；玩家层的片段 / 词条 / 快捷输入未填则不出，产物未填则本轮不问、索取被拒并报洞名，问法沿链回退；卡自己的条目带字面照发。
 - 开关句子：`asks` 里 id 为 `switch.<key>.<value>` 的默认文本就是 `SENTENCES`；叠加行按 id 改一句即生效；整槽自由文本仍整组接管。`SENTENCES` 常量从 fragment.ts 搬进 harness 行。
 
 ### 4. 库与线
