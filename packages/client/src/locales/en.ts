@@ -294,6 +294,8 @@ const en: Dict = {
     messageLabel: "Message text",
     messagePlaceholder: "Message text...",
     newHat: "New prompt template",
+    precheck: "Pre-check",
+    setUpDecision: "Set up the decision model",
     newHatShort: "New template",
     newPersona: "New persona",
     noHats: "No template yet",
@@ -580,7 +582,6 @@ const en: Dict = {
   },
   decision: {
     title: "Decision model",
-    enable: "Enable the decision model",
     service: "Service",
     model: "Model ID",
     noKey: "No key",

@@ -15,6 +15,7 @@ import { ask, Avatar, Confirm, Menu, Name, newId, Switch, ToList, type Pane } fr
 import {
   Back,
   Close,
+  Jump,
   Package,
   Plugs,
   Sliders,
@@ -27,12 +28,12 @@ import {
 } from "./icons.tsx"
 import { pairKey, pairOf, stalePair } from "./connections.ts"
 import { Packs } from "./packs.tsx"
-import { Providers } from "./providers.tsx"
+import { DECISION, Providers } from "./providers.tsx"
 import { close, open } from "./pages.ts"
 import * as Atom from "./atom.ts"
-import { cards, hats, locals, personas, providers, registry, routing, type Pair } from "./store.ts"
+import { cards, decision, hats, locals, personas, providers, registry, routing, type Pair } from "./store.ts"
 import { type Key, t } from "./i18n.ts"
-import { deleteHat, deletePersona, putHat, putPersona, putRouting, refreshActiveCard } from "./wire.ts"
+import { deleteHat, deletePersona, putDecision, putHat, putPersona, putRouting, refreshActiveCard } from "./wire.ts"
 
 export type Section = "providers" | "routing" | "templates" | "personas" | "packs"
 /** The section shown: written by every way in, so the settings layer moves to the section asked for. */
@@ -114,7 +115,7 @@ export const Settings = () => {
         <Providers {...paneOf("providers")} />
       </Show>
       <Show when={at() === "routing"}>
-        <Routing />
+        <Routing onDecision={() => (paneOf("providers").onPick(DECISION), registry.set(section, "providers"))} />
       </Show>
       <Show when={at() === "templates"}>
         <Templates {...paneOf("templates")} />
@@ -141,7 +142,38 @@ const STAGES: [Phase, Key][] = [
   ["polish", "settings.stagePolish"],
 ]
 
-const Routing = () => {
+/** 预检: whether check asks the decision model first (DecisionConfig.enabled). With no config saved the switch is off
+ *  and the arrow opens the Decision row on 模型服务. */
+const PreCheck = (props: { onDecision: () => void }) => {
+  const dec = read(decision)
+  return (
+    <div class="row">
+      <span>{t("settings.precheck")}</span>
+      <span class="spacer" />
+      <Show when={!dec()}>
+        <button
+          type="button"
+          class="icon sm"
+          aria-label={t("settings.setUpDecision")}
+          onClick={() => props.onDecision()}
+        >
+          <Jump aria-hidden="true" />
+        </button>
+      </Show>
+      <Switch
+        on={!!dec()?.enabled}
+        disabled={!dec()}
+        label={t("settings.precheck")}
+        onFlip={() => {
+          const c = dec()
+          if (c) void putDecision({ ...c, enabled: !c.enabled })
+        }}
+      />
+    </div>
+  )
+}
+
+const Routing = (props: { onDecision: () => void }) => {
   const list = read(providers)
   const route = read(routing)
   const pairs = createMemo(() =>
@@ -193,6 +225,9 @@ const Routing = () => {
               onPick={(k) => void putRouting({ ...route(), default: pairOf(k) })}
             />
           </div>
+          <Show when={!route().stages}>
+            <PreCheck onDecision={props.onDecision} />
+          </Show>
         </div>
         <div class="block">
           <div class="block-title">
@@ -218,6 +253,9 @@ const Routing = () => {
                       stale={stale(route().stages?.[s()[0]])}
                       onPick={(k) => setStage(s()[0], k)}
                     />
+                    <Show when={s()[0] === "check"}>
+                      <PreCheck onDecision={props.onDecision} />
+                    </Show>
                   </div>
                 )}
               </For>
