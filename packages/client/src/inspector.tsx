@@ -375,7 +375,7 @@ const Step = (props: {
                     {(p) => (
                       <div class="piece">
                         <Show when={p().id}>{(id) => <span class="pill">{id()}</span>}</Show>
-                        <p class="prose">
+                        <p class="ptext">
                           <Marked text={p().text} q={props.q} />
                         </p>
                       </div>

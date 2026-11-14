@@ -12,43 +12,43 @@
   overflow: auto;
   mask-image: none;
 }
-.timeline .stage {
+.timeline .plot {
   position: relative;
   flex: none;
   min-width: 100%;
 }
-.timeline .stage svg {
+.timeline .plot svg {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-.timeline .stage path {
+.timeline .plot path {
   fill: none;
   stroke: var(--line-strong);
   stroke-width: 1.5;
 }
-.timeline .stage path.line {
+.timeline .plot path.lit {
   stroke: var(--ink);
   stroke-width: 2;
 }
-.timeline .stage path.draft {
+.timeline .plot path.draft {
   stroke: var(--ink-3);
   stroke-dasharray: 3 3;
 }
-.timeline .knot {
+.timeline .dot {
   fill: var(--surface-1);
   stroke: var(--ink-3);
   stroke-width: 1.5;
 }
-.timeline .knot.line {
+.timeline .dot.lit {
   fill: var(--ink);
   stroke: var(--ink);
 }
-.timeline .knot.target {
+.timeline .dot.target {
   stroke: var(--ok);
   stroke-width: 2;
 }
-.timeline .knot.draft {
+.timeline .dot.draft {
   stroke-dasharray: 2 2;
 }
 .timeline .ring {
@@ -94,7 +94,7 @@
   font-size: var(--text-caption);
   color: var(--ink-3);
 }
-.timeline .tick.line {
+.timeline .tick.lit {
   color: var(--ink-2);
   font-weight: 600;
 }
@@ -115,7 +115,7 @@ button.cell:hover {
   background: var(--alpha-1);
   color: var(--ink);
 }
-.timeline .cell.line {
+.timeline .cell.lit {
   color: var(--ink);
 }
 .timeline .cell.selected {
@@ -198,7 +198,7 @@ button.cell:hover {
 .timeline .row2 .pill {
   margin-right: var(--space-1);
 }
-.timeline .pills {
+.timeline .vpills {
   gap: var(--space-half);
   overflow: hidden;
 }
@@ -244,13 +244,13 @@ button.cell:hover {
   padding-bottom: var(--space-3);
   border-bottom: var(--hairline) solid var(--line);
 }
-.timeline .bar {
+.timeline .nodebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
 }
-.timeline .bar h2 {
+.timeline .nodebar h2 {
   margin: 0;
   display: inline-flex;
   align-items: center;

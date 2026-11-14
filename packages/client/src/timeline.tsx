@@ -108,7 +108,7 @@ export const Timeline = () => {
     return (
       <button
         type="button"
-        class={{ cell: true, line: onLine().has(p.id), selected: selected() === p.id }}
+        class={{ cell: true, lit: onLine().has(p.id), selected: selected() === p.id }}
         style={{ left: `${xy(p.c).x}px`, top: `${xy(p.c).y}px`, width: `${LANE}px` }}
         aria-current={isHead(p.id) ? "true" : undefined}
         aria-label={t("timeline.cellLabel", { n: p.c.row + 1, id: p.id })}
@@ -148,12 +148,12 @@ export const Timeline = () => {
       node(p.c.ids.find((i) => i === selected()) ?? p.c.ids.find((i) => i === all().head) ?? p.c.ids[0]!)!
     return (
       <div
-        class={{ cell: true, cluster: true, line: lit(p.c), selected: p.c.ids.includes(selected()!) }}
+        class={{ cell: true, cluster: true, lit: lit(p.c), selected: p.c.ids.includes(selected()!) }}
         style={{ left: `${xy(p.c).x}px`, top: `${xy(p.c).y}px`, width: `${LANE}px` }}
         role="group"
         aria-label={t("timeline.clusterLabel", { n: p.c.row + 1, k: p.c.ids.length })}
       >
-        <div class="row1 pills">
+        <div class="row1 vpills">
           <span class="tag">{p.c.ids.length}v</span>
           <For each={p.c.ids} keyed={false}>
             {(id) => (
@@ -217,7 +217,7 @@ export const Timeline = () => {
       </header>
       <div class="cols">
         <section class="pane pipeline graph" aria-label={t("common.timeline")}>
-          <div class="stage" style={{ width: `${geo().width}px`, height: `${geo().height}px` }}>
+          <div class="plot" style={{ width: `${geo().width}px`, height: `${geo().height}px` }}>
             <svg width={geo().width} height={geo().height} aria-hidden="true">
               {/* each station: the rail up to its parent's knot (an elbow into a new lane just above the child), then its knot */}
               <For each={laid().cells} keyed={(c) => c.ids.join()}>
@@ -233,22 +233,22 @@ export const Timeline = () => {
                     <>
                       <Show when={c().parent !== null}>
                         <path
-                          class={{ line: lit(c()) && lit(laid().at.get(c().parent!)!), draft: c().ids[0] === DRAFT }}
+                          class={{ lit: lit(c()) && lit(laid().at.get(c().parent!)!), draft: c().ids[0] === DRAFT }}
                           d={d()}
                         />
                       </Show>
                       <g transform={`translate(${b().x} ${b().y})`}>
-                        <Switch fallback={<circle class={{ knot: true, line: lit(c()) }} r={lit(c()) ? 3.5 : 3} />}>
+                        <Switch fallback={<circle class={{ dot: true, lit: lit(c()) }} r={lit(c()) ? 3.5 : 3} />}>
                           <Match when={c().ids[0] === DRAFT}>
-                            <circle class="knot draft" r={3.5} />
+                            <circle class="dot draft" r={3.5} />
                           </Match>
                           <Match when={c().ids.some(isHead)}>
                             <circle class="ring" r={6.5} />
-                            <circle class="knot line" r={3.5} />
+                            <circle class="dot lit" r={3.5} />
                           </Match>
                           <Match when={c().ids.some(isTarget)}>
                             <circle class="ring target" r={6} />
-                            <circle class="knot target" r={3} />
+                            <circle class="dot target" r={3} />
                           </Match>
                         </Switch>
                       </g>
@@ -279,7 +279,7 @@ export const Timeline = () => {
                   <For each={Array.from({ length: th().rows }, (_, r) => r)} keyed={false}>
                     {(r) => (
                       <span
-                        class={{ tick: true, line: line()[0]?.id === th().root && r() < line().length }}
+                        class={{ tick: true, lit: line()[0]?.id === th().root && r() < line().length }}
                         style={{ top: `${geo().threads[i()]!.rows + r() * STEP}px` }}
                       >
                         T{r() + 1}
@@ -308,7 +308,7 @@ export const Timeline = () => {
             {(n) => (
               <>
                 <div class="nodehead">
-                  <div class="bar">
+                  <div class="nodebar">
                     <h2>
                       {t("common.turnN", { n: depth(n().id) })} <span class="v">· #{n().id}</span>
                       <Show when={isHead(n().id)}>

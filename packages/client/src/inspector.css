@@ -577,7 +577,7 @@
   align-items: flex-start;
   gap: var(--space-1);
 }
-.inspect .prose {
+.inspect .ptext {
   margin: 0;
   font-size: var(--text-body);
   line-height: var(--leading-prose);
