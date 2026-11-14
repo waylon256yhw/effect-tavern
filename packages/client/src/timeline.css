@@ -12,43 +12,43 @@
   overflow: auto;
   mask-image: none;
 }
-.timeline .stage {
+.timeline .plot {
   position: relative;
   flex: none;
   min-width: 100%;
 }
-.timeline .stage svg {
+.timeline .plot svg {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-.timeline .stage path {
+.timeline .plot path {
   fill: none;
   stroke: var(--line-strong);
   stroke-width: 1.5;
 }
-.timeline .stage path.line {
+.timeline .plot path.lit {
   stroke: var(--ink);
   stroke-width: 2;
 }
-.timeline .stage path.draft {
+.timeline .plot path.draft {
   stroke: var(--ink-3);
   stroke-dasharray: 3 3;
 }
-.timeline .knot {
+.timeline .dot {
   fill: var(--surface-1);
   stroke: var(--ink-3);
   stroke-width: 1.5;
 }
-.timeline .knot.line {
+.timeline .dot.lit {
   fill: var(--ink);
   stroke: var(--ink);
 }
-.timeline .knot.target {
+.timeline .dot.target {
   stroke: var(--ok);
   stroke-width: 2;
 }
-.timeline .knot.draft {
+.timeline .dot.draft {
   stroke-dasharray: 2 2;
 }
 .timeline .ring {
@@ -62,7 +62,7 @@
 .timeline .band {
   position: absolute;
   height: 22px;
-  padding: 0 2px;
+  padding: 0 var(--space-half);
   border-bottom: var(--hairline) solid var(--line);
   display: inline-flex;
   align-items: center;
@@ -94,7 +94,7 @@
   font-size: var(--text-caption);
   color: var(--ink-3);
 }
-.timeline .tick.line {
+.timeline .tick.lit {
   color: var(--ink-2);
   font-weight: 600;
 }
@@ -102,20 +102,20 @@
   position: absolute;
   box-sizing: border-box;
   height: 46px;
-  padding: 4px 8px 4px 18px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
   border-radius: var(--radius);
   color: var(--ink-3);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: var(--space-half);
   text-align: left;
 }
 button.cell:hover {
   background: var(--alpha-1);
   color: var(--ink);
 }
-.timeline .cell.line {
+.timeline .cell.lit {
   color: var(--ink);
 }
 .timeline .cell.selected {
@@ -125,7 +125,7 @@ button.cell:hover {
   z-index: 1;
 }
 .timeline .cell.selected .nid {
-  padding: 0 5px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--ink);
   color: var(--surface-1);
@@ -137,7 +137,7 @@ button.cell:hover {
 .timeline .row1 {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--text-caption);
@@ -171,7 +171,7 @@ button.cell:hover {
 .timeline .badge {
   flex: none;
   margin-left: auto;
-  padding: 0 5px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   font-size: 10px;
   font-weight: 600;
@@ -196,10 +196,10 @@ button.cell:hover {
   text-overflow: ellipsis;
 }
 .timeline .row2 .pill {
-  margin-right: 4px;
+  margin-right: var(--space-1);
 }
-.timeline .pills {
-  gap: 3px;
+.timeline .vpills {
+  gap: var(--space-half);
   overflow: hidden;
 }
 .timeline .tag {
@@ -210,9 +210,9 @@ button.cell:hover {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-half);
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
   color: var(--ink-2);
@@ -240,21 +240,21 @@ button.cell:hover {
 .timeline .nodehead {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   padding-bottom: var(--space-3);
   border-bottom: var(--hairline) solid var(--line);
 }
-.timeline .bar {
+.timeline .nodebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
 }
-.timeline .bar h2 {
+.timeline .nodebar h2 {
   margin: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   font-size: var(--text-heading);
   font-weight: 600;
   color: var(--ink);
@@ -267,14 +267,14 @@ button.cell:hover {
 .timeline .acts {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .timeline .acts .checkout {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   height: 28px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--surface-1);
@@ -287,7 +287,7 @@ button.cell:hover {
   height: 13px;
 }
 .timeline .acts .at {
-  padding: 0 6px;
+  padding: 0 var(--space-1);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   color: var(--ink-3);
@@ -309,7 +309,7 @@ button.cell:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   color: var(--ink-3);
@@ -332,7 +332,7 @@ button.cell:hover {
 .timeline .vlist {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
   padding-top: var(--space-2);
   border-top: var(--hairline) solid var(--line);
 }
@@ -344,7 +344,7 @@ button.cell:hover {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
-  padding: 5px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius);
   color: var(--ink-2);
   text-align: left;

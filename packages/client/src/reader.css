@@ -36,7 +36,7 @@ body {
      the composer's box (`--lift`), so wide prose and the action row's outer keys never show beside a raised box */
   mask-image: linear-gradient(
     to bottom,
-    transparent calc(var(--head) - var(--gap-turn)),
+    transparent max(0px, var(--head) - var(--gap-turn)),
     #000 var(--head),
     #000 calc(100% - max(min(var(--fade), var(--foot)), var(--lift) + var(--space-2))),
     transparent calc(100% - var(--lift))
@@ -80,7 +80,7 @@ main > section:last-of-type {
   vertical-align: text-bottom;
   width: 2px;
   height: 1em;
-  margin-left: 1px;
+  margin-left: var(--space-half);
   background: var(--ink-2);
   animation: blink 1s steps(2, jump-none) infinite;
 }
@@ -125,7 +125,7 @@ main > section:last-of-type {
 /* the Record slot waiting for the turn to settle: three dots in the pill (Claude Desktop's quiet dots) */
 .dots {
   display: inline-flex;
-  gap: 3.5px;
+  gap: var(--space-1);
   height: var(--icon-sm);
   align-items: center;
 }
@@ -330,7 +330,7 @@ section:has(> .editor) > .actions {
 .said {
   background: var(--alpha-1);
   border-radius: var(--radius-card);
-  padding: 10px 14px;
+  padding: var(--space-2) var(--space-3);
   font-size: 15px;
   line-height: 1.6;
   text-align: left;
@@ -342,18 +342,18 @@ section:has(> .editor) > .actions {
 .spoke {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   align-self: flex-end;
   box-sizing: border-box;
   max-width: min(80%, 36rem);
 }
 /* the note to the narrator is not speech: no bubble, its words smaller and lighter, ending on the bubble's own text
-   axis (14px in from the block's right edge); the prose under it starts at the column's left margin, so the sides
+   axis (--space-3 in from the block's right edge); the prose under it starts at the column's left margin, so the sides
    alone part them */
 .said.note {
   background: none;
   border-radius: 0;
-  padding: 0 14px;
+  padding: 0 var(--space-3);
   font-size: var(--text-body);
   color: var(--ink-3);
 }
@@ -370,7 +370,7 @@ section:has(> .editor) > .actions {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   opacity: 0;
   translate: 0 2px;
   transition:
@@ -385,11 +385,11 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
 }
 /* the keys: matched to the stage keys' ink-2 weight and 26px box so they read as interactive controls, brightening to
    ink on hover with a subtle press scale. The line's row sits close under its bubble and ends on the bubble's own text
-   axis (14px in) */
+   axis (--space-3 in) */
 :is(.spoke .acts, .actions, .theater, .editkeys) .icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: var(--control-key);
+  height: var(--control-key);
+  border-radius: var(--radius-sm);
   color: var(--ink-2);
   transition:
     background var(--dur-2) var(--ease),
@@ -408,11 +408,11 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
   height: var(--icon-sm);
 }
 .actions .acts {
-  margin-right: -5px;
+  margin-right: calc((var(--icon-sm) - var(--control-key)) / 2);
 }
 .spoke .acts {
   justify-content: flex-end;
-  margin: -2px 9px 0 0;
+  margin: calc(-1 * var(--space-half)) calc(var(--space-3) - (var(--control-key) - var(--icon-sm)) / 2) 0 0;
 }
 /* on the draft (or while a turn streams) disabled action keys hide in place: the row keeps its height, so nothing
    moves when the node lands */
@@ -448,7 +448,7 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
 .siblings {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 0;
   font-size: var(--text-footnote);
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -464,7 +464,7 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
 }
 .siblings .count {
   height: 20px;
-  padding: 0 3px;
+  padding: 0 var(--space-1);
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -545,7 +545,7 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2) var(--space-3);
-  padding: 10px 14px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-card);
   background: var(--alpha-1);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
@@ -559,7 +559,7 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
   width: var(--icon-sm);
   height: var(--icon-sm);
   align-self: flex-start;
-  margin-top: 3px;
+  margin-top: calc((var(--text-body) * 1.5 - var(--icon-sm)) / 2);
   color: var(--danger);
 }
 .error .body {
@@ -568,8 +568,8 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
 }
 :is(.error, .settlement, .failed) .phase {
   display: inline-block;
-  padding: 1px 6px;
-  margin-inline-end: 6px;
+  padding: var(--space-half) var(--space-1);
+  margin-inline-end: var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--alpha-2);
   color: var(--ink);
@@ -579,7 +579,9 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
   vertical-align: 1px;
 }
 .error .icon {
-  margin: -6px -8px -6px auto; /* the control's box hangs over the padding: the row stays one line of text tall */
+  /* the control's box hangs over the padding: the row stays one line of text tall */
+  margin-block: calc((var(--text-body) * 1.5 - var(--control)) / 2);
+  margin-inline: auto calc(-1 * var(--space-2));
 }
 /* the way out of an error, inline after it (no model: Settings → 默认模型) */
 :is(.error, .settlement) .go {
@@ -637,7 +639,7 @@ button:focus-visible {
   max-width: var(--measure);
   margin: 0 auto;
   background: var(--surface-3);
-  border-radius: var(--radius-composer);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-composer);
   padding: var(--space-1);
   display: flex;
@@ -649,7 +651,7 @@ button:focus-visible {
    browser that does not snaps. A closed strip stays in the tree, inert, so the close has the same motion */
 .composer .attach,
 .composer .format {
-  margin-bottom: 2px;
+  margin-bottom: var(--space-half);
   height: auto;
   overflow: hidden; /* not clip: a scroll container gets its own layer, and the masked textarea inside is not repainted each frame of the motion */
   transition:
@@ -690,7 +692,7 @@ button:focus-visible {
   /* one line at rest, a control tall, the keys beside it centred on it; it grows with the words to a third of the screen */
   min-height: var(--control);
   max-height: 35dvh;
-  padding: 6px var(--space-2);
+  padding: calc((var(--control) - 1lh) / 2) var(--space-2);
   border: 0;
   background: none;
   font: inherit;
@@ -732,20 +734,20 @@ button:focus-visible {
 }
 .composer .attach .tag {
   flex: none;
-  margin-top: 7px; /* (32px line − 18px tag) / 2: on the note's first line */
-  height: 18px;
-  padding: 0 5px;
+  margin-top: calc((var(--control) - var(--tag)) / 2); /* on the note's first line */
+  height: var(--tag);
+  padding: 0 var(--space-1);
   font-size: var(--text-caption);
   font-weight: 600;
 }
 .composer textarea.note {
-  padding: 6px var(--space-1);
+  padding: calc((var(--control) - 1lh) / 2) var(--space-1);
   color: var(--ink-2);
 }
 .composer .attach .bare {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-height: var(--control);
   padding: 0;
   border: 0;
@@ -773,14 +775,14 @@ button:focus-visible {
 /* the chip: a small pill of text (a state, a key, a setting in force) */
 .chip {
   height: var(--control-sm);
-  padding: 0 6px 0 10px;
+  padding: 0 var(--space-1) 0 var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
   color: var(--ink-2);
   font-size: var(--text-footnote);
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .chip svg {
   width: 12px;
@@ -799,8 +801,8 @@ button:focus-visible {
 .format {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: var(--space-1) var(--space-1) 2px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-half);
 }
 .box:has(textarea:not(.note):placeholder-shown):not(:has(textarea:not(.note):focus, .snippets :focus)) .format {
   height: 0;
@@ -811,7 +813,7 @@ button:focus-visible {
 }
 .format .chip {
   min-width: 3.5em; /* the same width whatever the pair's glyphs weigh */
-  padding: 0 6px;
+  padding: 0 var(--space-1);
   justify-content: center;
   font-size: var(--text-body);
   letter-spacing: 0.2em; /* air between the two halves of a pair: it reads as a container */
@@ -854,7 +856,7 @@ button:focus-visible {
   min-width: min(16rem, 100%);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .settlement .detail {
   font-size: var(--text-footnote);
@@ -873,7 +875,7 @@ button:focus-visible {
   flex: 1;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 .composer .compose-input textarea {
@@ -907,7 +909,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 2px var(--space-2) var(--space-1);
+  padding: var(--space-half) var(--space-2) var(--space-1);
   font-size: var(--text-body);
 }
 .invocation-menu .menu-heading button {
@@ -950,7 +952,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-half);
   max-width: none;
   padding: var(--space-2) var(--space-3);
   line-height: var(--leading-body);

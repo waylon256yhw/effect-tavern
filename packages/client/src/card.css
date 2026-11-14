@@ -116,7 +116,7 @@
   gap: var(--space-2);
 }
 .manifest .title .icon {
-  margin-left: -6px;
+  margin-left: calc((var(--icon) - var(--control)) / 2);
 }
 .manifest h1 {
   margin: 0;
@@ -150,11 +150,11 @@
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .manifest .chips > li {
   flex: none;
-  padding: 2px 9px;
+  padding: var(--space-half) var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
   color: var(--ink-2);
@@ -168,7 +168,7 @@
   padding: 0;
 }
 .manifest .chips li > button {
-  padding: 2px 9px;
+  padding: var(--space-half) var(--space-2);
   border-radius: inherit;
 }
 .manifest .chips li > button:hover {
@@ -203,7 +203,7 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .manifest .spec-pop li {
   overflow-wrap: anywhere;
@@ -215,8 +215,8 @@
   white-space: nowrap;
 }
 .manifest .more {
-  margin-left: 6px;
-  padding: 1px 5px;
+  margin-left: var(--space-1);
+  padding: var(--space-half) var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
   color: var(--ink-3);
@@ -234,7 +234,7 @@
 .manifest .size {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--space-1);
   color: var(--ink-3);
   font-size: var(--text-footnote);
   white-space: nowrap;
@@ -303,8 +303,8 @@
   flex: none;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: var(--space-1);
+  padding: var(--space-3);
   border-radius: var(--radius);
   font-size: var(--text-footnote);
   color: var(--ink-2);
@@ -338,7 +338,7 @@
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1);
   min-width: 0;
 }
 .manifest .version .first {
@@ -353,7 +353,7 @@
 }
 .manifest .version .tag {
   flex: none;
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
@@ -381,7 +381,7 @@
 }
 .manifest .opening .wscroll {
   flex: 1;
-  padding: var(--fade) 20px;
+  padding: var(--fade) var(--space-5);
   /* the opening as the reader draws it (prose.tsx): blocks in the turn's rhythm; reader.css styles them here too */
   display: flex;
   flex-direction: column;
@@ -393,7 +393,7 @@
 .manifest .well.empty {
   align-items: center;
   justify-content: center;
-  padding: var(--space-4) 20px;
+  padding: var(--space-4) var(--space-5);
   text-align: center;
   color: var(--ink-3);
 }
@@ -414,7 +414,7 @@
 .manifest .count {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   font-size: var(--text-footnote);
   font-weight: 550;
   white-space: nowrap;
@@ -429,9 +429,9 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   height: var(--control);
-  padding: 0 18px;
+  padding: 0 var(--space-4);
   border-radius: var(--radius-pill);
   background: var(--fill);
   color: var(--ink);

@@ -64,8 +64,8 @@
 }
 .phone-bar .tabs {
   display: inline-flex;
-  gap: 2px;
-  padding: 3px;
+  gap: var(--space-half);
+  padding: var(--space-half);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
 }
@@ -124,7 +124,7 @@
 .p-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   width: 100%;
   height: 40px;
   padding: 0 var(--space-3);
@@ -161,7 +161,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-half);
   padding: var(--space-2) var(--space-3);
 }
 .master-list.top {
@@ -170,7 +170,7 @@
 .p-row {
   flex: none;
   height: 42px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
 }
 .p-name {
   flex: 1;
@@ -273,11 +273,11 @@
 }
 .btn {
   height: var(--control);
-  padding: 0 14px;
+  padding: 0 var(--space-3);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-1);
   flex: none;
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line-strong);
@@ -294,13 +294,13 @@
 }
 .btn.sm {
   height: var(--control-sm);
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-caption);
 }
 .btn.xs {
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-caption);
 }
@@ -337,7 +337,7 @@
   box-shadow: inset var(--hairline) 0 0 var(--line-strong);
 }
 .settings .link {
-  padding: 2px 6px;
+  padding: var(--space-half) var(--space-1);
   border-radius: var(--radius-sm);
   font-size: var(--text-footnote);
   color: var(--ink-2);
@@ -352,7 +352,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-1);
   border: 1px dashed var(--line-strong);
   color: var(--ink-2);
   font-size: var(--text-footnote);
@@ -467,7 +467,7 @@
   flex: none;
   width: 42px;
   height: 24px;
-  padding: 2px;
+  padding: var(--space-half);
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-pill);
@@ -498,7 +498,7 @@
   display: inline-flex;
   align-items: center;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
   color: var(--ink-2);
@@ -536,7 +536,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
   font-size: var(--text-footnote);
   color: var(--danger);
   white-space: pre-wrap;
@@ -620,7 +620,7 @@
   align-items: center;
   width: var(--control-sm);
   height: var(--control-sm);
-  padding: 0 7px;
+  padding: 0 var(--space-1);
   gap: 0;
   border-radius: var(--radius-sm);
   color: var(--ink-2);
@@ -655,8 +655,8 @@
 }
 .inline-search[data-open="true"] {
   width: clamp(8.75rem, 32%, 14rem);
-  gap: 6px;
-  padding: 0 10px;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
   border-radius: var(--radius);
   background: var(--alpha-1);
   cursor: text;
@@ -708,7 +708,7 @@
   min-height: 42px;
   box-sizing: border-box;
   margin-top: var(--space-1);
-  padding: 4px var(--space-3) 4px var(--space-4);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-4);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
   transition: background var(--dur-3) var(--ease);
@@ -892,7 +892,7 @@
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .field-group .label,
@@ -919,7 +919,7 @@
 .label-row .exact {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   font-size: var(--text-caption);
   color: var(--ink-3);
 }
@@ -936,7 +936,7 @@
   gap: var(--space-3);
 }
 .resolved {
-  padding-left: 2px;
+  padding-left: var(--space-half);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   color: var(--ink-3);
@@ -1006,7 +1006,7 @@
   box-shadow: inset 0 var(--hairline) 0 var(--line);
 }
 .settings .warn {
-  padding: 10px 12px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
   background: var(--warn-soft);
   color: var(--warn);
@@ -1023,7 +1023,7 @@
 /* the effort stepper: five stops on a rail, the labels under them clickable */
 .effort {
   position: relative;
-  padding: 6px 0 2px;
+  padding: var(--space-2) 0 var(--space-half);
 }
 .effort .rail {
   position: absolute;
@@ -1031,12 +1031,12 @@
   left: 9px;
   right: 9px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background: var(--alpha-2);
 }
 .effort .fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   transition: width var(--dur-2) var(--ease);
 }
@@ -1048,7 +1048,7 @@
 .effort .stop {
   display: grid;
   justify-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border-radius: var(--radius-sm);
 }
 .effort .stop:first-child {
@@ -1175,9 +1175,9 @@
 .name-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   height: var(--control);
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius);
   background: var(--alpha-1);
   transition: box-shadow var(--dur-2) var(--ease);
@@ -1214,14 +1214,15 @@
 .name-chip .icon {
   width: var(--control-sm);
   height: var(--control-sm);
-  margin-right: -6px;
+  margin-right: calc((var(--control) - var(--control-sm)) / 2 - var(--space-2));
+  border-radius: var(--radius-sm); /* concentric with the chip */
 }
 .pack-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   min-height: 38px;
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
   background: var(--alpha-1);
   cursor: pointer;
@@ -1255,8 +1256,8 @@
     top: calc(var(--shell-top) + var(--safe-top));
     grid-template-columns: 13.5rem 16.5rem minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
-    gap: 8px;
-    padding: 0 8px 8px;
+    gap: var(--space-2);
+    padding: 0 var(--space-2) var(--space-2);
     background: var(--surface-0);
   }
   .settings[data-section="routing"] {
