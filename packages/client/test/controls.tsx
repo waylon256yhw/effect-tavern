@@ -5,6 +5,8 @@ import { render } from "@solidjs/web"
 import { installDiagnosticsBridge } from "@solidjs/diagnostics/browser"
 import { createAgent } from "@ui-sdk/solid/agent"
 import { createSignal } from "solid-js"
+import { Composer } from "../src/composer.tsx"
+import { composition } from "../src/store.ts"
 import { ask, Confirm, dialogHandle, Menu, Modal, Prompt, Switch } from "../src/controls.tsx"
 import { Edge } from "../src/edge.tsx"
 import { SIDE } from "../src/fold.ts"
@@ -20,16 +22,50 @@ if (locale() !== "zh-CN") flip()
 const post = globalThis.fetch
 const requests: string[] = [] // the bodies the client posts
 globalThis.fetch = Object.assign(
-  async (_input: RequestInfo | URL, init?: RequestInit) => {
+  async (input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof init?.body === "string") requests.push(init.body)
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+    // the composer's menu reads the player's catalog: one entry filed under a pack, one of the card's
+    if (url.includes("/context?"))
+      return Response.json({
+        worldState: { fields: {}, world: {}, lore: {} },
+        products: {},
+        playerCatalog: [
+          {
+            resourceId: "pack:p/guide",
+            title: "细腻描写",
+            summary: "让动作与景物自然相连",
+            source: "pack",
+            category: "p",
+            available: true,
+          },
+          {
+            resourceId: "card:clue",
+            title: "查看线索",
+            summary: "已经解锁的卡片功能",
+            source: "card",
+            category: "card",
+            available: true,
+          },
+        ],
+      })
     return new Response("", { headers: { "content-type": "text/event-stream" } })
   },
   { preconnect: () => {} },
 )
 registry.set(card, {
   id: "fixture",
+  input: "act",
+  greetings: [],
+  mounts: [{ id: "p", name: "叙事写作包" }],
   layer: {
     products: [{ id: "diary", label: "日记", role: "theater", shape: { kind: "text" }, on: true }],
+    snippets: [
+      { name: "继续", text: "继续" },
+      { name: "场外", text: "写细一点。", note: true },
+    ],
+    format: [],
+    names: {},
   },
 } as unknown as CardView)
 
@@ -95,6 +131,7 @@ render(
       </footer>
       {/* the confirm mounts far down the page, as on the settings page: it must still show in the window */}
       <div style={{ height: "200vh" }} />
+      <Composer />
       <Confirm />
       <div class="canvas" style={{ position: "fixed", inset: "0 auto auto 0", width: "100px", height: "80px" }}>
         <Edge
@@ -177,6 +214,97 @@ const run = async () => {
   await wait(400)
   check(allowed.ok && deleted === 1, `an approved delete runs once: ${allowed.error?.message} (${deleted})`)
   check(!document.querySelector(".confirm"), "an answered confirm leaves the page")
+
+  // the composer's menu. "/" on the empty box opens it with the hand in its field and the first row lit; typing
+  // reaches an entry filed under a pack from the first page; Enter attaches it and the hand is back in the box
+  const line = document.querySelector<HTMLTextAreaElement>(".composer textarea:not(.note)")!
+  const noteBox = document.querySelector<HTMLTextAreaElement>(".composer textarea.note")!
+  const field = () => document.querySelector<HTMLInputElement>("#snippets input")
+  const rows = () =>
+    [...document.querySelectorAll<HTMLElement>('#snippets [data-slot="command-item"]')]
+      .filter((r) => r.getClientRects().length > 0)
+      .map((r) => r.querySelector(".name")?.textContent + (r.hasAttribute("data-highlighted") ? "*" : ""))
+  const key = (el: Element, k: string) =>
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }))
+  const type = (text: string) => {
+    field()!.value = text
+    field()!.dispatchEvent(new InputEvent("input", { bubbles: true }))
+  }
+  line.focus()
+  await wait(100)
+  key(line, "/")
+  await wait(500)
+  check(document.activeElement === field(), "the slash key opens the menu with the hand in its field")
+  check(rows().join(" ") === "继续 场外 写作技能 卡片调用", `the first page, no row lit yet: ${rows().join(" ")}`)
+  key(field()!, "ArrowDown")
+  await wait(100)
+  check(rows()[0] === "继续*", `an arrow lights the first row: ${rows().join(" ")}`)
+  const rowBox = document.querySelector('#snippets [data-slot="command-item"]')!.getBoundingClientRect()
+  const fieldBox = field()!.getBoundingClientRect()
+  check(
+    Math.abs(rowBox.left - fieldBox.left) < 1 && Math.abs(rowBox.right - fieldBox.right) < 1,
+    `the field and the rows share their edges: ${[fieldBox.left, fieldBox.right, rowBox.left, rowBox.right].map(Math.round).join(" ")}`,
+  )
+  check(getComputedStyle(document.querySelector("#snippets")!).opacity === "1", "the menu has faded in")
+  const menuBox = document.querySelector("#snippets")!.getBoundingClientRect()
+  const lineBox = document.querySelector(".composer .box")!.getBoundingClientRect()
+  check(
+    Math.abs(menuBox.left - lineBox.left) < 2 && menuBox.bottom <= lineBox.top,
+    `the menu sits over the box, left edges aligned: ${[menuBox.left, menuBox.bottom, lineBox.left, lineBox.top].map(Math.round).join(" ")}`,
+  )
+  type("细腻")
+  await wait(300)
+  check(rows().join(" ") === "细腻描写*", `a search from the first page reaches a filed entry: ${rows().join(" ")}`)
+  key(field()!, "Enter")
+  await wait(500)
+  check(
+    registry.get(composition).invocations.some((i) => i.resourceId === "pack:p/guide"),
+    "Enter attaches the entry to the turn",
+  )
+  check(!document.querySelector("#snippets") && document.activeElement === line, "and the hand is back in the line")
+  // into the card's page and back; a note snippet opens the note box and leaves the hand in it
+  key(line, "/")
+  await wait(500)
+  type("卡片")
+  await wait(300)
+  key(field()!, "Enter")
+  await wait(300)
+  check(rows().join(" ") === "查看线索", `Enter on a tools row opens its page, nothing lit: ${rows().join(" ")}`)
+  key(field()!, "Backspace")
+  await wait(300)
+  check(
+    !document.querySelector("#snippets .menu-heading") && field()!.value === "卡片",
+    `Backspace on the empty field goes back to the first page and its search: ${rows().join(" ")}`,
+  )
+  type("场外")
+  await wait(300)
+  key(field()!, "Enter")
+  await wait(500)
+  check(
+    registry.get(composition).note === "写细一点。",
+    `a note snippet writes into the note: ${registry.get(composition).note}`,
+  )
+  const holder = document.activeElement
+  check(
+    holder === noteBox,
+    `and the hand is in the note's box (it is in ${holder?.tagName}.${holder?.className} "${holder?.getAttribute("aria-label")}", strip inert: ${!!noteBox.closest("[inert]")})`,
+  )
+  // a press on the button opens it and keeps the hand where it was; a press on a row runs it
+  line.focus()
+  document
+    .querySelector<HTMLElement>('.composer button[aria-haspopup="dialog"]')!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+  await wait(500)
+  check(
+    !!document.querySelector("#snippets") && document.activeElement === line,
+    "a press opens the menu and leaves the hand in the line",
+  )
+  ;[...document.querySelectorAll<HTMLElement>('#snippets [data-slot="command-item"]')][0]!.click()
+  await wait(500)
+  check(
+    registry.get(composition).text === "继续" && !document.querySelector("#snippets"),
+    `a press on a snippet fills the line: ${registry.get(composition).text}`,
+  )
 
   // the stage's edge. An agent sets a width inside the band; a key steps it
   const widen = await agent.act({ steps: [{ ref: "侧栏宽度", action: "setWidth", args: [900] }] })

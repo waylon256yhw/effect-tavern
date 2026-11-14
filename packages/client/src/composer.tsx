@@ -1,4 +1,3 @@
-import { AsyncView } from "./async-view.tsx"
 import { InvocationMenu } from "./invocation-menu.tsx"
 import { addInvocation, backspaceInvocation, removeInvocation } from "./composition.ts"
 // The composer: the one raised object under the column, one line at rest (#117): `+` (the snippets menu, or / on an
@@ -7,11 +6,12 @@ import { addInvocation, backspaceInvocation, removeInvocation } from "./composit
 // narrator a note snippet opens (a word that goes with the line, or alone), its own box in a thin strip; the line
 // being revised, a strip naming its turn; entry chips carry this turn's invocations.
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
-import { createSignal, onSettled, For, Show } from "solid-js"
+import { CommandItem, CommandSeparator } from "@ui-sdk/solid/command"
+import { createPopoverController, Popover, PopoverContent } from "@ui-sdk/solid/popover"
+import { createSignal, flush, onSettled, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, Send, Snippets, Stop } from "./icons.tsx"
 import { imeController } from "./ime.ts"
-import { roam } from "./controls.tsx"
 import { fillKnown } from "./pack.ts"
 import {
   acting,
@@ -66,8 +66,22 @@ export const Composer = () => {
     waiting() ? t("composer.pickOpening") : acting() ? t("composer.yourLine") : t("composer.toNarrator")
   let box: HTMLTextAreaElement | undefined
   let noteBox: HTMLTextAreaElement | undefined
-  let menu: HTMLDivElement | undefined
-  let menuKeyboard = false
+  // the snippets menu: opened by a press it keeps the hand in the box; opened from the keyboard (`/`, or Enter on its
+  // button) its search field takes the focus
+  const menu = createPopoverController()
+  const [menuKeyboard, setMenuKeyboard] = createSignal(false)
+  // a pick puts the hand where its words went (`put`, `choose`); a menu dismissed with the hand in its field gives it
+  // back to the line. The popover itself moves no focus on closing.
+  let picked = false
+  const openMenu = (keyboard: boolean) => {
+    picked = false
+    setMenuKeyboard(keyboard)
+    void menu.open()
+  }
+  const menuChanged = (open: boolean) => {
+    setMenuOpen(open)
+    if (!open && !picked && document.activeElement?.closest("#snippets")) box?.focus()
+  }
   /** What a send carries: the main box, and the note box when it is there. */
   const filled = () => selected().length > 0 || !!(text().trim() || (acting() && noteText().trim()))
   // The caret lands after what went in, and the hand with it: a note snippet puts the hand in the note's box, where
@@ -75,23 +89,28 @@ export const Composer = () => {
   // a tap of its own.
   const put = (value: string, caret: number, note = false) => {
     updateComposition(note ? { note: value } : { text: value })
-    requestAnimationFrame(() => {
+    // The note's strip is hidden until its opening starts, a frame or two after it is asked to, and a hidden box
+    // takes no focus: the hand tries each frame until it lands (a handful at most).
+    const land = (tries: number) => {
       const el = note ? noteBox : box
       el?.setSelectionRange(caret, caret)
       el?.focus()
-    })
+      if (el && document.activeElement !== el && tries > 0) requestAnimationFrame(() => land(tries - 1))
+    }
+    requestAnimationFrame(() => land(8))
   }
   // An Insert (a format key or a snippet) goes in at the caret and never sends: `text` before the caret, `after`
   // behind it, the selection between them. A note snippet opens the note box and goes in there; an empty one only
   // opens it.
   const insert = (s: { text: string; after?: string; note?: boolean }) => {
-    // a popover closing with the focus inside it gives the focus back to where it was before it opened, after this
-    // frame; the blur keeps that from undoing the focus `put` sets
-    ;(document.activeElement as HTMLElement | null)?.blur()
-    menu?.hidePopover()
     const note = !!s.note && acting()
-    if (note) updateComposition({ noteOpen: true })
+    if (note) {
+      updateComposition({ noteOpen: true })
+      flush() // the note's strip is inert until it opens: the hand can only land in it once it has
+    }
     const el = note ? noteBox : box
+    picked = true
+    menu.close()
     const v = note ? noteText() : text()
     const a = el?.selectionStart ?? v.length
     const b = el?.selectionEnd ?? a
@@ -103,13 +122,12 @@ export const Composer = () => {
   const Items = (p: { of: readonly Snippet[] }) => (
     <For each={p.of} keyed={(s) => s.name}>
       {(s) => (
-        <button
-          type="button"
-          role="menuitem"
+        <CommandItem
           class="item"
-          tabindex="-1"
-          onPointerDown={keep} // a press does not focus the item: the keys row that follows a focused item would move the menu under the pointer
-          onClick={() => insert(s())}
+          value={`snippet/${s().name}`}
+          label={s().name}
+          keywords={s().hint ? [s().hint!] : []}
+          onPointerDown={keep} // a press does not take the focus from the box
         >
           <span class="name">{s().name}</span>
           <span class="hint">{s().hint}</span>
@@ -117,7 +135,7 @@ export const Composer = () => {
           <Show when={s().text && !s().after}>
             <Insert aria-hidden="true" />
           </Show>
-        </button>
+        </CommandItem>
       )}
     </For>
   )
@@ -237,53 +255,48 @@ export const Composer = () => {
             type="button"
             class="icon"
             aria-label={t("composer.snippets")}
-            aria-haspopup="menu"
-            popovertarget="snippets"
-            onPointerDown={(e) => {
-              menuKeyboard = false
-              keep(e)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") menuKeyboard = true
-            }}
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen() ? "true" : "false"}
+            onPointerDown={keep}
+            // a click the keyboard made (Enter or Space on the button) carries no pointer detail
+            onClick={(e) => (menuOpen() ? menu.close() : openMenu(e.detail === 0))}
           >
             <Snippets />
           </button>
-          <div
-            id="snippets"
-            class="snippets"
-            popover
-            role="menu"
-            ref={(el) => (menu = el)}
-            onKeyDown={(e) => {
-              if (!(e.target instanceof HTMLInputElement)) roam(e)
-            }}
-            onToggle={(e) => {
-              setMenuOpen(e.newState === "open")
-              if (e.newState === "open" && document.activeElement?.matches("[popovertarget=snippets]"))
-                requestAnimationFrame(() => menu?.querySelector<HTMLElement>("[role=menuitem]")?.focus())
-            }}
-          >
-            <Show when={menuOpen()}>
-              <AsyncView>
-                <InvocationMenu
-                  keyboard={menuKeyboard}
-                  quick={
-                    <>
-                      <Items of={inStory()} />
-                      <hr />
-                      <Items of={toNarrator()} />
-                    </>
-                  }
-                  choose={(item) => {
-                    registry.update(composition, (d) => addInvocation(d, item))
-                    menu?.hidePopover()
-                    requestAnimationFrame(() => box?.focus())
-                  }}
-                />
-              </AsyncView>
-            </Show>
-          </div>
+          <Popover controller={menu} onOpenChange={menuChanged}>
+            <PopoverContent
+              id="snippets"
+              class="snippets"
+              aria-label={t("composer.snippets")}
+              anchor=".composer .box"
+              side="top"
+              align="start"
+              sideOffset={8}
+              initialFocus="none"
+              finalFocus="none"
+            >
+              <InvocationMenu
+                keyboard={menuKeyboard()}
+                quick={
+                  <>
+                    <Items of={inStory()} />
+                    <CommandSeparator />
+                    <Items of={toNarrator()} />
+                  </>
+                }
+                insert={(name) => {
+                  const s = quick().find((x) => x.name === name)
+                  if (s) insert(s)
+                }}
+                choose={(item) => {
+                  registry.update(composition, (d) => addInvocation(d, item))
+                  picked = true
+                  menu.close()
+                  requestAnimationFrame(() => box?.focus())
+                }}
+              />
+            </PopoverContent>
+          </Popover>
           <div class="compose-input">
             <For each={selected()} keyed={(i) => i.resourceId}>
               {(item) => (
@@ -334,11 +347,9 @@ export const Composer = () => {
                     return
                   }
                 }
-                if (e.key === "/" && !e.isComposing && !ime.compositionActive() && text() === "" && menu) {
+                if (e.key === "/" && !e.isComposing && !ime.compositionActive() && text() === "") {
                   e.preventDefault()
-                  menuKeyboard = true
-                  menu.showPopover()
-                  menu.querySelector<HTMLElement>("[role=menuitem]")?.focus()
+                  openMenu(true)
                 } else if (e.key === "Escape" && revise()) cancelRevise()
                 else ime.keyDown(e, selected().length > 0 && !text().trim() && !noteText().trim())
               }}

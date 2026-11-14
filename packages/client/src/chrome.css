@@ -452,57 +452,40 @@
   color: var(--ink-3);
 }
 
-/* the snippets menu: above the composer box, left edges aligned; a pick inserts into the box and never sends */
-.composer .box {
-  anchor-name: --composer;
-}
-.icon[popovertarget="snippets"]:has(+ .snippets:popover-open) {
+/* the snippets menu: above the composer box, left edges aligned (@ui-sdk's popover places it against the box); a
+   pick inserts into the box and never sends */
+.composer .icon[aria-expanded="true"] {
   background: var(--ghost-hover);
   color: var(--ink);
 }
 .snippets {
-  position-anchor: --composer;
-  position-area: top span-right;
-  inset: auto;
-  margin: 0 0 var(--space-2);
   min-width: 10rem;
   padding: var(--space-1);
   border: 0;
   border-radius: var(--radius-card);
-  /* one grid for the rows: the name column as wide as the widest name, the hints aligned after it. The display is
-     the open state's: set here it would override the UA's display: none on a closed popover, which then stays laid out
-     at opacity 0 over the reader, hoverable and clickable (the Timeline opened from a blank page). */
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
   background: var(--surface-3);
   color: inherit;
   box-shadow:
     var(--shadow-pop),
     inset 0 0 0 var(--hairline) var(--line);
   outline: none;
-  /* rises 8px as it fades in, drops back as it leaves; leaving is quicker (Cherry Studio's quick panel) */
-  opacity: 0;
-  translate: 0 8px;
-  transition:
-    translate 80ms var(--ease-pulse),
-    opacity 100ms ease-out,
-    overlay 100ms allow-discrete,
-    display 100ms allow-discrete;
-}
-.snippets:popover-open {
-  display: grid;
-  opacity: 1;
-  translate: 0 0;
+  /* rises 8px as it fades in, drops back as it leaves */
   transition:
     translate 140ms var(--ease),
-    opacity var(--dur-3) ease-out,
-    overlay var(--dur-3) allow-discrete,
-    display var(--dur-3) allow-discrete;
+    opacity var(--dur-3) ease-out;
 }
-@starting-style {
-  .snippets:popover-open {
-    opacity: 0;
-    translate: 0 8px;
-  }
+.snippets:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  translate: 0 8px;
+}
+/* one grid for the rows: the name column as wide as the widest name, the hints aligned after it */
+.snippets [data-slot="command-list"] {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  max-height: min(45dvh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
 }
 /* a row: the name, the hint aligned after it, the fill glyph at the end; the columns are the menu's */
 .snippets .item {
@@ -538,21 +521,22 @@
   height: 14px;
   color: var(--ink-3);
 }
-.snippets hr:is(:first-child, :last-child),
-.snippets hr + hr {
+.snippets [data-slot="command-separator"]:is(:first-child, :last-child),
+.snippets [data-slot="command-separator"] + [data-slot="command-separator"] {
   display: none;
 }
-.snippets hr {
+.snippets [data-slot="command-separator"] {
   grid-column: 1 / -1;
   margin: var(--space-1) var(--space-2);
-  border: 0;
   border-top: var(--hairline) solid var(--line);
 }
-.snippets .item:not(:disabled):is(:hover, :focus-visible) {
+.snippets .item {
+  cursor: default;
+}
+.snippets .item[data-highlighted]:not([data-disabled]) {
   background: var(--ghost-hover);
 }
-
-.snippets .item:disabled {
+.snippets .item[data-disabled] {
   color: var(--ink-3);
 }
 /* a list @ui-sdk places (the settings' selects, the 小剧场 menu): state comes from data attributes, placement from the
