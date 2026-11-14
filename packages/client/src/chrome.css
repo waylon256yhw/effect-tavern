@@ -478,6 +478,13 @@
   opacity: 0;
   translate: 0 8px;
 }
+/* leaving is quicker than arriving, and its drop is even over its length: on the arriving curve the menu fell its 8px
+   in the first two frames and then hung there fading for the rest */
+.snippets[data-ending-style] {
+  transition:
+    translate 80ms var(--ease-pulse),
+    opacity 100ms ease-out;
+}
 /* one grid for the rows: the name column as wide as the widest name, the hints aligned after it */
 .snippets [data-slot="command-list"] {
   display: grid;

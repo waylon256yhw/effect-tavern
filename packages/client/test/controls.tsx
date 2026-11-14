@@ -306,8 +306,10 @@ const run = async () => {
     "a press opens the menu and leaves the hand in the line",
   )
   tap(plus)
-  await wait(500)
-  check(!document.querySelector("#snippets"), "a second press on the button closes the menu, and it stays closed")
+  await wait(160)
+  check(!document.querySelector("#snippets"), "a second press on the button closes the menu, quickly")
+  await wait(340)
+  check(!document.querySelector("#snippets"), "and it stays closed")
   tap(plus)
   await wait(500)
   ;[...document.querySelectorAll<HTMLElement>('#snippets [data-slot="command-item"]')][0]!.click()
