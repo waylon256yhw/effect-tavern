@@ -113,6 +113,12 @@
   --measure: 42rem; /* the prose column at its narrowest; on the canvas it widens with the stage card (shell.css) */
   --measure-max: 54rem; /* and no wider than this */
   --topbar: 48px; /* a page's own head on a phone (inspector.css), under the safe area */
+  --inspect-stage: 7.5rem; /* an Inspector row's stage slot */
+  /* its number slots: time, ↑, ↓ (inspector.css adds the cache slot when the turn has one) */
+  --inspect-metrics: 3.25rem 3.75rem 3.75rem;
+  --bar-p: 0; /* a pre-check bar's probability and its two thresholds (inspector.tsx sets them on the bar) */
+  --bar-lo: 0;
+  --bar-hi: 1;
   --strip: 44px; /* the stage card's strip (the reader's head), and the sidebar's top row beside it */
   --shell-top: 38px; /* the thin strip over the canvas: the fold key, the card › story tab */
   --side-w: 248px; /* the sidebar's width; shell.tsx sets it on the canvas as the hand moves it (fold.ts) */
