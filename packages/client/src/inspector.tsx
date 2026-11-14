@@ -147,16 +147,19 @@ const Pills = (props: { pills: readonly Pill[] }) => {
   )
 }
 
+// a record operation's word, the Record's own (readings.tsx); a tool this page does not know keeps its name
+const verb = (v: string) =>
+  v === "insert" || v === "patch" || v === "remove" || v === "replace" ? t(`readings.${v}`) : v
 const is = <K extends Op["kind"]>(o: Op, k: K) => (o.kind === k ? (o as Extract<Op, { kind: K }>) : undefined)
 /** The result of a tool stage: one line per step, what it did on the left, its own time and tokens on the right. */
-const Steps = (props: { call: Call; label: (id: string) => string; cache: boolean }) => (
+const Steps = (props: { call: Call; facts: Facts; cache: boolean }) => (
   <Show when={nativeTrace(props.call.out)}>
     {(trace) => (
-      <For each={trace().steps} keyed={(s) => s.index}>
+      <For each={trace().steps.filter((s) => stepOps(s, props.facts).length)} keyed={(s) => s.index}>
         {(step) => (
           <div class="sline">
             <span class="ops">
-              <For each={stepOps(step(), props.label)} keyed={false}>
+              <For each={stepOps(step(), props.facts)} keyed={false}>
                 {(op) => (
                   <span class="op">
                     <Switch>
@@ -180,7 +183,25 @@ const Steps = (props: { call: Call; label: (id: string) => string; cache: boolea
                         )}
                       </Match>
                       <Match when={is(op(), "op")}>
-                        {(o) => <span class="pill">{`${o().verb} ${o().target}`.trim()}</span>}
+                        {(o) => (
+                          <Show
+                            when={o().verb !== "read"}
+                            fallback={
+                              <>
+                                <Read aria-hidden="true" />
+                                <span class="pill">{o().target}</span>
+                              </>
+                            }
+                          >
+                            <span class="n">{verb(o().verb)}</span>
+                            <Show when={o().target}>
+                              <span class="pill">{o().target}</span>
+                            </Show>
+                          </Show>
+                        )}
+                      </Match>
+                      <Match when={is(op(), "wrote")}>
+                        {(o) => <Pills pills={o().names.map((text) => ({ text }))} />}
                       </Match>
                     </Switch>
                     <Show when={op().error}>{(e) => <span class="pill bad">{e()}</span>}</Show>
@@ -324,7 +345,7 @@ const Step = (props: {
                   <pre>{JSON.stringify(c(), null, 2)}</pre>
                 </Match>
                 <Match when={nativeTrace(c().out)}>
-                  <Steps call={c()} label={props.facts.label} cache={props.cache} />
+                  <Steps call={c()} facts={props.facts} cache={props.cache} />
                 </Match>
                 <Match when={c().via === "decision"}>
                   <For each={precheck(c().out).lines} keyed={false}>
@@ -467,6 +488,17 @@ const InspectBody = (props: { id: Id }) => {
     checks: node()?.checks ?? [],
     must: node()?.brief.must ?? [],
     label: (id) => view()?.layer?.products.find((p) => p.id === id)?.label ?? id,
+    fields: (answers) => {
+      const r = view()?.rules
+      const paths = Object.entries(answers).flatMap(
+        ([q, o]) =>
+          r?.readouts
+            ?.find((x) => x.id === q)
+            ?.options.find((x) => x.id === o)
+            ?.do.flatMap((e) => ("path" in e ? [e.path] : [])) ?? [],
+      )
+      return [...new Set(paths)].map((p) => r?.fields.find((f) => f.path === p)?.label ?? p)
+    },
   }))
   const One = (p: { row: Row }) => (
     <Step

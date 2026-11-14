@@ -431,7 +431,7 @@
 }
 .inspect .mt {
   display: flex;
-  justify-content: space-between;
+  justify-content: end;
   gap: 2px;
 }
 .inspect .mt:first-child {

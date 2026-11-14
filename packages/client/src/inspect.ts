@@ -217,6 +217,8 @@ export interface Facts {
   checks: readonly { action: string; chance: number; roll: number; hit: boolean }[]
   must: readonly string[]
   label: (product: string) => string
+  /** The labels of the fields the chosen readout options write (a readout's answer moves fields, not products). */
+  fields: (answers: Readonly<Record<string, string>>) => string[]
 }
 
 /** The entry titles a lookup read (a resident revision is not read again, and carries no title). */
@@ -230,15 +232,20 @@ export const readTitles = (calls: readonly StageStep["calls"][number][]): string
   ),
 ]
 /** The products a record wrote: the world products its changes touched and the scene products it finished with. */
-const written = (value: unknown): string[] => {
+const written = (value: unknown, f: Pick<Facts, "label" | "fields">): string[] => {
   const v = (value ?? {}) as {
     changes?: { product?: string; collection?: string }[]
     products?: Record<string, unknown>
+    answers?: Record<string, string>
   }
   return [
     ...new Set([
-      ...(v.changes ?? []).flatMap((c) => [c.product ?? c.collection ?? ""]).filter(Boolean),
-      ...Object.entries(v.products ?? {}).flatMap(([k, x]) => (x === undefined || x === "" ? [] : [k])),
+      ...f.fields(v.answers ?? {}),
+      ...(v.changes ?? [])
+        .flatMap((c) => [c.product ?? c.collection ?? ""])
+        .filter(Boolean)
+        .map(f.label),
+      ...Object.entries(v.products ?? {}).flatMap(([k, x]) => (x === undefined || x === "" ? [] : [f.label(k)])),
     ]),
   ]
 }
@@ -305,7 +312,7 @@ export const digest = (r: Row, nth: number, f: Facts): Digest => {
     const bad = abnormal(native.status)
     const value = (out as { value?: unknown }).value
     const calls = native.steps.flatMap((s) => s.calls)
-    const names = r.phase === "lookup" ? readTitles(calls) : written(value).map(f.label)
+    const names = r.phase === "lookup" ? readTitles(calls) : written(value, f)
     return { pills: [...(bad ? [bad] : []), ...names.map((text) => ({ text }))] }
   }
   if (r.call.via === "decision") {
@@ -360,13 +367,14 @@ export const digest = (r: Row, nth: number, f: Facts): Digest => {
   }
 }
 
-/** One item of a tool step's line: a search and its hit count, the titles read, or a record operation on a product
- *  by its shown name. The completion call is the row's outcome, not an operation. */
+/** One item of a tool step's line: a search and its hit count, the titles read, a record operation on a product by
+ *  its shown name, or the completion call as what it wrote. A step that did nothing has no items, and no line. */
 export type Op =
   | { kind: "search"; query: string; n?: number; error?: string }
   | { kind: "read"; titles: string[]; error?: string }
   | { kind: "op"; verb: string; target: string; error?: string }
-export const stepOps = (step: StageStep, label: (product: string) => string): Op[] =>
+  | { kind: "wrote"; names: string[]; error?: string }
+export const stepOps = (step: StageStep, f: Pick<Facts, "label" | "fields">): Op[] =>
   step.calls.flatMap((c): Op[] => {
     const error = c.result.ok ? undefined : c.result.code
     const e = error === undefined ? {} : { error }
@@ -382,9 +390,12 @@ export const stepOps = (step: StageStep, label: (product: string) => string): Op
       ]
     }
     if (c.name === "read_context") return [{ kind: "read", titles: readTitles([c]), ...e }]
-    if (c.name === "finish_record") return error === undefined ? [] : [{ kind: "op", verb: "finish", target: "", ...e }]
+    if (c.name === "finish_record") {
+      const names = c.result.ok ? written(c.result.value, f) : []
+      return names.length || error !== undefined ? [{ kind: "wrote", names, ...e }] : []
+    }
     const m = /^(read|replace|patch|insert|remove)_(.+)$/.exec(c.name)
     return [
-      m ? { kind: "op", verb: m[1]!, target: label(m[2]!), ...e } : { kind: "op", verb: c.name, target: "", ...e },
+      m ? { kind: "op", verb: m[1]!, target: f.label(m[2]!), ...e } : { kind: "op", verb: c.name, target: "", ...e },
     ]
   })

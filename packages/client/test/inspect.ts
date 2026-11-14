@@ -168,6 +168,7 @@ const facts: Facts = {
   checks: [{ action: "steal", chance: 0.65, roll: 0.32, hit: true }],
   must: ["a", "b"],
   label: (id) => ({ mood: "心情" })[id] ?? id,
+  fields: (a) => (a["affinity"] ? ["好感度"] : []),
 }
 const row = (c: Partial<Call>, end: "end" | "stopped" = "end") =>
   rows([{ ...call(c.phase ?? "narrate"), ...c }], { end })[0]!
@@ -265,7 +266,7 @@ const lookup = row({
   out: { status: "completed", value: "", trace: [step([searched]), step([read], 1)] },
 })
 assert.deepEqual(digest(lookup, 0, facts).pills, [{ text: "竹林" }])
-assert.deepEqual(stepOps(step([searched, read]) as never, facts.label), [
+assert.deepEqual(stepOps(step([searched, read]) as never, facts), [
   { kind: "search", query: "竹林 剑", n: 2 },
   { kind: "read", titles: ["竹林"] },
 ])
@@ -287,7 +288,7 @@ const ops = [
   { ...searched, name: "finish_record", toolCallId: "f", result: { ok: true, value: {} } },
   { ...searched, name: "insert_npc", toolCallId: "i", result: { ok: false, code: "invalid_change", message: "" } },
 ]
-assert.deepEqual(stepOps(step(ops) as never, facts.label), [
+assert.deepEqual(stepOps(step(ops) as never, facts), [
   { kind: "op", verb: "patch", target: "心情" },
   { kind: "op", verb: "insert", target: "npc", error: "invalid_change" },
 ])
@@ -295,3 +296,18 @@ assert.deepEqual(digest(row({ phase: "lookup", out: { status: "budget_exhausted"
   { word: "exhausted", tone: "warn" },
 ])
 console.log("ok")
+
+// finish_record is what it wrote (fields a readout moved first); a step that did nothing has no items
+const finish = (value: unknown) => ({
+  toolCallId: "f",
+  name: "finish_record",
+  input: {},
+  result: { ok: true, value },
+  ms: 0,
+  replayed: false,
+})
+assert.deepEqual(
+  stepOps(step([finish({ changes: [], products: { mood: "x" }, answers: { affinity: "warm" } })]) as never, facts),
+  [{ kind: "wrote", names: ["好感度", "心情"] }],
+)
+assert.deepEqual(stepOps(step([]) as never, facts), [])
