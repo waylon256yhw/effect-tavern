@@ -38,7 +38,7 @@
   display: inline-flex;
   align-items: center;
   flex: none;
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
   color: var(--ink-2);
@@ -91,8 +91,8 @@
 .inspect .nodenav {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--space-half);
+  padding: var(--space-half);
   border-radius: var(--radius);
   background: var(--alpha-1);
   white-space: nowrap;
@@ -110,7 +110,7 @@
   padding: 0 var(--space-2);
   color: var(--ink-2);
   display: inline-flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .inspect .nodenav b {
   color: var(--ink);
@@ -124,24 +124,24 @@
 }
 .inspect .sums {
   display: none;
-  padding: 4px 10px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
 }
 .inspect .seg {
   display: inline-flex;
-  padding: 2px;
+  padding: var(--space-half);
   border-radius: var(--radius);
   background: var(--alpha-1);
 }
 .inspect .seg button {
   height: var(--control-sm);
-  padding: 0 10px;
-  border-radius: 6px;
+  padding: 0 var(--space-2);
+  border-radius: calc(var(--radius) - var(--space-half));
   color: var(--ink-2);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
 }
 .inspect .seg button[aria-selected="true"] {
   background: var(--surface-3);
@@ -209,9 +209,9 @@
   margin-inline-start: auto; /* the caption that used to sit before it is gone */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   height: 26px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius);
   background: var(--alpha-1);
   color: var(--ink-3);
@@ -239,8 +239,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-left: 18px;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
 }
 .inspect .knot:not(:last-child)::after {
   content: "";
@@ -284,13 +284,13 @@
 }
 /* a draft's tray: the discarded one steps back */
 .inspect .tray {
-  padding: 8px;
+  padding: var(--space-2);
   border-radius: var(--radius-card);
   background: var(--alpha-1);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .inspect .tray.discarded {
   background: transparent;
@@ -298,7 +298,8 @@
 /* inside a tray a row's text sits where it would outside: the tray's padding comes off the row's own */
 .inspect .tray .thead,
 .inspect .tray .step > summary {
-  padding-inline: calc(12px - 8px);
+  padding-inline: calc(var(--space-3) - var(--space-2));
+  border-radius: calc(var(--radius-card) - var(--space-2)); /* concentric with the tray */
 }
 .inspect .tray .thead {
   display: grid;
@@ -312,7 +313,7 @@
 .inspect .tray .tl {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .inspect .tray.discarded .thead {
   color: var(--ink-3);
@@ -340,12 +341,12 @@
 .inspect .step > summary {
   list-style: none;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   display: grid;
   grid-template-columns: var(--inspect-stage) minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-3);
-  row-gap: 3px;
+  row-gap: var(--space-half);
   border-radius: var(--radius);
   user-select: none;
 }
@@ -372,7 +373,7 @@
 .inspect .stage {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   min-width: 0;
   overflow: hidden;
   font-size: var(--text-body);
@@ -380,7 +381,7 @@
   white-space: nowrap;
 }
 .inspect .ord {
-  margin-inline-start: 4px;
+  margin-inline-start: var(--space-1);
   color: var(--ink-3);
   font-weight: 400;
 }
@@ -394,7 +395,7 @@
   transform: rotate(90deg);
 }
 .inspect .hits {
-  padding: 0 5px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--surface-1);
@@ -405,7 +406,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   color: var(--ink-2);
   overflow: hidden;
 }
@@ -425,7 +426,7 @@
   justify-self: end;
   display: grid;
   grid-template-columns: var(--inspect-metrics);
-  column-gap: 6px;
+  column-gap: var(--space-2);
   font-size: var(--text-caption);
   color: var(--ink-3);
   white-space: nowrap;
@@ -433,7 +434,7 @@
 .inspect .mt {
   display: flex;
   justify-content: end;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .inspect .mt:first-child {
   justify-content: end;
@@ -447,10 +448,10 @@
 
 /* the body: the well */
 .inspect .body {
-  padding: 10px 12px 12px;
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .inspect .well {
   display: flex;
@@ -466,8 +467,8 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: var(--space-half);
+  padding: var(--space-1);
   background: var(--alpha-1);
   box-shadow: 0 var(--hairline) 0 var(--line);
   overflow-x: auto;
@@ -476,9 +477,9 @@
 .inspect .wbar button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: 5px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   color: var(--ink-2);
   font-size: var(--text-caption);
   white-space: nowrap;
@@ -505,17 +506,17 @@
   contain: size;
   min-height: 8lh;
   overflow-y: auto;
-  padding: var(--fade) 12px;
+  padding: var(--fade) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .inspect .msg {
-  padding-left: 9px;
+  padding-left: var(--space-2);
   border-left: 2px solid var(--alpha-3);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .inspect .msg[data-role="user"] {
   border-left-color: var(--ink);
@@ -526,7 +527,7 @@
 .inspect .role {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   font-size: var(--text-caption);
   color: var(--ink-3);
 }
@@ -534,7 +535,7 @@
 .inspect .bp {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   color: var(--ink-3);
@@ -563,8 +564,8 @@
   overflow-wrap: anywhere;
 }
 .inspect mark {
-  padding: 0 2px;
-  border-radius: 2px;
+  padding: 0 var(--space-half);
+  border-radius: var(--radius-sm);
   background: light-dark(#fde047, #a16207);
   color: var(--ink);
 }
@@ -574,7 +575,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .inspect .prose {
   margin: 0;
@@ -586,7 +587,7 @@
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1);
   line-height: 1.6;
 }
 .inspect .rewrite .was {
@@ -615,7 +616,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   overflow: hidden;
   white-space: nowrap;
 }
@@ -677,7 +678,7 @@
   margin: 0;
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 4px var(--space-3);
+  gap: var(--space-1) var(--space-3);
   align-items: baseline;
 }
 .inspect .kv dt {
@@ -693,7 +694,7 @@
 
 /* the node card */
 .inspect .inwell {
-  padding: 10px 12px;
+  padding: var(--space-3);
   border-radius: var(--radius);
   background: var(--surface-0);
   box-shadow:
@@ -701,7 +702,7 @@
     inset 0 0 0 var(--hairline) var(--line);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .inspect .line,
 .inspect .val {
@@ -712,13 +713,13 @@
 .inspect .pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .inspect .hook {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  padding: 8px 10px;
+  padding: var(--space-2);
   border-radius: var(--radius);
   background: var(--alpha-1);
   line-height: 1.5;
@@ -726,7 +727,7 @@
 .inspect .hooks {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .inspect .hook.armed {
   background: var(--surface-2);
@@ -739,7 +740,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .inspect .hid {
   font-size: var(--text-caption);
@@ -769,10 +770,10 @@
 .inspect .prod {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .inspect .prod + .prod {
-  margin-top: 2px;
+  margin-top: var(--space-half);
 }
 .inspect .pid {
   font-size: var(--text-caption);
@@ -780,14 +781,14 @@
 }
 .inspect .items {
   margin: 0;
-  padding-left: 1.15rem;
+  padding-left: 1.2em;
   line-height: 1.55;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-half);
 }
 .inspect .prod .kv {
-  padding: 8px 10px;
+  padding: var(--space-2);
   border-radius: var(--radius);
   background: var(--alpha-1);
 }
@@ -800,11 +801,11 @@
   font-size: var(--text-caption);
   font-weight: 500;
   color: var(--ink-3);
-  padding: 2px 8px 4px 0;
+  padding: var(--space-half) var(--space-2) var(--space-1) 0;
   border-bottom: var(--hairline) solid var(--line);
 }
 .inspect .rows td {
-  padding: 4px 8px 2px 0;
+  padding: var(--space-1) var(--space-2) var(--space-half) 0;
 }
 
 /* desktop: the canvas, two cards, the title and the sums in the bar, no switch */
