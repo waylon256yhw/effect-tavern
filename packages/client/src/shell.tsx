@@ -7,12 +7,13 @@
 // it (the card page, Timeline, Inspector, Writing, Settings, 读数; each with its own head, pages.ts). The sidebar
 // folds to nothing (no icon rail): the key, a click on the stage's left edge, or a pull past the threshold; folded,
 // the pointer at the screen's left edge floats it over the stage (ground turned figure), and the key docks it in
-// place. The stage's edge drags the width inside a band with a detent under its floor (shell.ts); a fold forgets the
-// width. The device remembers the fold and the width. Under 72rem there is no canvas: the stage card is the screen,
+// place. The stage's edge drags the width inside a band with a detent under its floor (fold.ts, edge.tsx); a fold forgets
+// the width. The device remembers the fold and the width. Under 72rem there is no canvas: the stage card is the screen,
 // the reader's strip is ☰ (the sidebar as a drawer, whose workspace holds the persona and writing), `card › story`
 // as plain text, and the same three keys.
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js"
+import { createDrawerController, Drawer, DrawerBackdrop, DrawerContent } from "@ui-sdk/solid/drawer"
 import { read } from "./bridge.ts"
 import { StoryDialogs } from "./dialogs.tsx"
 import { BrandGlyph } from "./home.tsx"
@@ -32,7 +33,8 @@ import {
   Write,
 } from "./icons.tsx"
 import { openInspector } from "./inspector.tsx"
-import { drag, remembered, SIDE } from "./fold.ts"
+import { Edge } from "./edge.tsx"
+import { remembered, SIDE } from "./fold.ts"
 import { hasReadings } from "./readings.tsx"
 import { InstallKeys, Sidebar } from "./side.tsx"
 import { card, cards, isHome, page, type Page, path, stories, tabs } from "./store.ts"
@@ -79,8 +81,7 @@ export const Shell = (props: { children: JSX.Element }) => {
   const [folded, setFolded] = createSignal(wasFolded)
   const [peek, setPeek] = createSignal(false)
   const [width, setWidth] = createSignal(wasFolded ? SIDE.default : remembered(stored(WIDTH)))
-  const [shown, setShown] = createSignal<number | null>(null) // the track under the hand, while dragging
-  const [resizing, setResizing] = createSignal(false)
+  const [shown, setShown] = createSignal<number | null>(null) // the track under the hand or the spring
   let resetTimer: ReturnType<typeof setTimeout> | undefined
   /** Folds and forgets the width: the track keeps its width through the slide out, then returns to the default. */
   const fold = () => {
@@ -123,65 +124,25 @@ export const Shell = (props: { children: JSX.Element }) => {
     if (other && e.relatedTarget instanceof Node && other.contains(e.relatedTarget)) return
     closePeek()
   }
-  // the stage's left edge: a press without a move folds; a pull sets the width, with the detent and the spring, and
-  // past the thresholds folds or docks. `pressed` is the hand on the edge (one drag may fold and dock again);
-  // `resizing` is only the frames the track follows the hand, when the stage must not ease after it
-  let canvas: HTMLDivElement | undefined
-  let pressed = false
-  let moved = false
-  let downX = 0
-  let keep: number = SIDE.default
-  const onDown = (e: PointerEvent) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    clearTimeout(resetTimer)
-    pressed = true
-    moved = false
-    downX = e.clientX
-    keep = width()
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    setResizing(true)
-  }
-  const onMove = (e: PointerEvent) => {
-    if (!pressed) return
-    if (!moved && Math.abs(e.clientX - downX) < 4) return
-    moved = true
-    const x = e.clientX - (canvas?.getBoundingClientRect().left ?? 0)
-    const d = drag(x, folded())
-    switch (d.kind) {
-      case "close":
-        // the fold eases from where the track stands (not a jump back to the width before the pull), and the
-        // stage eases shut with it: the hand is still down, but it no longer leads
-        setWidth(Math.round(shown() ?? width()))
-        setShown(null)
-        setResizing(false)
-        fold()
-        return
-      case "open":
-        setShown(null)
-        setResizing(false) // the stage eases out to the width; the next move takes the lead again
-        dock(d.width)
-        keep = d.width
-        return
-      case "width":
-        if (!resizing()) setResizing(true)
-        setShown(d.shown)
-        keep = d.keep
-        return
-      case "none":
-        return
-    }
-  }
-  const onUp = () => {
-    if (!pressed) return
-    pressed = false
-    setResizing(false)
+  // the stage's left edge (edge.tsx reads the hand, fold.ts says what it means): the track follows `shown` while the
+  // hand or the release's spring leads, and the stage must not ease after it then
+  const resizing = () => shown() !== null
+  /** A fold from the edge eases from where the track stands, not from the width before the pull; the fold key takes
+   *  the focus the hidden edge would lose. */
+  const foldFromEdge = () => {
+    const held = document.activeElement?.closest(".resizer")
+    setWidth(Math.round(shown() ?? width()))
     setShown(null)
-    if (!moved) return fold() // a click on the edge folds
-    if (!folded()) {
-      setWidth(keep)
-      store(WIDTH, String(keep))
-    }
+    fold()
+    if (held) key?.focus()
+  }
+  const dockFromEdge = (w: number) => {
+    setShown(null)
+    dock(w)
+  }
+  const keepWidth = (w: number) => {
+    setWidth(w)
+    store(WIDTH, String(w))
   }
   // ── what the strips name ──
   const current = createMemo(() => lib()?.stories.find((s) => s.id === lib()?.current))
@@ -194,8 +155,8 @@ export const Shell = (props: { children: JSX.Element }) => {
     return c ? (c.title ?? t("stories.newStory")) : ""
   }
   // ── the phone's drawer ──
-  let drawer: HTMLDialogElement | undefined
-  const leaveDrawer = () => drawer?.close()
+  const drawer = createDrawerController()
+  const leaveDrawer = () => void drawer.close()
   /** The reader's three keys: Timeline, Inspector, 读数 (when the card has one), one behaviour (a page in place, Escape and Back to return);
    *  small on the canvas, the strip's size on the phone. They are the reader's, so no page they open is ever under
    *  them: no key of the three has a pressed state. */
@@ -331,7 +292,6 @@ export const Shell = (props: { children: JSX.Element }) => {
         </header>
       </Show>
       <div
-        ref={(el) => (canvas = el)}
         class="canvas"
         data-folded={folded() ? "true" : "false"}
         data-peek={folded() && peek() ? "true" : "false"}
@@ -353,15 +313,15 @@ export const Shell = (props: { children: JSX.Element }) => {
         </Show>
         <div class="stage" data-stage={typeof pg() === "object" ? "inspect" : pg()}>
           <Show when={wide()}>
-            <div
+            <Edge
               class="resizer"
-              role="separator"
-              aria-orientation="vertical"
               aria-label={t("side.resize")}
-              onPointerDown={onDown}
-              onPointerMove={onMove}
-              onPointerUp={onUp}
-              onPointerCancel={onUp}
+              width={width()}
+              folded={folded()}
+              onTrack={setShown}
+              onWidth={keepWidth}
+              onFold={foldFromEdge}
+              onDock={dockFromEdge}
             />
           </Show>
           <section class="stage-card" aria-label={t("side.stage")}>
@@ -375,7 +335,7 @@ export const Shell = (props: { children: JSX.Element }) => {
                     type="button"
                     class="icon"
                     aria-label={t("side.navigation")}
-                    onClick={() => drawer?.showModal()}
+                    onClick={() => void drawer.open()}
                   >
                     <List />
                   </button>
@@ -415,9 +375,12 @@ export const Shell = (props: { children: JSX.Element }) => {
       </div>
       <Show when={!wide()}>
         {/* the phone: the sidebar as a drawer from the left */}
-        <dialog class="drawer" ref={(el) => (drawer = el)} closedby="any" aria-label={t("side.navigation")}>
-          <Sidebar inDrawer onLeave={leaveDrawer} />
-        </dialog>
+        <Drawer controller={drawer} side="left">
+          <DrawerBackdrop class="nav-scrim" />
+          <DrawerContent class="drawer" aria-label={t("side.navigation")}>
+            <Sidebar inDrawer onLeave={leaveDrawer} />
+          </DrawerContent>
+        </Drawer>
       </Show>
       <StoryDialogs />
     </>

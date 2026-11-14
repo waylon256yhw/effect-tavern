@@ -933,45 +933,20 @@
 }
 
 /* ── the phone's drawer: the sidebar sliding in from the left ── */
-dialog.drawer {
-  margin: 0;
-  padding: 0;
-  border: 0;
+/* @ui-sdk's drawer places it, slides it under the hand and fades the scrim: the size and the surface are ours */
+.drawer {
+  display: flex;
   width: min(17rem, 84vw);
-  height: 100dvh;
-  max-height: 100dvh;
+  height: 100%;
   background: var(--surface-1);
   color: var(--ink);
   box-shadow: var(--shadow-pop);
   outline: none;
-  transform: translateX(-100%);
-  transition:
-    transform var(--dur-3) var(--ease),
-    overlay var(--dur-3) allow-discrete,
-    display var(--dur-3) allow-discrete;
 }
-dialog.drawer[open] {
-  display: flex;
-  transform: none;
-}
-dialog.drawer::backdrop {
+.nav-scrim {
+  position: fixed;
+  inset: 0;
   background: var(--scrim);
-  opacity: 0;
-  transition:
-    opacity var(--dur-3) var(--ease),
-    overlay var(--dur-3) allow-discrete,
-    display var(--dur-3) allow-discrete;
-}
-dialog.drawer[open]::backdrop {
-  opacity: 1;
-}
-@starting-style {
-  dialog.drawer[open] {
-    transform: translateX(-100%);
-  }
-  dialog.drawer[open]::backdrop {
-    opacity: 0;
-  }
 }
 
 /* ── from 72rem: the canvas, the sidebar in its space, the stage card raised ── */
@@ -1200,6 +1175,17 @@ dialog.drawer[open]::backdrop {
   }
   .canvas[data-folded="true"] .resizer {
     display: none;
+  }
+  /* the keyboard on the edge: a line down its middle, the hand's own cue being the cursor */
+  .resizer {
+    outline: none;
+  }
+  .resizer:focus-visible::after {
+    content: "";
+    position: absolute;
+    inset: var(--space-3) 4px;
+    border-radius: 1px;
+    background: var(--ink-3);
   }
   .stage-card {
     border-radius: var(--radius-dialog);

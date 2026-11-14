@@ -6,6 +6,8 @@ import { installDiagnosticsBridge } from "@solidjs/diagnostics/browser"
 import { createAgent } from "@ui-sdk/solid/agent"
 import { createSignal } from "solid-js"
 import { ask, Confirm, dialogHandle, Menu, Modal, Prompt, Switch } from "../src/controls.tsx"
+import { Edge } from "../src/edge.tsx"
+import { SIDE } from "../src/fold.ts"
 import { Demand, Sheet } from "../src/readings.tsx"
 import { card, registry, type CardView } from "../src/store.ts"
 import { flip, locale } from "../src/i18n.ts"
@@ -43,6 +45,27 @@ const sheet = dialogHandle()
 const prompt = dialogHandle()
 const modal = dialogHandle()
 let left = 0 // the modal's onClose
+// the stage's edge over a canvas at the window's left: what the shell would keep, and every width the track showed
+const [sideWidth, setSideWidth] = createSignal<number>(SIDE.default)
+const [sideFolded, setSideFolded] = createSignal(false)
+const side = { width: SIDE.default as number, folded: false, track: [] as (number | null)[] }
+/** A pointer on the edge, as the browser would send it: down on the edge, the moves and the up on the same pointer. */
+const hand = (type: string, x: number) =>
+  document
+    .querySelector(".resizer")!
+    .dispatchEvent(
+      new PointerEvent(type, { clientX: x, clientY: 40, button: 0, pointerId: 1, bubbles: true, isPrimary: true }),
+    )
+/** A pull through these positions, `gap` ms apart, then the release. */
+const pull = async (xs: number[], gap: number) => {
+  hand("pointerdown", side.width)
+  for (const x of xs) {
+    await wait(gap)
+    hand("pointermove", x)
+  }
+  await wait(gap)
+  hand("pointerup", xs.at(-1)!)
+}
 let held = false // the sheet refuses Escape while this is set, as the manager does with stories checked
 const escape = () =>
   document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
@@ -73,6 +96,19 @@ render(
       {/* the confirm mounts far down the page, as on the settings page: it must still show in the window */}
       <div style={{ height: "200vh" }} />
       <Confirm />
+      <div class="canvas" style={{ position: "fixed", inset: "0 auto auto 0", width: "100px", height: "80px" }}>
+        <Edge
+          class="resizer"
+          aria-label="侧栏宽度"
+          style={{ position: "absolute", inset: "0", display: sideFolded() ? "none" : "block" }}
+          width={sideWidth()}
+          folded={sideFolded()}
+          onTrack={(w) => side.track.push(w)}
+          onWidth={(w) => (setSideWidth(w), (side.width = w))}
+          onFold={() => (setSideFolded(true), (side.folded = true))}
+          onDock={(w) => (setSideFolded(false), setSideWidth(w), (side.folded = false), (side.width = w))}
+        />
+      </div>
       <Sheet
         controller={sheet}
         heading="全部故事"
@@ -102,7 +138,7 @@ const run = async () => {
   const entries = agent.snapshot().filter((e) => !e.offPage)
   for (const e of entries) check(e.label, `${e.component} ${e.ref} has no name`)
   const labels = entries.map((e) => e.label)
-  for (const l of ["接口格式", "流式输出", "小剧场 · 第 1 轮", "小剧场 · 第 2 轮"])
+  for (const l of ["接口格式", "流式输出", "小剧场 · 第 1 轮", "小剧场 · 第 2 轮", "侧栏宽度"])
     check(labels.includes(l), `${l} is missing from the snapshot: ${labels.join(" | ")}`)
 
   const set = await agent.act({
@@ -141,6 +177,56 @@ const run = async () => {
   await wait(400)
   check(allowed.ok && deleted === 1, `an approved delete runs once: ${allowed.error?.message} (${deleted})`)
   check(!document.querySelector(".confirm"), "an answered confirm leaves the page")
+
+  // the stage's edge. An agent sets a width inside the band; a key steps it
+  const widen = await agent.act({ steps: [{ ref: "侧栏宽度", action: "setWidth", args: [900] }] })
+  await wait(50)
+  check(
+    widen.ok && side.width === SIDE.max,
+    `an agent's width stays in the band: ${widen.error?.message} (${side.width})`,
+  )
+  document.querySelector(".resizer")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }))
+  await wait(50)
+  check(side.width === SIDE.max - 16, `an arrow key steps the width (${side.width})`)
+  // a slow pull past the ceiling gives a little, and the release springs back to the ceiling through real frames
+  side.track = []
+  await pull([340, 400, 460], 60)
+  await wait(700)
+  const peak = Math.max(...side.track.filter((w) => w !== null))
+  const after = side.track.slice(side.track.lastIndexOf(peak) + 1)
+  check(peak > SIDE.max && peak < SIDE.max + 24, `past the ceiling the track gives, under its limit (${peak})`)
+  check(
+    after.filter((w) => w !== null && w > SIDE.max && w < peak).length >= 3 && after.at(-1) === null,
+    `the release springs back over several frames, then lets go: ${after.map((w) => w?.toFixed(1) ?? "null").join(" ")}`,
+  )
+  check(side.width === SIDE.max && !side.folded, `it rests at the ceiling (${side.width})`)
+  // a pull under the floor that Escape takes back: the width is as it was
+  side.track = []
+  hand("pointerdown", side.width)
+  await wait(40)
+  hand("pointermove", 150)
+  await wait(40)
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  await wait(100)
+  check(side.track.at(-1) === null && side.width === SIDE.max, `Escape puts the track back (${side.track.join(" ")})`)
+  hand("pointerup", 150)
+  // a quick flick toward the edge, released well inside the band's reach, folds
+  await pull([300, 270, 235, 195], 8)
+  await wait(100)
+  check(side.folded, "a flick toward the edge folds")
+  // docked again (the shell's fold key), a press without a move folds, and so does an agent
+  const dock = () => (setSideFolded(false), (side.folded = false))
+  dock()
+  await wait(50)
+  hand("pointerdown", side.width)
+  hand("pointerup", side.width)
+  await wait(50)
+  check(side.folded, "a click on the edge folds")
+  dock()
+  await wait(50)
+  const folds = await agent.act({ steps: [{ ref: "侧栏宽度", action: "fold" }] })
+  await wait(50)
+  check(folds.ok && side.folded, `an agent folds it: ${folds.error?.message}`)
 
   // the dialogs: a sheet named by its heading with the focus where it asked, a prompt over it that closes alone,
   // each gone from the page once closed; a modal whose onClose runs once it has left
