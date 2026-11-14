@@ -59,7 +59,13 @@ const scripted = (answers: Record<string, number>): DecisionModel =>
       state: call.state.map((p) => ("text" in p ? p.text : "")).join(""),
       questions: Object.values(call.questions).map((q) => q.instructions as string),
     })
-    return Object.fromEntries(Object.entries(answers).map(([k, p]) => [k, b(p)]))
+    // lookup's questions (`u<i>`) answered no: its pass settles with nothing to read, no LLM lookup
+    return Object.fromEntries(
+      Object.keys(call.questions).flatMap((k) => {
+        const p = answers[k] ?? (k.startsWith("u") ? 0.1 : undefined)
+        return p === undefined ? [] : [[k, b(p)]]
+      }),
+    )
   })
 /** One turn where the guard line holds and `li` is open (a greeting at bond 8 opens its window, as test/loop.ts t9). */
 const turn = (decision?: () => DecisionModel | undefined) =>
@@ -79,10 +85,16 @@ const turn = (decision?: () => DecisionModel | undefined) =>
 // clear pass: no LLM check, `fired` from the decision
 {
   const r = await turn(() => scripted({ g0: 0.03, o0: 0.92 }))
-  assert.deepEqual(r.phases, ["lookup", "decide", "direct", "narrate", "check:decision", "record"])
+  assert.deepEqual(r.phases, ["lookup:decision", "decide", "direct", "narrate", "check:decision", "record"])
   assert.deepEqual([r.t.fired, r.t.violated], [[{ id: "li", layer: 3 }], []])
-  const c = r.calls.find((c) => c.via)!
-  assert.deepEqual(c.out, { p: { rules: { [rule]: 0.03 }, open: { li: 0.92 } }, verdict: "pass" })
+  const c = r.calls.findLast((c) => c.via)!
+  assert.deepEqual(c.out, {
+    lines: [
+      { label: rule, p: 0.03 },
+      { label: "li", p: 0.92 },
+    ],
+    verdict: "pass",
+  })
   assert.deepEqual(c.msgs, [{ role: "user", content: sent.at(-1)!.state }])
   assert.ok(sent.at(-1)!.state.startsWith("<world>") && sent.at(-1)!.state.endsWith("hello world\n</draft>"))
   assert.ok(sent.at(-1)!.questions[0]!.endsWith(`规则：${rule}`))
@@ -95,8 +107,8 @@ const turn = (decision?: () => DecisionModel | undefined) =>
 {
   llmCheck = { fired: [], violated: [] }
   const r = await turn(() => scripted({ g0: 0.03, o0: 0.5 }))
-  assert.deepEqual(r.phases, ["lookup", "decide", "direct", "narrate", "check:decision", "check", "record"])
-  assert.equal((r.calls.find((c) => c.via)!.out as { verdict: string }).verdict, "escalate")
+  assert.deepEqual(r.phases, ["lookup:decision", "decide", "direct", "narrate", "check:decision", "check", "record"])
+  assert.equal((r.calls.findLast((c) => c.via)!.out as { verdict: string }).verdict, "escalate")
   assert.deepEqual([r.t.fired, r.t.violated], [[], []])
 }
 // a failed decision call (and a model that could not be made): the LLM check runs, the failure is on the call
@@ -115,11 +127,12 @@ const turn = (decision?: () => DecisionModel | undefined) =>
     ],
   ] as const) {
     const r = await turn(decision)
+    assert.deepEqual(r.phases.slice(0, 2), ["lookup:decision", "lookup"]) // lookup falls back to its LLM loop
     assert.deepEqual(r.phases.slice(-3), ["check:decision", "check", "record"])
-    const out = r.calls.find((c) => c.via)!.out as { verdict: string; error: string; p?: unknown }
+    const out = r.calls.findLast((c) => c.via)!.out as { verdict: string; error: string; lines: unknown[] }
     assert.equal(out.verdict, "escalate")
     assert.match(out.error, why)
-    assert.equal(out.p, undefined)
+    assert.deepEqual(out.lines, [])
     assert.deepEqual(r.t.fired, [{ id: "li", layer: 3 }])
   }
 }

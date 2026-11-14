@@ -954,6 +954,10 @@
         "text": "Choose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
       },
       {
+        "id": "lookup.decision",
+        "text": "<input> 里玩家这一轮说的话或做的事，是否提到、询问或直接牵涉下面这条设定里的人物、物件或事情？\n"
+      },
+      {
         "id": "direct",
         "text": "Given <input> and the Open and Events lines above, put in \"must\" only the open entries the next scene cannot make sense without; the rest stay in \"may\", and both are empty when none fits now. \"tone\" is one line of direction to the narrator, not to the player: the mood, the pace, or where this scene should land, as a phrase or a short sentence. It is a direction, never a sentence of the story: it names no character and writes no one's words, actions or expression."
       },
