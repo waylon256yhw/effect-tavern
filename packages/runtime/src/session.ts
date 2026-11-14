@@ -1167,6 +1167,11 @@ export const makeSession = ({
       fresh()
       return derived.at(chain(nodeId)).context()
     },
+    /** The entries a turn under `nodeId` could look up: unlocked, model-readable, not in the request (context.ts). */
+    readable: (nodeId: number | null) => {
+      fresh()
+      return derived.at(chain(nodeId)).readable()
+    },
     activeContext: (nodeId: number | null): ActiveContextView => {
       fresh()
       const here = derived.at(chain(nodeId))
