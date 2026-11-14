@@ -410,7 +410,7 @@
   font-family: var(--font-mono);
 }
 
-/* the menu trigger and its popover: the snippets menu under the trigger, as wide as it, the pick checked */
+/* the select's trigger; its list is chrome.css .popup-list */
 .select {
   box-sizing: border-box;
   width: 100%;
@@ -428,7 +428,7 @@
   font-size: var(--text-footnote);
 }
 .select:hover,
-.select:has(+ .menu:popover-open) {
+.select[data-open] {
   background: var(--alpha-2);
 }
 .select .label {
@@ -445,35 +445,8 @@
   color: var(--ink-3);
   transition: rotate var(--dur-2) var(--ease);
 }
-.select:has(+ .menu:popover-open) .caret {
+.select[data-open] .caret {
   rotate: 180deg;
-}
-.settings .snippets {
-  position-anchor: auto;
-  position-area: bottom span-right;
-  position-try-fallbacks: flip-block;
-  box-sizing: border-box;
-  margin: var(--space-1) 0;
-}
-.settings .menu {
-  width: max-content;
-  min-width: anchor-size(width);
-  max-width: min(30rem, calc(100vw - 2 * var(--space-4)));
-  max-height: 16rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-.settings .menu .item {
-  max-width: none;
-  font-size: var(--text-footnote);
-}
-.settings .menu .name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 400;
-}
-.settings .menu .item svg {
-  color: var(--ink);
 }
 
 /* the family glyph before a model id: mono at the secondary ink, in the letter circle's slot */
@@ -488,9 +461,6 @@
 .family svg {
   width: 14px;
   height: 14px;
-}
-.settings .menu .family svg {
-  color: var(--ink-2);
 }
 
 .switch {
@@ -1336,11 +1306,6 @@
   .modal-body {
     padding: var(--space-4) var(--space-5);
   }
-}
-.settings .menu .text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* the phone bar names the routing page already */
 .settings[data-section="routing"] .detail-header {

@@ -196,6 +196,12 @@ importers:
       '@solidjs/web':
         specifier: 2.0.0-rc.15
         version: 2.0.0-rc.15(solid-js@2.0.0-rc.15)
+      '@ui-sdk/core':
+        specifier: 0.1.0-beta.2
+        version: 0.1.0-beta.2
+      '@ui-sdk/solid':
+        specifier: 0.1.0-beta.2
+        version: 0.1.0-beta.2(@solidjs/web@2.0.0-rc.15(solid-js@2.0.0-rc.15))(@ui-sdk/core@0.1.0-beta.2)(solid-js@2.0.0-rc.15)
       remark-cjk-friendly:
         specifier: 2.3.3
         version: 2.3.3(@types/mdast@4.0.4)(micromark-util-types@2.0.3)(micromark@4.0.3)(unified@11.0.5)
@@ -1316,6 +1322,16 @@ packages:
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [win32]
+
+  '@ui-sdk/core@0.1.0-beta.2':
+    resolution: {integrity: sha512-y89M4OKL2Oy1IvFS8FEozn/44BJD9FoRjfecWA4XwFhkSuQADcEcI+eoLdfRK1hkrJZhKkHvhJf4Jtfp1y7aJw==}
+
+  '@ui-sdk/solid@0.1.0-beta.2':
+    resolution: {integrity: sha512-PKHLMsL8ly7Miqt2cNNIlCrvh8IgF1Vsrg/SSonNvahag3NiO4MLUTauS7FOHgDOjOruhsa3lqTX0O0easXDzA==}
+    peerDependencies:
+      '@solidjs/web': '>=2.0.0-rc.14 <3'
+      '@ui-sdk/core': ^0.1.0-beta.2
+      solid-js: '>=2.0.0-rc.14 <3'
 
   '@valibot/to-json-schema@1.8.0':
     resolution: {integrity: sha512-a0M+uwCuQZEPAo65NYkFSJ14O5c213KoSZmPdoCfuFvUhfULi4T2Z6Tpjv6lTVMW9RoLm74RpRAjNEa43KcN+g==}
@@ -3618,6 +3634,14 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
+
+  '@ui-sdk/core@0.1.0-beta.2': {}
+
+  '@ui-sdk/solid@0.1.0-beta.2(@solidjs/web@2.0.0-rc.15(solid-js@2.0.0-rc.15))(@ui-sdk/core@0.1.0-beta.2)(solid-js@2.0.0-rc.15)':
+    dependencies:
+      '@solidjs/web': 2.0.0-rc.15(solid-js@2.0.0-rc.15)
+      '@ui-sdk/core': 0.1.0-beta.2
+      solid-js: 2.0.0-rc.15
 
   '@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2))':
     dependencies:

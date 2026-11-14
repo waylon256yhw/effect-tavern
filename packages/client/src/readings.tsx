@@ -7,7 +7,7 @@ import type { TimelineNode as Node } from "@effect-tavern/runtime/src/projection
 import { type JSX } from "@solidjs/web"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
-import { Menu } from "./controls.tsx"
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@ui-sdk/solid/menu"
 import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe, Warning } from "./icons.tsx"
 import { close } from "./pages.ts"
 import { openSettings } from "./settings.tsx"
@@ -519,12 +519,27 @@ export const Demand = (props: { node: Node }) => {
     <>
       <Show when={demands().length}>
         <Menu
-          action={t("readings.aside")}
-          label={t("readings.aside")}
-          value={undefined}
-          options={busy() || unresolved() ? [] : demands()}
-          onPick={(id) => (dismiss(), turn.demand(props.node.id, id))}
-        />
+          presentation="auto"
+          onAction={(id) => {
+            dismiss()
+            turn.demand(props.node.id, id)
+          }}
+        >
+          <MenuTrigger class="btn" disabled={busy() || unresolved()}>
+            {t("readings.aside")}
+          </MenuTrigger>
+          <MenuContent class="popup-list" side="top" align="start" sideOffset={4}>
+            <For each={demands()} keyed={(o) => o.value}>
+              {(o) => (
+                <MenuItem value={o().value} class="item">
+                  <span class="name">
+                    <span class="text">{o().label}</span>
+                  </span>
+                </MenuItem>
+              )}
+            </For>
+          </MenuContent>
+        </Menu>
       </Show>
       <Show when={asked() === props.node.id && failed()}>
         {(f) => (

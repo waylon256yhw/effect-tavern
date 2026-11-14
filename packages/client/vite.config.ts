@@ -34,4 +34,6 @@ const lobe = FileSystemIconLoader(
 )
 export default defineConfig({
   plugins: [solid(), Icons({ compiler: "solid", scale: 1, customCollections: { lobe } }), api()],
+  // one copy of the core in dev, shared by the app and @ui-sdk/solid
+  optimizeDeps: { exclude: ["@ui-sdk/core"] },
 })

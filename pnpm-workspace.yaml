@@ -17,6 +17,8 @@ permissions:
     skills: true
   "@solidjs/web":
     skills: true
+  "@ui-sdk/core":
+    skills: true
   "@x18n/cli":
     skills: true
   solid-js:
@@ -46,3 +48,5 @@ minimumReleaseAgeExclude:
   - "@ai-sdk/provider-utils@5.0.79"
   - "@ai-sdk/openai@4.0.115"
   - "@ai-sdk/typesafe-ai@3.0.38"
+  - "@ui-sdk/core@0.1.0-beta.2"
+  - "@ui-sdk/solid@0.1.0-beta.2"

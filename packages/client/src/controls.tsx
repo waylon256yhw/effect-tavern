@@ -6,6 +6,7 @@ import { lookup } from "@effect-tavern/provider/src/names.ts"
 import { normalize, plan, type Format } from "@effect-tavern/provider/src/url.ts"
 import type { JSX } from "@solidjs/web"
 import { createSignal, For, onSettled, Show } from "solid-js"
+import { Select, SelectContent, SelectItem, SelectItemIndicator, SelectTrigger } from "@ui-sdk/solid/select"
 import { Family } from "./family.tsx"
 import { Back, Caret, Check, Close } from "./icons.tsx"
 import { names } from "./store.ts"
@@ -46,7 +47,6 @@ export const preview = (format: Format, url: string, exact: boolean | undefined,
     return { ok: false, text: e instanceof Error ? e.message : String(e) }
   }
 }
-export const hide = (el: HTMLElement) => el.closest<HTMLElement>("[popover]")?.hidePopover()
 /** A value (a key, an error) onto the clipboard, then `flash` for a moment. A plain-http page off localhost (a phone
  *  on the LAN) has no clipboard: the button then does nothing. */
 export const copyKey = async (value: string | Promise<string>, flash: (on: boolean) => void) => {
@@ -58,15 +58,14 @@ export const copyKey = async (value: string | Promise<string>, flash: (on: boole
 }
 
 // ───────── Controls ─────────
-let menus = 0
 export interface Option<T extends string> {
   value: T
   label: string
   glyph?: string // a model id: its family glyph leads the row
 }
-/** A select without <select>: a trigger and a popover menu anchored under it, the pick checked. With `action`, the
- *  trigger is a button by that name and a pick runs it (检测: the model to test on). With nothing to pick, the
- *  trigger is disabled and still names the pick it holds (a stale one too). */
+/** A select without <select>, on @ui-sdk/solid/select: a trigger and its list, the pick checked, a bottom sheet on a
+ *  small touch screen. With nothing to pick, the trigger is disabled and still names the pick it holds (a stale one
+ *  too). */
 export const Menu = <T extends string>(props: {
   value: T | undefined
   options: readonly Option<T>[]
@@ -75,63 +74,37 @@ export const Menu = <T extends string>(props: {
   stale?: Option<T> // what the trigger shows when the value is set but not among the options (a dangling pick)
   label?: string
   small?: boolean
-  action?: string
 }) => {
-  const id = `menu-${menus++}`
   const current = () => props.options.find((o) => o.value === props.value) ?? props.stale
   return (
-    <>
-      <Show
-        when={props.action}
-        fallback={
-          <button
-            type="button"
-            class={{ select: true, sm: !!props.small }}
-            popovertarget={id}
-            aria-label={props.label}
-            disabled={props.options.length === 0}
-          >
-            <Show when={current()?.glyph}>{(g) => <Family id={g()} />}</Show>
-            <span class="label">{current()?.label ?? props.placeholder ?? ""}</span>
-            <Caret class="caret" />
-          </button>
-        }
-      >
-        {(a) => (
-          <button
-            type="button"
-            class="btn"
-            popovertarget={id}
-            aria-label={props.label}
-            disabled={props.options.length === 0}
-          >
-            {a()}
-          </button>
-        )}
-      </Show>
-      <div id={id} class="snippets menu scroller" popover role="menu" onKeyDown={roam}>
+    <Select
+      value={props.value ?? null}
+      items={props.options.map((o) => ({ value: o.value, label: o.label }))}
+      onValueChange={(v) => v !== null && props.onPick(v as T)}
+      disabled={props.options.length === 0}
+      presentation="auto"
+    >
+      <SelectTrigger class={{ select: true, sm: !!props.small }} aria-label={props.label}>
+        <Show when={current()?.glyph}>{(g) => <Family id={g()} />}</Show>
+        <span class="label">{current()?.label ?? props.placeholder ?? ""}</span>
+        <Caret class="caret" />
+      </SelectTrigger>
+      <SelectContent class="popup-list scroller" sideOffset={4} align="start">
         <For each={props.options} keyed={(o) => o.value}>
           {(o) => (
-            <button
-              type="button"
-              role="menuitemradio"
-              class="item"
-              tabindex="-1"
-              aria-checked={o().value === props.value ? "true" : "false"}
-              onClick={(e) => (hide(e.currentTarget), props.onPick(o().value))}
-            >
+            <SelectItem value={o().value} class="item">
               <span class="name">
                 <Show when={o().glyph}>{(g) => <Family id={g()} />}</Show>
                 <span class="text">{o().label}</span>
               </span>
-              <Show when={o().value === props.value}>
+              <SelectItemIndicator>
                 <Check />
-              </Show>
-            </button>
+              </SelectItemIndicator>
+            </SelectItem>
           )}
         </For>
-      </div>
-    </>
+      </SelectContent>
+    </Select>
   )
 }
 export const Switch = (props: { on: boolean; label: string; onFlip: () => void; disabled?: boolean }) => (
@@ -180,7 +153,13 @@ export interface Pane {
 export const Drawer = (props: { open: boolean; label: string; onClose: () => void; children: JSX.Element }) => {
   onSettled(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && props.open && !document.querySelector(":popover-open, dialog[open]")) props.onClose()
+      if (
+        e.key === "Escape" &&
+        !e.defaultPrevented &&
+        props.open &&
+        !document.querySelector(":popover-open, dialog[open]")
+      )
+        props.onClose()
     }
     addEventListener("keydown", onKey)
     return () => removeEventListener("keydown", onKey)

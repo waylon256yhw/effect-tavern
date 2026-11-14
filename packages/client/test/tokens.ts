@@ -12,7 +12,9 @@ for (const f of readdirSync(src)) {
   if (f === "tokens.css" || !/\.(css|tsx?)$/.test(f)) continue
   for (const m of readFileSync(join(src, f), "utf8").matchAll(/var\((--[a-z0-9-]+)/g)) used.set(m[1]!, f)
 }
-const missing = [...used].filter(([t]) => !defined.has(t))
+// set at runtime on a popup by @ui-sdk (its styling contract), not design constants
+const runtime = new Set(["--anchor-width", "--available-height"])
+const missing = [...used].filter(([t]) => !defined.has(t) && !runtime.has(t))
 assert.deepEqual(missing, [], `undefined tokens: ${missing.map(([t, f]) => `${t} (${f})`).join(", ")}`)
 const unused = [...defined].filter(
   (t) => !used.has(t) && !readFileSync(join(src, "tokens.css"), "utf8").includes(`var(${t})`),

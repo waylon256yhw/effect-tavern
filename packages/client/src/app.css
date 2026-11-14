@@ -1,4 +1,4 @@
-/* Four cascade layers, lowest first: the tokens, the components (which may only use tokens), the card's CSS, the
+/* Five cascade layers, lowest first: ui-sdk (the little CSS @ui-sdk adds for its popups), the tokens, the components (which may only use tokens), the card's CSS, the
    reader's own. A later layer wins unconditionally, so nobody needs !important. The components layer is three files in
    source order: reader.css (the flow, the composer), chrome.css (the Record pill and sheet, the readings, Options, the
    snippets menu, the manager, the picker), inspector.css (the Inspect page), timeline.css (the Timeline page), card.css
@@ -7,7 +7,7 @@
    .prose, .actions, .composer, .send, .strip, .canvas, .panel, .scroll, .side, .stage, .status-page, .status,
    .snippets) are the public surface a card or a reader styles against: rename with care.
    Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the canvas in docs/client-canvas/. */
-@layer tokens, components, card, user;
+@layer ui-sdk, tokens, components, card, user;
 @import "./tokens.css" layer(tokens);
 @import "./reader.css" layer(components);
 @import "./chrome.css" layer(components);
