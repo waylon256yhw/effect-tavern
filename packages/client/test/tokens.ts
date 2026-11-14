@@ -20,3 +20,20 @@ const unused = [...defined].filter(
   (t) => !used.has(t) && !readFileSync(join(src, "tokens.css"), "utf8").includes(`var(${t})`),
 )
 console.log(`tokens: ${defined.size} defined, ${used.size} used, ${unused.length} not yet used`)
+
+// Radius and spacing come off the rulers: no px or rem literal in a border-radius, padding, margin or gap outside tokens.css.
+const ruled =
+  /(?<![\w-])(border(?:-[a-z]+)*-radius|padding(?:-[a-z-]+)?|margin(?:-[a-z-]+)?|gap|row-gap|column-gap)\s*:([^;{}]*)/g
+const literal = /(?<![\w.-])-?(\d*\.)?\d+(px|rem)\b/
+const off: string[] = []
+for (const f of readdirSync(src)) {
+  if (f === "tokens.css" || !f.endsWith(".css")) continue
+  // blank comments out, keeping newlines so line numbers hold
+  const text = readFileSync(join(src, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "))
+  for (const m of text.matchAll(ruled)) {
+    if (!literal.test(m[2]!)) continue
+    const line = text.slice(0, m.index).split("\n").length
+    off.push(`${f}:${line} ${m[0].replace(/\s+/g, " ").trim()}`)
+  }
+}
+assert.deepEqual(off, [], `radius or spacing off the token rulers:\n${off.join("\n")}`)
