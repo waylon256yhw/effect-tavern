@@ -142,24 +142,17 @@ const STAGES: [Phase, Key][] = [
   ["polish", "settings.stagePolish"],
 ]
 
-/** 预检: whether check asks the decision model first (DecisionConfig.enabled). With no config saved the switch is off
- *  and the arrow opens the Decision row on 模型服务. */
+/** 预检: whether check asks the decision model first (DecisionConfig.enabled). The arrow opens the Decision row on 模型服务;
+ *  with no config saved the switch is off. A key is not required (a keyless service is legal), so it is not the test. */
 const PreCheck = (props: { onDecision: () => void }) => {
   const dec = read(decision)
   return (
     <div class="row">
       <span>{t("settings.precheck")}</span>
       <span class="spacer" />
-      <Show when={!dec()}>
-        <button
-          type="button"
-          class="icon sm"
-          aria-label={t("settings.setUpDecision")}
-          onClick={() => props.onDecision()}
-        >
-          <Jump aria-hidden="true" />
-        </button>
-      </Show>
+      <button type="button" class="icon sm" aria-label={t("settings.setUpDecision")} onClick={() => props.onDecision()}>
+        <Jump aria-hidden="true" />
+      </button>
       <Switch
         on={!!dec()?.enabled}
         disabled={!dec()}
@@ -225,10 +218,13 @@ const Routing = (props: { onDecision: () => void }) => {
               onPick={(k) => void putRouting({ ...route(), default: pairOf(k) })}
             />
           </div>
-          <Show when={!route().stages}>
-            <PreCheck onDecision={props.onDecision} />
-          </Show>
         </div>
+        {/* its own card: the hero is a row on desktop */}
+        <Show when={!route().stages}>
+          <div class="setting-card">
+            <PreCheck onDecision={props.onDecision} />
+          </div>
+        </Show>
         <div class="block">
           <div class="block-title">
             <h3>{t("settings.byStage")}</h3>
