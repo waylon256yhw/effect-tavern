@@ -639,6 +639,7 @@ button:focus-visible {
   max-width: var(--measure);
   margin: 0 auto;
   background: var(--surface-3);
+  anchor-name: --composer; /* what stands over the box hangs from it: the jump to the latest turn (.latest) */
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-composer);
   padding: var(--space-1);

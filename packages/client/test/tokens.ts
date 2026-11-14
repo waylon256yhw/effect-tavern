@@ -37,3 +37,13 @@ for (const f of readdirSync(src)) {
   }
 }
 assert.deepEqual(off, [], `radius or spacing off the token rulers:\n${off.join("\n")}`)
+
+// An anchored box names an anchor that exists: without one it falls to the viewport's corner (the jump to the latest
+// turn did, when the composer's menu stopped needing the box's name).
+const css = readdirSync(src)
+  .filter((f) => f.endsWith(".css"))
+  .map((f) => readFileSync(join(src, f), "utf8"))
+  .join("\n")
+const anchors = new Set([...css.matchAll(/anchor-name:\s*(--[a-z0-9-]+)/g)].map((m) => m[1]))
+const adrift = [...css.matchAll(/position-anchor:\s*(--[a-z0-9-]+)/g)].map((m) => m[1]!).filter((a) => !anchors.has(a))
+assert.deepEqual(adrift, [], `position-anchor without an anchor-name: ${adrift.join(", ")}`)
