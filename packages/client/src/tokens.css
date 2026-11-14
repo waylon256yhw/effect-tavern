@@ -115,7 +115,7 @@
   --topbar: 48px; /* a page's own head on a phone (inspector.css), under the safe area */
   --inspect-stage: 7.5rem; /* an Inspector row's stage slot */
   /* its number slots: time, ↑, ↓ (inspector.css adds the cache slot when the turn has one) */
-  --inspect-metrics: 3.25rem 3.75rem 3.75rem;
+  --inspect-metrics: 3.25rem 4.5rem 4.5rem;
   --bar-p: 0; /* a pre-check bar's probability and its two thresholds (inspector.tsx sets them on the bar) */
   --bar-lo: 0;
   --bar-hi: 1;

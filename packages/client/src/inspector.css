@@ -18,7 +18,7 @@
 }
 /* a row's number slots gain the cache slot when any call of the turn read or wrote the cache */
 .inspect.cache {
-  --inspect-metrics: 3.25rem 3.75rem 3.75rem 3.75rem;
+  --inspect-metrics: 3.25rem 4.5rem 4.5rem 4.5rem;
 }
 .inspect .dim,
 .inspect .meta {

@@ -67,7 +67,7 @@ const Metrics = (props: { ms?: number; usage?: Call["usage"]; cache: boolean }) 
         {(u) => (
           <>
             <i>↑</i>
-            {u().input}
+            {fmt(u().input)}
           </>
         )}
       </Show>
@@ -77,7 +77,7 @@ const Metrics = (props: { ms?: number; usage?: Call["usage"]; cache: boolean }) 
         {(u) => (
           <>
             <i>↓</i>
-            {u().output}
+            {fmt(u().output)}
           </>
         )}
       </Show>
@@ -88,7 +88,7 @@ const Metrics = (props: { ms?: number; usage?: Call["usage"]; cache: boolean }) 
         fallback={
           <span class="mt" title={t("inspector.cacheWrite")}>
             <i>+</i>
-            {props.usage?.cacheWrite}
+            {fmt(props.usage?.cacheWrite ?? 0)}
           </span>
         }
       >
@@ -97,7 +97,7 @@ const Metrics = (props: { ms?: number; usage?: Call["usage"]; cache: boolean }) 
             {(n) => (
               <>
                 <i>↻</i>
-                {n()}
+                {fmt(n())}
               </>
             )}
           </Show>
