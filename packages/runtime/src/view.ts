@@ -13,7 +13,7 @@ import { hook, makeLore, namedLore } from "./lore.ts"
 import { lines, fill } from "./names.ts"
 import { request, type Ask } from "./request.ts"
 import { cond, effect, labels } from "./phrase.ts"
-import { contextLookup, deliveryText, freeze, latest, resourcesAt, fedResources } from "./context.ts"
+import { catalogBlock, contextLookup, deliveryText, freeze, latest, resourcesAt, fedResources } from "./context.ts"
 import { floorAt, currentAt } from "./derived.ts"
 
 import { initialWorld } from "./world.ts"
@@ -200,6 +200,7 @@ export const view = (card: Card, rows: Rows, o: Options = {}): View => {
             question: R.asks["lookup"]!.text,
             context: frozen.map(lookupContext.told),
             current: currentAt(R.products, world), // session.ts: sections listed for lookup only
+            catalog: catalogBlock(lookupContext.catalog("")), // the view the session builds; no input to match
             ledger: [],
           }
         : stage === "record"

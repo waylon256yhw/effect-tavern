@@ -2,7 +2,7 @@
 // Replaces the ad-hoc `lore` in turn.ts and `threads` in brief.ts. Windows here read the player's input.
 import { Schema } from "effect"
 import assert from "node:assert/strict"
-import { makeLore, type Disclosure, type Entry } from "../src/lore.ts"
+import { hook, makeLore, type Disclosure, type Entry } from "../src/lore.ts"
 
 interface State {
   chapter: number
@@ -68,6 +68,15 @@ assert.equal(
   makeLore([{ id: "x", layers: ["甲在竹林。乙在镇上。"], unlock: () => 1 }]).index({}, [])[0]!.hook,
   "甲在竹林。",
 )
+// an ASCII period ends one only before whitespace or the end, never inside an abbreviation (#168: nikke's titles)
+for (const [layer, first] of [
+  ["DEEP (D.E.E.P)的档案与设定。\n\n正文。", "DEEP (D.E.E.P)的档案与设定。"],
+  ["E.H.的档案与设定。正文。", "E.H.的档案与设定。"],
+  ["Version 3.5 is out. Next.", "Version 3.5 is out."],
+  ["Ends here.", "Ends here."],
+  ["Wait!他走了。", "Wait!"],
+] as const)
+  assert.equal(hook(layer), first)
 const r1 = read(ch1, D(path(root)), D(path(root)), "li")!
 assert.deepEqual(r1, [{ id: "li", layer: 1 }])
 const t1 = add(root, ch1, r1) // lookup result appended to the log once

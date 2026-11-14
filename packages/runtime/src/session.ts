@@ -38,6 +38,7 @@
 // (an opening, a guard line, the fiction); only a player's entry with one stays out, and `demand` on such a product refuses.
 import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } from "./projection.ts"
 import {
+  catalogBlock,
   contextLookup,
   deliveryText,
   freeze,
@@ -554,7 +555,8 @@ export const makeSession = ({
         const injected = latest([...resident, ...current, ...deliveries])
         const lookup = contextLookup(resources, injected)
         if (lookup.readable().length) {
-          // No catalog enumeration: request size is independent of the number of unseen resources.
+          // One catalog view per turn (#168): the whole pool when it fits, else the counts and the input's matches
+          const view = lookup.catalog(input.text || input.note || "")
           yield* native(
             emit,
             "lookup",
@@ -565,6 +567,7 @@ export const makeSession = ({
               // lookup's own reading: an entry's unread sections listed under it; narrate's `told` stays bare
               context: latest([...resident, ...deliveries]).map(lookup.told),
               current: here.known().current,
+              catalog: catalogBlock(view),
             }),
             {
               tools: lookup.tools,

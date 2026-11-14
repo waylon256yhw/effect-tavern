@@ -736,7 +736,7 @@ const packs = [packB, packA]
   assert.deepEqual([by("good").text, by("good").unasked], ["Q 贝克兰德", undefined])
   assert.deepEqual([by("bad").text, by("bad").unasked], ["Q-NO {{missing}}", true])
   // an ask: down the chain, the code's own at the bottom
-  assert.deepEqual([R.asks["lookup"]!.from, /Find only the context/.test(R.asks["lookup"]!.text)], ["harness", true])
+  assert.deepEqual([R.asks["lookup"]!.from, /Choose the context/.test(R.asks["lookup"]!.text)], ["harness", true])
   // `holes`: what nothing fills, in order of appearance, the same list whether or not the entry was dropped
   assert.deepEqual(R.holes, ["missing", "ask", "after"])
 }

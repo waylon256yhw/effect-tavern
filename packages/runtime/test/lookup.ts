@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
-import { fake, type FakeCall, type FakeReply } from "@effect-tavern/provider"
+import { fake, fakeDecision, type DecisionModel, type FakeCall, type FakeReply } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import {
+  CATALOG_CHARS,
   contextLookup,
   deliveryText,
   freeze,
@@ -22,7 +23,11 @@ const lore = (id: string, body = `${id} body`): Card["lore"][number] => ({
   unlock: { all: [] },
   offer: { any: [] },
 })
-const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => FakeReply) => {
+const fixture = (
+  entries: Card["lore"],
+  answer: (o: FakeCall, n: number) => FakeReply,
+  decision?: () => DecisionModel | undefined,
+) => {
   let n = 0
   const lookup: FakeCall[] = []
   const calls: Extract<Event, { kind: "call" }>[] = []
@@ -35,6 +40,7 @@ const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => Fake
     card: { ...chat, lore: entries, products: [] },
     rows: () => ({}),
     model: (p) => (p === "lookup" ? light : other),
+    decision,
   })
   const g = S.greet({ text: "opening" }).node!
   const go = (s: ReturnType<typeof S.act>) =>
@@ -138,15 +144,44 @@ const entries = [lore("a", "A points to card:b."), lore("b", "B points to card:c
   assert.ok(!JSON.stringify(f.lookup).includes("LOCKED BODY"))
   assert.ok(!JSON.stringify(f.lookup).includes("PLAYER ONLY"))
 }
-// Even huge catalogs never enumerate IDs in the initial request or tool schema.
+// A huge catalog is incomplete: the first request carries the counts by source and the host's top 8 for the input,
+// never the whole list, and the decision model is never asked (#168).
 {
   const large = Array.from({ length: 2000 }, (_, i) => lore(`entry${i}`, `Shared hook ${i}.`))
-  const f = fixture(large, (_, n) => (n === 0 ? call("search_context", { query: "shared" }) : done))
-  await f.go(f.S.act(f.g.id, { text: "find" }))
-  assert.ok(JSON.stringify(f.lookup[0]).length < 16000)
-  assert.ok(!JSON.stringify(f.lookup[0]).includes("entry1999"))
+  let asked = 0
+  const never = fakeDecision(() => {
+    asked++
+    return {}
+  })
+  const f = fixture(
+    large,
+    (_, n) => (n === 0 ? call("search_context", { query: "shared" }) : done),
+    () => never,
+  )
+  await f.go(f.S.act(f.g.id, { text: "shared hook" }))
+  assert.equal(asked, 0)
+  assert.ok(!f.calls.some((c) => c.via))
+  const first = JSON.stringify(f.lookup[0])
+  assert.ok(first.length < 16000)
+  assert.ok(first.includes("Available (2000): card 2000"))
+  assert.ok(first.includes("card:entry0 Shared hook 0.") && first.includes("card:entry7 "))
+  assert.ok(!first.includes("card:entry8 ") && !first.includes("entry1999"))
   const out = JSON.stringify(f.lookup[1]!.prompt)
   assert.ok(out.includes("card:entry7") && !out.includes("card:entry8"))
+}
+// A complete catalog at its character bound still keeps the first request under the same 16000.
+{
+  const title = "x".repeat(150)
+  const n = Math.floor(CATALOG_CHARS / `card:wide000 ${title}.\n`.length)
+  const wide = Array.from({ length: n }, (_, i) => lore(`wide${String(i).padStart(3, "0")}`, `${title}.`))
+  const f = fixture(wide, () => done)
+  await f.go(f.S.act(f.g.id, { text: "find" }))
+  const first = JSON.stringify(f.lookup[0])
+  assert.ok(
+    first.includes(`Available (${n}, complete):`) && first.includes(`card:wide${String(n - 1).padStart(3, "0")}`),
+    String(n),
+  )
+  assert.ok(first.length < 16000, String(first.length))
 }
 // Infinite search is bounded; successfully read context still reaches the narrator at the cap.
 {

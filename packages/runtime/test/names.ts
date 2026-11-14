@@ -356,7 +356,7 @@ assert.ok(has(doc(third, "narrate"), "HELD 玩家给的."))
   const cardAsk = [{ id: "lookup", text: "CARD ASK" }]
   assert.ok((await lookup(cardAsk)).includes("CARD ASK"))
   const harness = await lookup(undefined)
-  assert.ok(harness.includes("Find only the context") && !harness.includes("PLAYER"))
+  assert.ok(harness.includes("Choose the context") && !harness.includes("PLAYER"))
   assert.ok((await lookup(cardAsk, { char: "依瑞丝" })).includes("PLAYER 依瑞丝"))
 }
 

@@ -68,7 +68,8 @@ assert.deepEqual(
     .slice(0, -1),
   at("lookup").doc.map(text).slice(0, -1),
 )
-assert.match(sent("lookup").join("\n"), /search_context/)
+// the catalog view, the same block in the preview and the turn (#168)
+assert.match(sent("lookup").join("\n"), /\nAvailable \(1, complete\):\ncard:yandao /)
 const r = at("record")
 assert.equal(r.sections[0]!.text, "") // yandao declares only pov and style: head (record) shows worldOf, never writing lines
 assert.deepEqual(sent("record").slice(0, -1), r.doc.map(text).slice(0, -1))
