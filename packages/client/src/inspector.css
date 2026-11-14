@@ -668,6 +668,10 @@
 .inspect .bar[data-none] {
   opacity: 0.4;
 }
+/* a lookup line the pre-check delivered */
+.inspect .pline.read .lb {
+  color: var(--ok);
+}
 .inspect .kv {
   margin: 0;
   display: grid;

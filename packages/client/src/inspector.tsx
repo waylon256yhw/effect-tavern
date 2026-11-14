@@ -1,6 +1,6 @@
 import { AsyncView } from "./async-view.tsx"
 import { fetchDetail, fetchTrace, fetchContext } from "./wire.ts"
-import { HI, LO } from "@effect-tavern/runtime/src/decision.ts"
+import { HI, LO, LOOKUP } from "@effect-tavern/runtime/src/decision.ts"
 import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch, untrack } from "solid-js"
 import { read } from "./bridge.ts"
 import { Back, Change, Check, Clue, Copy, Next, Prev, Read } from "./icons.tsx"
@@ -348,20 +348,27 @@ const Step = (props: {
                   <Steps call={c()} facts={props.facts} cache={props.cache} />
                 </Match>
                 <Match when={c().via === "decision"}>
-                  <For each={precheck(c().out).lines} keyed={false}>
+                  <For each={precheck(c().out, props.row.phase).lines} keyed={false}>
                     {(l) => (
-                      <div class="pline">
+                      <div class={{ pline: true, read: !!l().read }}>
                         <span class="lb">{l().label}</span>
+                        {/* lookup has one threshold: both ticks on it */}
                         <span
                           class="bar"
-                          style={{ "--bar-p": l().p ?? 0, "--bar-lo": LO, "--bar-hi": HI }}
+                          style={
+                            props.row.phase === "lookup"
+                              ? { "--bar-p": l().p ?? 0, "--bar-lo": LOOKUP, "--bar-hi": LOOKUP }
+                              : { "--bar-p": l().p ?? 0, "--bar-lo": LO, "--bar-hi": HI }
+                          }
                           data-none={l().p === null || undefined}
                         />
                         <span class="pv">{l().p === null ? "" : l().p!.toFixed(2)}</span>
                       </div>
                     )}
                   </For>
-                  <Show when={precheck(c().out).error}>{(e) => <KeyValues of={{ error: e() }} />}</Show>
+                  <Show when={precheck(c().out, props.row.phase).error}>
+                    {(e) => <KeyValues of={{ error: e() }} />}
+                  </Show>
                 </Match>
                 <Match when={typeof c().out === "string"}>
                   <For each={pieces(c().out as string)} keyed={false}>

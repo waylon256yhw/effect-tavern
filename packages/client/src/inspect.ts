@@ -179,10 +179,10 @@ export const nativeTrace = (
 
 // ───────── A row's head and its opened result, as data (inspector.tsx draws) ─────────
 
-/** The ordinal after a stage's name, only when that stage ran more than once in the node; check's pre-check
- *  (`via: "decision"`) counts apart from the LLM check. */
+/** The ordinal after a stage's name, only when that stage ran more than once in the node; a stage's pre-check
+ *  (`via: "decision"`) counts apart from its LLM call, and lookup's apart from check's. */
 export const ordinals = (rs: readonly Row[]): (number | undefined)[] => {
-  const key = (r: Row) => r.call.via ?? r.phase
+  const key = (r: Row) => (r.call.via ? `${r.phase}:${r.call.via}` : r.phase)
   return rs.map((r) => {
     const same = rs.filter((x) => key(x) === key(r))
     return same.length > 1 ? same.indexOf(r) + 1 : undefined
@@ -262,24 +262,41 @@ export const polishPairs = (call: Call): { id: string; before?: string; after: s
     after: String(after),
   }))
 }
-/** The pre-check's reading: one line per rule and open entry with its probability (null: none came back). */
+/** The pre-check's reading (runtime decision.ts `decisionPass`, one shape for lookup and check): one line per question
+ *  with its probability (null: none came back), and what lookup delivered. Lookup's lines are its whole catalog: only
+ *  the highest-ranked show, each delivered one marked. */
 export const precheck = (
   out: unknown,
-): { lines: { label: string; p: number | null }[]; escalate: boolean; error?: string } => {
+  phase: string,
+): {
+  lines: { label: string; p: number | null; read?: true }[]
+  escalate: boolean
+  delivered: string[]
+  error?: string
+} => {
   const o = (out ?? {}) as {
-    p?: { rules?: Record<string, number | null>; open?: Record<string, number | null> }
+    lines?: { label: string; p: number | null }[]
     verdict?: string
     error?: string
+    delivered?: string[]
   }
+  const delivered = o.delivered ?? []
+  const lines = (o.lines ?? []).map((l) => ({ label: l.label, p: l.p ?? null }))
   return {
-    lines: [...Object.entries(o.p?.rules ?? {}), ...Object.entries(o.p?.open ?? {})].map(([label, p]) => ({
-      label,
-      p: p ?? null,
-    })),
+    lines:
+      phase === "lookup"
+        ? lines
+            .sort((a, b) => (b.p ?? -1) - (a.p ?? -1))
+            .slice(0, RANKED)
+            .map((l) => (delivered.includes(l.label) ? { ...l, read: true as const } : l))
+        : lines,
     escalate: o.verdict !== "pass",
+    delivered,
     ...(o.error !== undefined && { error: o.error }),
   }
 }
+// ponytail: a screen of lines; the stored row keeps them all (JSON view)
+const RANKED = 12
 
 /** A narrate answer as its prose and the blocks it opened (journal.ts `splitter`), each run of one kind merged. */
 export const pieces = (text: string): { id?: string; text: string }[] => {
@@ -316,11 +333,12 @@ export const digest = (r: Row, nth: number, f: Facts): Digest => {
     return { pills: [...(bad ? [bad] : []), ...names.map((text) => ({ text }))] }
   }
   if (r.call.via === "decision") {
-    const x = precheck(out)
+    const x = precheck(out, r.phase)
     return {
       pills: [
         { word: "precheck", ...(x.error !== undefined && { tone: "bad" as const, hint: x.error }) },
         ...(x.escalate ? [{ word: "escalate" as const }] : []),
+        ...x.delivered.map((text) => ({ text })),
       ],
     }
   }
