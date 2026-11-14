@@ -5,7 +5,7 @@
 .record-pill {
   position: relative;
   height: var(--control-sm);
-  padding: 0 4px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
   display: inline-flex;
@@ -163,7 +163,7 @@
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  gap: 3px;
+  gap: var(--space-half);
   background: none;
 }
 .steps .track i {
@@ -180,7 +180,7 @@
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr); /* a long name clips in its own cell instead of pushing the row past the track */
-  gap: 3px;
+  gap: var(--space-half);
   margin-top: var(--space-1);
   font-size: var(--text-caption);
   color: var(--ink-3);
@@ -223,7 +223,7 @@
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  gap: 3px;
+  gap: var(--space-half);
   background: none;
 }
 .meter.scale .cell {
@@ -293,7 +293,7 @@
   box-shadow: 0 0 0 2px var(--surface-3);
 }
 .badge {
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--alpha-1);
   font-size: var(--text-caption);
@@ -315,7 +315,7 @@
   flex: none;
   width: var(--icon-sm);
   height: var(--icon-sm);
-  margin-top: 2px;
+  margin-top: var(--space-half);
   color: var(--ink-3);
 }
 .clue p {
@@ -323,10 +323,13 @@
   text-align: left;
 }
 .clue .icon {
-  margin: -6px -8px -6px 0;
+  margin-block: calc(
+    (var(--text-body) * var(--leading-body) - var(--control)) / 2
+  ); /* hangs over the padding, as .error's */
+  margin-inline: 0 calc(-1 * var(--space-2));
 }
 .clue .badge {
-  margin-top: 2px;
+  margin-top: var(--space-half);
 }
 
 .icon[aria-pressed="true"],
@@ -348,8 +351,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 26px;
-  margin: -4px -5px -4px 0;
+  min-height: var(--control-key);
+  margin: calc(-1 * var(--space-1)) calc((var(--icon-sm) - var(--control-key)) / 2) calc(-1 * var(--space-1)) 0;
 }
 .product .plabel {
   font-size: var(--text-footnote);
@@ -370,7 +373,7 @@
 .product .kv {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 2px var(--space-2);
+  gap: var(--space-half) var(--space-2);
 }
 .product .kv dt {
   color: var(--ink-3);
@@ -384,20 +387,20 @@
   font-size: var(--text-footnote);
 }
 .product .rows th {
-  padding: 0 var(--space-2) 2px 0;
+  padding: 0 var(--space-2) var(--space-half) 0;
   text-align: left;
   font-weight: 500;
   color: var(--ink-3);
 }
 .product .rows td {
-  padding: 1px var(--space-2) 1px 0;
+  padding: 0 var(--space-2) var(--space-half) 0;
   vertical-align: top;
 }
 /* the 小剧场 menu in the turn's row: a button at the row's start, its menu above it with left edges aligned, opening
    rightward into the prose column (@ui-sdk/solid/menu places it) */
 .actions .btn {
   height: var(--control-sm);
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-caption);
 }
@@ -703,14 +706,14 @@
 .manager .filter {
   flex: none;
   display: inline-flex;
-  gap: 2px;
-  padding: 3px;
+  gap: var(--space-half);
+  padding: var(--space-half);
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
 }
 .manager .filter button {
   height: 26px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   border-radius: var(--radius-pill);
   color: var(--ink-2);
   font-size: var(--text-footnote);
@@ -747,7 +750,7 @@
   column-gap: var(--space-3);
   align-items: center;
   min-height: 40px;
-  padding: 6px var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-card);
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
@@ -762,7 +765,7 @@
 }
 .manager .card:has(.preview) {
   align-items: start;
-  padding-block: 10px;
+  padding-block: var(--space-3);
 }
 .manager .card:hover {
   background: var(--ghost-hover);
@@ -793,7 +796,7 @@
   display: inline-grid;
 }
 .manager .card:has(.preview) .box {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 .manager .card .box svg {
   width: 11px;
@@ -816,7 +819,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .manager .card .top {
   min-width: 0;
@@ -843,7 +846,7 @@
 .manager .card .acts {
   flex: none;
   display: inline-flex;
-  gap: 2px;
+  gap: var(--space-half);
   opacity: 0;
   translate: 0 2px;
   pointer-events: none;
@@ -887,9 +890,9 @@
 .manager .card .where {
   display: inline-flex;
   align-items: center;
-  height: 18px;
-  padding: 0 5px;
-  margin-right: 5px;
+  height: var(--tag);
+  padding: 0 var(--space-1);
+  margin-right: var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--warn-soft);
   color: var(--warn);
@@ -898,8 +901,8 @@
   vertical-align: baseline;
 }
 .manager mark {
-  padding: 0 2px;
-  border-radius: 3px;
+  padding: 0 var(--space-half);
+  border-radius: var(--radius-sm);
   background: var(--warn-soft);
   color: var(--ink);
   font-weight: 600;
@@ -946,8 +949,8 @@
 }
 .tagman .chip {
   height: 30px;
-  padding: 0 6px 0 11px;
-  gap: 6px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  gap: var(--space-1);
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
 }
@@ -962,7 +965,7 @@
 .tagman .chip .field {
   min-width: 3rem;
   max-width: 10rem;
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-1);
   font-size: var(--text-footnote);
 }
 .tagman .chip .count {
@@ -973,7 +976,7 @@
 }
 .tagman .chip .del {
   display: inline-flex;
-  padding: 3px;
+  padding: var(--space-1);
   border-radius: var(--radius-pill);
   color: var(--ink-3);
 }
@@ -1008,7 +1011,7 @@
   flex-direction: column;
   gap: var(--space-2);
   margin: 0 calc(-1 * var(--space-2));
-  padding: 2px var(--space-2);
+  padding: var(--space-half) var(--space-2);
 }
 /* a row: a surface card, the name over an optional bio line, the check at the right on the pick in force */
 .picker .item {
@@ -1017,11 +1020,11 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--space-2);
-  row-gap: 2px;
+  row-gap: var(--space-half);
   align-items: center;
   width: 100%;
   min-height: 40px;
-  padding: 6px var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 0;
   border-radius: var(--radius-card);
   background: var(--surface-2);
@@ -1129,7 +1132,7 @@
   inset: 0 auto auto 50%;
   translate: -50%;
   z-index: 1000;
-  padding: 2px 8px;
+  padding: var(--space-half) var(--space-2);
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   background: var(--warn);
   color: var(--primary-ink);
