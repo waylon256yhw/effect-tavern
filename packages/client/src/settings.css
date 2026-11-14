@@ -1125,14 +1125,6 @@
 }
 
 /* ── routing and templates ── */
-.setting-card.hero {
-  flex-direction: column;
-  align-items: stretch;
-}
-.setting-card.hero h3 {
-  font-size: var(--text-heading);
-  font-weight: 650;
-}
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
@@ -1328,15 +1320,6 @@
   }
   .detail-scroll {
     padding-inline: var(--space-6);
-  }
-  .setting-card.hero {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-5);
-  }
-  .hero-pick {
-    width: min(22rem, 60%);
   }
   .msg-card {
     grid-template-columns: 8.5rem minmax(0, 1fr) auto;

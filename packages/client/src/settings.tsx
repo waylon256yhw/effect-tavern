@@ -148,9 +148,9 @@ const PreCheck = (props: { onDecision: () => void }) => {
   const dec = read(decision)
   return (
     <div class="row">
-      <span>{t("settings.precheck")}</span>
-      <span class="spacer" />
-      <button type="button" class="icon sm" aria-label={t("settings.setUpDecision")} onClick={() => props.onDecision()}>
+      {/* the word is the way to its model: one target, not a bare arrow */}
+      <button type="button" class="btn sm" title={t("settings.setUpDecision")} onClick={() => props.onDecision()}>
+        {t("settings.precheck")}
         <Jump aria-hidden="true" />
       </button>
       <Switch
@@ -204,11 +204,17 @@ const Routing = (props: { onDecision: () => void }) => {
     <section class="detail-card" aria-label={t("settings.routing")}>
       <header class="detail-header">
         <h2>{t("settings.routing")}</h2>
+        <span class="spacer" />
+        <PreCheck onDecision={props.onDecision} />
       </header>
       <div class="detail-scroll scroller">
-        <div class="setting-card hero">
-          <h3>{t("settings.mainModel")}</h3>
-          <div class="hero-pick">
+        {/* the main model in the stage cards' own grid and grammar; 预检 covers lookup and check, so it is the page's,
+            in its head, in both by-stage states */}
+        <div class="cards-grid">
+          <div class="setting-card">
+            <div class="stage-head">
+              <span>{t("settings.mainModel")}</span>
+            </div>
             <Menu
               label={t("settings.mainModel")}
               placeholder={t("settings.unset")}
@@ -218,10 +224,6 @@ const Routing = (props: { onDecision: () => void }) => {
               onPick={(k) => void putRouting({ ...route(), default: pairOf(k) })}
             />
           </div>
-        </div>
-        {/* its own card under the main model in both by-stage states: it covers lookup and check */}
-        <div class="setting-card">
-          <PreCheck onDecision={props.onDecision} />
         </div>
         <div class="block">
           <div class="block-title">
