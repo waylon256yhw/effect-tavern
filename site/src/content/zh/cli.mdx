@@ -100,10 +100,10 @@ cd packages/server && bun run compile:headless
 
 ## 4. 终端交互与管道游玩（`tavern play`）
 
-纯数字参数表示续玩已有故事 ID，其余参数作为卡片 ID 新建故事（数字卡片名可加 `--card` 强制新建）。支持交互式行输入、`--input` 单步执行、stdin 管道以及 `--jsonl` 事件流输出：
+纯数字参数表示续玩已有故事 ID，其余参数作为卡片 ID 新建故事（数字卡片名可加 `--card` 强制新建）。支持交互式行输入、`--input` 单步执行、stdin 管道、`--user <name>`（写入该卡上的玩家名 `{{user}}` 并对该卡后续新局生效）以及 `--jsonl` 事件流输出：
 
 ```sh
-MODEL=fake bun run tavern play wuxia --greeting 1 --set bond=3 --note "雨夜初见"
+MODEL=fake bun run tavern play wuxia --greeting 1 --set bond=3 --user "陆沉" --note "雨夜初见"
 ```
 
 | 斜杠命令 | 行为 |

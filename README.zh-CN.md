@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-从零构建的 AI 角色扮演与交互叙事全栈系统，基于 **Effect v4**、**Solid 2.0** 与 **Bun**。
+从零构建的 AI 角色扮演与交互叙事全栈系统，基于 **Effect v4**、**Solid 2.0**、**UI SDK（`@ui-sdk`）** 与 **Bun**。
 
 Effect Tavern 将一张卡视为**声明式数据 + 确定性规则**，而非提示词魔咒与正则脚本的拼接。代码掌控执行循环、状态结算、带种子的随机检定与缓存断点；LLM 只在带类型的阶段接缝上被调用，负责分类判断、渲染正文与提取结构化事实。
 
@@ -18,9 +18,9 @@ Effect Tavern 将一张卡视为**声明式数据 + 确定性规则**，而非�
 lookup → (decide → settle)* → gate → direct → narrate → check → polish → record
 ```
 
-- **结构化阶段按需开启（Opt-in）：** 纯聊天卡每轮只跑 `narrate` 与 `record`；`lookup`、`decide`、`direct`、`check`、`polish` 均根据卡片声明自动启停。
-- **正文非权威：** 只有 `narrate` 读取 `fiction` 与对话转录稿（`transcript`），且绝不直接看到数值——状态仅通过带 `when` 条件的散文分段（`band`）送达叙事者。
-- **确定性结算与两阶段世界状态：** 标量字段（`fields`）由带种子的动作检定（`actions`）与写后选择题读数（`readouts`）由代码结算；可变世界表与记录（`world`）通过 `record` 阶段的稀疏 `DomainChange` 事务更新，与追加式编年记忆（`chronicle`，如 `notes`）及纯面向玩家的小剧场（`theater`，如 `inner`、`options`、`<<aside>>`）严格分责。
+- **结构化阶段按需开启与决策模型预检：** 纯聊天卡每轮只跑 `narrate` 与 `record`；`lookup`、`decide`、`direct`、`check`、`polish` 均根据卡片声明自动启停。可选的全局**决策模型（Decision Model）**支持以概率打分直接完成完整目录 `lookup` 检索与边界清晰的 `check` 预检，仅在需要时回退至语言模型调用。
+- **正文非权威与后台阶段隔离：** 只有 `narrate` 读取 `fiction`、行文风格指令与对话转录稿（`transcript`），且绝不直接看到数值——状态仅通过带 `when` 条件的散文分段（`band`）送达叙事者；其余后台阶段仅读取 `<world>` 背景与 XML 标签包裹的待处理文本。
+- **确定性结算、两阶段世界状态与过场（`passages`）：** 标量字段（`fields`）由带种子的动作检定（`actions`）与写后选择题读数（`readouts`）由代码结算；可变世界表与记录（`world`）通过 `record` 阶段的稀疏 `DomainChange` 事务更新，与追加式编年记忆（`chronicle`，如 `notes`）及纯面向玩家的小剧场（`theater`，如 `inner`、`options`、`<<aside>>`）严格分责；写后 `passages` 支持周目/幕间重置（`digest` 纪元边界）与终局收束（`over`）。
 
 ### 2. 不可变日志树与纯函数派生视图
 
@@ -50,12 +50,13 @@ lookup → (decide → settle)* → gate → direct → narrate → check → po
 
 ```text
 packages/
-  runtime/    回合管线、Card/Layer/Product Schema、日志树、派生折叠、静态 lint 与离线制卡 CLI
-  provider/   连接配置、AI SDK 编译（Anthropic / OpenAI-compatible / Gemini）、缓存断点与流式原语
+  runtime/    回合管线、Card/Layer/Product Schema、决策模型快筛、日志树、派生折叠、静态 lint 与离线制卡 CLI
+  provider/   语言模型与决策模型连接、AI SDK 编译（Anthropic / OpenAI 兼容 / Gemini）、缓存断点与流式原语
   server/     SQLite 文档库、HTTP + SSE 服务端、制卡工坊接口（compile / sort / review）与 `tavern` CLI
-  client/     Solid 2.0 Web 客户端：阅读器、卡片详情与动态开局、状态与小剧场、检查器、时间轴、写作包与模型库
+  client/     Solid 2.0 + @ui-sdk Web 客户端：空间画布壳层、阅读器、卡片详情、读数与小剧场、检查器、时间轴与设置
 skills/
   card-author/  渐进式披露（Progressive Disclosure）制卡与旧卡重制 Agent Skill
+samples/        完整重制样卡（如演示多日循环 `passages` 与 `digest` 边界的 `life-of-pi`）
 site/           基于 Cloudflare Nimbus（Astro）的双语文档站（同时产出 HTML、净版 Markdown 与 llms.txt）
 docs/           内部工程调研与设计简报档案
 ```
@@ -119,7 +120,8 @@ bun run tavern card install my-card.yaml
 
 ```sh
 vp check            # oxfmt + oxlint（含 Solid 2.0 规则）+ 类型检查
-vp run verify       # 运行全仓断言自检（runtime、provider、server、client 及 x18n 词条检查）
+vp run verify       # 运行全仓断言自检（runtime、provider、server、client、x18n 词条及前端包边界检查）
+cd packages/client && vp run verify:ui # 基于无头 Chrome 与 @ui-sdk Agent Bridge 的真实控件与 Solid 诊断自检
 
 pnpm run docs:dev   # 本地启动 Nimbus 双语文档站
 pnpm run docs:check # 执行 Nimbus 文档规范检查与静态构建验证
@@ -129,7 +131,7 @@ pnpm run docs:check # 执行 Nimbus 文档规范检查与静态构建验证
 
 ## 文档导航
 
-- **文档站（`site/`）：** 中英双语功能文档，涵盖核心概念、制卡指南、CLI 与无头宿主、玩家层与写作包（自动生成面向 Agent 的 `/llms.txt` 与 `.md` 镜像）。
+- **文档站（`site/`）：** 中英双语功能文档，涵盖核心概念、制卡指南、CLI 与无头宿主、玩家层与写作包、Web 客户端与交互架构（自动生成面向 Agent 的 `/llms.txt` 与 `.md` 镜像）。
 - **[GLOSSARY.md](GLOSSARY.md)：** 面向开发与 Agent 的全英文命名原语表（Ubiquitous Language），严格对齐代码标识符。
 - **[skills/card-author/SKILL.md](skills/card-author/SKILL.md)：** 卡片设计、静态校验、场景测试与旧卡重制 Skill。
-- **[CLAUDE.md](CLAUDE.md)：** Vite+ 工具链、Solid 2.0 响应式规范、国际化（`x18n`）与本地开发约定。
+- **[CLAUDE.md](CLAUDE.md)：** Vite+ 工具链、Solid 2.0 响应式规范、UI SDK（`@ui-sdk`）控件约定、国际化（`x18n`）与本地开发规范。

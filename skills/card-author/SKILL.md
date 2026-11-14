@@ -5,7 +5,7 @@ description: Author, revise, test, or remaster cards for Effect Tavern. Trigger 
 
 # Card Author
 
-Use canonical naming from `GLOSSARY.md` (`stage`, `turn`, `slot`, `band`, `readout`, `lore`, `section`, `ContextPolicy`, `product`, `role`, `fold`, `catalog`). Never substitute legacy tavern terms (`worldbook`, `keyword trigger`, `preset`, `character card`, `depth`, `author's note`, `memory system`).
+Use canonical naming from `GLOSSARY.md` (`stage`, `turn`, `slot`, `band`, `readout`, `passage`, `boundary`, `lore`, `section`, `ContextPolicy`, `product`, `role`, `fold`, `catalog`). Never substitute legacy tavern terms (`worldbook`, `keyword trigger`, `preset`, `character card`, `depth`, `author's note`, `memory system`).
 
 ## 1. Core Model
 
@@ -33,10 +33,10 @@ Turn spine assembled in `packages/runtime/src/request.ts`:
    - Keep prose to one-line placeholders.
    - Choose the two coordinates (`persona` slot + `input`).
    - Declare `rules.fields` (bounds, `initial`, `start`, `hidden`, `view`), decide which fields move via `actions` (mechanical) vs. `readouts` (prose-driven), and wire `effects` / `events` / `over` / `cap`.
-   - Lay out `lore` (`unlock` floors, `offer` windows, `sections`, `ContextPolicy`), `fiction` band `when` conditions, `greetings` (`do` effects, optional dynamic `note`), `products`, and `catalogs`.
+   - Lay out `lore` (`unlock` floors, `offer` windows, `sections`, `ContextPolicy`), `fiction` band `when` conditions, `greetings` (`do` effects, optional dynamic `note`), optional post-record `passages` (`when`, `do`, `digest`, `end`), `products`, and `catalogs`.
    - Validate with `card check <card> --json` until zero errors and expected field/greeting lines, then lock behavior with `card test <card> [scenario.yaml]`.
 2. **Hat 2 — Novelist (Prose & Voice)**
-   - Freeze the mechanism. Write `frame` slots, `fiction` bands, `lore` layers/sections, `greetings`, `guard`, and `lexicon`.
+   - Freeze the mechanism. Write `frame` slots, `fiction` bands, `lore` layers/sections, `greetings`, `passages`, `guard`, and `lexicon`.
    - Re-run `card check` (catches `field-in-prose`, `inline-product`, `hook-length`, `unfilled-name`, `empty-text`).
    - Inspect exact prompt assembly across states and stages via `card view <card> --stage narrate|record|lookup|direct --state k=v --greeting n`.
 
@@ -60,7 +60,7 @@ All CLIs expose full flag documentation via `--help` and machine-readable output
 | Zero-token test      | `bun packages/runtime/bin/card.ts test <card> [scenario.yaml]`                                              | Offline deterministic run on scripted fake model               |
 | Unroll ST V2/V3 card | `bun packages/runtime/bin/unroll.ts <card.png\|card.json> [--user name] [--json]`                           | Read-only inspection in ST assembly order; feeds `sort`        |
 | Workshop operations  | `bun run tavern card compile\|sort\|review ...`                                                             | Uses `author` model route (`--url` for running server)         |
-| Install & live play  | `bun run tavern card install <file>` / `bun run tavern play <card-or-story>`                                | Pass `MODEL=fake` or `--model fake` for zero-token host runs   |
+| Install & live play  | `bun run tavern card install <file>` / `bun run tavern play <card-or-story> [--user <name>]`                | Pass `MODEL=fake` or `--model fake` for zero-token host runs   |
 
 ## 5. Progressive Disclosure — Read On Demand
 

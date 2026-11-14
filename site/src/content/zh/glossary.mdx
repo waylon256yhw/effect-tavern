@@ -2,7 +2,7 @@
 title: 术语原语表（Glossary）
 description: 面向开发与 Agent 的标准英文命名原语及中文对照说明。
 sidebar:
-  order: 5
+  order: 6
 ---
 
 Effect Tavern 以英文代码标识符作为**命名原语（Naming Primitives）**。仓库根目录的 `GLOSSARY.md` 是面向代码与 Agent 的唯一权威英文词表；本页提供核心原语的中文对照，阅读源码或编写卡片时请始终以英文原语名准确定界。
@@ -18,7 +18,7 @@ Effect Tavern 以英文代码标识符作为**命名原语（Naming Primitives�
 | `bleedthrough` | 叙事者替玩家说话、行动或做决定（社区常称抢话 / *impersonation*）。 |
 | `has no agency` | 心声无能动性：一个念头不是动作，`decide` 阶段绝不从心声中提取机械动作。 |
 | `participant mode` / `author mode` | 参与者视角与作者视角：由 `persona` 槽位有无与默认输入通道 `act` / `note` 决定的坐标，而非两种卡格式。 |
-| `persona` | 玩家在虚构里是谁：既是 `frame` 的 `persona` 槽位，也是库中可按卡选用的玩家资产（`/personas`）。 |
+| `persona` | 玩家在虚构里是谁：既是 `frame` 的 `persona` 槽位，也是库中可设全局默认并按三态 `local.persona` 选用的玩家资产（`/personas`；参与者卡以 `yield` 让位模式继承默认人设）。 |
 | `hat` | 绑定在 `Connection.hat` 上的模型续写协议壳（`/hats`）：分 `narrate.head`、`narrate.tail` 与 `review.head`。 |
 | `slop` (`claudeism`) | 模型高频复读的陈词滥调与套话句式，由 `lexicon` 词表与 `polish` 阶段定向重写。 |
 
@@ -26,14 +26,15 @@ Effect Tavern 以英文代码标识符作为**命名原语（Naming Primitives�
 
 | 命名原语（Code Primitive） | 边界定义 |
 | --- | --- |
-| `Card` | 唯一卡片声明式 Schema（`packages/runtime/src/card.ts`），涵盖 `frame`、`fiction`、`greetings`、`rules`、`lore`、`products`、`catalogs`、`guard` 与 `lexicon`。 |
+| `Card` | 唯一卡片声明式 Schema（`packages/runtime/src/card.ts`），涵盖 `frame`、`fiction`、`greetings`、`passages`、`rules`、`lore`、`products`、`catalogs`、`guard` 与 `lexicon`。 |
+| `Passage` / `Boundary` | 结算后过场与纪元切分（`Card.passages`）：玩家回合 `record` 落盘后按首个命中求值，追加过场节点（`passage: true`），支持区间摘要提取 `digest`（标记 `boundary: true` 截断历史转录稿并保留数值字段、已解锁 `lore` 地板与世界状态）及终局封口（`end: "over"`）。 |
 | `Turn` & `Stage` | 固定八阶段流水线：`lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`。 |
 | `Log` / `Node` / `head` | 不可变节点树（`log.ts`）、单轮记录节点（`journal.ts`）与唯一当前叶游标（`head`）。 |
 | `sibling` (`swipe`, `reword`, `edit`) | 同父兄弟节点，分别从 `lookup`、`narrate`、`check` 阶段重跑。 |
 | `Derived` | 沿根到节点路径实时折叠算出的纯函数结果（`derived.ts`），从不落库存储。 |
 | `WorldState` & `DomainChange` | 统一求值状态 `{ fields, world, lore }` 及两阶段稀疏世界事务（`insert_entity`、`patch_entity`、`remove_entity`、`patch_record`、`replace`）。 |
 | `Fold` | 产物沿路径累积规则（`latest`、`append`、`{ key }`），以及对旧轮 `notes` 与已揭示 lore 的字节稳定前缀压缩。 |
-| `Head` / `Tail` | 提示词仅有的头尾两区（`request.ts`），取代破坏缓存的楼层深度插入。 |
+| `Head` / `Tail` & `<world>` | 提示词仅有的头尾两区（`request.ts`，取代破坏缓存的楼层深度插入）；仅 `narrate` 读取完整 `frame`，幕后阶段只读各自职能角色加紧凑的 XML 标签化 `<world>` 摘要（`worldOf`）。 |
 | `Channel` (`act` / `note`) | 输入通道：`act` 进入转录稿，`note` 仅在本轮指导叙事者与导演。 |
 | `Fragment` / `Slot` / `Band` | 装配单元、框架具名槽位（`SLOTS`）与带 `when` 条件的 `fiction` 状态分段。 |
 | `Layer` / `Local` / `Pack` | 五级定制行（`harness → card → packs → local → persona`）。 |
@@ -42,6 +43,7 @@ Effect Tavern 以英文代码标识符作为**命名原语（Naming Primitives�
 | `Catalog` | 卡片静态附件表（`catalogs`），在 `record` 阶段按状态条件动态收敛可选枚举 ID。 |
 | `Readout` / `Action` / `Beat` / `Cond` | 写后选择题状态读数（`Readout`）、写前动作掷骰（`Action` → `Beat`）与封闭条件树（`Cond`）。 |
 | `Guard` / `Lexicon` | 事后核查禁令（`check`）与通配符套话词表（`polish`）。 |
+| `Connection` & `DecisionModel` | 语言模型连接配置（`/providers`，底座零硬编码采样参数）与可选的纯概率二元决策模型（`/decision`，`pre-check`），直接结算完整目录 `lookup` 与边界分明的 `check`（事件标记 `via: "decision"`）。 |
 
 ## 传统酒馆概念辨析与负向约束
 

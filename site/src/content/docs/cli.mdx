@@ -100,10 +100,10 @@ cd packages/server && bun run compile:headless
 
 ## 4. Terminal Play (`tavern play`)
 
-Pass a numeric story ID to resume an existing story, or a card ID to create a new story (add `--card` to force card ID interpretation for numeric card names). Supports interactive readline, single-shot `--input`, stdin pipes, and `--jsonl` event streaming:
+Pass a numeric story ID to resume an existing story, or a card ID to create a new story (add `--card` to force card ID interpretation for numeric card names). Supports interactive readline, single-shot `--input`, stdin pipes, `--user <name>` (persisting `{{user}}` on the card for this and subsequent stories), and `--jsonl` event streaming:
 
 ```sh
-MODEL=fake bun run tavern play wuxia --greeting 1 --set bond=3 --note "雨夜初见"
+MODEL=fake bun run tavern play wuxia --greeting 1 --set bond=3 --user "陆沉" --note "雨夜初见"
 ```
 
 | Slash Command | Action |

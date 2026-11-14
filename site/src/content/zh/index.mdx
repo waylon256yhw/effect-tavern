@@ -5,7 +5,7 @@ sidebar:
   order: 0
 ---
 
-Effect Tavern 是从零设计的 AI 角色扮演与交互叙事全栈系统，基于 **Effect v4**、**Solid 2.0** 与 **Bun** 构建。
+Effect Tavern 是从零设计的 AI 角色扮演与交互叙事全栈系统，基于 **Effect v4**、**Solid 2.0**、**UI SDK（`@ui-sdk`）** 与 **Bun** 构建。
 
 它彻底摒弃了“提示词魔咒 + 聊天楼层深度插入 + 正则解析状态栏”的传统做法，将每张卡定义为**声明式数据加确定性规则**。代码掌控执行循环、带种子的随机掷骰、状态变更与缓存前缀断点；LLM 只在类型严密的阶段接缝上被调用，负责分类判断、渲染散文与提取结构化事实。
 
@@ -26,7 +26,10 @@ Effect Tavern 是从零设计的 AI 角色扮演与交互叙事全栈系统，�
     使用 `card`、`unroll` 与 `tavern` 完成零 Token 回归测试、终端游玩、工坊编译与无头服务部署。
   </Card>
   <Card title="玩家层、写作包与帽子" icon="ph:stack" href="/zh/layers-and-packs/">
-    告别传统大杂烩预设，通过五级 `Layer` 优先级、写作开关、写作包（`Pack`）与协议壳（`Hat`）按需定制。
+    告别传统大杂烩预设，通过五级 `Layer` 优先级、写作开关、写作包（`Pack`）、协议壳（`Hat`）与决策预检按需定制。
+  </Card>
+  <Card title="Web 客户端与交互架构" icon="ph:browsers" href="/zh/client/">
+    了解三层空间画布壳层、无跳变流式阅读器、回合检查器，以及基于 `@ui-sdk` 的跨平台控件与 Agent Bridge。
   </Card>
 </CardGrid>
 
@@ -56,13 +59,14 @@ Effect Tavern 是从零设计的 AI 角色扮演与交互叙事全栈系统，�
     ```sh
     vp check
     vp run verify
+    cd packages/client && vp run verify:ui
     ```
   </Step>
 </Steps>
 
-## 内置四张标准模板卡
+## 内置标准模板卡与重制样卡
 
-`packages/runtime/cards/` 下的四张 YAML 卡既是创建脚手架与文档范例，也是运行时的回归基线：
+`packages/runtime/cards/` 下的四张 YAML 模板卡（配合 `samples/life-of-pi/life-of-pi.yaml` 等完整重制样卡）既是创建脚手架与文档范例，也是运行时的回归基线：
 
 | 卡片 ID | 视角与默认通道 | 覆盖机制 |
 | --- | --- | --- |
@@ -70,3 +74,4 @@ Effect Tavern 是从零设计的 AI 角色扮演与交互叙事全栈系统，�
 | `ri`（理） | `participant` / `act` | 单轴多段 `scale` 散文分段、`hidden` 隐藏结局开关、三开场与锁存型读数 |
 | `wuxia`（竹林） | `participant` / `act` | 动作掷骰、读数分段、三层 lore、`director`、`world` 记录与人物表、`guard` |
 | `yandao`（盐道） | `author` / `note` | 无玩家角色的大世界续写，卡片接管 `pov` 槽位并在第 1 轮开窗 |
+| `life-of-pi`（`samples/`） | `participant` / `act` | 多日时间循环重制卡，演示写后 `passages`、`digest` 纪元边界与 `end: true` 终局 |

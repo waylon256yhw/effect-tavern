@@ -1,0 +1,51 @@
+---
+title: Web Client & UI Architecture
+description: Spatial canvas shell, non-jumping reader, turn Inspector, and cross-platform controls built on Solid 2.0 and UI SDK.
+sidebar:
+  order: 5
+---
+
+The web client (`packages/client`) is a single-page interactive fiction reader, workbench, and harness inspector built on **Solid 2.0** and **UI SDK (`@ui-sdk/solid` + `@ui-sdk/core`)**. It runs identically against the Vite+ dev server (`bun --bun vp run dev`) and the single-port standalone server (`tavern serve`).
+
+## 1. Three-Layer Spatial Shell & Page Stack
+
+On desktop viewports (`≥ 72rem`), `shell.tsx` organizes the workspace into three spatial planes without unmounting active streams:
+
+| Plane | Modules | Responsibility |
+| --- | --- | --- |
+| **Ground Chrome & Sidebar** | `shell.tsx`, `side.tsx`, `tabs.ts`, `edge.tsx`, `fold.ts` | Top strip (`card › story` multi-tab bar with live/unread dots, Settings, Theme, Language) and a two-layer left sidebar (**Shelf** across all cards ↔ **Workspace** for the focused card's stories, persona, writing switches, and tags). |
+| **Stage Card** | `App.tsx`, `pages.ts` | Central card hosting the **Reader** permanently at the bottom of the stack while full-stage views (**Card Page**, **Timeline**, **Inspector**, **Writing**, **Readings**, **Workshop**, **Settings**) push and pop above it—keeping any turn in flight streaming underneath. |
+| **Overlays & Sheets** | `dialogs.tsx`, `readings.tsx`, `manager.tsx` | Story manager, persona picker, tag manager, delete confirmations, and per-turn Record / Readings sheets. |
+
+- **Spring-settled sidebar edge (`edge.tsx`, `fold.ts`):** Dragging the Stage Card's left separator resizes the sidebar within a `200–320px` band with rubber-band resistance past bounds, velocity-aware flick-to-fold, and spring settle on release. When folded to zero width, bringing the pointer to the left screen edge floats the sidebar over the stage without shifting prose layout.
+- **Mobile layout (`< 72rem`):** Collapses the outer canvas so the Stage Card fills the screen; the sidebar becomes a touch `Drawer` and popups adapt into bottom sheets without duplicating state logic.
+
+## 2. Reader, Composer & Turn Surfaces
+
+- **Non-jumping streaming (`App.tsx`):** Sending pins the new turn to the top of the viewport above a full-screen runway, trading runway whitespace line-by-line as `narrate` streams. Scrolling upward detaches follow mode cleanly without yanking the viewport back.
+- **Zero-auto-send Composer (`composer.tsx`, `invocation-menu.tsx`, `ime.ts`):** Nothing in the interface sends behind the player's back—`options` chips, quick `snippets`, and punctuation `format` keys (`「」`, `『』`) only populate the input box, with full CJK IME composition protection. Players toggle between `act` and `note` channels (or revise past lines in place), while pressing `/` or `+` opens a `Popover` + multi-page `Command` palette searching across snippets, mounted pack `entries`, and unlocked `player: true` card `lore`.
+- **Readings, Ledger & Theater (`readings.tsx`, `record.ts`):** Inline `<<aside>>` blocks stream live beside prose; post-turn deltas condense into a one-line **Record** pill that opens into a detailed sheet; `demand`-triggered `theater` blocks are requested from the turn's menu; and scalar meters (`steps`, `gauge`, `scale`, `value`) plus `world` tables render on the **Readings** view.
+
+## 3. Timeline, Inspector & Workshop
+
+- **Timeline (`timeline.tsx`):** Projects the immutable `Log` tree across branches—distinguishing `swipe`, `reword`, `edit`, post-record `passage` epoch boundaries, and `over` leaves—with instant `checkout` and subtree `drop`.
+- **Turn Inspector (`inspector.tsx`, `inspect.ts`):** Inspects any node from the harness's point of view (`[` / `]` to walk the path) across two side-by-side panes:
+  - **Pipeline pane:** Lists only the calls that ran—including `DecisionModel` pre-check passes for `lookup` and `check`—with aligned metric columns (latency, `↑` input tokens, `↓` output tokens, and `↻`/`+` KV cache reads/writes). Expanding a row offers **Result** (verdicts, tool steps, and probability bars against `LO` / `HI` / `LOOKUP` thresholds), **Prompt** (assembled messages with KV cache breakpoints marked as hairlines when `TAVERN_INSPECT=1` / `tavern serve --inspect` is active), and **JSON**.
+  - **Node pane:** Displays input channel, untold lore hooks, state deltas against the parent node, and shaped `world` / `chronicle` / `theater` products.
+- **Card Page & Workshop (`card.tsx`, `home.tsx`):** Previews card modules and token budgets, configures `Field.start` parameters and dynamic opening notes before `greet`, and drives draft `compile`, `sort`, and `review` authoring flows.
+
+## 4. Solid 2.0 + UI SDK (`@ui-sdk`) Behavioral Substrate
+
+<Aside type="tip" title="Why UI SDK on Solid 2.0?">
+  Hand-rolling browser `<select>`, `<dialog>`, `[popover]`, Escape stacks, and touch/pointer drag handlers across components leads to subtle focus, dismissal, and mobile-viewport divergences. Pairing **Solid 2.0**'s run-once fine-grained reactivity with **UI SDK (`@ui-sdk/core` + `@ui-sdk/solid`)** centralizes cross-platform control behavior while keeping 100% of visual styling in plain CSS tokens.
+</Aside>
+
+- **Run-once reactivity & root atoms (`atom.ts`, `bridge.ts`):** Components execute once with zero virtual-DOM re-renders. Shared state lives in root-owned Solid 2.0 signals and memos behind an `Atom` / `AtomRegistry` surface, paired with incremental per-paragraph Markdown rendering (`markdown.ts`).
+- **Unified control & gesture primitives (`controls.tsx`, `edge.tsx`):**
+  - `Select` (`presentation="auto"`, rendering a positioned list on desktop and a bottom sheet on small touch screens), `Switch`, `Dialog` (`createDialogController` for modals, prompts, and full-page sheets), `AlertDialog` (`createConfirm` for destructive actions), `Drawer`, `Popover`, `Menu`, and `Command`.
+  - Custom controls not shipped by `@ui-sdk`—such as the stage's `Edge` separator—are authored via `definePrimitive`, `createParts`, `bindDrag`, `rubberBand`, `createVelocityTracker`, and `solveSpring` (`@ui-sdk/core/gesture`).
+- **Five-layer CSS cascade (`app.css`):** Declared in strict priority order—`@layer ui-sdk, tokens, components, card, user`—so `@ui-sdk`'s minimal popup positioning rules sit at the bottom, design tokens (`tokens.css` with `light-dark()`) and component stylesheets override cleanly without `!important`, and card/reader themes sit on top.
+- **Agent Bridge & headless browser verification (`test/controls.tsx`, `test/ui.ts`, `test/imports.ts`):**
+  - Every interactive control is a named `@ui-sdk` part reachable via `@ui-sdk/solid/agent` (`createAgent` `snapshot` and `act`, enforcing confirmation gates on destructive `AlertDialog` buttons).
+  - Running `cd packages/client && vp run verify:ui` bundles `test/controls.tsx` without a backend server, drives every control and gesture in headless Chrome, and asserts zero unnamed parts, zero failed interactions, and zero `@solidjs/diagnostics` warnings.
+  - `test/imports.ts` (in `vp run verify`) statically walks all value imports reachable from `packages/client/src/` to guarantee no `node:*` module or server AI-SDK barrel ever enters the browser bundle.

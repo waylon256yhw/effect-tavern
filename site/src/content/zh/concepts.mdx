@@ -19,15 +19,22 @@ lookup → (decide → settle)* → gate → direct → narrate → check → po
 
 | 阶段 | 触发条件 | 读取范围 | 核心职责 |
 | --- | --- | --- | --- |
-| `lookup` | 存在已解锁 `lore` 或 `recall` 表行 | `frame`、本轮输入、事实账本 | 通过检索与按需读取挑选本轮所需的 `lore` 层、`sections` 节与召回行，冻结为 `deliveries` |
-| `decide` | 声明了 `rules.actions` 且走 `act` 通道 | `frame`、输入（忽略心声）、可用动作 | 选择动作 ID，为 `{ judge }` 估算概率，并在多拍指令时标记 `again` |
+| `lookup` | 存在已解锁 `lore`、写作包 `entries` 或 `recall` 表行 | `<world>`、`<input>`、事实账本、宿主 `catalog` | 完整目录下优先由 `DecisionModel` 一次概率打分（`p > 0.5`，取前 8）结算；否则运行语言模型 `search_context` / `read_context` 循环，冻结 `deliveries` |
+| `decide` | 声明了 `rules.actions` 且走 `act` 通道 | `<world>`、`<input>`（忽略心声）、可用动作 | 选择动作 ID，为 `{ judge }` 估算概率，并在多拍指令时标记 `again` |
 | `settle` | `decide` 选出了动作 | 随机种子 + `rules` | 纯代码结算：掷骰、夹紧字段边界、发出本轮 `events`、记下 `Beat` |
 | `gate` | 声明了 `lore` | 结算后 `WorldState` + 本轮事件 | 纯代码门控：求值单调地板 `unlock` 与当轮窗口 `offer` |
-| `direct` | `director: true` 且本轮有窗口打开 | `frame`、事实账本、开窗候选 | 将开窗条目划分为必讲 `must` 与可选 `may`，并给出一句场景基调 `tone`（`Brief`） |
-| `narrate` | 每轮必跑 | `frame`、`fiction` 分段、`transcript`、`tail` | 流式生成故事正文（及可选的内联 `<<aside>>` 小剧场块） |
-| `check` | `guard` 或 `must` 非空 | `frame`、`review.head`、正文草稿 | 事后核查 `guard` 禁令与 `must` 揭示；违规或漏讲时最多触发一次纠错重写 |
-| `polish` | `switches.polish !== false` 且命中词表 | `frame`、`review.head`、命中句 | 仅重写对白之外命中 `lexicon` 套话模式的旁白句子 |
-| `record` | 每轮必跑 | `frame`、`review.head`、定稿正文 | 回答 `readouts` 选择题、提取 `chronicle` / `theater` 产物、提交 `world` 稀疏变更 |
+| `direct` | `director: true` 且本轮有窗口打开 | `<world>`、事实账本、开窗候选、`<input>` | 将开窗条目划分为必讲 `must` 与可选 `may`，并给出一句场景基调 `tone`（`Brief`） |
+| `narrate` | 每轮必跑 | 完整 `frame`、`<fiction>` 分段、`transcript`、`tail` | 流式生成故事正文（及可选的内联 `<<aside>>` 小剧场块） |
+| `check` | `guard` 或 `must` 非空 | `<world>`、`review.head`、`<draft>` 草稿 | 开启预检时先经 `DecisionModel` 快筛；遇到模糊项再回退语言模型 `check`，最多触发一次纠错重写 |
+| `polish` | `switches.polish !== false` 且命中词表 | `<world>`、`review.head`、`<draft>` 命中句 | 仅重写对白之外命中 `lexicon` 套话模式的旁白句子 |
+| `record` | 每轮必跑 | `<world>`、`review.head`、`<scene>` 定稿正文 | 回答 `readouts` 选择题、提取 `chronicle` / `theater` 产物、提交 `world` 稀疏变更 |
+
+### 决策模型预检（`lookup` 与 `check`）
+
+除常规语言模型连接（`Connection`）外，Effect Tavern 支持配置一个安装级**决策模型（`DecisionModel`）**（`/decision`：支持 Google Gemini Decisions、OpenAI Decisions 与 TypeSafe Jev），在默认模型页通过统一的**预检（Pre-check）**开关启停：
+
+- **完整目录 `lookup` 直出：** 宿主每轮构建一份 `catalog` 目录视图（`context.ts`）。当目录满足完整条件（`≤ 256` 单元且 `≤ 10,000` 字符）且启用了决策模型时，直接对未读条目钩子与驻留条目的未读节做概率打分（`p > 0.5`，至多 8 项），零语言模型调用完成检索；超大目录或接口不可用时无感回退至语言模型工具循环。
+- **`check` 快速放行：** 将 `guard` 禁令与开窗披露转化为布尔概率问题（`LO = 0.25`、`HI = 0.75`）。仅当所有问题分界清晰且无违规时直接放行结算；决策模型**绝不自行触发纠错重写**，任何边界模糊或异常均交由语言模型 `check` 裁定。
 
 <Aside type="important" title="为什么摒弃“单次补全 + 状态栏正则剥离”？">
   传统酒馆往往要求一次对话补全同时完成小说续写、`<thinking>` 思维链推演、`<status>` 或 MVU JSON 变量块输出与选项生成，再靠前端正则脚本抠字隐藏——既分散叙事注意力，又会在格式微偏或重抽改文时引发状态失步。在 Effect Tavern 中，`narrate` 只负责写小说且**永远看不到具体数值**（状态仅经由带 `when` 的 `fiction` 分段送达）；掷骰检定归纯代码（`settle`），状态判读与结构化表更新归独立的 `record` 阶段按严格 Schema 抽取。
@@ -55,6 +62,7 @@ SillyTavern 的 `chara_card_v2` / `ccv3` 默认每张卡都是单个 NPC（`desc
   - `reword`：保留已检索上下文与检定结果，从 `narrate` 重新起笔（可附一句单次 `note`）；
   - `edit`：直接修改正文、修订玩家输入（保留正文）或同时修改两者，仅重跑 `check` 与 `record` 使状态干净重算。
 - **一切状态与视图均为路径折叠（`Derived`）：** `WorldState`、转录稿、本轮账本 `Ledger`、时间轴投影以及前缀压缩块全部由根到节点的路径实时纯函数算出。
+- **写后过场（`passages`）与终局叶节点守卫：** 玩家回合 `record` 提交后，运行时按序匹配 `Card.passages`（首个满足 `when` 者生效，防重入）追加章节切换或周目重置子节点（`passage: true`）。声明了 `digest` 的过场会对刚结束的纪元（epoch）转录稿执行一次区间 `record` 摘要并打上 `boundary: true`——使 `narratorHistory`、`ledger`、`Known:`、前缀折叠与 `window` 驻留期从新纪元干净切片，同时保持标量 `fields`、`lore` 解锁地板与 `world`/`chronicle` 状态沿整条根路径完整累积。标为 `end: "over"`（过场 `end: true` 或满足 `rules.over`）的终局叶节点禁止继续追加子回合。
 
 ## 4. 统一 `WorldState` 与三类产物职责
 
@@ -72,6 +80,6 @@ SillyTavern 的 `chara_card_v2` / `ccv3` 默认每张卡都是单个 NPC（`desc
 
 Effect Tavern 严格规定提示词只有 **`head`** 与 **`tail`** 两个装配区：
 
-- **`head`（头区）**：放置解析后的玩家层 `frame` 槽位与当前生效的 `fiction` 分段，整块位于 `transcript` 之前作为稳定缓存前缀。
-- **`tail`（尾区）**：紧接在历史转录稿与本轮输入*之后*，承载本轮揭示、掷骰结果、`Current:`、`Brief`、`note`、`input.thought` 及尾部片段——在不改动任何历史楼层的前提下获得最强的末尾近因权重（等价于 `@D0` 的注意力位置，且 100% 保住前缀缓存）。
+- **`head`（头区）与后台阶段 `<world>` 隔离**：`narrate` 将解析后的玩家层 `frame` 槽位（`<persona>`、`<setting>` 及行文指令）与当前生效的 `<fiction>` 分段组装在 `transcript` 之前作为稳定缓存前缀。所有非叙事后台阶段（`lookup`、`decide`、`direct`、`check`、`polish`、`record`）仅读取 `stage.role` 与 **`<world>`**（`worldOf`——仅含卡片声明的框架槽位与 `persona`，彻底剥离 `pov`、`verbosity`、`style` 等行文风格指令与玩家附加片段，防止分析阶段误入小说续写），并将待处理文本装入 `<input>`、`<draft>` 或 `<scene>` 标签后，再紧跟该阶段的任务提问。
+- **`tail`（尾区）**：在 `narrate` 中紧接在历史转录稿与本轮输入*之后*，承载 `<context>`（送达背景）与 `<turn>`（掷骰结果、`Current:`、`MUST`/`MAY reveal`、`Brief` 基调、`note`）、`input.thought` 及尾部片段——在不改动任何历史楼层的前提下获得最强的末尾近因权重（等价于 `@D0` 的注意力位置，且 100% 保住前缀缓存）。
 - **固定区间 `Fold` vs. 滚动摘要插件**：不同于每隔几轮改写一段深度插入摘要的滚动总结插件，前缀压缩由代码按固定节点区间折叠旧轮 `notes` 与已揭示 lore；每个折叠块只依赖区间内已定稿节点，因此缓存断点（头区末尾、折叠前缀末尾、上一轮历史末尾）在跨轮推进与分支切换时始终字节级一致。

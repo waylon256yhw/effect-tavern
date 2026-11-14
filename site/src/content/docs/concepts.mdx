@@ -19,15 +19,22 @@ Structured stages are **strictly opt-in**: a pure chat card (`banxing.yaml`) exe
 
 | Stage | Runs When | Reads | Responsibility |
 | --- | --- | --- | --- |
-| `lookup` | Unlocked `lore` or `recall` rows exist | `frame`, current input, factual ledger | Searches and reads relevant `lore` layers, `sections`, and `recall` rows, freezing `deliveries` |
-| `decide` | `rules.actions` non-empty & `act` input | `frame`, input (excluding `thought`), available actions | Picks an action ID, estimates `{ judge }` chance if declared, and signals `again` for multi-beat moves |
+| `lookup` | Unlocked `lore`, pack `entries`, or `recall` rows exist | `<world>`, `<input>`, factual ledger, host `catalog` | Settles via `DecisionModel` on a complete catalog (`p > 0.5`, top 8), else runs the LLM `search_context` / `read_context` loop, freezing `deliveries` |
+| `decide` | `rules.actions` non-empty & `act` input | `<world>`, `<input>` (excluding `thought`), available actions | Picks an action ID, estimates `{ judge }` chance if declared, and signals `again` for multi-beat moves |
 | `settle` | `decide` chose an action | Seeded RNG + `rules` | Pure code: rolls dice, clamps `fields`, emits turn `events`, records `Beat` |
 | `gate` | `lore` entries exist | Post-settlement `WorldState` + turn events | Pure code: evaluates monotone `unlock` floors and per-turn `offer` windows |
-| `direct` | `card.director: true` & windows opened | `frame`, factual ledger, open windows | Partitions open lore into `must` vs. `may` and emits a one-line scene `tone` (`Brief`) |
-| `narrate` | Every turn | `frame`, `fiction` bands, `transcript`, `tail` | Streams story prose (and optional inline `<<aside>>` theater blocks) |
-| `check` | `guard` or `must` non-empty | `frame`, `review.head`, draft prose | Checks `guard` prohibitions and `must` disclosures; triggers at most one correction rewrite |
-| `polish` | `switches.polish !== false` & `lexicon` hit | `frame`, `review.head`, matched sentences | Rewrites only narration sentences outside dialogue that match `lexicon` slop patterns |
-| `record` | Every turn | `frame`, `review.head`, final prose | Answers `readouts`, extracts `chronicle`/`theater` products, commits sparse `world` `DomainChange` ops |
+| `direct` | `card.director: true` & windows opened | `<world>`, factual ledger, open windows, `<input>` | Partitions open lore into `must` vs. `may` and emits a one-line scene `tone` (`Brief`) |
+| `narrate` | Every turn | Full `frame`, `<fiction>` bands, `transcript`, `tail` | Streams story prose (and optional inline `<<aside>>` theater blocks) |
+| `check` | `guard` or `must` non-empty | `<world>`, `review.head`, `<draft>` prose | Runs `DecisionModel` fast pass when enabled; falls back to LLM `check` when ambiguous, triggering at most one correction rewrite |
+| `polish` | `switches.polish !== false` & `lexicon` hit | `<world>`, `review.head`, `<draft>` matched sentences | Rewrites only narration sentences outside dialogue that match `lexicon` slop patterns |
+| `record` | Every turn | `<world>`, `review.head`, `<scene>` final prose | Answers `readouts`, extracts `chronicle`/`theater` products, commits sparse `world` `DomainChange` ops |
+
+### Decision Model Pre-Check (`lookup` & `check`)
+
+Alongside language-model `Connection`s, Effect Tavern supports an optional install-wide **Decision Model** (`/decision`: Google Gemini Decisions, OpenAI Decisions, or TypeSafe Jev), toggled via the **Pre-check** switch on the default-model page:
+
+- **Complete-catalog `lookup`:** Each turn builds a host `catalog` view (`context.ts`). When the catalog fits `≤ 256` units and `≤ 10,000` characters, the Decision Model scores unread entry hooks and unread sections of resident entries (`p > 0.5`, up to 8) and settles `lookup` with zero language-model calls. Larger catalogs or unavailable decision services fall back seamlessly to the LLM tool loop.
+- **Fast-pass `check`:** Evaluates `guard` prohibitions and open lore disclosures as boolean probability questions (`LO = 0.25`, `HI = 0.75`). When every answer is clear-cut and clean, `check` settles immediately; the Decision Model **never** triggers a correction rewrite by itself—any borderline score or error hands off to the LLM `check`.
 
 <Aside type="important" title="Why Not One Completion + Regex Status Bars?">
   Legacy tavern setups force a single chat completion to simultaneously write prose, reason inside `<thinking>` tags, format `<status>` or MVU JSON patches, and suggest player choices—then scrape and hide those blocks with client regexes. In Effect Tavern, `narrate` writes prose only and **never** sees raw field numbers (state reaches narration strictly via `when`-gated `fiction` bands). Dice settle in code (`settle`), while state judgements and structured tables run in `record` against strict schemas.
@@ -55,6 +62,7 @@ Legacy clients store a flat message array with per-message `swipes[]`, duplicati
   - `reword` re-runs from `narrate` (keeping `deliveries` and settled `beats`), optionally appending a one-turn `note`.
   - `edit` replaces prose, revises `input` while keeping prose, or both—re-running only `check` and `record` so state re-settles cleanly.
 - **Everything else is `Derived` (`derived.ts`):** `WorldState`, transcripts, per-turn `Ledger` pills, `TimelineNode` / `TurnDetail` projections, and prefix compression folds are pure functions of the root-to-node path.
+- **Post-record `passages` & terminal leaves:** After a player turn's `record` commits, the harness evaluates `Card.passages` (`when` first-match-wins, non-reentrant) to append chapter or macro-loop transition nodes (`passage: true`). A passage declaring `digest` runs an interval `record` pass over the ending epoch and sets `boundary: true`—slicing `narratorHistory`, `ledger`, `Known:`, prefix folds, and `window` lore residency cleanly at the new epoch while keeping scalar `fields`, `lore` unlock floors, and `world`/`chronicle` state folded across the entire path. Nodes ending with `end: "over"` (`end: true` on a passage or `rules.over`) reject further child turns.
 
 ## 4. Unified `WorldState` & Three Product Roles
 
@@ -72,6 +80,6 @@ Legacy tavern cards and presets rely heavily on numeric **depth injection** (`at
 
 Effect Tavern enforces **strictly two prompt zones** (`head` and `tail`):
 
-- **`head`** assembles resolved `Layer` frame slots and active `fiction` bands into a stable prefix before the `transcript`.
-- **`tail`** sits immediately *after* the `transcript` and current player input, holding this turn's disclosures, beat outcomes, `Current:`, `Brief`, `note`, `input.thought`, and tail fragments—giving turn-level context maximum recency attention (`@D0`-equivalent position) without ever mutating historical turns.
+- **`head` & off-stage `<world>` isolation:** `narrate` assembles resolved `Layer` `frame` slots (`<persona>`, `<setting>`, plus writing directives) and active `<fiction>` bands into a stable prefix before the `transcript`. Off-stage passes (`lookup`, `decide`, `direct`, `check`, `polish`, `record`) read only `stage.role` and **`<world>`** (`worldOf`—card-declared frame slots and `persona`, stripping writing directives `pov`, `verbosity`, `style` and player-added fragments so analytical passes never slip into continuing the story), with reference text enclosed in `<input>`, `<draft>`, or `<scene>` tags before the stage's task prompt.
+- **`tail`** sits immediately *after* the `transcript` and current player input in `narrate`, holding `<context>` (delivered entries) and `<turn>` (beat outcomes, `Current:`, `MUST`/`MAY reveal`, `Brief` tone, `note`), `input.thought`, and tail fragments—giving turn-level context maximum recency attention (`@D0`-equivalent position) without ever mutating historical turns.
 - **Interval `Fold` vs. rolling summaries:** Instead of rolling chat-summarizer plugins that rewrite a depth-injected summary every few turns, prefix compression folds older turns' `notes` and disclosed lore by code over fixed node intervals. Because each folded block depends only on nodes inside its closed interval, prompt-cache breakpoints (`head` end, folded prefix, and last prior turn) stay byte-identical across turns and across branches.

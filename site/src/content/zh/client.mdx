@@ -1,0 +1,51 @@
+---
+title: Web 客户端与交互架构
+description: 基于 Solid 2.0 与 UI SDK 构建的三层空间壳层、无跳变阅读器、回合检查器与跨端交互底座。
+sidebar:
+  order: 5
+---
+
+Web 客户端（`packages/client`）是基于 **Solid 2.0** 与 **UI SDK（`@ui-sdk/solid` + `@ui-sdk/core`）** 构建的单页交互叙事阅读器、制卡工作台与管线检查器，在开发态全栈服务（`bun --bun vp run dev`）与单端口生产宿主（`tavern serve`）下具有完全一致的行为。
+
+## 1. 三层空间画布与页面栈（Spatial Shell）
+
+在桌面宽屏视口（`≥ 72rem`）下，`shell.tsx` 将工作区划分为三个互不阻塞的空间层级：
+
+| 空间层 | 核心模块 | 职责边界 |
+| --- | --- | --- |
+| **底层壳与双层侧栏** | `shell.tsx`、`side.tsx`、`tabs.ts`、`edge.tsx`、`fold.ts` | 顶部细栏（支持流式/未读圆点的 `卡名 › 局名` 多标签页、设置、主题、语言）与左侧双层侧栏（**卡架层**全局搜卡 ↔ **单卡工作区**切换故事、人设、写作开关与标签）。 |
+| **主舞台卡（Stage Card）** | `App.tsx`、`pages.ts` | 中央主舞台将**阅读器**常驻挂载于栈底，**卡片页**、**时间轴**、**检查器**、**写作页**、**读数页**、**工坊**与**设置**按标签页独立压栈覆盖在上方——切换任意子页面均不打断后台正在流式生成的回合。 |
+| **全局弹层与抽屉面板** | `dialogs.tsx`、`readings.tsx`、`manager.tsx` | 故事管理器（收藏、全文检索、批量清理、Markdown/JSON 导出）、人设选择器、标签管理、删除确认及单轮记录面板。 |
+
+- **弹簧物理侧边分隔原语（`edge.tsx`、`fold.ts`）：** 拖拽舞台卡左缘可在 `200–320px` 区间调节侧栏宽度，越界带橡皮筋阻尼（`rubberBand`），松手按速度矢量判定快速收折或经弹簧曲线（`solveSpring`）回落；收折为零宽后，指针贴近屏幕左缘即浮出临时侧栏而不挤压正文排版。
+- **移动端自适应（`< 72rem`）：** 收起外层画布，主舞台卡直接铺满视口；侧栏自动切换为手势跟手的触控 `Drawer`，选择器与弹层收敛为底部 `Sheet`，与桌面端共享同一套状态逻辑。
+
+## 2. 阅读器、输入框与回合交互面
+
+- **流式输出零跳变（`App.tsx`）：** 发送后新回合锚定至视口顶部并在下方预留整屏留白跑道，正文每增长一行即等量消耗留白，视口稳如书页；用户主动上滚阅读前文时立即解除跟随，绝不强行拉回底部。
+- **零自动发送输入框（`composer.tsx`、`invocation-menu.tsx`、`ime.ts`）：** 界面中没有任何按钮会在玩家不知情时直接发消息——`options` 建议芯片、快捷片段（`snippets`）与直角引号等标点键（`format`）一律只填入输入框，并内置完整的中文输入法（IME）选词回车保护。支持场内 `act` / 场外 `note` 通道切换与历史台词原位修订；输入 `/` 或点击 `+` 唤出基于 `Popover` + 多页 `Command` 的统一面板，跨快捷片段、已挂载写作包 `entries` 与已解锁 `player: true` 卡片 `lore` 即时检索调用。
+- **读数、本轮账本与小剧场（`readings.tsx`、`record.ts`）：** 内联 `<<aside>>` 块随正文实时分流渲染；写后结算增量折叠为正文底部的单行 **Record** 药丸（点开展开详情面板）；`demand` 按需小剧场从回合菜单直接点单；标量量表（`steps`、`gauge`、`scale`、`value`）与 `world` 实体表集中呈现在**读数（Readings）**视图。
+
+## 3. 时间轴、检查器与卡片工坊
+
+- **时间轴（`timeline.tsx`）：** 可视化整棵不可变 `Log` 分支树，清晰区分 `swipe`、`reword`、`edit`、写后 `passage` 纪元边界与 `over` 终局叶节点，支持一键 `checkout` 切支或 `drop` 剪除子树。
+- **回合检查器（`inspector.tsx`、`inspect.ts`）：** 站在 Harness 视角审视任意回合（支持 `[` / `]` 沿路径翻页），左右双栏对照：
+  - **管线调用栏：** 仅列出实际触发的阶段调用（含 `lookup` 与 `check` 的**决策模型预检**行），固定列宽对齐耗时、`↑` 输入 Token、`↓` 输出 Token 与 `↻`/`+` KV 缓存读写；点开单行可切换 **Result**（结构化判据与相对 `LO`/`HI`/`LOOKUP` 阈值的概率刻度条）、**Prompt**（服务端开启 `TAVERN_INSPECT=1` / `--inspect` 时展示带缓存断点细线的完整装配消息）与 **JSON**。
+  - **节点状态栏：** 展示本轮输入通道、待揭示钩子、相对父节点的状态增量，以及按声明形态渲染的 `world` / `chronicle` / `theater` 产物。
+- **卡片详情页与工坊（`card.tsx`、`home.tsx`）：** 预览模块结构与头区 Token 预算，在开局前配置 `Field.start` 初始参数与动态开场附言，并提供草稿 `compile`、`sort`、`review` 交互式制卡工作流。
+
+## 4. Solid 2.0 + UI SDK（`@ui-sdk`）行为底座与验证闭环
+
+<Aside type="tip" title="为什么在 Solid 2.0 之上引入 UI SDK？">
+  在多端浏览器中零散手搓原生 `<select>`、`<dialog>`、`[popover]`、Escape 关闭栈与触控拖拽逻辑，极易在焦点归还、层叠遮罩与移动端视口表现上产生平台分歧。将 **Solid 2.0** 的单次运行细粒度响应式与 **UI SDK（`@ui-sdk/core` + `@ui-sdk/solid`）** 结合，能够用统一的状态机与手势原语收敛跨平台交互行为，同时把视觉表达 100% 留给项目自身的 CSS Token。
+</Aside>
+
+- **单次运行响应式与根级 Atom（`atom.ts`、`bridge.ts`）：** 组件仅在挂载时运行一次，无虚拟 DOM 重渲染开销；全局状态由根作用域下的 Solid 2.0 Signal/Memo 承载并暴露为统一的 `Atom` / `AtomRegistry` 接口，配合段落级增量 Markdown 渲染（`markdown.ts`）保证长篇流式阅读的帧率稳定。
+- **统一控件与手势原语（`controls.tsx`、`edge.tsx`）：**
+  - 全面采用 `Select`（`presentation="auto"`：桌面端为定位弹层，触屏小视口自动切换为底部面板）、`Switch`、`Dialog`（通过 `createDialogController` 驱动模态框、输入弹窗与全屏 Sheet）、`AlertDialog`（`createConfirm` 驱动破坏性删除确认）、`Drawer`、`Popover`、`Menu` 与 `Command`。
+  - `@ui-sdk` 未内置的专属交互（如主舞台左侧分隔条 `Edge`）同样基于 `definePrimitive`、`createParts` 与 `@ui-sdk/core/gesture`（`bindDrag`、`rubberBand`、`createVelocityTracker`、`solveSpring`）构建，保持键盘、指针与无障碍契约一致。
+- **五级 CSS 级联层（`app.css`）：** 严格声明 `@layer ui-sdk, tokens, components, card, user`——将 `@ui-sdk` 极少量的弹层定位默认样式压在最底层，设计语义变量（`tokens.css`，原生 `light-dark()` 主题）与组件样式无需 `!important` 即可无条件胜出，最上层留给卡片与读者自定义样式。
+- **Agent Bridge 与无头浏览器自检（`test/controls.tsx`、`test/ui.ts`、`test/imports.ts`）：**
+  - 每个可交互控件都是具名的 `@ui-sdk` 部件，天然接入 `@ui-sdk/solid/agent`（通过 `createAgent` 的 `snapshot` 与 `act` 检视状态并驱动操作，危险确认框强制校验人工授权门控）。
+  - 运行 `cd packages/client && vp run verify:ui` 会在无服务端环境下构建真实控件夹具，在无头 Chrome 中通过 Agent Bridge 走通选择、开关、菜单点单、删除确认门控、`/` 命令面板、分隔条拖拽回弹与多层弹窗交互，同时断言零未命名控件与零 `@solidjs/diagnostics` 响应式告警。
+  - `test/imports.ts`（纳入 `vp run verify`）静态遍历 `packages/client/src/` 可达的全部值导入，严防任何 `node:*` 模块或服务端 AI SDK 入口混入浏览器产物。

@@ -4,18 +4,19 @@ Source of truth: `packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `lore
 
 ## Stage Visibility Matrix
 
-| Card Field                              | Stages That Read It                                                                                   |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `frame`                                 | **Every stage** (assembled at the top of `head` in every request)                                     |
-| `fiction` + `transcript`                | `narrate` only                                                                                        |
-| `lore` (`layers`, `sections`)           | `lookup` (`search_context` / `read_context`), `gate` / `direct` (windows), `narrate` (delivered text) |
-| `rules.actions`                         | `decide` (action menu + `{ judge }` chance), `settle` (deterministic code)                            |
-| `rules.readouts`                        | `record` (post-prose multiple choice), settled by code                                                |
-| `products` + `catalogs`                 | `record` (default), or inline in `narrate` (`<<aside>> <id>`) when `stage: "narrate"`                 |
-| `guard`                                 | `check` only (never shown to `narrate`)                                                               |
-| `lexicon`                               | `polish` only (rewrites matched sentences outside dialogue)                                           |
-| `greetings`                             | Node `0` (`do` settles initial state/events; `note` triggers dynamic narration)                       |
-| `title`, `summary`, `version`, `source` | Card page / metadata only (never sent to any model)                                                   |
+| Card Field                              | Stages That Read It                                                                                                                           |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frame`                                 | `narrate` reads full `frame`; off-stage stages read `<world>` (`worldOf`: card-declared slots + `persona`, minus `pov`, `verbosity`, `style`) |
+| `fiction` + `transcript`                | `narrate` only                                                                                                                                |
+| `lore` (`layers`, `sections`)           | `lookup` (host `catalog` / `search_context` / `read_context`), `gate` / `direct` (windows), `narrate` (delivered text)                        |
+| `rules.actions`                         | `decide` (action menu + `{ judge }` chance), `settle` (deterministic code)                                                                    |
+| `rules.readouts`                        | `record` (post-prose multiple choice), settled by code                                                                                        |
+| `products` + `catalogs`                 | `record` (default, plus interval `digest` on `passages`), or inline in `narrate` (`<<aside>> <id>`) when `stage: "narrate"`                   |
+| `guard`                                 | `check` only (`DecisionModel` fast pass when configured, then LLM `check`; never shown to `narrate`)                                          |
+| `lexicon`                               | `polish` only (rewrites matched sentences outside dialogue)                                                                                   |
+| `greetings`                             | Node `0` (`do` settles initial state/events; `note` triggers dynamic narration)                                                               |
+| `passages`                              | Post-`record` transition child node (`when` first-match-wins; `do`, optional `digest` epoch `boundary`, optional `end`)                       |
+| `title`, `summary`, `version`, `source` | Card page / metadata only (never sent to any model)                                                                                           |
 
 ---
 
@@ -27,7 +28,7 @@ Source of truth: `packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `lore
 - `id` names a **slot**. Known slots (`SLOTS` in `fragment.ts`): `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity`.
   - Leaving `text` absent opens an empty slot for the player to fill.
   - `pov` and `verbosity` are compiled from player `switches` unless the card fills the slot itself (e.g. `yandao.yaml` fills `pov` for protagonist-free narration).
-  - Any other `id` triggers lint `unknown-frame-slot` (warn): intentional custom slots are allowed, but never put a character sheet in `frame`—every stage including `direct` reads `frame`.
+  - Any other `id` triggers lint `unknown-frame-slot` (warn): intentional custom slots are allowed, but never put a character sheet in `frame`—non-writing slots declared on `card.frame` enter `<world>` on every off-stage pass including `direct`.
 
 ### 2. `fiction`: Characters, Cast & World Bands
 
@@ -35,12 +36,17 @@ Source of truth: `packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `lore
 - `label` names the module on the Card Page without exposing `text`.
 - `when` turns a fragment into a state-gated **band**. Bands gating on the same scalar field represent mutually exclusive narrative stages: at most one should hold at any value within `[min, max]` (checked by lint `band-gap`).
 
-### 3. `greetings`: Static & Dynamic Openings
+### 3. `greetings` & `passages`: Openings, Epoch Transitions & Endings
 
-- `greetings: [{ text?, do?, note? }]`.
-- `do`: array of `Effect_` applied on node `0` before turn 1; emitted events reach turn 1's `gate`.
-- **Static opening:** `text` alone (no `note` and no player `--note`) commits `text` verbatim at zero token cost.
-- **Dynamic opening:** when `note` is set on the greeting (or the player passes `--note` / `Field.start` overrides on `greet`), node `0` runs `narrate` over the settled opening state using `note` as direction (`swipe` and `reword` work on node `0`).
+- **`greetings`**: `[{ text?, do?, note? }]` (at least `text` or `note` required; lint `empty-greeting`).
+  - `do`: array of `Effect_` applied on node `0` before turn 1; emitted events reach turn 1's `gate`.
+  - **Static opening:** `text` alone (no `note` and no player `--note`) commits `text` verbatim at zero token cost.
+  - **Dynamic opening:** when `note` is set on the greeting (or the player passes `--note` / `Field.start` overrides on `greet`), node `0` runs `narrate` over the settled opening state using `note` as direction (`swipe` and `reword` work on node `0`).
+- **`passages`**: `[{ when: Cond, text?, note?, do?, digest?: string[], end?: boolean }]`.
+  - Evaluated first-match-wins and non-reentrantly after a player turn's `record` commits.
+  - Appends a static (`text`) or dynamically narrated (`note`) transition child node (`passage: true`), applying `do` effects (e.g. resetting single-day clocks while keeping cross-loop counters).
+  - **`digest` & epoch `boundary`:** declaring `digest` (IDs of `record`-stage products, checked by `unknown-product`; `digest: []` marks a clean boundary with zero extra extraction) runs an interval `record` pass over the ending epoch's transcript and sets `boundary: true` on the passage node—slicing `narratorHistory`, `ledger`, `Known:`, prefix folds, and `window` lore residency cleanly from the new epoch while keeping scalar `fields`, `lore` unlock floors, and `world`/`chronicle` state folded across the full path.
+  - **`end: true`:** marks the passage node `end: "over"` (matching `rules.over`), guarding the terminal leaf against further child turns (`swipe` / `reword` on the parent remain valid).
 
 ### 4. `rules`: Fields, Actions, Readouts & Termination
 
@@ -90,7 +96,7 @@ Source of truth: `packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `lore
 
 - **`Cond` grammar:** `{ path, is }`, `{ path, op: "lt" | "lte" | "gt" | "gte", value }`, `{ all: Cond[] }`, `{ any: Cond[] }`, `{ not: Cond }`, `{ event: string }`.
   - Paths: `<field>` (or `fields.<field>`), `world.<product>.<key>`, `lore.<id>.since | shown`. Field names `fields`, `world`, `lore` are reserved (`reserved-path`).
-- **`names`:** `{ user?, char?, [key]: string }` single-pass `{{key}}` dictionary (`unfilled-name`, `unsupported-macro`).
+- **`names`:** `{ user?, char?, [key]: string }` single-pass `{{key}}` dictionary (`unfilled-name` warn, `unsupported-macro` error). An unfilled hole in card-authored text passes through literally as `{{key}}` without locking turns; an unfilled hole in a player row's item drops that item.
 - **`guard`:** `string[]` checked post-prose in `check`.
 - **`lexicon`:** `[{ pattern, hint? }]` (`*` intra-sentence wildcard) rewritten in `polish`.
 - **`heading`:** `<field>` or `<worldOrRecordProduct>.<key>` displayed as the turn's scene heading.
@@ -100,4 +106,4 @@ Source of truth: `packages/runtime/src/card.ts`, `fragment.ts`, `cond.ts`, `lore
 ## Static Checks (`card check`) — Do Not Hand-Verify
 
 Schema & decode enforce structural invariants automatically. Static `lint` (`packages/runtime/src/lint.ts`) checks:
-`unknown-frame-slot`, `unknown-path`, `reserved-path`, `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`, `unfilled-name`, `unsupported-macro`, `unknown-catalog`, `duplicate-catalog-item`, `bad-section`, `bad-identifier`, and `empty-text` (error—blocks install).
+`unknown-frame-slot`, `unknown-path`, `reserved-path`, `orphan-event`, `dead-field`, `prose-cannot-move`, `band-gap`, `unreachable-layer`, `hook-length`, `field-in-prose`, `inline-product`, `unfilled-name`, `unsupported-macro`, `unknown-catalog`, `duplicate-catalog-item`, `bad-section`, `bad-identifier`, `unknown-product`, `empty-greeting`, and `empty-text` (error—blocks install).

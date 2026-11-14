@@ -2,7 +2,7 @@
 title: Glossary
 description: Canonical English naming primitives mapping Effect Tavern concepts directly to codebase identifiers.
 sidebar:
-  order: 5
+  order: 6
 ---
 
 Canonical naming primitives for developers, card authors, and coding agents. The repository source of truth lives in `GLOSSARY.md` at the repo root.
@@ -18,7 +18,7 @@ Canonical naming primitives for developers, card authors, and coding agents. The
 | `bleedthrough` | The narrator speaking, acting, or deciding for the player (*impersonation*). |
 | `has no agency` | Mechanical rule that `decide` ignores `thought` when choosing card `actions`. |
 | `participant mode` / `author mode` | Coordinate pair (`persona` filled vs. empty, paired with default `input: "act" \| "note"`). |
-| `persona` | Frame slot (`persona`) and reusable player asset (`/personas`) defining who the player is in the fiction. |
+| `persona` | Frame slot (`persona`) and reusable player asset (`/personas`, with optional install-wide default and tri-state `local.persona`; inherited in `yield` mode on participant cards). |
 | `hat` | Provider-specific continuation shell (`/hats`, `Connection.hat`): `narrate.head`, `narrate.tail`, and `review.head`. |
 | `slop` (`claudeism`) | Over-repeated model stock phrases and clichés targeted by `lexicon` and `polish`. |
 
@@ -26,14 +26,15 @@ Canonical naming primitives for developers, card authors, and coding agents. The
 
 | Primitive | Definition |
 | --- | --- |
-| `Card` | Single declarative schema (`packages/runtime/src/card.ts`) covering metadata, `frame`, `fiction`, `greetings`, `rules`, `lore`, `products`, `catalogs`, `guard`, and `lexicon`. |
+| `Card` | Single declarative schema (`packages/runtime/src/card.ts`) covering metadata, `frame`, `fiction`, `greetings`, `passages`, `rules`, `lore`, `products`, `catalogs`, `guard`, and `lexicon`. |
+| `Passage` / `Boundary` | Post-record card transitions (`Card.passages`) evaluated first-match-wins after player `record`: emits an authored transition (`passage: true`), optionally runs interval `digest` extraction (`boundary: true`, slicing narrator transcript and folds while preserving `fields`, `lore` floors, and `world`/`chronicle` state), or seals a terminal leaf (`end: "over"`). |
 | `Turn` & `Stage` | Fixed 8-stage pipeline: `lookup → (decide → settle)* → gate → direct → narrate → check → polish → record`. |
 | `Log` / `Node` / `head` | Immutable append/amend tree (`log.ts`), turn record (`journal.ts`), and active leaf cursor (`head`). |
 | `sibling` (`swipe`, `reword`, `edit`) | Nodes sharing a `parent`, restarting respectively from `lookup`, `narrate`, or `check`. |
 | `Derived` | Pure path fold (`derived.ts`) computing state, floors/counters, transcripts, compression, and UI projections without storing snapshots. |
 | `WorldState` & `DomainChange` | Unified `{ fields, world, lore }` state and sparse two-phase mutations (`insert_entity`, `patch_entity`, `remove_entity`, `patch_record`, `replace`). |
 | `Fold` | Path accumulation (`latest`, `append`, `{ key }`) on products, and byte-stable prefix compression over `notes` and disclosed lore. |
-| `Head` / `Tail` | The two prompt assembly zones (`request.ts`); replaces numeric chat-depth insertion. |
+| `Head` / `Tail` & `<world>` | The two prompt assembly zones (`request.ts`, replacing numeric chat-depth insertion); only `narrate` reads the full `frame`, whereas off-stage passes read `stage.role` + a compact XML-tagged `<world>` projection (`worldOf`). |
 | `Channel` (`act` / `note`) | Input route: `act` enters the `transcript`; `note` directs this turn only. |
 | `Fragment` / `Slot` / `Band` | Prompt unit (`fragment.ts`), named `frame` slot (`SLOTS`), and `when`-gated `fiction` state variant. |
 | `Layer` / `Local` / `Pack` | Rank-ordered customization rows (`harness → card → packs → local → persona`). |
@@ -42,6 +43,7 @@ Canonical naming primitives for developers, card authors, and coding agents. The
 | `Catalog` | Card attachment registry (`catalogs`) dynamically filtering pickable `enum` IDs during `record`. |
 | `Readout` / `Action` / `Beat` / `Cond` | Post-prose multiple-choice state judgment (`Readout`), pre-prose roll (`Action` → `Beat`), and closed boolean tree (`Cond`). |
 | `Guard` / `Lexicon` | Post-prose prohibitions (`check`) and wildcard rewrite patterns (`polish`). |
+| `Connection` & `DecisionModel` | Language-model endpoint config (`/providers`, sending zero hardcoded sampling knobs) and optional probability-only binary scorer (`/decision`, `pre-check`) settling complete-catalog `lookup` and clear-cut `check` passes (`via: "decision"`). |
 
 ## Legacy Tavern Concepts & Negative Constraints
 

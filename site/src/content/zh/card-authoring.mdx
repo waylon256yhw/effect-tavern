@@ -11,9 +11,10 @@ sidebar:
 
 | 卡片字段 | 作用与可见范围 | 关键配置 |
 | --- | --- | --- |
-| `frame` | 叙事声音、基调与玩家槽位（**所有阶段**均作为头区读取） | 标准槽位 `SLOTS`：`persona`、`pov`、`voice`、`style`、`setting`、`language`、`verbosity` |
+| `frame` | 世界前提、叙事基调与玩家槽位（`narrate` 读完整 `frame`；后台阶段读剥离行文槽后的 `<world>`） | 标准槽位 `SLOTS`：`persona`、`pov`、`voice`、`style`、`setting`、`language`、`verbosity` |
 | `fiction` | 人物设定、群像、世界观散文及按状态切换的**分段（`Band`）**（仅 `narrate` 读） | `{ id, label?, text, when? }` |
 | `greetings` | 静态开场白（`text`）或动态引导开场（`note` + `start: true` 开局字段） | `[{ text?, do?, note? }]` |
+| `passages` | 写后幕间过渡、周目循环重置与终局节点（`boundary` / `over`） | `[{ when, text?, note?, do?, digest?, end? }]` |
 | `rules.fields` | 标量状态（`int` / `number` / `boolean` / `enum`）及量表绘制推导（`drawn`） | `{ path, type, initial, min?, max?, options?, hidden?, start?, view? }` |
 | `rules.actions` | 叙事前机械动作与带种子的概率检定 | `{ id, text, when?, roll?, hit?, miss?, do? }` |
 | `rules.readouts` | 叙事后选择题判据，使剧情能够推动标量字段 | `{ id, text, when?, options: [{ id, text, do }] }` |
@@ -32,6 +33,12 @@ sidebar:
 - `enum` → **`steps`**（步骤轨）；
 - 同时带 `min` 与 `max` 的 `int` → 若 `min < 0` 或分段在区间内切出 2 个及以上阈值，画为 **`scale`**（分格刻度轴，如好感度 `-30..100`）；否则画为 **`gauge`**（存量进度条，如生命值 `0..100`）。当带伤势分段的存量仍需画为进度条时，显式声明 `view: "gauge"` 即可覆盖；
 - 其余字段 → **`value`**（数值行）。
+
+### 写后过场（`passages`）、纪元边界与终局收束
+包含多日时间循环、章节切幕或分支尾声的卡片（参见 `samples/life-of-pi/life-of-pi.yaml`）可声明 `passages`，在玩家回合 `record` 落库后按序取首个满足 `when` 的条目执行：
+- **`text` / `note` + `do`：** 追加一条静态（`text`）或动态叙事（`note`）过渡子节点（`passage: true`），并结算 `do` 效果（如重置单日钟点、推进周目计数）。
+- **`digest`（`boundary: true`）：** 对刚结束一幕的完整转录稿执行区间 `record` 提取指定产物（传 `digest: []` 则仅切分边界），并开启新纪元——后续 `narratorHistory` 与前缀折叠从新纪元重新起算，而标量字段、`lore` 解锁地板与 `world`/`chronicle` 状态跨幕完整继承。
+- **`end: true`：** 将该节点标为终局 `end: "over"`，阻止在已完结分支下继续追加子回合。
 
 ## 2. “两顶帽子”制卡流程
 
@@ -56,7 +63,7 @@ sidebar:
   1. **读数（`Readout`）选项必须写“可见举动”，绝不写“内心心理”。** 克制文风下心理活动含蓄不露，`record` 会永远保守落回不变项导致字段锁死；选项应写具体行为（如“收下信物”“追问来历”）。
   2. **挂在某字段上的 `fiction` 分段不得提前规定该字段读数要测量的走向。** 分段只写角色当下的姿态与张力，把本幕推进空间留给玩家互动。
   3. **锁存型读数（触发后翻转开关不再询问）必须包含“已提起、尚待回应”的中间态选项。** 当读数的 `when` 与某条 `lore` 的 `offer` 同阈值时，`record` 会在角色刚抛出话题、玩家尚未回答的当轮立即提问；若只有“未发生 / 接受 / 拒绝”，模型会误判为“拒绝”。
-  4. **多开场卡的 `Field.initial` 取所有开场的最低公共基线**，单条路线的增量写进各自的 `greetings[n].do`。切勿把人物设定放进 `frame`（包括 `direct` 在内的所有阶段都会读 `frame`）。
+  4. **多开场卡的 `Field.initial` 取所有开场的最低公共基线**，单条路线的增量写进各自的 `greetings[n].do`。切勿把人物设定放进 `frame`（非行文类的卡片 `frame` 槽位会作为 `<world>` 送入包括 `direct` 在内的所有后台阶段）。
 </Aside>
 
 ## 4. 制卡工坊与旧卡重制

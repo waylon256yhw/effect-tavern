@@ -72,6 +72,15 @@ Tooling:
 - `vp check` runs `eslint-plugin-solid/configs/v2` through oxlint (root `vite.config.ts`).
 - Docs: https://v2.solidjs.com/llms.txt; append `.md` to any page URL for its Markdown.
 
+## UI SDK (`@ui-sdk`)
+
+Interactive controls, overlays, and gesture primitives in `packages/client` build on `@ui-sdk/solid` and `@ui-sdk/core` (pinned together on Solid 2.0 RC; skill linked at `.claude/skills/pnpm-@ui-sdk+core-ui-sdk` via `pnpm-workspace.yaml`), replacing ad-hoc native `<select>`, `<dialog>`, `[popover]`, Escape/outside-click listeners, and raw pointer drag loops so behavior converges across desktop and touch browsers:
+
+- **Behavior vs. styling:** `@ui-sdk` owns focus management, keyboard navigation, Escape/scrim dismissal, background inertness, popup positioning, pointer velocity/rubber-band/spring physics (`@ui-sdk/core/gesture`), and responsive adaptation (`presentation="auto"`). Styling stays strictly in our stylesheets under the five-layer cascade `@layer ui-sdk, tokens, components, card, user` (`src/app.css`), so component rules override `@ui-sdk` defaults without `!important`.
+- **Shared controls & primitives:** Reuse the wrappers in `src/controls.tsx` (`Menu` on `Select`, `Switch`, `Modal` and `Prompt` on `Dialog` + `createDialogController`, `Confirm` on `AlertDialog` + `createConfirm`), `src/readings.tsx` (`Sheet` on `Dialog`, `Demand` on `Menu`), `src/shell.tsx` (phone `Drawer`), `src/composer.tsx` + `src/invocation-menu.tsx` (`Popover` + multi-page `Command`), and `src/edge.tsx` (`definePrimitive` separator with `bindDrag`, `rubberBand`, and `solveSpring` over `src/fold.ts`). When building a control `@ui-sdk` does not ship, author it with `definePrimitive` and `createParts` rather than raw DOM listeners.
+- **Agent bridge & browser check (`#181`):** Every interactive control an agent should reach is an `@ui-sdk` part (or `definePrimitive` declaring `agent: { actions }`) with an accessible name, mounted in `packages/client/test/controls.tsx`. `vp run verify:ui` in `packages/client` (kept out of `verify` because it launches headless Chrome; set `CHROME` when not at the macOS default) drives `test/controls.tsx` through `createAgent` (`snapshot` / `act`) and `@solidjs/diagnostics`, failing on any unnamed control, unreachable action, or Solid reactivity diagnostic.
+- **Browser bundle boundary:** `packages/client/test/imports.ts` (run in `vp run verify`) walks value imports from `packages/client/src/` across workspace packages and fails if any `node:*` module or `@effect-tavern/provider`'s root barrel (which pulls AI SDK drivers and Node code) becomes reachable in the browser. Import pure provider helpers by explicit subpath (`@effect-tavern/provider/src/names.ts`, `url.ts`) or `import type`.
+
 ## Interface words (i18n, #67)
 
 The chrome's words live in `packages/client/src/locales/zh-CN.ts` (the source, Chinese) and `en.ts` (English, the same
@@ -83,21 +92,10 @@ A card's own text (labels, group names, openings) and the model's words are neve
 
 ## Dev
 
-Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp test` built-in finds no vitest files and exits 1.
-`vp run verify:ui` in packages/client is the browser check (#181), kept out of `verify` because it needs Chrome: it
-builds `test/controls.tsx` (the shared controls, no server), opens it headless and drives them through `@ui-sdk`'s
-agent bridge (`snapshot` / `act`), failing on an unnamed control, a step that does not reach the app, or a Solid
-diagnostic. A control an agent should reach is an `@ui-sdk` part with a name; add it to that fixture.
+Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp test` built-in finds no vitest files and exits 1. Run `vp run verify:ui` in `packages/client` whenever client controls, dialogs, popups, or gestures change (see `## UI SDK`).
 
-`bun --bun vp run dev` at the root (`bun --bun vp dev` in packages/client; `--bun` makes the `node` Vite+ launches resolve to Bun) is the whole stack: the session (packages/server/src/dev.ts) runs
-inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take
-effect on the next request. `MODEL=fake` scripts the model, `CARDS=<dir>` puts a directory of YAML cards on the shelf (default: the four templates), the library lives in
-`.dev/tavern.db` (gitignored; `DATA=<dir>` moves it; delete it to start every story over). The user starts and stops `vp dev` in their own
-terminal; an agent uses it and never starts, restarts or kills it.
+`bun --bun vp run dev` at the root (`bun --bun vp dev` in `packages/client`; `--bun` makes the `node` Vite+ launches resolve to Bun) is the whole stack: the session (`packages/server/src/dev.ts`) runs inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take effect on the next request. `MODEL=fake` scripts the model, `CARDS=<dir>` puts a directory of YAML cards on the shelf (default: the four templates), the library lives in `.dev/tavern.db` (gitignored; `DATA=<dir>` moves it; delete it to start every story over). The user starts and stops `vp dev` in their own terminal; an agent uses it and never starts, restarts or kills it.
 
-`bun src/main.ts` in packages/server is the standalone app, the one-port form a phone runs: `/api` plus the client build
-(`vp build` in packages/client → dist) under every other path. It is the production host (start.ts → host.ts, shared
-with `tavern serve`), not the dev session: the library is `.tavern/tavern.db` (`DATA=<dir>` moves it; `DATA=.dev` opens
-the dev library), the harness is the minimal one, no local key is imported, and call bodies stay out of the Inspector
-unless `TAVERN_INSPECT=1` (`tavern serve --inspect`). A schema change to the library needs a new `user_version` step in
-data.ts `upgrade`: a stamped library no longer runs the create statements on open.
+`bun src/main.ts` in `packages/server` is the standalone app, the one-port form a phone runs: `/api` plus the client build (`vp build` in `packages/client` → `dist`) under every other path. It is the production host (`start.ts` → `host.ts`, shared with `tavern serve`), not the dev session: the library is `.tavern/tavern.db` (`DATA=<dir>` moves it; `DATA=.dev` opens the dev library), the harness is the minimal one, no local key is imported, and call bodies stay out of the Inspector unless `TAVERN_INSPECT=1` (`tavern serve --inspect`). A schema change to the library needs a new `user_version` step in `data.ts` `upgrade`: a stamped library no longer runs the create statements on open.
+
+Decision-model calibration instruments live in `packages/server/bin/` (`decision-probe.ts`, `decision-replay.ts`, `decision-lookup.ts`): they open a library read-only (defaulting to `.dev/tavern.db` without locking a running dev server) and send labeled scenes, stored node prose, or `lookup` catalog pools to the saved `decision` service to measure probability thresholds (`LO`, `HI`, `LOOKUP` in `packages/runtime/src/decision.ts`), latency, and block rates. Pass `--dry` (`decision-replay.ts`, `decision-lookup.ts`) to inspect built requests without calling the network.

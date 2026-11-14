@@ -11,12 +11,13 @@ A card in Effect Tavern is a single declarative YAML or JSON document validated 
 
 | Card Section | Purpose | Key Fields |
 | --- | --- | --- |
-| `frame` | Narrator register, voice & player slots (read by **all** stages) | `SLOTS`: `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity` |
+| `frame` | World premise, narrator register & player slots (`narrate` reads full `frame`; off-stage passes read non-writing `<world>` slots) | `SLOTS`: `persona`, `pov`, `voice`, `style`, `setting`, `language`, `verbosity` |
 | `fiction` | Character sheets, cast, world prose & state-gated **bands** (`narrate` only) | `{ id, label?, text, when? }` |
 | `greetings` | Static openings (`text`) or dynamic narrated openings (`note` + `start` fields) | `[{ text?, do?, note? }]` |
+| `passages` | Post-`record` chapter transitions, macro-loops & endings (`boundary` / `over`) | `[{ when, text?, note?, do?, digest?, end? }]` |
 | `rules.fields` | Scalar state (`int`, `number`, `boolean`, `enum`) & UI meter shape (`drawn`) | `{ path, type, initial, min?, max?, options?, hidden?, start?, view? }` |
 | `rules.actions` | Pre-narration mechanical moves & seeded rolls | `{ id, text, when?, roll?, hit?, miss?, do? }` |
-| `rules.readouts` | Post-narration multiple-choice judgements Moving prose-driven fields | `{ id, text, when?, options: [{ id, text, do }] }` |
+| `rules.readouts` | Post-narration multiple-choice judgements moving prose-driven fields | `{ id, text, when?, options: [{ id, text, do }] }` |
 | `lore` | Progressive `layers` (`unlock` floor + `offer` window), `sections` appendices & `ContextPolicy` | `{ id, layers, sections?, unlock, offer?, access?, activation?, residency? }` |
 | `products` | Typed `world`, `chronicle`, or `theater` schemas (`text`, `list`, `record`, `table`) | `{ id, label?, text, shape, role, initial?, stage?, fold?, feed?, recall? }` |
 | `catalogs` | Attachment registries (illustrations, BGM, voice) picked by ID in `record` | `{ id, baseUrl?, items: [{ id, when?, variants? }] }` |
@@ -32,6 +33,12 @@ Clients render `rules.fields` directly from their bounds and band thresholds—n
 - `enum` → **`steps`** track.
 - Bounded `int` (`min` and `max` set) → **`scale`** (staged cells with a dot, e.g. affection `-30..100`) when `min < 0` or `fiction` bands cut 2+ thresholds; otherwise **`gauge`** (`now / max` stock bar, e.g. HP `0..100`). Set `view: "gauge" | "scale"` to override.
 - Any other scalar → **`value`** row.
+
+### Post-Record `Passages`, Epoch Boundaries & Endings
+Cards with multi-day loops, act breaks, or authored epilogues (see `samples/life-of-pi/life-of-pi.yaml`) declare `passages` evaluated first-match-wins after player `record` commits:
+- **`text` / `note` + `do`:** Appends a static (`text`) or narrated (`note`) transition child node (`passage: true`), applying `do` effects (e.g. resetting a daily clock while advancing a loop counter).
+- **`digest` (`boundary: true`):** Runs an interval `record` pass for the named `record`-stage product IDs (`digest: []` marks a pure boundary) over the ending epoch's transcript—starting a clean `narratorHistory` and compression window while preserving scalar `fields`, `lore` unlock floors, and `world`/`chronicle` state.
+- **`end: true`:** Marks the passage node `end: "over"`, preventing further child turns under a finished story branch.
 
 ## 2. The Two-Hat Workflow
 
@@ -56,7 +63,7 @@ Always build a card in two distinct passes:
   1. **Write readout options as observable deeds, never internal psychology.** Reserved prose keeps feelings implicit, causing `record` to pick the conservative option forever. Name visible acts (`accepts the letter`, `asks about the scar`).
   2. **Do not let a `fiction` band prescribe the trajectory its readout measures.** A band should describe present tension and leave room for the scene to move.
   3. **Cover the "raised, not yet answered" state on latching readouts.** When a readout shares its `when` condition with a `lore` `offer`, `record` asks it on the very turn the NPC raises the topic—before the player replies. Include an explicit in-flight neutral option so the model is not forced into `refused`.
-  4. **Set `Field.initial` to the lowest baseline shared across all greetings** and place route-specific deltas in `greetings[n].do`. Never put character profiles inside `frame` (every stage, including `direct`, reads `frame`).
+  4. **Set `Field.initial` to the lowest baseline shared across all greetings** and place route-specific deltas in `greetings[n].do`. Never put character profiles inside `frame` (non-writing `frame` slots enter `<world>` on every off-stage pass, including `direct`).
 </Aside>
 
 ## 4. Workshop & Legacy Card Remastering

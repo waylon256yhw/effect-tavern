@@ -5,7 +5,7 @@ sidebar:
   order: 0
 ---
 
-Effect Tavern is a ground-up full-stack harness for AI roleplay and interactive fiction, built on **Effect v4**, **Solid 2.0**, and **Bun**.
+Effect Tavern is a ground-up full-stack harness for AI roleplay and interactive fiction, built on **Effect v4**, **Solid 2.0**, **UI SDK (`@ui-sdk`)**, and **Bun**.
 
 Instead of relying on prompt incantations, chat-depth injections, and regex scrapers, Effect Tavern treats every card as **declarative data plus deterministic rules**. Code owns the control loop, seeded dice, state transitions, and prompt-cache boundaries; the LLM is called only at typed stage seams to classify, narrate prose, and extract structured facts.
 
@@ -26,7 +26,10 @@ Instead of relying on prompt incantations, chat-depth injections, and regex scra
     Run `card`, `unroll`, and `tavern` for zero-token testing, terminal play, Workshop compilation, and SSE hosting.
   </Card>
   <Card title="Layers, Packs & Hats" icon="ph:stack" href="/layers-and-packs/">
-    Customize voice, writing switches, enhancer packs, and provider continuation shells without presets.
+    Customize voice, writing switches, enhancer packs, provider hats, and decision pre-checks without presets.
+  </Card>
+  <Card title="Web Client & UI Architecture" icon="ph:browsers" href="/client/">
+    Explore the spatial shell, non-jumping reader, Turn Inspector, and cross-platform `@ui-sdk` controls.
   </Card>
 </CardGrid>
 
@@ -56,13 +59,14 @@ Instead of relying on prompt incantations, chat-depth injections, and regex scra
     ```sh
     vp check
     vp run verify
+    cd packages/client && vp run verify:ui
     ```
   </Step>
 </Steps>
 
-## Built-in Template Cards
+## Built-in Template & Sample Cards
 
-Four canonical YAML cards live in `packages/runtime/cards/`—serving simultaneously as starter scaffolds, architectural exemplars, and live regression suites:
+Four canonical YAML template cards live in `packages/runtime/cards/` (with full-length remasters such as `samples/life-of-pi/life-of-pi.yaml` alongside them)—serving simultaneously as starter scaffolds, architectural exemplars, and live regression suites:
 
 | Card ID | Mode & Channel | Demonstrates |
 | --- | --- | --- |
@@ -70,3 +74,4 @@ Four canonical YAML cards live in `packages/runtime/cards/`—serving simultaneo
 | `ri` | `participant` / `act` | Multi-stage `scale` bands, `hidden` route switches, 3 openings, latching readout |
 | `wuxia` | `participant` / `act` | Action rolls, readout bands, 3-layer lore, `director`, `world` record & table, `guard` |
 | `yandao` | `author` / `note` | Protagonist-free world simulation with card-owned `pov` slot and turn-1 window |
+| `life-of-pi` (`samples/`) | `participant` / `act` | Multi-day time loop with post-record `passages`, `digest` epoch boundaries & `end: true` |

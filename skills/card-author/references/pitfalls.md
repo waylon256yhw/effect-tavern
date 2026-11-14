@@ -28,11 +28,12 @@ Every rule below comes from a failure observed in live multi-turn runs and locke
 3. **Write lore hooks as the player refers to the topic, not as encyclopedic labels or keywords.**
    - `layers[0]`'s first sentence (and each `section`'s first sentence) is what `lookup` scans. Keep it natural and specific.
 
-## 3. Canonical Template Cards (`packages/runtime/cards/`)
+## 3. Canonical Template & Sample Cards (`packages/runtime/cards/`, `samples/`)
 
-Inspect these four live-verified cards directly when looking for concrete YAML idioms:
+Inspect these live-verified cards directly when looking for concrete YAML idioms:
 
 - **`packages/runtime/cards/banxing.yaml` (伴星)** — Pure chat (`participant mode` without rules or lore). Demonstrates porting V3 `mes_example` dialogue into an unlabelled `fiction` voice-sample fragment.
 - **`packages/runtime/cards/ri.yaml` (理)** — `participant mode` affection progression remastered from MVU: multi-stage `scale` bands on one field, `hidden: true` route switches, three greetings with distinct `do` states (`15`, `0`, `60`), and a latching confession readout.
 - **`packages/runtime/cards/wuxia.yaml` (竹林)** — Full RPG + memory showcase: `actions` with rolls, readout-driven `bond` bands, 3-layer `lore` with floor + event windows, `director: true`, `world` record (`scene`, `feed: true`, `heading: "scene.place"`) + `world` table (`people`, `recall: "who"`), and `guard`.
 - **`packages/runtime/cards/yandao.yaml` (盐道)** — `author mode` (`input: "note"`, no `persona`, card-supplied `pov` slot): protagonist-free world narration with readout-driven state and a turn-1 window triggered by `greetings[0].do`.
+- **`samples/life-of-pi/life-of-pi.yaml` (Life of Pi)** — Multi-day time-loop remastered from V3: post-record `passages` resetting daily clocks while carrying cross-loop fields, epoch `digest` carryover (`boundary: true`), one-turn cooldown band, and `end: true` terminal ending.
