@@ -108,3 +108,17 @@ const updated = { ...node(100, 99, "child"), heading: "new heading" }
 apply({ kind: "change", node: node(100, 99, "child"), head: 100 })
 apply({ kind: "change", node: node(99, null, "parent"), updated: [updated], head: 100 })
 assert.equal(registry.get(log).nodes.get(100)?.heading, "new heading")
+
+// Record finishes while the prose is still playing out (a backgrounded tab): the commit waits behind the node, not dropped.
+registry.set(draft, { parent: 100, input: { text: "late" }, text: "", fresh: true })
+apply({ kind: "stage", phase: "narrate" })
+apply({ kind: "delta", part: { type: "text-delta", id: "0", text: "a long tail of prose" } })
+const late = { ...node(101, 100, "a long tail of prose"), settlementStatus: "pending" as const }
+apply({ kind: "change", node: late, head: 101 })
+apply({ kind: "stage", phase: "record" })
+apply({ kind: "change", node: { ...late, settlementStatus: "committed" }, head: 101 })
+n = 0
+while (frames.length && n++ < 400) tick()
+assert.equal(registry.get(log).nodes.get(101)!.settlementStatus, "committed")
+assert.equal(registry.get(working), false)
+console.log("ok")

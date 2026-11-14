@@ -343,7 +343,12 @@ const applyNow = (e: Wire): void => {
       })
       const id = e.node?.id
       if (id !== undefined || !registry.get(draft)) {
+        // What waits behind this node is the same turn's (record's commit, a passage's node): `settle` clears the
+        // queue for a turn that is over, and this one is not. Dropped, a record that finished while the prose was
+        // still playing out (a backgrounded tab) left the node pending and the turn running for good.
+        const rest = held
         settle(!amended) // an amend leaves a typed revision alone
+        held = rest
         if (e.node?.settlementStatus === "pending") registry.set(stage, "record")
         else running(null)
       }
