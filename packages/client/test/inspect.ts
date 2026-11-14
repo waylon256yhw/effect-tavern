@@ -248,7 +248,11 @@ assert.deepEqual(precheck({ lines: checked, verdict: "escalate" }, "check"), {
   delivered: [],
 })
 // lookup's: the 12 highest, highest first, the delivered ones marked
-const many = Array.from({ length: 20 }, (_, i) => ({ label: `e${i}`, p: i / 20 }))
+const many = Array.from({ length: 20 }, (_, i) => ({
+  label: `e${i}`,
+  p: i / 20,
+  ...(i >= 18 && { read: true as const }),
+}))
 const looked = precheck({ lines: many, verdict: "pass", delivered: ["e19", "e18"] }, "lookup")
 assert.equal(looked.lines.length, 12)
 assert.deepEqual(looked.lines.slice(0, 3), [

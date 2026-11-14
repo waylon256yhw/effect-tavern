@@ -16,12 +16,14 @@ export const HI = 0.75
 // ponytail: decision-lookup.ts readings (#168): should-read 0.84–0.98, should-not 0.03–0.33, unrelated inputs nothing
 // over 0.5, related ones 14–31 over it; re-read against the instrument before moving either.
 export const LOOKUP = 0.5
-export const TOP = 8 // read_context's per-call cap: a section's entry counts toward it
+export const TOP = 8 // read_context's per-call cap
 
-/** One answered question as the trace row shows it: its label and its probability (null: none came back). */
+/** One answered question as the trace row shows it: its label and its probability (null: none came back); `read`: a
+ *  lookup unit the host then delivered (by id: two units may share a title). */
 export interface Line {
   label: string
   p: number | null
+  read?: true
 }
 type Emit = (
   e:
@@ -86,7 +88,7 @@ export const decisionPass = <V>(o: {
   })
 
 /** Lookup's state (the scene's tail, then `<input>`: the line and the note) and one boolean question per catalog unit
- *  (`u<i>`): an entry whose face is unread, then each unread section under it. The ask is layer.ts `lookup.decision`,
+ *  (`u<i>`): an unread entry's face, or an unread section of a held one. The ask is layer.ts `lookup.decision`,
  *  followed by the unit's title. `scene` is the parent turn's prose; "" leaves the tag out. */
 export const lookupQuestions = (o: {
   scene: string
@@ -111,28 +113,28 @@ export const lookupQuestions = (o: {
 // ponytail: the scene tail as decision-lookup.ts asked it (1200 characters); it barely moved the readings, unmeasured
 // beyond that.
 const SCENE = 1200
+// an unread entry's face, or the unread sections of a face the request holds (context.ts `units` lists no others)
 const askedOf = (units: readonly Unit[]) =>
-  units.flatMap((u) => [
-    ...(u.resident ? [] : [{ resourceId: u.resourceId, title: u.title }]),
-    ...(u.sections ?? []).map((x) => ({ ...x, of: u.resident ? undefined : u.resourceId })),
-  ])
-/** The answers read back per unit (`asked` order) and what to read: over `LOOKUP`, highest first, at most `TOP` ids
- *  with a section's unread entry ahead of it and counted. `ids` is undefined when an answer has no probability: the
- *  pass does not settle then. */
-export const lookupSelect = (answers: Readonly<Record<string, unknown>>, units: readonly Unit[]) => {
+  units.flatMap((u) => (u.resident ? (u.sections ?? []) : [{ resourceId: u.resourceId, title: u.title }]))
+/** The answers read back per unit (`asked` order) and what to read: over `LOOKUP`, highest first, at most `TOP` ids;
+ *  the lines to be read are marked. `ids` is undefined when an answer has no probability: the pass does not settle
+ *  then. */
+export const lookupSelect = (
+  answers: Readonly<Record<string, unknown>>,
+  units: readonly Unit[],
+): { lines: Line[]; ids?: string[] } => {
   const asked = askedOf(units)
-  const lines = asked.map((u, i) => ({ label: u.title, p: p(answers[`u${i}`]) }))
+  const lines: Line[] = asked.map((u, i) => ({ label: u.title, p: p(answers[`u${i}`]) }))
   if (lines.some((l) => l.p === null)) return { lines }
-  const ids: string[] = []
-  for (const i of asked.map((_, i) => i).sort((a, b) => lines[b]!.p! - lines[a]!.p!)) {
-    if (lines[i]!.p! <= LOOKUP) break
-    const u = asked[i]!
-    const need = [...("of" in u && u.of && !ids.includes(u.of) ? [u.of] : []), u.resourceId].filter(
-      (id) => !ids.includes(id),
-    )
-    if (ids.length + need.length <= TOP) ids.push(...need)
+  const picked = asked
+    .map((_, i) => i)
+    .filter((i) => lines[i]!.p! > LOOKUP)
+    .sort((a, b) => lines[b]!.p! - lines[a]!.p!)
+    .slice(0, TOP)
+  return {
+    lines: lines.map((l, i) => (picked.includes(i) ? { ...l, read: true as const } : l)),
+    ids: picked.map((i) => asked[i]!.resourceId),
   }
-  return { lines, ids }
 }
 
 /** The state (`<world>` + `<draft>`) and one boolean question per guard rule (`g<i>`: violated?) and per open entry id

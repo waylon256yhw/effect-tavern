@@ -571,13 +571,13 @@ export const makeSession = ({
                   read: (answers) => {
                     const s = lookupSelect(answers, units)
                     const r = s.ids && lookup.read(s.ids) // read_context's own delivery: freeze, held, disclosures
-                    if (!r || !r.ok) return { lines: s.lines }
+                    if (!r || !r.ok) return { lines: s.lines.map(({ label, p }) => ({ label, p })) } // nothing was delivered
                     const delivered = r.value.flatMap((x) => ("title" in x ? [x.title] : []))
                     return { lines: s.lines, value: delivered, delivered }
                   },
                 })
               : undefined
-          if (!settled)
+          if (settled === undefined)
             yield* native(
               emit,
               "lookup",

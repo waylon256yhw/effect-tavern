@@ -147,8 +147,8 @@ const termsOf = (q: string, haystacks: readonly string[]) => [
 ]
 const count = (h: string, t: string) => h.split(t).length - 1
 
-/** A catalog line: an entry by id and title (its hook; never a second cut of its text), `resident` when only its unread
- *  sections, listed under it, are left to read. */
+/** A catalog line: an entry by id and title (its hook; never a second cut of its text). `resident`: the request holds
+ *  its face, and only its unread sections, listed under it, are left to read; an unread entry lists none. */
 export interface Unit {
   resourceId: string
   title: string
@@ -298,8 +298,11 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
       return {
         resourceId: r.resourceId,
         title: r.title.slice(0, 160),
-        ...(unheld(r) ? {} : { resident: true as const }),
-        ...(xs.length ? { sections: directory(xs) } : {}),
+        // Sections are listed only under a face the request already holds: an unread entry shows its face alone, and
+        // its sections come back on its read (the tool result) or enter the catalog the turn after. The reading
+        // economy of sections (docs/sections-brief.md), and what keeps an encyclopedia card's catalog complete: the
+        // nikke sample is 227 units / 8,355 characters this way, 386 / 14,303 with every section listed.
+        ...(unheld(r) ? {} : { resident: true as const, ...(xs.length ? { sections: directory(xs) } : {}) }),
       }
     })
   const catalog = (query: string): Catalog => {

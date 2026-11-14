@@ -275,21 +275,16 @@ export const precheck = (
   error?: string
 } => {
   const o = (out ?? {}) as {
-    lines?: { label: string; p: number | null }[]
+    lines?: { label: string; p: number | null; read?: true }[]
     verdict?: string
     error?: string
     delivered?: string[]
   }
   const delivered = o.delivered ?? []
-  const lines = (o.lines ?? []).map((l) => ({ label: l.label, p: l.p ?? null }))
+  const lines = (o.lines ?? []).map((l) => ({ label: l.label, p: l.p ?? null, ...(l.read && { read: true as const }) }))
   return {
-    lines:
-      phase === "lookup"
-        ? lines
-            .sort((a, b) => (b.p ?? -1) - (a.p ?? -1))
-            .slice(0, RANKED)
-            .map((l) => (delivered.includes(l.label) ? { ...l, read: true as const } : l))
-        : lines,
+    // the runtime marks the delivered lines itself (by id: two units may share a title)
+    lines: phase === "lookup" ? lines.sort((a, b) => (b.p ?? -1) - (a.p ?? -1)).slice(0, RANKED) : lines,
     escalate: o.verdict !== "pass",
     delivered,
     ...(o.error !== undefined && { error: o.error }),

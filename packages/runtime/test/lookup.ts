@@ -405,25 +405,28 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   assert.ok(narrated[1]!.includes("Mira keeps the lighthouse") && !narrated.some((m) => m.includes("#past")))
 }
 // ───────── The decision model over a complete catalog (#168, decision.ts) ─────────
-// Selection, pure: over the threshold, highest first, at most 8 ids with a section's unread entry ahead of it and
-// counted; an answer with no probability settles nothing.
+// Selection, pure: over the threshold, highest first, at most 8 ids, the lines to be read marked; an answer with no
+// probability settles nothing. A unit is an unread face or an unread section of a held face.
 {
   const units: Unit[] = [
-    ...Array.from({ length: 6 }, (_, i) => ({ resourceId: `card:e${i}`, title: `E${i}.` })),
-    { resourceId: "card:m", title: "M.", sections: [{ resourceId: "card:m#s", title: "S." }] },
+    ...Array.from({ length: 8 }, (_, i) => ({ resourceId: `card:e${i}`, title: `E${i}.` })),
     { resourceId: "card:r", title: "R.", resident: true, sections: [{ resourceId: "card:r#s", title: "RS." }] },
     { resourceId: "card:low", title: "Low." },
   ]
-  // asked: e0..e5, m, m#s, r#s (r's face is resident: not asked), low
-  const ps = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.2, 0.95, 0.6, 0.5]
+  // asked: e0..e7, r#s (r's face is held: not asked), low
+  const ps = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.62, 0.61, 0.95, 0.5]
   const answers = Object.fromEntries(ps.map((p, i) => [`u${i}`, { type: "boolean", probability: p }]))
   const s = lookupSelect(answers, units)
   assert.deepEqual(
     s.lines.map((l) => l.label),
-    ["E0.", "E1.", "E2.", "E3.", "E4.", "E5.", "M.", "S.", "RS.", "Low."],
+    ["E0.", "E1.", "E2.", "E3.", "E4.", "E5.", "E6.", "E7.", "RS.", "Low."],
   )
-  // m#s ranks first and brings m (0.2) ahead of it; then e0..e5 fill the 8; r#s (0.6) no longer fits; low is at 0.5
-  assert.deepEqual(s.ids, ["card:m", "card:m#s", "card:e0", "card:e1", "card:e2", "card:e3", "card:e4", "card:e5"])
+  // r#s ranks first, e0..e6 fill the 8; e7 (0.61) no longer fits; low is at 0.5, not over it
+  assert.deepEqual(s.ids, ["card:r#s", ...Array.from({ length: 7 }, (_, i) => `card:e${i}`)])
+  assert.deepEqual(
+    s.lines.map((l) => !!l.read),
+    [true, true, true, true, true, true, true, false, true, false],
+  )
   assert.deepEqual(lookupSelect({ ...answers, u3: { type: "refusal" } }, units).ids, undefined)
   assert.deepEqual(lookupSelect(Object.fromEntries(ps.map((_, i) => [`u${i}`, { probability: 0.1 }])), units).ids, [])
   const q = lookupQuestions({
@@ -434,10 +437,11 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   })
   assert.equal(q.state, `<scene>\n${"x".repeat(1200)}\n</scene>\n\n<input>\nL\nPlayer note: N\n</input>`)
   assert.equal(Object.keys(q.questions).length, 10)
-  assert.equal(q.questions["u7"]!.instructions, "lookup.decision:S.")
+  assert.equal(q.questions["u8"]!.instructions, "lookup.decision:RS.")
 }
-// In the turn: a complete catalog settled by the decision model, no LLM lookup call; a section pulls its entry, both
-// delivered through read_context's own path (snapshots, disclosures).
+// In the turn: a complete catalog settled by the decision model, no LLM lookup call. An unread entry is asked by its
+// face alone; once the request holds it, its section is asked the turn after. Both go through read_context's own
+// path (snapshots, disclosures).
 {
   const mira = {
     ...lore("mira", "Mira keeps the lighthouse."),
@@ -447,11 +451,11 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   const decision = fakeDecision((c) => {
     const questions = Object.values(c.questions).map((q) => q.instructions as string)
     sent.push({ state: c.state.map((p) => ("text" in p ? p.text : "")).join(""), questions })
-    // lookup: the section only; check is not asked (chat has no guard and nothing open)
+    // lookup: whatever is about Mira; check is not asked (chat has no guard and nothing open)
     return Object.fromEntries(
       Object.keys(c.questions).map((k, i) => [
         k,
-        { type: "boolean", probability: questions[i]!.endsWith("Mira's years at sea.") ? 0.9 : 0.1 },
+        { type: "boolean", probability: questions[i]!.includes("Mira") ? 0.9 : 0.1 },
       ]),
     )
   })
@@ -464,21 +468,30 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   assert.equal(f.lookup.length, 0)
   assert.deepEqual(
     t.deliveries.map((d) => d.resourceId),
-    ["card:mira", "card:mira#past"],
+    ["card:mira"],
   )
   assert.deepEqual(t.read, [{ id: "mira", layer: 1 }])
   assert.equal(sent.length, 1)
   assert.ok(
     sent[0]!.state.startsWith("<scene>\nopening\n</scene>") && sent[0]!.state.includes("Player note: slow down"),
   )
-  assert.equal(sent[0]!.questions.length, 6) // a, b, c, d, mira, mira#past
+  assert.equal(sent[0]!.questions.length, 5) // a, b, c, d, mira: the unread entry's section is not listed
   assert.ok(sent[0]!.questions[0]!.startsWith("<input> 里玩家这一轮说的话或做的事"))
   const row = f.calls.find((c) => c.via === "decision")!
   assert.equal(row.phase, "lookup")
-  const out = row.out as { lines: unknown[]; verdict: string; delivered: string[] }
+  const out = row.out as { lines: { label: string; read?: true }[]; verdict: string; delivered: string[] }
   assert.equal(out.verdict, "pass")
-  assert.equal(out.lines.length, 6)
-  assert.deepEqual(out.delivered, ["Mira keeps the lighthouse.", "Mira's years at sea."])
+  assert.equal(out.lines.length, 5)
+  assert.deepEqual(out.delivered, ["Mira keeps the lighthouse."])
+  assert.deepEqual(
+    out.lines.filter((l) => l.read).map((l) => l.label),
+    ["Mira keeps the lighthouse."],
+  )
+  // the turn after: the face is held, so its section is asked, and read
+  const t2 = await f.go(f.S.act(t.id, { text: "her years at sea" }))
+  assert.equal(f.lookup.length, 0)
+  assert.deepEqual(sent[1]!.questions.length, 5) // a, b, c, d, mira#past
+  assert.ok(t2.deliveries.some((d) => d.resourceId === "card:mira#past"))
 }
 // A failed decision call: the LLM loop runs, the whole catalog in its first request, and nothing was delivered early.
 {
