@@ -107,12 +107,14 @@ const none = { events: [], before: [] }
     .find((r) => r.resourceId === "memory:people/e_li")!
   assert.ok(
     D.at(a)
+      .lookup()
       .readable()
       .some((r) => r.resourceId === old.resourceId),
   )
   const b = add(a, { deliveries: [old] })
   assert.ok(
     !D.at(b)
+      .lookup()
       .readable()
       .some((r) => r.resourceId === old.resourceId),
   )
@@ -128,6 +130,7 @@ const none = { events: [], before: [] }
     ],
   })
   const next = D.at(c)
+    .lookup()
     .readable()
     .find((r) => r.resourceId === old.resourceId)!
   assert.notEqual(next.revision, old.revision)
@@ -136,12 +139,14 @@ const none = { events: [], before: [] }
   const d = add(c, { deliveries: [next] })
   assert.ok(
     !D.at(d)
+      .lookup()
       .readable()
       .some((r) => r.resourceId === old.resourceId),
   )
   const unloaded = add(add(add(d)))
   assert.ok(
     D.at(unloaded)
+      .lookup()
       .readable()
       .some((r) => r.resourceId === old.resourceId),
   )
@@ -183,6 +188,7 @@ const none = { events: [], before: [] }
   assert.ok(D.at(a).known().current!.includes("Origin"))
   assert.ok(
     !D.at(a)
+      .lookup()
       .readable()
       .some((r) => r.resourceId.startsWith("memory:")),
   )

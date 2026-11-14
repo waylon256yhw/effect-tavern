@@ -147,6 +147,41 @@ const termsOf = (q: string, haystacks: readonly string[]) => [
 ]
 const count = (h: string, t: string) => h.split(t).length - 1
 
+/** A catalog line: an entry by id and title (its hook; never a second cut of its text). `resident`: the request holds
+ *  its face, and only its unread sections, listed under it, are left to read; an unread entry lists none. */
+export interface Unit {
+  resourceId: string
+  title: string
+  resident?: boolean
+  sections?: readonly { resourceId: string; title: string }[]
+}
+/** What lookup can read this turn, computed once by the host for both readers (#168): the whole pool when it fits
+ *  (`complete`), else the count by source and the top 8 of `search` over the input. */
+export type Catalog =
+  | { complete: true; units: Unit[] }
+  | { complete: false; counts: Partial<Record<Source, number>>; matched: Unit[] }
+// ponytail: decision-lookup.ts readings (#168): 227 questions fit one decision request (~84 input tokens each), so a
+// unit count in the low hundreds; and a directory bound that keeps lookup's first request under the 16000 characters
+// test/lookup.ts holds a 2000-entry catalog to (a chat-card request at this bound: ~13000). Raise both against the
+// instrument, not by feel.
+export const CATALOG_UNITS = 256
+export const CATALOG_CHARS = 10000
+const lineOf = (u: Unit) =>
+  [
+    `${u.resourceId} ${u.title}${u.resident ? " (resident: sections only)" : ""}`,
+    ...(u.sections ?? []).map((x) => `  ${x.resourceId} ${x.title}`),
+  ].join("\n")
+/** The catalog as the LLM loop's first request reads it (and `card view --stage lookup`). */
+export const catalogBlock = (c: Catalog) =>
+  c.complete
+    ? [`Available (${c.units.length}, complete):`, ...c.units.map(lineOf)].join("\n")
+    : [
+        `Available (${Object.values(c.counts).reduce((n, x) => n + x, 0)}): ${Object.entries(c.counts)
+          .map(([s, n]) => `${s} ${n}`)
+          .join(", ")}`,
+        ...(c.matched.length ? ["Matching <input>:", ...c.matched.map(lineOf)] : []),
+      ].join("\n")
+
 export const contextLookup = (resources: readonly Resource[], injected: readonly DeliverySnapshot[]) => {
   const held = new Map(injected.map((s) => [s.resourceId, s]))
   const delivered: DeliverySnapshot[] = []
@@ -214,59 +249,84 @@ export const contextLookup = (resources: readonly Resource[], injected: readonly
           .join(" | ")}`
       : deliveryText(s)
   }
+  /** Deliver up to 8 resources: read_context's handler, and the host's on the decision path (session.ts lookup). */
+  const read = (refs: readonly string[]) => {
+    const ids = [...new Set(refs)]
+    const selected: Resource[] = []
+    for (const id of ids) {
+      const r = resources.find((r) => r.resourceId === id && open(r))
+      if (!r)
+        return {
+          ok: false as const,
+          code: "unavailable_resource",
+          message: `${id}: unavailable; search for accessible resources.`,
+        }
+      // A section supplements its entry, never goes on alone: an entry not in the request comes first (§3).
+      const face = r.of === undefined ? undefined : resources.find((x) => x.resourceId === r.of)
+      if (face && unheld(face) && !ids.includes(face.resourceId) && !selected.includes(face)) selected.push(face)
+      selected.push(r)
+    }
+    if (selected.length > 8)
+      return {
+        ok: false as const,
+        code: "too_many_refs",
+        message: "Read at most 8 resources per call; a section's entry counts when it is not resident.",
+      }
+    const results = selected.map((r) => {
+      const previous = held.get(r.resourceId)
+      if (previous?.revision === r.revision) return { resourceId: r.resourceId, revision: r.revision, resident: true }
+      const snapshot = freeze(r, previous)
+      held.set(r.resourceId, snapshot)
+      delivered.push(snapshot)
+      disclosures.push(...r.disclosures)
+      return snapshot
+    })
+    // an entry's unread sections ride on its result, after the whole call, never on the frozen snapshot
+    return {
+      ok: true as const,
+      value: results.map((x) => {
+        const xs = sectionsOf(x.resourceId)
+        return xs.length ? { ...x, sections: directory(xs) } : x
+      }),
+    }
+  }
+  /** The catalog view of this request (`Catalog`); `query` is the input, matched only when the pool does not fit. */
+  /** The readable entries as catalog lines (`Unit`), whatever their number. */
+  const units = (): Unit[] =>
+    readable().map((r) => {
+      const xs = sectionsOf(r.resourceId)
+      return {
+        resourceId: r.resourceId,
+        title: r.title.slice(0, 160),
+        // Sections are listed only under a face the request already holds: an unread entry shows its face alone, and
+        // its sections come back on its read (the tool result) or enter the catalog the turn after. The reading
+        // economy of sections (docs/sections-brief.md), and what keeps an encyclopedia card's catalog complete: the
+        // nikke sample is 227 units / 8,355 characters this way, 386 / 14,303 with every section listed.
+        ...(unheld(r) ? {} : { resident: true as const, ...(xs.length ? { sections: directory(xs) } : {}) }),
+      }
+    })
+  const catalog = (query: string): Catalog => {
+    const pool = readable()
+    const all = units()
+    const n = all.reduce((n, u) => n + (u.resident ? 0 : 1) + (u.sections?.length ?? 0), 0)
+    if (n <= CATALOG_UNITS && all.map(lineOf).join("\n").length <= CATALOG_CHARS) return { complete: true, units: all }
+    const counts: Partial<Record<Source, number>> = {}
+    for (const r of pool) counts[r.source] = (counts[r.source] ?? 0) + 1
+    return { complete: false, counts, matched: query.trim() ? search(query) : [] }
+  }
   const tools = {
     search_context: stageTool(
       Schema.Struct({ query: Schema.String, scope: Schema.optionalKey(Scope) }),
-      "Search unlocked, model-readable context. Pass space-separated keywords in Chinese or English (names, places, topics), not a sentence. Returns at most 8 summaries, excluding resident revisions. Read their resourceId to get full text; search again using facts you discover. An entry may list `sections` (deeper text, read by their resourceId); `resident: true` means only its sections are left to read.",
+      "Search unlocked, model-readable context not listed in full above. Pass space-separated keywords in Chinese or English (names, places, topics), not a sentence. Returns at most 8 summaries, excluding resident revisions. An entry may list `sections` (deeper text, read by their resourceId); `resident: true` means only its sections are left to read.",
       async ({ query, scope }) => ({ ok: true, value: search(query, scope) }),
     ),
     read_context: stageTool(
       Schema.Struct({ refs: Schema.Array(Schema.String) }),
-      "Read up to 8 resource IDs returned by search_context. Full frozen snapshots are delivered to the narrator. Already resident revisions need no repeat read. A result's `sections` are its entry's deeper text, read only when the turn needs them.",
-      async ({ refs }) => {
-        const ids = [...new Set(refs)]
-        const selected: Resource[] = []
-        for (const id of ids) {
-          const r = resources.find((r) => r.resourceId === id && open(r))
-          if (!r)
-            return {
-              ok: false,
-              code: "unavailable_resource",
-              message: `${id}: unavailable; search for accessible resources.`,
-            }
-          // A section supplements its entry, never goes on alone: an entry not in the request comes first (§3).
-          const face = r.of === undefined ? undefined : resources.find((x) => x.resourceId === r.of)
-          if (face && unheld(face) && !ids.includes(face.resourceId) && !selected.includes(face)) selected.push(face)
-          selected.push(r)
-        }
-        if (selected.length > 8)
-          return {
-            ok: false,
-            code: "too_many_refs",
-            message: "Read at most 8 resources per call; a section's entry counts when it is not resident.",
-          }
-        const results = selected.map((r) => {
-          const previous = held.get(r.resourceId)
-          if (previous?.revision === r.revision)
-            return { resourceId: r.resourceId, revision: r.revision, resident: true }
-          const snapshot = freeze(r, previous)
-          held.set(r.resourceId, snapshot)
-          delivered.push(snapshot)
-          disclosures.push(...r.disclosures)
-          return snapshot
-        })
-        // an entry's unread sections ride on its result, after the whole call, never on the frozen snapshot
-        return {
-          ok: true,
-          value: results.map((x) => {
-            const xs = sectionsOf(x.resourceId)
-            return xs.length ? { ...x, sections: directory(xs) } : x
-          }),
-        }
-      },
+      "Read up to 8 resource IDs, as listed under Available or returned by search_context. Full frozen snapshots are delivered to the narrator. Already resident revisions need no repeat read. A result's `sections` are its entry's deeper text, read only when the turn needs them.",
+      async ({ refs }) => read(refs),
     ),
   }
-  return { tools, readable, search, told, delivered, disclosures }
+  return { tools, readable, units, search, catalog, read, told, delivered, disclosures }
 }
 
 /** Materialize unlocked lore, pack entries and recalled rows before applying reader permissions. */

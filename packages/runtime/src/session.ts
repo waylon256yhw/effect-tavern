@@ -38,6 +38,7 @@
 // (an opening, a guard line, the fiction); only a player's entry with one stays out, and `demand` on such a product refuses.
 import { timelineNode, turnDetail, type ActiveContextView, type TimelineNode } from "./projection.ts"
 import {
+  catalogBlock,
   contextLookup,
   deliveryText,
   freeze,
@@ -47,8 +48,6 @@ import {
   type DeliverySnapshot,
 } from "./context.ts"
 import {
-  blocked,
-  decide,
   object,
   runStageTools,
   ModelError,
@@ -76,7 +75,7 @@ import { makeLore, namedLore, type Disclosure, type Lore } from "./lore.ts"
 import { lines, expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, worldBlock, type Ask, type Told } from "./request.ts"
-import { checkQuestions, checkVerdict } from "./decision.ts"
+import { checkQuestions, checkVerdict, decisionPass, lookupQuestions, lookupSelect } from "./decision.ts"
 import { cap, withCatalogs, askedAt, productAsks, type Product } from "./product.ts"
 import { recordTransaction, worldValue, type RecordResult } from "./world.ts"
 
@@ -97,7 +96,7 @@ export type { Node } from "./derived.ts" // internal complete projection; client
 export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part | ProductDelta }
-  // `via: "decision"`: check's fast pass on the decision model (decision.ts), not a language model call
+  // `via: "decision"`: lookup's or check's pass on the decision model (decision.ts `decisionPass`), not a language model call
   | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number; via?: "decision" }
   | ({ kind: "change" } & Change) // the log moved: a node landed or was amended, nodes dropped, and where head is now
 /** A narrate block's text as it streams, beside the provider's `text-delta`: the block `<<aside>> <id>` opened. */
@@ -553,26 +552,51 @@ export const makeSession = ({
       if (!reused && hasInput) {
         const injected = latest([...resident, ...current, ...deliveries])
         const lookup = contextLookup(resources, injected)
+        // One catalog view per turn (#168), two exclusive readers: a complete one goes to the decision model when there
+        // is one, and its answer settles lookup alone; anything else (no decision model, a failed or blocked call, an
+        // answer with no probability, an incomplete view) runs the LLM loop with the view in its first request.
         if (lookup.readable().length) {
-          // No catalog enumeration: request size is independent of the number of unseen resources.
-          yield* native(
-            emit,
-            "lookup",
-            ask(here.context(s0), input, {
-              stage: "lookup",
-              ledger: here.ledger(),
-              question: wording("lookup"),
-              // lookup's own reading: an entry's unread sections listed under it; narrate's `told` stays bare
-              context: latest([...resident, ...deliveries]).map(lookup.told),
-              current: here.known().current,
-            }),
-            {
-              tools: lookup.tools,
-              completion: { text: true },
-              budget: { maxSteps: 5, maxTotalOutputTokens: 8192, timeoutMs: 60000 },
-              call: { name: "lookup" },
-            },
-          )
+          const view = lookup.catalog(input.text || input.note || "")
+          const units = view.complete ? view.units : undefined
+          const q =
+            units && lookupQuestions({ scene: path.length ? proseOf(path.at(-1)!.reply) : "", input, units, wording })
+          const settled =
+            units && q
+              ? yield* decisionPass({
+                  emit,
+                  phase: "lookup",
+                  model: decisionFor,
+                  state: q.state,
+                  questions: q.questions,
+                  read: (answers) => {
+                    const s = lookupSelect(answers, units)
+                    const r = s.ids && lookup.read(s.ids) // read_context's own delivery: freeze, held, disclosures
+                    if (!r || !r.ok) return { lines: s.lines.map(({ label, p }) => ({ label, p })) } // nothing was delivered
+                    const delivered = r.value.flatMap((x) => ("title" in x ? [x.title] : []))
+                    return { lines: s.lines, value: delivered, delivered }
+                  },
+                })
+              : undefined
+          if (settled === undefined)
+            yield* native(
+              emit,
+              "lookup",
+              ask(here.context(s0), input, {
+                stage: "lookup",
+                ledger: here.ledger(),
+                question: wording("lookup"),
+                // lookup's own reading: an entry's unread sections listed under it; narrate's `told` stays bare
+                context: latest([...resident, ...deliveries]).map(lookup.told),
+                current: here.known().current,
+                catalog: catalogBlock(view),
+              }),
+              {
+                tools: lookup.tools,
+                completion: { text: true },
+                budget: { maxSteps: 5, maxTotalOutputTokens: 8192, timeoutMs: 60000 },
+                call: { name: "lookup" },
+              },
+            )
           deliveries.push(...lookup.delivered)
           looked.push(...lookup.disclosures)
         }
@@ -752,49 +776,29 @@ export const makeSession = ({
         // The decision model first, when there is one (decision.ts): it settles check only when every answer is clear.
         // Anything else (a middle answer, no probability, a failed or blocked call) runs the LLM check, whose verdict
         // stands whole; the prose is written by now, so the fast pass never fails the turn. Its call is on the trace.
-        const fast = (text: string) =>
-          Effect.gen(function* () {
-            let M: DecisionModel | undefined
-            let error: string | undefined
-            try {
-              M = decisionFor?.()
-            } catch (e) {
-              error = e instanceof Error ? e.message : String(e)
-            }
-            if (!M && error === undefined) return undefined
-            yield* emit({ kind: "stage", phase: "check" })
-            const t0 = Date.now()
-            const { state, questions } = checkQuestions({
-              world: worldBlock(headOf(worldOf(card, layer().frame), { state: here.context(s1) })),
-              draft: text,
-              rules: guard,
-              open,
-              wording,
-            })
-            const r = M
-              ? yield* decide(M, state, questions, { maxRetries: 0 }).pipe(
-                  Effect.match({
-                    onSuccess: (ok) => ({ ok }),
-                    onFailure: (e) => ({ error: blocked(e) ? `blocked:${blocked(e)}` : e.message }),
-                  }),
-                )
-              : { error: error ?? "" }
-            const v = "ok" in r ? checkVerdict(r.ok.answers, guard, openIds, brief.must) : undefined
-            yield* emit({
-              kind: "call",
-              phase: "check",
-              via: "decision",
-              msgs: [{ role: "user", content: state }],
-              out: {
-                ...(v && { p: v.p }),
-                verdict: v?.pass ? "pass" : "escalate",
-                ...("error" in r && { error: r.error }),
-              },
-              usage: "ok" in r ? r.ok.usage : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              ms: Date.now() - t0,
-            })
-            return v?.pass ? { fired: v.fired, violated: [] as string[] } : undefined
+        const fast = (text: string) => {
+          const { state, questions } = checkQuestions({
+            world: worldBlock(headOf(worldOf(card, layer().frame), { state: here.context(s1) })),
+            draft: text,
+            rules: guard,
+            open,
+            wording,
           })
+          return decisionPass({
+            emit,
+            phase: "check",
+            model: decisionFor,
+            state,
+            questions,
+            read: (answers) => {
+              const v = checkVerdict(answers, guard, openIds, brief.must)
+              return {
+                lines: [...Object.entries(v.p.rules), ...Object.entries(v.p.open)].map(([label, p]) => ({ label, p })),
+                ...(v.pass && { value: { fired: v.fired, violated: [] as string[] } }),
+              }
+            },
+          })
+        }
         const llm = (text: string) =>
           obj(
             emit,
@@ -1167,10 +1171,11 @@ export const makeSession = ({
       fresh()
       return derived.at(chain(nodeId)).context()
     },
-    /** The entries a turn under `nodeId` could look up: unlocked, model-readable, not in the request (context.ts). */
+    /** The entries a turn under `nodeId` could look up, as catalog lines: unlocked, model-readable, not in the request
+     *  (context.ts `units`; the instrument bin/decision-lookup.ts asks them). */
     readable: (nodeId: number | null) => {
       fresh()
-      return derived.at(chain(nodeId)).readable()
+      return derived.at(chain(nodeId)).lookup().units()
     },
     activeContext: (nodeId: number | null): ActiveContextView => {
       fresh()

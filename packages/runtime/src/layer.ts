@@ -37,7 +37,7 @@ export const Layer = Schema.Struct({
   name: Schema.String,
   fragments: Schema.optionalKey(Schema.Array(Fragment)), // the id is a slot or its own, `at` head or tail, `mode` vs the lower ranks
   switches: Schema.optionalKey(Writing), // compiled to `pov` / `verbosity` before this row's own fragments, yielding
-  asks: Schema.optionalKey(Schema.Array(Ask)), // lookup, direct, decide.*, check, check.decision.*, record.*, narrate.*, polish, input.thought; switch.<key>.<value>; product.<id> is a text patch
+  asks: Schema.optionalKey(Schema.Array(Ask)), // lookup, lookup.decision, direct, decide.*, check, check.decision.*, record.*, narrate.*, polish, input.thought; switch.<key>.<value>; product.<id> is a text patch
   products: Schema.optionalKey(Schema.Array(ProductPatch)), // whole on the code's defaults and the card; on a player's row label, text and on
   entries: Schema.optionalKey(Schema.Array(PackEntry)), // indexed as `<row>/<entry>`: one layer, no Cond
   lexicon: Schema.optionalKey(Schema.Array(LexiconEntry)),
@@ -109,7 +109,13 @@ const words: readonly Ask[] = [
   },
   {
     id: "lookup",
-    text: 'Find only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. "No additional context needed."); never reply to <input>, write dialogue, or continue the story.',
+    text: 'Choose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. "No additional context needed."); never reply to <input>, write dialogue, or continue the story.',
+  },
+  // The decision model's question per catalog unit (decision.ts `lookupQuestions`), followed by the unit's title.
+  // Measured in Chinese by server bin/decision-lookup.ts (#168); kept as measured.
+  {
+    id: "lookup.decision",
+    text: "<input> 里玩家这一轮说的话或做的事，是否提到、询问或直接牵涉下面这条设定里的人物、物件或事情？\n",
   },
   {
     id: "direct",

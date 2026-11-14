@@ -172,14 +172,22 @@ const facts: Facts = {
 }
 const row = (c: Partial<Call>, end: "end" | "stopped" = "end") =>
   rows([{ ...call(c.phase ?? "narrate"), ...c }], { end })[0]!
-// the ordinal only when a stage ran twice; the pre-check counts apart from the LLM check
+// the ordinal only when a stage ran twice; a pre-check counts apart from its LLM call, lookup's apart from check's
 assert.deepEqual(
   ordinals(
-    rows([call("lookup"), call("narrate"), { ...call("check"), via: "decision" }, call("check"), call("narrate")], {
-      end: "end",
-    }),
+    rows(
+      [
+        { ...call("lookup"), via: "decision" },
+        call("lookup"),
+        call("narrate"),
+        { ...call("check"), via: "decision" },
+        call("check"),
+        call("narrate"),
+      ],
+      { end: "end" },
+    ),
   ),
-  [undefined, 1, undefined, undefined, 2],
+  [undefined, undefined, 1, undefined, undefined, 2],
 )
 assert.equal(cached([call("narrate")]), true)
 assert.equal(cached([{ ...call("narrate"), usage: { ...usage, cacheRead: 0 } }]), false)
@@ -216,20 +224,42 @@ assert.deepEqual(digest(row({ phase: "check", out: { fired: ["a"], violated: ["n
   { text: "b", tone: "bad" },
   { text: "no magic", tone: "bad" },
 ])
-// the pre-check: its pill, and the hand-over only on escalate
-const pre = (out: unknown) => digest(row({ phase: "check", via: "decision", out }), 0, facts).pills
-assert.deepEqual(pre({ p: { rules: {}, open: {} }, verdict: "pass" }), [{ word: "precheck" }])
-assert.deepEqual(pre({ verdict: "escalate", error: "blocked:x" }), [
+// the pre-check (one shape for both stages): its pill, the hand-over only on escalate, lookup's delivered titles
+const pre = (out: unknown, phase: Call["phase"] = "check") =>
+  digest(row({ phase, via: "decision", out }), 0, facts).pills
+assert.deepEqual(pre({ lines: [], verdict: "pass" }), [{ word: "precheck" }])
+assert.deepEqual(pre({ lines: [], verdict: "escalate", error: "blocked:x" }), [
   { word: "precheck", tone: "bad", hint: "blocked:x" },
   { word: "escalate" },
 ])
-assert.deepEqual(precheck({ p: { rules: { "no magic": 0.1 }, open: { a: null } }, verdict: "escalate" }), {
-  lines: [
-    { label: "no magic", p: 0.1 },
-    { label: "a", p: null },
-  ],
+assert.deepEqual(pre({ lines: [], verdict: "pass", delivered: ["李鹤。", "刺青。"] }, "lookup"), [
+  { word: "precheck" },
+  { text: "李鹤。" },
+  { text: "刺青。" },
+])
+// check's lines in their order
+const checked = [
+  { label: "no magic", p: 0.1 },
+  { label: "a", p: null },
+]
+assert.deepEqual(precheck({ lines: checked, verdict: "escalate" }, "check"), {
+  lines: checked,
   escalate: true,
+  delivered: [],
 })
+// lookup's: the 12 highest, highest first, the delivered ones marked
+const many = Array.from({ length: 20 }, (_, i) => ({
+  label: `e${i}`,
+  p: i / 20,
+  ...(i >= 18 && { read: true as const }),
+}))
+const looked = precheck({ lines: many, verdict: "pass", delivered: ["e19", "e18"] }, "lookup")
+assert.equal(looked.lines.length, 12)
+assert.deepEqual(looked.lines.slice(0, 3), [
+  { label: "e19", p: 0.95, read: true },
+  { label: "e18", p: 0.9, read: true },
+  { label: "e17", p: 0.85 },
+])
 // polish: the sentences that came back changed
 const polished = row({
   phase: "polish",

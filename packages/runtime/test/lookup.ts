@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
-import { fake, type FakeCall, type FakeReply } from "@effect-tavern/provider"
+import { fake, fakeDecision, type DecisionModel, type FakeCall, type FakeReply } from "@effect-tavern/provider"
 import { Effect, Stream } from "effect"
 import { makeSession, outcome, type Event } from "../src/session.ts"
 import {
+  CATALOG_CHARS,
   contextLookup,
   deliveryText,
   freeze,
@@ -11,8 +12,10 @@ import {
   residentOn,
   sectionResources,
   type Resource,
+  type Unit,
 } from "../src/context.ts"
 import type { Card } from "../src/card.ts"
+import { lookupQuestions, lookupSelect } from "../src/decision.ts"
 import { chat } from "./cards/index.ts"
 import { defaultAnswer, readStage } from "../support/script.ts"
 
@@ -22,7 +25,11 @@ const lore = (id: string, body = `${id} body`): Card["lore"][number] => ({
   unlock: { all: [] },
   offer: { any: [] },
 })
-const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => FakeReply) => {
+const fixture = (
+  entries: Card["lore"],
+  answer: (o: FakeCall, n: number) => FakeReply,
+  decision?: () => DecisionModel | undefined,
+) => {
   let n = 0
   const lookup: FakeCall[] = []
   const calls: Extract<Event, { kind: "call" }>[] = []
@@ -35,6 +42,7 @@ const fixture = (entries: Card["lore"], answer: (o: FakeCall, n: number) => Fake
     card: { ...chat, lore: entries, products: [] },
     rows: () => ({}),
     model: (p) => (p === "lookup" ? light : other),
+    decision,
   })
   const g = S.greet({ text: "opening" }).node!
   const go = (s: ReturnType<typeof S.act>) =>
@@ -138,15 +146,44 @@ const entries = [lore("a", "A points to card:b."), lore("b", "B points to card:c
   assert.ok(!JSON.stringify(f.lookup).includes("LOCKED BODY"))
   assert.ok(!JSON.stringify(f.lookup).includes("PLAYER ONLY"))
 }
-// Even huge catalogs never enumerate IDs in the initial request or tool schema.
+// A huge catalog is incomplete: the first request carries the counts by source and the host's top 8 for the input,
+// never the whole list, and the decision model is never asked (#168).
 {
   const large = Array.from({ length: 2000 }, (_, i) => lore(`entry${i}`, `Shared hook ${i}.`))
-  const f = fixture(large, (_, n) => (n === 0 ? call("search_context", { query: "shared" }) : done))
-  await f.go(f.S.act(f.g.id, { text: "find" }))
-  assert.ok(JSON.stringify(f.lookup[0]).length < 16000)
-  assert.ok(!JSON.stringify(f.lookup[0]).includes("entry1999"))
+  let asked = 0
+  const never = fakeDecision(() => {
+    asked++
+    return {}
+  })
+  const f = fixture(
+    large,
+    (_, n) => (n === 0 ? call("search_context", { query: "shared" }) : done),
+    () => never,
+  )
+  await f.go(f.S.act(f.g.id, { text: "shared hook" }))
+  assert.equal(asked, 0)
+  assert.ok(!f.calls.some((c) => c.via))
+  const first = JSON.stringify(f.lookup[0])
+  assert.ok(first.length < 16000)
+  assert.ok(first.includes("Available (2000): card 2000"))
+  assert.ok(first.includes("card:entry0 Shared hook 0.") && first.includes("card:entry7 "))
+  assert.ok(!first.includes("card:entry8 ") && !first.includes("entry1999"))
   const out = JSON.stringify(f.lookup[1]!.prompt)
   assert.ok(out.includes("card:entry7") && !out.includes("card:entry8"))
+}
+// A complete catalog at its character bound still keeps the first request under the same 16000.
+{
+  const title = "x".repeat(150)
+  const n = Math.floor(CATALOG_CHARS / `card:wide000 ${title}.\n`.length)
+  const wide = Array.from({ length: n }, (_, i) => lore(`wide${String(i).padStart(3, "0")}`, `${title}.`))
+  const f = fixture(wide, () => done)
+  await f.go(f.S.act(f.g.id, { text: "find" }))
+  const first = JSON.stringify(f.lookup[0])
+  assert.ok(
+    first.includes(`Available (${n}, complete):`) && first.includes(`card:wide${String(n - 1).padStart(3, "0")}`),
+    String(n),
+  )
+  assert.ok(first.length < 16000, String(first.length))
 }
 // Infinite search is bounded; successfully read context still reaches the narrator at the cap.
 {
@@ -366,5 +403,113 @@ const tc = { toolCallId: "test", signal: new AbortController().signal }
   const narrated = f.calls.filter((c) => c.phase === "narrate").map((c) => JSON.stringify(c.msgs))
   assert.equal(narrated.length, 2)
   assert.ok(narrated[1]!.includes("Mira keeps the lighthouse") && !narrated.some((m) => m.includes("#past")))
+}
+// ───────── The decision model over a complete catalog (#168, decision.ts) ─────────
+// Selection, pure: over the threshold, highest first, at most 8 ids, the lines to be read marked; an answer with no
+// probability settles nothing. A unit is an unread face or an unread section of a held face.
+{
+  const units: Unit[] = [
+    ...Array.from({ length: 8 }, (_, i) => ({ resourceId: `card:e${i}`, title: `E${i}.` })),
+    { resourceId: "card:r", title: "R.", resident: true, sections: [{ resourceId: "card:r#s", title: "RS." }] },
+    { resourceId: "card:low", title: "Low." },
+  ]
+  // asked: e0..e7, r#s (r's face is held: not asked), low
+  const ps = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.62, 0.61, 0.95, 0.5]
+  const answers = Object.fromEntries(ps.map((p, i) => [`u${i}`, { type: "boolean", probability: p }]))
+  const s = lookupSelect(answers, units)
+  assert.deepEqual(
+    s.lines.map((l) => l.label),
+    ["E0.", "E1.", "E2.", "E3.", "E4.", "E5.", "E6.", "E7.", "RS.", "Low."],
+  )
+  // r#s ranks first, e0..e6 fill the 8; e7 (0.61) no longer fits; low is at 0.5, not over it
+  assert.deepEqual(s.ids, ["card:r#s", ...Array.from({ length: 7 }, (_, i) => `card:e${i}`)])
+  assert.deepEqual(
+    s.lines.map((l) => !!l.read),
+    [true, true, true, true, true, true, true, false, true, false],
+  )
+  assert.deepEqual(lookupSelect({ ...answers, u3: { type: "refusal" } }, units).ids, undefined)
+  assert.deepEqual(lookupSelect(Object.fromEntries(ps.map((_, i) => [`u${i}`, { probability: 0.1 }])), units).ids, [])
+  const q = lookupQuestions({
+    scene: "x".repeat(1300),
+    input: { text: "L", note: "N" },
+    units,
+    wording: (id) => `${id}:`,
+  })
+  assert.equal(q.state, `<scene>\n${"x".repeat(1200)}\n</scene>\n\n<input>\nL\nPlayer note: N\n</input>`)
+  assert.equal(Object.keys(q.questions).length, 10)
+  assert.equal(q.questions["u8"]!.instructions, "lookup.decision:RS.")
+}
+// In the turn: a complete catalog settled by the decision model, no LLM lookup call. An unread entry is asked by its
+// face alone; once the request holds it, its section is asked the turn after. Both go through read_context's own
+// path (snapshots, disclosures).
+{
+  const mira = {
+    ...lore("mira", "Mira keeps the lighthouse."),
+    sections: [{ id: "past", text: "Mira's years at sea." }],
+  }
+  const sent: { state: string; questions: string[] }[] = []
+  const decision = fakeDecision((c) => {
+    const questions = Object.values(c.questions).map((q) => q.instructions as string)
+    sent.push({ state: c.state.map((p) => ("text" in p ? p.text : "")).join(""), questions })
+    // lookup: whatever is about Mira; check is not asked (chat has no guard and nothing open)
+    return Object.fromEntries(
+      Object.keys(c.questions).map((k, i) => [
+        k,
+        { type: "boolean", probability: questions[i]!.includes("Mira") ? 0.9 : 0.1 },
+      ]),
+    )
+  })
+  const f = fixture(
+    [...entries, mira],
+    () => done,
+    () => decision,
+  )
+  const t = await f.go(f.S.act(f.g.id, { text: "her years at sea", note: "slow down" }))
+  assert.equal(f.lookup.length, 0)
+  assert.deepEqual(
+    t.deliveries.map((d) => d.resourceId),
+    ["card:mira"],
+  )
+  assert.deepEqual(t.read, [{ id: "mira", layer: 1 }])
+  assert.equal(sent.length, 1)
+  assert.ok(
+    sent[0]!.state.startsWith("<scene>\nopening\n</scene>") && sent[0]!.state.includes("Player note: slow down"),
+  )
+  assert.equal(sent[0]!.questions.length, 5) // a, b, c, d, mira: the unread entry's section is not listed
+  assert.ok(sent[0]!.questions[0]!.startsWith("<input> 里玩家这一轮说的话或做的事"))
+  const row = f.calls.find((c) => c.via === "decision")!
+  assert.equal(row.phase, "lookup")
+  const out = row.out as { lines: { label: string; read?: true }[]; verdict: string; delivered: string[] }
+  assert.equal(out.verdict, "pass")
+  assert.equal(out.lines.length, 5)
+  assert.deepEqual(out.delivered, ["Mira keeps the lighthouse."])
+  assert.deepEqual(
+    out.lines.filter((l) => l.read).map((l) => l.label),
+    ["Mira keeps the lighthouse."],
+  )
+  // the turn after: the face is held, so its section is asked, and read
+  const t2 = await f.go(f.S.act(t.id, { text: "her years at sea" }))
+  assert.equal(f.lookup.length, 0)
+  assert.deepEqual(sent[1]!.questions.length, 5) // a, b, c, d, mira#past
+  assert.ok(t2.deliveries.some((d) => d.resourceId === "card:mira#past"))
+}
+// A failed decision call: the LLM loop runs, the whole catalog in its first request, and nothing was delivered early.
+{
+  const boom = fakeDecision(() => {
+    throw new Error("upstream down")
+  })
+  const f = fixture(
+    entries,
+    (_, n) => (n === 0 ? call("read_context", { refs: ["card:c"] }) : done),
+    () => boom,
+  )
+  const t = await f.go(f.S.act(f.g.id, { text: "find" }))
+  assert.equal((f.calls.find((c) => c.via)!.out as { error: string }).error, "upstream down")
+  const first = JSON.stringify(f.lookup[0]!.prompt)
+  assert.ok(first.includes("Available (4, complete):\\ncard:a A points to card:b.\\ncard:b"))
+  assert.deepEqual(
+    t.deliveries.map((d) => d.resourceId),
+    ["card:c"],
+  )
 }
 console.log("lookup ok")

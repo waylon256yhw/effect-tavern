@@ -24,11 +24,15 @@
         },
         {
           "role": "system",
+          "content": "Available (1, complete):\ncard:li 李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
+        },
+        {
+          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nChoose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -248,11 +252,15 @@
         },
         {
           "role": "system",
+          "content": "Available (1, complete):\ncard:yandao 盐道之争已经半年，镇上人都说县令是外省人不懂盐。"
+        },
+        {
+          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nChoose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -528,11 +536,15 @@
         },
         {
           "role": "system",
+          "content": "Available (1, complete):\ncard:kokuhaku 理最近有心事：常常绞着胸前的吊坠出神，话到嘴边又咽回去。"
+        },
+        {
+          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nChoose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -688,11 +700,15 @@
         },
         {
           "role": "system",
+          "content": "Available (1, complete):\ncard:li 李鹤是裴青舟昔年形影不离的同门师弟，左肩有一处青色白鹤刺青。"
+        },
+        {
+          "role": "system",
           "content": "Text between ⦅ and ⦆ in the player's input is what their character thinks: not said, not done, no one in the story perceives it."
         },
         {
           "role": "user",
-          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nFind only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
+          "content": "<input>\n我看了看四周。⦅小心⦆\n</input>\n\nChoose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
         }
       ]
     },
@@ -935,7 +951,11 @@
       },
       {
         "id": "lookup",
-        "text": "Find only the context needed for this turn from <input>. Use search_context with Chinese or English terms, then read_context with returned resource IDs. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
+        "text": "Choose the context this turn needs from what <input> names, asks about or acts on. The Available line above lists what can be read: when it is complete, read the IDs needed or stop, in one step; otherwise it gives the counts and the entries matching <input>, and other names can be searched. From a Player note take only what names people, places or events inside the story. Follow references in the returned text when needed. Resident snapshots and Current are already supplied. Once sufficient—or if nothing is needed—stop with one brief status note (e.g. \"No additional context needed.\"); never reply to <input>, write dialogue, or continue the story."
+      },
+      {
+        "id": "lookup.decision",
+        "text": "<input> 里玩家这一轮说的话或做的事，是否提到、询问或直接牵涉下面这条设定里的人物、物件或事情？\n"
       },
       {
         "id": "direct",

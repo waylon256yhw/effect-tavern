@@ -26,7 +26,7 @@
 // frame); narrate's tail ends the request, after this turn's directives and the player's tail fragments. check, polish
 // and record wear review.head after `<world>`; lookup, decide and direct wear nothing.
 // Data lines and wrappers live here: `<world>`, `<persona>`, `<setting>`, `<fiction>`, `<context>`, `<turn>`, `<input>`,
-// `<draft>`, `<scene>`, State / Actions / So far, Rule, Open, Events, Must, Outcome, Current, MUST / MAY reveal, Tone,
+// `<draft>`, `<scene>`, Available, State / Actions / So far, Rule, Open, Events, Must, Outcome, Current, MUST / MAY reveal, Tone,
 // Player note, Known, Questions, Player's line.
 import { breakpoint, type CacheTtl, type Message } from "@effect-tavern/provider/src/call.ts"
 import type { Hat, Msg, Slotted } from "./fragment.ts"
@@ -61,6 +61,7 @@ export type Ask =
       ledger: readonly Msg[]
       context: readonly string[]
       current?: string
+      catalog: string // context.ts `catalogBlock`: what can be read, whole or counted with the input's matches
     }
   | {
       stage: "decide"
@@ -206,6 +207,7 @@ export const request = (c: Common, a: Ask, w: Wire = {}): Message[] => {
         ...a.ledger.map(toP(w)),
         ...a.context.map(sys),
         ...(a.current ? [sys(a.current)] : []),
+        sys(a.catalog),
         ...noteOf(c.input),
         ...thoughtOf(c),
         tagged("input", inputText(c.input), a.question),

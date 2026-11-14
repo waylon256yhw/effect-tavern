@@ -60,7 +60,13 @@ const marks = (ms: Message[]) =>
     .filter((i) => i >= 0)
 
 const asks: Record<Ask["stage"], Ask> = {
-  lookup: { stage: "lookup", ledger: [], question: "Which entries?", context: ["Resident: Li's friend."] },
+  lookup: {
+    stage: "lookup",
+    ledger: [],
+    question: "Which entries?",
+    context: ["Resident: Li's friend."],
+    catalog: "Available (1, complete):\ncard:li Li.",
+  },
   decide: {
     stage: "decide",
     ledger: [{ role: "system", text: "Ledger:\nhello → -" }],
@@ -240,6 +246,7 @@ for (const s of stages.filter((s) => s !== "narrate")) {
 }
 assert.deepEqual(line.lookup.slice(offHead.length).map(text), [
   "Resident: Li's friend.",
+  "Available (1, complete):\ncard:li Li.", // the catalog view, after what is already resident (#168)
   "Player note: 虚晃一招",
   "<input>\n我拔剑。\n</input>\n\nWhich entries?",
 ])

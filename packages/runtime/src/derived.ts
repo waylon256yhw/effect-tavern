@@ -261,7 +261,8 @@ export const makeDerived = ({
       resident: () => resident(path),
       currentResources: () => currentResources(path).map((r) => freeze(r)),
       playerCatalog: () => playerCatalog(path),
-      readable: () => contextLookup(resourcesOn(path), [...resident(path), ...currentResources(path)]).readable(),
+      /** What a lookup under this path reads from (context.ts `contextLookup`), outside a turn. */
+      lookup: () => contextLookup(resourcesOn(path), [...resident(path), ...currentResources(path)]),
       /** How many leading turns the fold covers. */
       fold: () => foldOf(path),
       summary: () => summaryOf(path),

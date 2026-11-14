@@ -142,7 +142,7 @@ const STAGES: [Phase, Key][] = [
   ["polish", "settings.stagePolish"],
 ]
 
-/** 预检: whether check asks the decision model first (DecisionConfig.enabled). The arrow opens the Decision row on 模型服务;
+/** 预检: whether lookup and check ask the decision model first (DecisionConfig.enabled). The arrow opens the Decision row on 模型服务;
  *  with no config saved the switch is off. A key is not required (a keyless service is legal), so it is not the test. */
 const PreCheck = (props: { onDecision: () => void }) => {
   const dec = read(decision)
@@ -219,12 +219,10 @@ const Routing = (props: { onDecision: () => void }) => {
             />
           </div>
         </div>
-        {/* its own card: the hero is a row on desktop */}
-        <Show when={!route().stages}>
-          <div class="setting-card">
-            <PreCheck onDecision={props.onDecision} />
-          </div>
-        </Show>
+        {/* its own card under the main model in both by-stage states: it covers lookup and check */}
+        <div class="setting-card">
+          <PreCheck onDecision={props.onDecision} />
+        </div>
         <div class="block">
           <div class="block-title">
             <h3>{t("settings.byStage")}</h3>
@@ -249,9 +247,6 @@ const Routing = (props: { onDecision: () => void }) => {
                       stale={stale(route().stages?.[s()[0]])}
                       onPick={(k) => setStage(s()[0], k)}
                     />
-                    <Show when={s()[0] === "check"}>
-                      <PreCheck onDecision={props.onDecision} />
-                    </Show>
                   </div>
                 )}
               </For>
