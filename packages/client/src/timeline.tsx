@@ -11,6 +11,7 @@ import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { TimelineNode as Node } from "@effect-tavern/runtime/src/projection.ts"
 import { createMemo, createSignal, For, Match, onSettled, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
+import { dialogHandle, Prompt } from "./controls.tsx"
 import { Back, Checkout, Clue, Notes, Trash } from "./icons.tsx"
 import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { plain, Prose } from "./prose.tsx"
@@ -89,7 +90,7 @@ export const Timeline = () => {
     turn.checkout(id)
   }
   const inspect = (id: Id) => open({ inspect: id }) // over the Timeline: Back returns here
-  let confirm!: HTMLDialogElement
+  const confirm = dialogHandle()
   const drop = async () => {
     const id = sel()!.id
     confirm.close()
@@ -352,7 +353,7 @@ export const Timeline = () => {
                         class="icon danger"
                         aria-label={t("timeline.dropSubtree")}
                         disabled={busy()}
-                        onClick={() => confirm.showModal()}
+                        onClick={() => void confirm.open()}
                       >
                         <Trash />
                       </button>
@@ -426,26 +427,39 @@ export const Timeline = () => {
           </Show>
         </section>
       </div>
-      <dialog class="confirm" ref={(el) => (confirm = el)} closedby="any">
-        <Show when={sel()}>
-          {(n) => (
-            <p>
-              {t("timeline.dropConfirm", { id: n().id, n: L.below(all(), n().id) })}{" "}
-              {L.chain(all(), all().head).some((x) => x.id === n().id)
-                ? t("timeline.headFalls")
-                : t("timeline.headStays")}
-            </p>
-          )}
-        </Show>
+      <Prompt
+        controller={confirm}
+        title={
+          <Show when={sel()}>
+            {(n) => (
+              <>
+                {t("timeline.dropConfirm", { id: n().id, n: L.below(all(), n().id) })}{" "}
+                {L.chain(all(), all().head).some((x) => x.id === n().id)
+                  ? t("timeline.headFalls")
+                  : t("timeline.headStays")}
+              </>
+            )}
+          </Show>
+        }
+      >
         <div class="row">
           <button type="button" class="chip state" onClick={() => confirm.close()}>
             {t("common.cancel")}
           </button>
-          <button type="button" class="chip danger" disabled={busy()} onClick={() => void drop()}>
+          <button
+            type="button"
+            class="chip danger"
+            disabled={busy()}
+            data-agent-confirm={t("timeline.dropConfirm", {
+              id: sel()?.id ?? 0,
+              n: sel() ? L.below(all(), sel()!.id) : 0,
+            })}
+            onClick={() => void drop()}
+          >
             {t("common.delete")}
           </button>
         </div>
-      </dialog>
+      </Prompt>
     </div>
   )
 }

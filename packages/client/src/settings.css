@@ -957,6 +957,11 @@
 
 /* the dialogs: the confirm's surface and width rule, a head, a body that scrolls, a foot */
 .settings .modal {
+  position: fixed;
+  inset: 0;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   width: min(29rem, calc(100% - 2 * var(--space-4)));
   max-height: calc(100dvh - 2 * var(--space-4));
@@ -972,10 +977,6 @@
 }
 .settings .modal.narrow {
   width: min(24rem, calc(100% - 2 * var(--space-4)));
-}
-.settings .modal[open] {
-  display: flex;
-  flex-direction: column;
 }
 .settings .modal::backdrop {
   background: var(--scrim);

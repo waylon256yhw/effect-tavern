@@ -5,6 +5,7 @@
 // present). Opening, renaming, deleting and exporting a story are the library's dialogs (dialogs.tsx).
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
+import type { DialogHandle } from "./controls.tsx"
 import { Check, Clue, Edit, Export, Star, StarFill, Trash } from "./icons.tsx"
 import { Sheet } from "./readings.tsx"
 import { ago, kindLabel, matches, pieces, preview, ranked, turnLabel, type Hit } from "./stories.ts"
@@ -24,8 +25,8 @@ const Mark = (props: { text: string; q: string }) => (
 )
 
 export const Manager = (props: {
-  /** The dialog, for its opener (showModal), as the Sheet hands it out. */
-  dialog: (el: HTMLDialogElement) => void
+  /** The sheet's handle, kept by the opener. */
+  controller: DialogHandle
   onOpen: (s: StoryRow) => void
   onRename: (s: StoryRow) => void
   onDelete: (rows: readonly StoryRow[]) => void
@@ -89,60 +90,46 @@ export const Manager = (props: {
   let startX = 0
   let startY = 0
   const clearHold = () => clearTimeout(holdTimer)
-  /** Shown: the search and selection start over, the field takes the focus (the dialog's own toggle event). */
+  /** Shown: the search and selection start over (the field is drawn anew and takes the focus). */
   const reset = () => {
     ask("")
-    search.value = ""
     setFilter("all")
     setPicked(new Set<number>())
     setAnchor(null)
-    search.focus()
   }
   return (
     <Sheet
-      dialog={(el) => {
-        el.addEventListener("toggle", (e) => void ((e as ToggleEvent).newState === "open" && reset()))
-        el.addEventListener("cancel", (e) => {
-          if (selecting()) {
-            e.preventDefault()
-            setPicked(new Set<number>())
-            setAnchor(null)
-          }
-        })
-        props.dialog(el)
+      controller={props.controller}
+      focus="input[type=search]"
+      // Escape with stories checked clears the checks and keeps the sheet, wherever the focus is (a click on a card
+      // leaves it on the sheet itself, above anything inside)
+      onOpenChange={(open, details) => {
+        if (open) reset()
+        else if (details.reason === "escape-key" && selecting()) {
+          details.cancel()
+          setPicked(new Set<number>())
+          setAnchor(null)
+        }
       }}
-      heading={
-        <>
-          <span>{t("manager.allStories")}</span>
-          <Show when={chosen().length}>
-            <span class="picked-bar">
-              <span class="turns">#{chosen().length}</span>
-              <button
-                type="button"
-                class="icon danger"
-                aria-label={t("common.delete")}
-                disabled={busy()}
-                onClick={() => props.onDelete(chosen())}
-              >
-                <Trash />
-              </button>
-            </span>
-          </Show>
-        </>
+      heading={t("manager.allStories")}
+      tools={
+        <Show when={chosen().length}>
+          <span class="picked-bar">
+            <span class="turns">#{chosen().length}</span>
+            <button
+              type="button"
+              class="icon danger"
+              aria-label={t("common.delete")}
+              disabled={busy()}
+              onClick={() => props.onDelete(chosen())}
+            >
+              <Trash />
+            </button>
+          </span>
+        </Show>
       }
     >
-      <div
-        class="manager"
-        data-selecting={selecting() ? "" : undefined}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && selecting()) {
-            e.preventDefault()
-            e.stopPropagation()
-            setPicked(new Set<number>())
-            setAnchor(null)
-          }
-        }}
-      >
+      <div class="manager" data-selecting={selecting() ? "" : undefined}>
         <div class="search">
           <div class="input-box sm">
             <Clue aria-hidden="true" />

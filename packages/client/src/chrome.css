@@ -22,7 +22,7 @@
   height: var(--icon-sm);
 }
 
-/* the sheet: a native modal dialog, its backdrop the scrim, a full-page panel rising from the bottom to 56px under the
+/* the sheet: a modal dialog (@ui-sdk), its backdrop the scrim, a full-page panel rising from the bottom to 56px under the
    top; the prose never moves (the page does not scroll while one is open) */
 .sheet {
   position: fixed;
@@ -42,34 +42,19 @@
   border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
   box-shadow: var(--shadow-pop);
   outline: none;
-  transform: translateY(100%);
-  transition:
-    transform var(--dur-4) var(--ease),
-    overlay var(--dur-4) allow-discrete,
-    display var(--dur-4) allow-discrete;
-}
-.sheet[open] {
   display: flex;
-  transform: none;
+  transition: transform var(--dur-4) var(--ease);
+}
+/* entering and leaving: the first frame and the way out, which the library keeps on the page until it ends */
+.sheet:is([data-starting-style], [data-ending-style]) {
+  transform: translateY(100%);
 }
 .sheet::backdrop {
   background: var(--scrim);
+  transition: opacity var(--dur-4) var(--ease);
+}
+.sheet:is([data-starting-style], [data-ending-style])::backdrop {
   opacity: 0;
-  transition:
-    opacity var(--dur-4) var(--ease),
-    overlay var(--dur-4) allow-discrete,
-    display var(--dur-4) allow-discrete;
-}
-.sheet[open]::backdrop {
-  opacity: 1;
-}
-@starting-style {
-  .sheet[open] {
-    transform: translateY(100%);
-  }
-  .sheet[open]::backdrop {
-    opacity: 0;
-  }
 }
 .sheet header {
   display: flex;
@@ -88,25 +73,25 @@
   margin: 0;
   font: inherit;
 }
-.sheet header h2 > .btn,
-.sheet header h2 > .picked-bar {
+.sheet header > .btn,
+.sheet header > .picked-bar {
   margin-left: auto;
 }
-.sheet header h2 > .picked-bar {
+.sheet header > .picked-bar {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
 }
-.sheet header h2 > .picked-bar .turns {
+.sheet header > .picked-bar .turns {
   font-family: var(--font-mono);
   font-size: var(--text-footnote);
   font-weight: 600;
   color: var(--ink-2);
 }
-.sheet header h2 > .picked-bar .icon.danger {
+.sheet header > .picked-bar .icon.danger {
   color: var(--danger);
 }
-.sheet header h2 > .picked-bar .icon.danger:hover:not(:disabled) {
+.sheet header > .picked-bar .icon.danger:hover:not(:disabled) {
   background: var(--danger-soft);
 }
 .sheet .record {
@@ -1127,21 +1112,14 @@
     max-height: 80vh;
     margin: auto;
     border-radius: var(--radius-dialog);
+    transition: opacity var(--dur-3) var(--ease);
+  }
+  .sheet:is([data-starting-style], [data-ending-style]) {
     transform: none;
     opacity: 0;
-    transition:
-      opacity var(--dur-3) var(--ease),
-      overlay var(--dur-3) allow-discrete,
-      display var(--dur-3) allow-discrete;
   }
-  .sheet[open] {
-    opacity: 1;
-  }
-  @starting-style {
-    .sheet[open] {
-      opacity: 0;
-      transform: none;
-    }
+  .sheet::backdrop {
+    transition-duration: var(--dur-3);
   }
   .sheet .record {
     flex: 0 1 auto;

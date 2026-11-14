@@ -7,7 +7,7 @@ import { hook } from "@effect-tavern/runtime/src/lore.ts"
 import type { Entry } from "@effect-tavern/runtime/src/polish.ts"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { ask, Modal, Name, newId, Switch, ToList, type Pane } from "./controls.tsx"
+import { ask, Modal, Name, newId, Switch, ToList, type Pane, dialogHandle } from "./controls.tsx"
 import { Clue, Close, Export, Import, Snippets as Plus, Trash } from "./icons.tsx"
 import { caretOf, draftOfFormat, draftOfSnippet, emptyDraft, formatOf, snippetOf, type InsertDraft } from "./inserts.ts"
 import { FILE, mergeLexicon, parseLexicon, serializeLexicon } from "./lexicon.ts"
@@ -867,11 +867,11 @@ interface ProductDraft {
 const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
   const products = () => props.pack.products ?? []
   const [editing, setEditing] = createSignal<ProductDraft | null>(null)
-  let dlg!: HTMLDialogElement
+  const dlg = dialogHandle()
 
   const openNew = () => {
     setEditing({ id: newId("th"), isNew: true, label: "", on: false, trigger: "demand", text: "" })
-    dlg.showModal()
+    void dlg.open()
   }
   const openEdit = (p: { id: string; label?: string; on?: boolean; trigger?: "demand" | "turn"; text?: string }) => {
     setEditing({
@@ -882,7 +882,7 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
       trigger: p.trigger ?? "turn",
       text: p.text ?? "",
     })
-    dlg.showModal()
+    void dlg.open()
   }
   const save = () => {
     const d = editing()
@@ -969,7 +969,7 @@ const ProductsTab = (props: { pack: Layer; onSave: Save }) => {
 
       <Modal
         title={editing()?.isNew ? t("packs.addTheater") : t("packs.editTheater")}
-        dialog={(el) => (dlg = el)}
+        controller={dlg}
         onClose={() => setEditing(null)}
       >
         <Show when={editing()}>
@@ -1079,8 +1079,8 @@ const InputsTab = (props: { pack: Layer; onSave: Save }) => {
     return !def || !isDefault(e.snippet ? snips()[e.at] : keys()[e.at], def)
   }
   const [editing, setEditing] = createSignal<InputEditing | null>(null)
-  let dlg!: HTMLDialogElement
-  const open = (e: InputEditing) => (setEditing(e), dlg.showModal())
+  const dlg = dialogHandle()
+  const open = (e: InputEditing) => (setEditing(e), void dlg.open())
   const patch = (f: Partial<InsertDraft>) => setEditing((e) => (e ? { ...e, draft: { ...e.draft, ...f } } : e))
   const made = () => {
     const e = editing()
@@ -1178,7 +1178,7 @@ const InputsTab = (props: { pack: Layer; onSave: Save }) => {
               : t("writing.editKey")
         }
         narrow
-        dialog={(el) => (dlg = el)}
+        controller={dlg}
         onClose={() => setEditing(null)}
       >
         <Show when={editing()}>

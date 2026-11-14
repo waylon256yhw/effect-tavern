@@ -25,7 +25,7 @@ const timer = setTimeout(() => result.reject(new Error("the fixture posted no re
 try {
   const { failures, snapshot } = await result.promise
   assert.deepEqual(failures, [])
-  console.log(`ui: ${snapshot.length} controls named and driven by the agent bridge`)
+  console.log("ui: the controls and dialogs answer the agent bridge, " + snapshot.length + " still on the page")
 } finally {
   clearTimeout(timer)
   browser.kill()

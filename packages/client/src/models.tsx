@@ -5,9 +5,9 @@ import type { Effort } from "@effect-tavern/provider/src/call.ts"
 import { DEFAULTS, type Capabilities } from "@effect-tavern/provider/src/capabilities.ts"
 import type { ModelEntry, Provider } from "@effect-tavern/provider/src/providers.ts"
 import type { Format } from "@effect-tavern/provider/src/url.ts"
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, Show, onSettled } from "solid-js"
 import { read } from "./bridge.ts"
-import { FORMAT, Menu, Modal, type Opener, Switch } from "./controls.tsx"
+import { FORMAT, Menu, Modal, type Opener, Switch, dialogHandle } from "./controls.tsx"
 import { capOf, FORMATS, formatOf, without, withModels, withoutModels } from "./connections.ts"
 import { hats, providers, registry } from "./store.ts"
 import { putProvider, type Listed } from "./wire.ts"
@@ -31,8 +31,9 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
   const list = read(providers)
   const hatList = read(hats)
   const p = () => list().find((x) => x.id === props.id)
-  let el!: HTMLDialogElement
+  const el = dialogHandle()
   const [entry, setEntry] = createSignal<ModelEntry | null>(null)
+  onSettled(() => props.opener((m) => (setEntry(m), void el.open())))
   const change = (f: (m: ModelEntry) => ModelEntry) => setEntry((m) => (m ? f(m) : m))
   /** An override set only where it differs from the format's default. */
   const setCap = <K extends keyof Capabilities>(k: K, v: Capabilities[K]) => {
@@ -58,14 +59,7 @@ export const ModelDialog = (props: { id: string; opener: Opener<ModelEntry> }) =
       void putProvider({ ...x, models: x.models.map((y) => (y.id === m.id ? m : y)) })
   }
   return (
-    <Modal
-      title={entry()?.id ?? ""}
-      dialog={(d) => {
-        el = d
-        props.opener((m) => (setEntry(m), d.showModal()))
-      }}
-      onClose={commit}
-    >
+    <Modal title={entry()?.id ?? ""} controller={el} onClose={commit}>
       <Show when={entry() && p() ? { m: entry()!, x: p()! } : undefined}>
         {(c) => (
           <>
@@ -210,17 +204,11 @@ const Effort = (props: { value: Effort | undefined; onPick: (v: Effort | undefin
 
 // ───────── Add a model by id ─────────
 export const AddModelDialog = (props: { id: string; opener: Opener<undefined> }) => {
-  let el!: HTMLDialogElement
+  const el = dialogHandle()
   const [id, setId] = createSignal("")
+  onSettled(() => props.opener(() => (setId(""), void el.open())))
   return (
-    <Modal
-      title={t("models.addModel")}
-      narrow
-      dialog={(d) => {
-        el = d
-        props.opener(() => (setId(""), d.showModal()))
-      }}
-    >
+    <Modal title={t("models.addModel")} narrow controller={el}>
       <form
         onSubmit={(e) => {
           e.preventDefault()

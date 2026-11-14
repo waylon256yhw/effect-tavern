@@ -681,6 +681,11 @@
 
 /* modal over .wpage */
 .wpage .modal {
+  position: fixed;
+  inset: 0;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   width: min(29rem, calc(100% - 2 * var(--space-4)));
   max-height: calc(100dvh - 2 * var(--space-4));
@@ -696,10 +701,6 @@
 }
 .wpage .modal.narrow {
   width: min(24rem, calc(100% - 2 * var(--space-4)));
-}
-.wpage .modal[open] {
-  display: flex;
-  flex-direction: column;
 }
 .wpage .modal::backdrop {
   background: var(--scrim);

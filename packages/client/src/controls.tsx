@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
   createConfirm,
 } from "@ui-sdk/solid/alert-dialog"
+import { createDialogController, Dialog, DialogClose, DialogContent, DialogTitle } from "@ui-sdk/solid/dialog"
 import { Select, SelectContent, SelectItem, SelectItemIndicator, SelectTrigger } from "@ui-sdk/solid/select"
 import { Switch as Toggle, SwitchThumb } from "@ui-sdk/solid/switch"
 import { Family } from "./family.tsx"
@@ -181,35 +182,41 @@ export const Drawer = (props: { open: boolean; label: string; onClose: () => voi
 }
 /** Opens a dialog component from its parent: the dialog hands its open function up through `opener`. */
 export type Opener<A> = (open: (a: A) => void) => void
-/** A modal: the head with its close, then the caller's body and foot. Scrim click and Escape close it too. */
+/** What an opener keeps of a dialog, in place of its element: `open()` and `close()`. The owner makes one and passes
+ *  it to the shell (`Modal`, readings.tsx `Sheet`) as `controller`. */
+export const dialogHandle = () => createDialogController()
+export type DialogHandle = ReturnType<typeof dialogHandle>
+/** A modal: the head with its close, then the caller's body and foot, drawn only while it is open. Scrim click and
+ *  Escape close it too; `onClose` runs once it has left. */
 export const Modal = (props: {
   title: string
   narrow?: boolean
-  dialog: (el: HTMLDialogElement) => void
+  controller: DialogHandle
   onClose?: () => void
   children: JSX.Element
-}) => {
-  let el!: HTMLDialogElement
-  return (
-    <dialog
-      class={{ modal: true, narrow: !!props.narrow }}
-      ref={(d) => {
-        el = d
-        props.dialog(d)
-      }}
-      closedby="any"
-      onClose={() => props.onClose?.()}
-    >
+}) => (
+  <Dialog controller={props.controller} onOpenChangeComplete={(open) => !open && props.onClose?.()}>
+    <DialogContent class={{ modal: true, narrow: !!props.narrow }}>
       <div class="modal-head">
-        <h3>{props.title}</h3>
-        <button type="button" class="icon sm" aria-label={t("common.close")} onClick={() => el.close()}>
+        <DialogTitle render={(part) => <h3 {...part} />}>{props.title}</DialogTitle>
+        <DialogClose class="icon sm" aria-label={t("common.close")}>
           <Close />
-        </button>
+        </DialogClose>
       </div>
       {props.children}
-    </dialog>
-  )
-}
+    </DialogContent>
+  </Dialog>
+)
+/** A small centred dialog on the confirm's surface: the question, which names it, then the caller's fields and
+ *  buttons. Scrim click and Escape close it. */
+export const Prompt = (props: { controller: DialogHandle; title: JSX.Element; children: JSX.Element }) => (
+  <Dialog controller={props.controller}>
+    <DialogContent class="confirm">
+      <DialogTitle render={(part) => <p {...part} />}>{props.title}</DialogTitle>
+      {props.children}
+    </DialogContent>
+  </Dialog>
+)
 
 // The one delete confirm on the page: `ask` opens it with the question and what Delete then does. Escape and Cancel
 // keep the record; a press outside leaves the question open (an alert dialog wants an answer).

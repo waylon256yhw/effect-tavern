@@ -24,6 +24,7 @@ import {
   Switch,
   ToList,
   type Pane,
+  dialogHandle,
 } from "./controls.tsx"
 import { Family } from "./family.tsx"
 import {
@@ -1134,7 +1135,7 @@ const BASE_URL: Record<Format, string> = {
   gemini: "https://generativelanguage.googleapis.com",
 }
 const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: string) => void }) => {
-  let el!: HTMLDialogElement
+  const el = dialogHandle()
   const fresh = () => ({
     name: "",
     key: "",
@@ -1142,6 +1143,7 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
     urls: { "openai-compatible": "https://api.openai.com", anthropic: "", gemini: "" } as Record<Format, string>,
   })
   const [draft, setDraft] = createSignal(fresh())
+  onSettled(() => props.opener(() => (setDraft(fresh()), void el.open())))
   const submit = async (e: SubmitEvent) => {
     e.preventDefault()
     const d = draft()
@@ -1162,13 +1164,7 @@ const AddProviderDialog = (props: { opener: Opener<undefined>; onAdded: (id: str
     props.onAdded(id)
   }
   return (
-    <Modal
-      title={t("providers.addCustom")}
-      dialog={(d) => {
-        el = d
-        props.opener(() => (setDraft(fresh()), d.showModal()))
-      }}
-    >
+    <Modal title={t("providers.addCustom")} controller={el}>
       <form onSubmit={(e) => void submit(e)}>
         <div class="modal-body scroller">
           <div class="pair">

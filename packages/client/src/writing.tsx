@@ -9,7 +9,7 @@ import type { Local } from "@effect-tavern/runtime/src/layer.ts"
 import { unfilled } from "@effect-tavern/runtime/src/names.ts"
 import { createSignal, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
-import { Modal, newId, Switch } from "./controls.tsx"
+import { Modal, newId, Switch, dialogHandle } from "./controls.tsx"
 import { Back, Next, Prev, Snippets as Plus, User } from "./icons.tsx"
 import {
   cardNameKeys,
@@ -314,11 +314,11 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
   }
 
   const [editingProd, setEditingProd] = createSignal<ProductEditDraft | null>(null)
-  let prodDlg!: HTMLDialogElement
+  const prodDlg = dialogHandle()
 
   const openNewTheater = () => {
     setEditingProd({ id: newId("th"), isNew: true, label: "", text: "", trigger: "demand" })
-    prodDlg.showModal()
+    void prodDlg.open()
   }
   const openEditProduct = (p: { id: string; label?: string; text?: string; trigger?: "demand" | "turn" }) => {
     const own = loc()?.products?.find((x) => x.id === p.id)
@@ -329,7 +329,7 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
       text: own?.text ?? p.text ?? "",
       trigger: own?.trigger ?? p.trigger ?? "turn",
     })
-    prodDlg.showModal()
+    void prodDlg.open()
   }
   const shownProduct = (id: string) =>
     products().find((p) => p.id === id) as
@@ -541,7 +541,7 @@ const SwitchesAndProducts = (props: { fromLabel: (from: string) => string }) => 
 
       <Modal
         title={editingProd()?.isNew ? t("packs.addTheater") : t("packs.editTheater")}
-        dialog={(el) => (prodDlg = el)}
+        controller={prodDlg}
         onClose={() => setEditingProd(null)}
       >
         <Show when={editingProd()}>

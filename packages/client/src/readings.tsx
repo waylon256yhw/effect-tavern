@@ -5,9 +5,11 @@ import { AsyncView } from "./async-view.tsx"
 import { type Shape, type TableShape } from "@effect-tavern/runtime/src/product.ts"
 import type { TimelineNode as Node } from "@effect-tavern/runtime/src/projection.ts"
 import { type JSX } from "@solidjs/web"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { type ComponentProps, createMemo, For, Match, Show, Switch } from "solid-js"
 import { read } from "./bridge.ts"
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@ui-sdk/solid/dialog"
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@ui-sdk/solid/menu"
+import { type DialogHandle, dialogHandle } from "./controls.tsx"
 import { Back, Change, Close, Clue, Die, Edit, Record, Reword, Swipe, Warning } from "./icons.tsx"
 import { close } from "./pages.ts"
 import { openSettings } from "./settings.tsx"
@@ -403,27 +405,32 @@ export const Reading = (props: { el: Element }) => (
 
 export { demandable }
 
-/** The full-page sheet: a native modal dialog (scrim, focus, Escape and inertness are the platform's), a titled panel
- *  with a close, the body, an optional footer. Scrim click and Escape close it (closedby). Record and Status share it;
- *  an opener either names it by `id` (invoker commands) or keeps the element through `dialog`. */
+/** The full-page sheet: a modal dialog (@ui-sdk/solid/dialog: scrim, focus, Escape and inertness are its), a titled
+ *  panel with a close, the body, an optional footer, all drawn only while it is open. Scrim click and Escape close it.
+ *  The opener keeps the `controller`; `focus` is a selector for where the focus lands (the first control otherwise);
+ *  `tools` sit in the head after the heading, outside the dialog's name. */
 export const Sheet = (props: {
-  id?: string
-  dialog?: (el: HTMLDialogElement) => void
+  controller: DialogHandle
   heading: JSX.Element
+  tools?: JSX.Element
   children: JSX.Element
   footer?: JSX.Element
-  onClose?: () => void
+  focus?: string
+  onOpenChange?: ComponentProps<typeof Dialog>["onOpenChange"]
 }) => (
-  <dialog id={props.id} class="sheet" ref={props.dialog} closedby="any" onClose={() => props.onClose?.()}>
-    <header>
-      <h2>{props.heading}</h2>
-      <button class="icon" aria-label={t("common.close")} onClick={(e) => e.currentTarget.closest("dialog")!.close()}>
-        <Close />
-      </button>
-    </header>
-    {props.children}
-    {props.footer}
-  </dialog>
+  <Dialog controller={props.controller} onOpenChange={props.onOpenChange}>
+    <DialogContent class="sheet" initialFocus={props.focus}>
+      <header>
+        <DialogTitle>{props.heading}</DialogTitle>
+        {props.tools}
+        <DialogClose class="icon" aria-label={t("common.close")}>
+          <Close />
+        </DialogClose>
+      </header>
+      {props.children}
+      {props.footer}
+    </DialogContent>
+  </Dialog>
 )
 
 /** A turn's readings: what it changed and produced (src/record.ts). */
@@ -604,8 +611,7 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
   const all = read(log)
   const view = read(card)
   const busy = read(working)
-  const [shown, setShown] = createSignal(false)
-  let dlg!: HTMLDialogElement
+  const dlg = dialogHandle()
   const settling = () => props.node.settlementStatus === "pending" && busy()
   return (
     <Switch>
@@ -623,17 +629,14 @@ export const RecordSheet = (props: { node: Node; n: number }) => {
         </button>
       </Match>
       <Match when={marked(props.node)}>
-        <button class="record-pill" aria-label={t("common.record")} onClick={() => (setShown(true), dlg.showModal())}>
+        <button class="record-pill" aria-label={t("common.record")} onClick={() => void dlg.open()}>
           <Record aria-hidden="true" />
         </button>
         <Sheet
-          dialog={(el) => (dlg = el)}
-          onClose={() => setShown(false)}
+          controller={dlg}
           heading={heading(view()?.heading, props.node, all()) ?? t("common.turnN", { n: props.n })}
         >
-          <Show when={shown()}>
-            <TurnRecord node={props.node} />
-          </Show>
+          <TurnRecord node={props.node} />
         </Sheet>
       </Match>
     </Switch>
