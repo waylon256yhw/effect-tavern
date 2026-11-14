@@ -1,4 +1,5 @@
 import type { StageStep, StageEvent, StageBudget } from "@effect-tavern/provider/src/stage.ts"
+import { splitter } from "@effect-tavern/runtime/src/journal.ts"
 // The Inspect projection (docs/inspector-prototype.html is the page's shape): one turn's calls as the pipeline that
 // ran, a request as its cache regions, a turn's totals. `rows` names each call's place: a check followed by a narrate
 // failed into the second draft, the last narrate of a stopped turn is where the player halted. Stages without a call
@@ -137,17 +138,14 @@ export const totals = (calls: readonly Call[]): Totals => {
   return t
 }
 
-/** Each region's matches of the query. */
-export const regionHits = (rs: readonly Region[], q: string): number[] =>
-  rs.map((r) => r.msgs.reduce((n, m) => n + count(textOf(m), q), 0))
+/** A row's matches of the query in its request. */
+export const requestHits = (r: Row, q: string): number => r.call.msgs.reduce((n, m) => n + count(textOf(m), q), 0)
 /** A row's matches of the query: its request's messages and its answer when that is prose (marked in the well too). */
 export const rowHits = (r: Row, q: string): number =>
-  r.call.msgs.reduce((n, m) => n + count(textOf(m), q), 0) + (typeof r.call.out === "string" ? count(r.call.out, q) : 0)
-/** The tab a well opens on: with a query the first region with hits; otherwise (or when none hits) the last region. */
-export const defaultTab = (hits: readonly number[], q: string): number => {
-  const first = q ? hits.findIndex((h) => h > 0) : -1
-  return first >= 0 ? first : Math.max(0, hits.length - 1)
-}
+  requestHits(r, q) + (typeof r.call.out === "string" ? count(r.call.out, q) : 0)
+/** The view an opened row lands on: the request when the query hits there, otherwise the result. */
+export const defaultView = (r: Row, q: string): "result" | "prompt" =>
+  q && requestHits(r, q) > 0 ? "prompt" : "result"
 
 /** Successful, exhausted and failed attempts carry steps; cancellation retains incremental events. */
 export const nativeTrace = (
@@ -178,3 +176,226 @@ export const nativeTrace = (
   }
   return { ...value, steps: [...steps.values()] }
 }
+
+// ───────── A row's head and its opened result, as data (inspector.tsx draws) ─────────
+
+/** The ordinal after a stage's name, only when that stage ran more than once in the node; check's pre-check
+ *  (`via: "decision"`) counts apart from the LLM check. */
+export const ordinals = (rs: readonly Row[]): (number | undefined)[] => {
+  const key = (r: Row) => r.call.via ?? r.phase
+  return rs.map((r) => {
+    const same = rs.filter((x) => key(x) === key(r))
+    return same.length > 1 ? same.indexOf(r) + 1 : undefined
+  })
+}
+/** Whether the cache slot exists: any call of the turn read or wrote the cache. */
+export const cached = (calls: readonly Call[]): boolean =>
+  calls.some((c) => c.usage.cacheRead > 0 || c.usage.cacheWrite > 0)
+/** The prose's first sentence: cut after the first 。！？!? (with its closing quotes) or at the first newline. */
+export const firstSentence = (text: string): string =>
+  /^[^\n]*?(?:[。！？!?][”’"'」』）)]*|(?=\n)|$)/.exec(text.trim())![0].trim()
+
+/** An interface word a pill carries; the drawing turns it into the locale's word. */
+export type Word = "precheck" | "escalate" | "stopped" | "exhausted" | "failed" | "sentences"
+export type Tone = "ok" | "bad" | "warn" | "soft"
+/** A pill: the card's own text, or an interface word (`n` for its count). */
+export interface Pill {
+  text?: string
+  word?: Word
+  n?: number
+  tone?: Tone
+  hint?: string
+}
+export interface Digest {
+  pills: Pill[]
+  note?: string // grey, after the pills
+  line?: string // the prose's first sentence, ellipsed by its column
+}
+/** What a head reads besides the call: the node's beats and checks, the brief's must, a product's shown name. */
+export interface Facts {
+  beats: readonly { next: string; chance?: number }[]
+  checks: readonly { action: string; chance: number; roll: number; hit: boolean }[]
+  must: readonly string[]
+  label: (product: string) => string
+  /** The labels of the fields the chosen readout options write (a readout's answer moves fields, not products). */
+  fields: (answers: Readonly<Record<string, string>>) => string[]
+}
+
+/** The entry titles a lookup read (a resident revision is not read again, and carries no title). */
+export const readTitles = (calls: readonly StageStep["calls"][number][]): string[] => [
+  ...new Set(
+    calls.flatMap((c) =>
+      c.name === "read_context" && c.result.ok && Array.isArray(c.result.value)
+        ? (c.result.value as { title?: unknown }[]).flatMap((x) => (typeof x.title === "string" ? [x.title] : []))
+        : [],
+    ),
+  ),
+]
+/** The products a record wrote: the world products its changes touched and the scene products it finished with. */
+const written = (value: unknown, f: Pick<Facts, "label" | "fields">): string[] => {
+  const v = (value ?? {}) as {
+    changes?: { product?: string; collection?: string }[]
+    products?: Record<string, unknown>
+    answers?: Record<string, string>
+  }
+  return [
+    ...new Set([
+      ...f.fields(v.answers ?? {}),
+      ...(v.changes ?? [])
+        .flatMap((c) => [c.product ?? c.collection ?? ""])
+        .filter(Boolean)
+        .map(f.label),
+      ...Object.entries(v.products ?? {}).flatMap(([k, x]) => (x === undefined || x === "" ? [] : [f.label(k)])),
+    ]),
+  ]
+}
+/** The polish targets: each sentence as sent (the request's marks, when the trace carries it) and as it came back. */
+export const polishPairs = (call: Call): { id: string; before?: string; after: string }[] => {
+  const sent = new Map(
+    call.msgs.flatMap((m) =>
+      [...textOf(m).matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(([, id, s]) => [id!, s!] as const),
+    ),
+  )
+  return Object.entries((call.out ?? {}) as Record<string, unknown>).map(([id, after]) => ({
+    id,
+    ...(sent.has(id) && { before: sent.get(id) }),
+    after: String(after),
+  }))
+}
+/** The pre-check's reading: one line per rule and open entry with its probability (null: none came back). */
+export const precheck = (
+  out: unknown,
+): { lines: { label: string; p: number | null }[]; escalate: boolean; error?: string } => {
+  const o = (out ?? {}) as {
+    p?: { rules?: Record<string, number | null>; open?: Record<string, number | null> }
+    verdict?: string
+    error?: string
+  }
+  return {
+    lines: [...Object.entries(o.p?.rules ?? {}), ...Object.entries(o.p?.open ?? {})].map(([label, p]) => ({
+      label,
+      p: p ?? null,
+    })),
+    escalate: o.verdict !== "pass",
+    ...(o.error !== undefined && { error: o.error }),
+  }
+}
+
+/** A narrate answer as its prose and the blocks it opened (journal.ts `splitter`), each run of one kind merged. */
+export const pieces = (text: string): { id?: string; text: string }[] => {
+  const out: { id?: string; text: string }[] = []
+  for (const p of splitter()(text, true)) {
+    const last = out.at(-1)
+    if (last && last.id === p.id) last.text += p.text
+    else out.push({ ...(p.id !== undefined && { id: p.id }), text: p.text })
+  }
+  return out.map((p) => ({ ...p, text: p.text.trim() })).filter((p) => p.text)
+}
+
+const abnormal = (status: string): Pill | undefined =>
+  status === "cancelled"
+    ? { word: "stopped", tone: "warn" }
+    : status === "budget_exhausted"
+      ? { word: "exhausted", tone: "warn" }
+      : status === "failed"
+        ? { word: "failed", tone: "bad" }
+        : undefined
+const ids = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
+
+/** A row's head: what the stage decided, from the call's answer and the node's facts. `nth`: the row's place among
+ *  the node's rows of its stage (decide reads the nth beat). A stage with nothing to say gives no pills. */
+export const digest = (r: Row, nth: number, f: Facts): Digest => {
+  const out = r.call.out
+  const o = (out ?? {}) as Record<string, unknown>
+  const native = nativeTrace(out)
+  if (native) {
+    const bad = abnormal(native.status)
+    const value = (out as { value?: unknown }).value
+    const calls = native.steps.flatMap((s) => s.calls)
+    const names = r.phase === "lookup" ? readTitles(calls) : written(value, f)
+    return { pills: [...(bad ? [bad] : []), ...names.map((text) => ({ text }))] }
+  }
+  if (r.call.via === "decision") {
+    const x = precheck(out)
+    return {
+      pills: [
+        { word: "precheck", ...(x.error !== undefined && { tone: "bad" as const, hint: x.error }) },
+        ...(x.escalate ? [{ word: "escalate" as const }] : []),
+      ],
+    }
+  }
+  switch (r.phase) {
+    case "decide": {
+      const beat = f.beats[nth]
+      if (beat?.chance === undefined) return { pills: [{ text: beat?.next ?? "end" }] }
+      const c = f.checks[f.beats.slice(0, nth + 1).filter((b) => b.chance !== undefined).length - 1]
+      return c
+        ? {
+            pills: [{ text: c.action, tone: c.hit ? "ok" : "bad" }],
+            note: `${c.roll.toFixed(2)} / ${Math.round(c.chance * 100)}%`,
+          }
+        : { pills: [{ text: beat.next }] }
+    }
+    case "direct":
+      return {
+        pills: [
+          ...ids(o.must).map((text) => ({ text })),
+          ...ids(o.may).map((text) => ({ text, tone: "soft" as const })),
+        ],
+      }
+    case "narrate": {
+      // the prose's first sentence; a demanded block has no prose, so its own first sentence stands in
+      const ps = pieces(typeof out === "string" ? out : "")
+      return {
+        pills: r.status === "stopped" ? [{ word: "stopped", tone: "warn" }] : [],
+        line: firstSentence(ps.find((x) => x.id === undefined)?.text || ps[0]?.text || ""),
+      }
+    }
+    case "check": {
+      const fired = ids(o.fired)
+      return {
+        pills: [
+          ...f.must.filter((id) => !fired.includes(id)).map((text) => ({ text, tone: "bad" as const })),
+          ...ids(o.violated).map((text) => ({ text, tone: "bad" as const })),
+        ],
+      }
+    }
+    case "polish":
+      return { pills: [{ word: "sentences", n: polishPairs(r.call).filter((x) => x.before !== x.after).length }] }
+    default:
+      return { pills: [] }
+  }
+}
+
+/** One item of a tool step's line: a search and its hit count, the titles read, a record operation on a product by
+ *  its shown name, or the completion call as what it wrote. A step that did nothing has no items, and no line. */
+export type Op =
+  | { kind: "search"; query: string; n?: number; error?: string }
+  | { kind: "read"; titles: string[]; error?: string }
+  | { kind: "op"; verb: string; target: string; error?: string }
+  | { kind: "wrote"; names: string[]; error?: string }
+export const stepOps = (step: StageStep, f: Pick<Facts, "label" | "fields">): Op[] =>
+  step.calls.flatMap((c): Op[] => {
+    const error = c.result.ok ? undefined : c.result.code
+    const e = error === undefined ? {} : { error }
+    if (c.name === "search_context") {
+      const q = (c.input as { query?: unknown } | undefined)?.query
+      return [
+        {
+          kind: "search",
+          query: typeof q === "string" ? q : "",
+          ...(c.result.ok && Array.isArray(c.result.value) && { n: c.result.value.length }),
+          ...e,
+        },
+      ]
+    }
+    if (c.name === "read_context") return [{ kind: "read", titles: readTitles([c]), ...e }]
+    if (c.name === "finish_record") {
+      const names = c.result.ok ? written(c.result.value, f) : []
+      return names.length || error !== undefined ? [{ kind: "wrote", names, ...e }] : []
+    }
+    const m = /^(read|replace|patch|insert|remove)_(.+)$/.exec(c.name)
+    return [
+      m ? { kind: "op", verb: m[1]!, target: f.label(m[2]!), ...e } : { kind: "op", verb: c.name, target: "", ...e },
+    ]
+  })

@@ -1,25 +1,32 @@
 import { AsyncView } from "./async-view.tsx"
 import { fetchDetail, fetchTrace, fetchContext } from "./wire.ts"
-type Node = Timeline & TurnDetail
-import { splitter } from "@effect-tavern/runtime/src/journal.ts"
-import type { TimelineNode as Timeline, TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
+import { HI, LO } from "@effect-tavern/runtime/src/decision.ts"
 import { createEffect, createMemo, createSignal, For, Match, onSettled, Show, Switch, untrack } from "solid-js"
 import { read } from "./bridge.ts"
-import { Back, Check, Clue, Copy, Next, Prev, Record } from "./icons.tsx"
+import { Back, Change, Check, Clue, Copy, Next, Prev, Read } from "./icons.tsx"
 import {
-  nativeTrace,
-  defaultTab,
+  cached,
+  defaultView,
+  digest,
   groups,
   isTray,
+  nativeTrace,
+  ordinals,
   pattern,
-  regionHits,
+  pieces,
+  polishPairs,
+  precheck,
   regions,
   rowHits,
   rows,
   settledAt,
+  stepOps,
   textOf,
   totals,
   type Call,
+  type Facts,
+  type Op,
+  type Pill,
   type Row,
   type Tray,
 } from "./inspect.ts"
@@ -33,34 +40,78 @@ import { t } from "./i18n.ts"
 const CHANNEL = { act: "act", note: "note", both: "act + note", invoke: "invoke", greeting: "greeting" } as const
 
 // ───────── The Inspect page: one turn from the harness's view ─────────
-// A full page over the reader (the reader stays mounted, so a turn in flight keeps streaming under it), shaped by
-// docs/inspector-prototype.html: two cards on the canvas. Left, the pipeline: only the calls that ran, each row's
-// head carrying what the stage decided (the beat and its roll, the brief's must, the prose's first line, what check
-// fired or missed, the readout answers), its time and tokens at the end; a two-draft turn folds each draft into a tray.
-// One row at a time opens into the request by cache region (tabs over one scroller that fills what the card has
-// left, so a long head never pushes the pipeline apart) and the answer. Right, the node: the input, the untold hooks
-// (hooks and tiers only), the state against the parent, the products by their
-// declared shape. Without `inspect` on the server no call carries a request body: the rows keep their heads, time and
-// tokens, open to their answers (the brief stays closed), and the right card is what the player came for. Opens on the path's last node; prev / next walk the
-// path, `[` `]` too, Escape goes back (pages.ts). src/inspect.ts projects; this draws.
+// A full page over the reader (the reader stays mounted, so a turn in flight keeps streaming under it), two cards on
+// the canvas. Left, the pipeline: only the calls that ran, one row each in one grid of fixed slots (stage, what the
+// stage decided, time, ↑, ↓, cache), so the numbers line up down the page and through a draft's tray. One row at a
+// time opens into a well with three views: its result, its prompt (the request with the cache breakpoints as
+// hairlines), the stored call as JSON. Right, the node: the input, the untold hooks, the state against the parent, the
+// products by their declared shape. Without `inspect` on the server no call carries a request body: the rows keep
+// their heads and numbers, open to their results (the brief stays closed), and no prompt view. Opens on the path's
+// last node; prev / next walk the path, `[` `]` too, Escape goes back (pages.ts). src/inspect.ts projects; this draws.
 export const openInspector = () => {
   const id = registry.get(path).at(-1)?.id
   if (id !== undefined) open({ inspect: id })
 }
 const fmt = (n: number) => n.toLocaleString("en-US")
-const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`
-// token readings in one grammar: ↑ in, ↓ out, ↻ cache read, + cache write (the last two only when not 0); the words
-// live once, in the reading's title
-const tokens = (u: Call["usage"], f: (n: number) => string) =>
-  [`↑${f(u.input)}`, `↓${f(u.output)}`, u.cacheRead && `↻${f(u.cacheRead)}`, u.cacheWrite && `+${f(u.cacheWrite)}`]
-    .filter(Boolean)
-    .join(" ")
+
+/** The number slots: time, ↑ in, ↓ out, and the cache (read, or written when nothing was read) when the turn has
+ *  any. The words live in each slot's hint. */
+const Metrics = (props: { ms?: number; usage?: Call["usage"]; cache: boolean }) => (
+  <span class="metrics">
+    <span class="mt" title={t("inspector.time")}>
+      {props.ms === undefined ? "" : secs(props.ms)}
+    </span>
+    <span class="mt" title={t("inspector.in")}>
+      <Show when={props.usage}>
+        {(u) => (
+          <>
+            <i>↑</i>
+            {fmt(u().input)}
+          </>
+        )}
+      </Show>
+    </span>
+    <span class="mt" title={t("inspector.out")}>
+      <Show when={props.usage}>
+        {(u) => (
+          <>
+            <i>↓</i>
+            {fmt(u().output)}
+          </>
+        )}
+      </Show>
+    </span>
+    <Show when={props.cache}>
+      <Show
+        when={props.usage?.cacheRead || !props.usage?.cacheWrite}
+        fallback={
+          <span class="mt" title={t("inspector.cacheWrite")}>
+            <i>+</i>
+            {fmt(props.usage?.cacheWrite ?? 0)}
+          </span>
+        }
+      >
+        <span class="mt" title={t("inspector.cacheRead")}>
+          <Show when={props.usage?.cacheRead}>
+            {(n) => (
+              <>
+                <i>↻</i>
+                {fmt(n())}
+              </>
+            )}
+          </Show>
+        </span>
+      </Show>
+    </Show>
+  </span>
+)
+
 /** Text with every match of the (literal) query marked. */
 const Marked = (props: { text: string; q: string }) => {
-  const pieces = createMemo(() => (props.q ? props.text.split(pattern(props.q)) : [props.text]))
+  const parts = createMemo(() => (props.q ? props.text.split(pattern(props.q)) : [props.text]))
   return (
-    <For each={pieces()} keyed={false}>
+    <For each={parts()} keyed={false}>
       {(p, i) => (
         <Show when={i % 2} fallback={p()}>
           <mark>{p()}</mark>
@@ -69,175 +120,132 @@ const Marked = (props: { text: string; q: string }) => {
     </For>
   )
 }
-/** A row's head: what the stage decided, from the call's answer and the node's facts (never a written summary). */
-const Digest = (props: { row: Row; node: Node; nth: number; dev: boolean }) => {
-  const out = () => (props.row.call.out ?? {}) as Record<string, unknown>
-  // narrate: the prose's first line and the blocks it opened (journal.ts `splitter`); a demanded block has no prose,
-  // so its own first line stands in
-  const cut = () => {
-    const pieces = splitter()(typeof props.row.call.out === "string" ? props.row.call.out : "", true)
-    const prose = pieces
-      .filter((x) => x.id === undefined)
-      .map((x) => x.text)
-      .join("")
-      .trim()
-    const first = pieces.find((x) => x.id !== undefined)?.text.trim() ?? ""
-    return {
-      blocks: [...new Set(pieces.flatMap((x) => (x.id === undefined ? [] : [x.id])))],
-      line: (prose || first).split("\n")[0],
-    }
-  }
-  const ids = (v: unknown) => (Array.isArray(v) ? (v as string[]).join(", ") : "")
-  // decide: the nth beat of the turn; its judged check is the one among the beats with a chance up to it
-  const beats = () => props.node.beats
-  const check = () =>
-    beats()[props.nth]?.chance === undefined
-      ? undefined
-      : props.node.checks[
-          beats()
-            .slice(0, props.nth + 1)
-            .filter((x) => x.chance !== undefined).length - 1
-        ]
-  const fired = () => (out().fired as string[] | undefined) ?? []
-  const missed = () => props.node.brief.must.filter((id) => !fired().includes(id))
-  const violated = () => (out().violated as string[] | undefined) ?? []
-  // polish: the sentences sent (the marks in the request, when the trace carries it) against the ones that came back changed
-  const sent = createMemo(
-    () =>
-      new Map(
-        props.row.call.msgs.flatMap((m) =>
-          [...textOf(m).matchAll(/<target id="(hit-\d+)"[^>]*>(.*?)<\/target>/g)].map(
-            ([, id, s]) => [id!, s!] as const,
-          ),
-        ),
-      ),
-  )
-  const changed = () => Object.entries(out()).filter(([k, v]) => sent().has(k) && sent().get(k) !== v).length
+
+const Pills = (props: { pills: readonly Pill[] }) => {
+  const word = (p: Pill) =>
+    p.word === "precheck"
+      ? t("inspector.precheck")
+      : p.word === "escalate"
+        ? t("inspector.escalate")
+        : p.word === "stopped"
+          ? t("common.stopped")
+          : p.word === "exhausted"
+            ? t("inspector.exhausted")
+            : p.word === "failed"
+              ? t("inspector.failed")
+              : p.word === "sentences"
+                ? t("inspector.sentences", { n: p.n ?? 0 })
+                : ""
   return (
-    <Switch>
-      <Match when={nativeTrace(props.row.call.out)}>
-        {(trace) => (
-          <>
-            <span class="pill">{trace().status}</span>
-            <Show
-              when={
-                props.row.phase === "lookup" &&
-                !trace().steps.some((s) => s.calls.some((c) => c.name === "read_context" && c.result.ok))
-              }
-            >
-              <span class="pill">{t("inspector.nothingRead")}</span>
-            </Show>
-            <span class="dtext">
-              {trace()
-                .steps.flatMap((s) => s.calls.map((c) => c.name))
-                .join(" → ")}
-            </span>
-          </>
-        )}
-      </Match>
-      <Match when={props.row.phase === "decide"}>
-        <Show when={check()} fallback={<span class="pill">{beats()[props.nth]?.next ?? "end"}</span>}>
-          {(c) => (
-            <>
-              <span class={{ pill: true, ok: c().hit, bad: !c().hit }}>
-                {c().action} · {c().hit ? t("inspector.hit") : t("inspector.miss")}
-              </span>
-              <span class="dtext">
-                {t("inspector.rollVs", { roll: c().roll.toFixed(2), chance: Math.round(c().chance * 100) })}
-              </span>
-            </>
-          )}
-        </Show>
-      </Match>
-      <Match when={props.row.phase === "direct"}>
-        <Show when={ids(out().must)} fallback={<span class="pill">{t("inspector.noMust")}</span>}>
-          {(m) => <span class="pill">must: {m()}</span>}
-        </Show>
-        <Show when={props.dev}>
-          <span class="dtext">
-            {[ids(out().may) && `may: ${ids(out().may)}`, out().tone && `tone: ${String(out().tone)}`]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-        </Show>
-      </Match>
-      <Match when={props.row.phase === "narrate"}>
-        <Show when={props.row.status === "stopped"}>
-          <span class="pill bad">{t("common.stopped")}</span>
-        </Show>
-        <For each={cut().blocks} keyed={(id) => id}>
-          {(id) => <span class="pill">{id()}</span>}
-        </For>
-        <span class="dprose">{cut().line}</span>
-      </Match>
-      <Match when={props.row.call.via === "decision"}>
-        {/* check's fast pass (runtime decision.ts): settled here, or handed to the LLM check on the next row */}
-        <Show when={out().verdict}>
-          <span class={{ pill: true, ok: out().verdict === "pass" }}>{String(out().verdict)}</span>
-        </Show>
-        <Show when={out().error}>
-          <span class="dtext">{String(out().error)}</span>
-        </Show>
-      </Match>
-      <Match when={props.row.phase === "check"}>
-        <Show
-          when={props.dev}
-          fallback={
-            <span class={{ pill: true, bad: props.row.status === "failed", ok: props.row.status !== "failed" }}>
-              {props.row.status === "failed" ? t("inspector.failedSecondDraft") : t("inspector.ok")}
-            </span>
-          }
-        >
-          <Show
-            when={missed().length || violated().length}
-            fallback={<span class="pill ok">{fired().length ? `met: ${fired().join(", ")}` : "ok"}</span>}
-          >
-            <span class="pill bad">
-              {[...missed().map((m) => `missed: ${m}`), ...violated().map((v) => `rule: ${v}`)].join(" · ")}
-            </span>
-            <span class="dtext">fired: {fired().join(", ") || "none"}</span>
-          </Show>
-        </Show>
-      </Match>
-      <Match when={props.row.phase === "polish"}>
-        <span class="pill">{t("inspector.targets", { n: Object.keys(out()).length })}</span>
-        <Show when={sent().size}>
-          <span class="dtext">{t("inspector.changed", { n: changed() })}</span>
-        </Show>
-      </Match>
-    </Switch>
+    <For each={props.pills} keyed={false}>
+      {(p) => (
+        <span class={{ pill: true, [p().tone ?? "plain"]: true }} title={p().hint}>
+          {p().text ?? word(p())}
+        </span>
+      )}
+    </For>
   )
 }
 
-/** One call: the head (stage, digest, time and tokens), opening to the request by region and the answer. */
+// a record operation's word, the Record's own (readings.tsx); a tool this page does not know keeps its name
+const verb = (v: string) =>
+  v === "insert" || v === "patch" || v === "remove" || v === "replace" ? t(`readings.${v}`) : v
+const is = <K extends Op["kind"]>(o: Op, k: K) => (o.kind === k ? (o as Extract<Op, { kind: K }>) : undefined)
+/** The result of a tool stage: one line per step, what it did on the left, its own time and tokens on the right. */
+const Steps = (props: { call: Call; facts: Facts; cache: boolean }) => (
+  <Show when={nativeTrace(props.call.out)}>
+    {(trace) => (
+      <For each={trace().steps.filter((s) => stepOps(s, props.facts).length)} keyed={(s) => s.index}>
+        {(step) => (
+          <div class="sline">
+            <span class="ops">
+              <For each={stepOps(step(), props.facts)} keyed={false}>
+                {(op) => (
+                  <span class="op">
+                    <Switch>
+                      <Match when={is(op(), "search")}>
+                        {(o) => (
+                          <>
+                            <Clue aria-hidden="true" />
+                            <span class="q">{o().query}</span>
+                            <Show when={o().n !== undefined}>
+                              <span class="n">→ {o().n}</span>
+                            </Show>
+                          </>
+                        )}
+                      </Match>
+                      <Match when={is(op(), "read")}>
+                        {(o) => (
+                          <>
+                            <Read aria-hidden="true" />
+                            <Pills pills={o().titles.map((text) => ({ text }))} />
+                          </>
+                        )}
+                      </Match>
+                      <Match when={is(op(), "op")}>
+                        {(o) => (
+                          <Show
+                            when={o().verb !== "read"}
+                            fallback={
+                              <>
+                                <Read aria-hidden="true" />
+                                <span class="pill">{o().target}</span>
+                              </>
+                            }
+                          >
+                            <span class="n">{verb(o().verb)}</span>
+                            <Show when={o().target}>
+                              <span class="pill">{o().target}</span>
+                            </Show>
+                          </Show>
+                        )}
+                      </Match>
+                      <Match when={is(op(), "wrote")}>
+                        {(o) => <Pills pills={o().names.map((text) => ({ text }))} />}
+                      </Match>
+                    </Switch>
+                    <Show when={op().error}>{(e) => <span class="pill bad">{e()}</span>}</Show>
+                  </span>
+                )}
+              </For>
+            </span>
+            <Metrics ms={step().ms} usage={step().usage} cache={props.cache} />
+          </div>
+        )}
+      </For>
+    )}
+  </Show>
+)
+
+/** One call: the head in the row's slots, opening to its result, its prompt or the stored call. */
 const Step = (props: {
   row: Row
-  node: Node
+  facts: Facts
   nth: number
+  ord: number | undefined
   dev: boolean
+  cache: boolean
   q: string
   open: boolean
   onToggle: () => void
 }) => {
   const c = () => props.row.call
-  const regs = createMemo(() => regions(c().msgs))
-  const rhits = createMemo(() => regionHits(regs(), props.q))
+  const head = createMemo(() => digest(props.row, props.nth, props.facts))
   const hits = createMemo(() => rowHits(props.row, props.q))
-  // the brief is the one answer that stays closed without `inspect`; a stage without a body or an answer has nothing to open
+  // the brief is the one answer that stays closed without `inspect`
   const opens = () => (props.dev && c().msgs.length > 0) || props.row.phase !== "direct"
-  // the reader's pick (a region, or null for all) holds only under the query it was made with: a new query reopens
-  // the well on its first region with hits
-  const [pick, setPick] = createSignal<{ q: string; tab: number | null }>()
-  const shownTab = () => {
+  // the reader's pick of a view holds only under the query it was made with: a new query reopens the well where its
+  // marks are (the prompt when the request has them)
+  const [pick, setPick] = createSignal<{ q: string; view: "result" | "prompt" | "json" }>()
+  const view = () => {
     const p = pick()
-    return p && p.q === props.q ? p.tab : defaultTab(rhits(), props.q)
+    return p && p.q === props.q ? p.view : defaultView(props.row, props.q)
   }
-  const setTab = (tab: number | null) => setPick({ q: props.q, tab })
-  // a query (or a tab, or the step opening under one) brings the well's first mark to its middle, by the well's own
+  // a query (or a view, or the step opening under one) brings the well's first mark to its middle, by the well's own
   // scrollTop so the pane stays put
   let well: HTMLDivElement | undefined
   createEffect(
-    () => [props.q, shownTab(), props.open] as const,
+    () => [props.q, view(), props.open] as const,
     ([q, , open]) => {
       if (!q || !open) return // a closed step has no geometry; it scrolls when it opens under the query
       const id = requestAnimationFrame(() => {
@@ -252,12 +260,20 @@ const Step = (props: {
   )
   const [copied, setCopied] = createSignal(false)
   const copy = () => {
-    const out = { regions: regs().map(({ msgs, ...r }) => ({ ...r, messages: msgs })), answer: c().out }
-    void navigator.clipboard?.writeText(JSON.stringify(out, null, 2)).then(() => {
+    void navigator.clipboard?.writeText(JSON.stringify(c(), null, 2)).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })
   }
+  const Tab = (p: { v: "result" | "prompt" | "json"; children: string }) => (
+    <button
+      role="tab"
+      aria-selected={view() === p.v ? "true" : "false"}
+      onClick={() => setPick({ q: props.q, view: p.v })}
+    >
+      {p.children}
+    </button>
+  )
   return (
     <details
       class={{ step: true, flat: !opens(), bad: props.row.status !== "ok" }}
@@ -274,129 +290,116 @@ const Step = (props: {
           <Next class="chev" aria-hidden="true" />
           <span class="nm">
             {props.row.phase}
-            <Show when={props.row.phase === "lookup" || props.row.phase === "decide"}> {props.nth + 1}</Show>
-            <Show when={c().via === "decision"}> · {t("inspector.decision")}</Show>
+            <Show when={props.ord}>{(n) => <span class="ord">{n()}</span>}</Show>
           </span>
           <Show when={hits()}>{(h) => <span class="hits">{h()}</span>}</Show>
         </span>
         <span class="digest">
-          <Digest row={props.row} node={props.node} nth={props.nth} dev={props.dev} />
+          <Pills pills={head().pills} />
+          <Show when={head().note}>{(n) => <span class="dtext">{n()}</span>}</Show>
+          <Show when={head().line}>{(l) => <span class="dprose">{l()}</span>}</Show>
         </span>
-        <span class="metrics" title={t("inspector.tokenLegend")}>
-          <span class="ms">{secs(c().ms)}</span> · {tokens(c().usage, fmt)}
-        </span>
+        <Metrics ms={c().ms} usage={c().usage} cache={props.cache} />
       </summary>
       <Show when={opens()}>
         <div class="body">
           <div class="well">
-            <Show when={props.dev && regs().length > 0}>
-              <div class="rtabs" role="tablist">
-                <For each={regs()} keyed={false}>
-                  {(r, i) => (
-                    <button role="tab" aria-selected={shownTab() === i ? "true" : "false"} onClick={() => setTab(i)}>
-                      <Show when={r().breakpoint}>
-                        <i class="bp" aria-label={t("inspector.breakpoint")} />
-                      </Show>
-                      {r().name} <span class="chars">{fmt(r().chars)}c</span>
-                      <Show when={rhits()[i]}>{(h) => <span class="hits">{h()}</span>}</Show>
-                    </button>
-                  )}
-                </For>
-                <button role="tab" aria-selected={shownTab() === null ? "true" : "false"} onClick={() => setTab(null)}>
-                  {t("inspector.all")}
-                </button>
-                <button class="copy" aria-label={t("inspector.copyJson")} onClick={copy}>
-                  <Show when={copied()} fallback={<Copy />}>
-                    <Check />
-                  </Show>
-                </button>
-              </div>
-            </Show>
-            <div class="wscroll" ref={(el) => (well = el)}>
-              <Show when={props.dev}>
-                <For each={regs()} keyed={false}>
-                  {(r, i) => (
-                    <Show when={shownTab() === null || shownTab() === i}>
-                      <For each={r().msgs} keyed={false}>
-                        {(m, j) => (
-                          <div class="msg" data-role={m().role}>
-                            <span class="role">
-                              {shownTab() === null ? `${r().name} · ${m().role}` : m().role}
-                              <Show when={r().breakpoint && j === r().msgs.length - 1}>
-                                <span class="bptag">{t("inspector.breakpoint")}</span>
-                              </Show>
-                            </span>
-                            <div class="txt">
-                              <Marked text={textOf(m())} q={props.q} />
-                            </div>
-                          </div>
-                        )}
-                      </For>
-                    </Show>
-                  )}
-                </For>
+            <div class="wbar" role="tablist">
+              <Tab v="result">{t("inspector.result")}</Tab>
+              <Show when={c().msgs.length > 0}>
+                <Tab v="prompt">{t("inspector.prompt")}</Tab>
               </Show>
-              <div class="answer">
-                <span class="role">{t("inspector.answer")}</span>
-                <Show
-                  when={typeof c().out === "string"}
-                  fallback={
-                    <Show
-                      when={nativeTrace(c().out)}
-                      fallback={<KeyValues of={(c().out ?? {}) as Record<string, unknown>} />}
-                    >
-                      {(trace) => (
-                        <div class="native-trace">
-                          <p>
-                            {trace().status} {trace().reason}
-                          </p>
-                          <Show when={trace().budget}>{(b) => <KeyValues of={{ budget: b() }} />}</Show>
-                          <For each={trace().steps} keyed={(s) => s.index}>
-                            {(step) => (
-                              <section>
-                                <h4>
-                                  {t("inspector.step", { n: step().index + 1 })} · {step().finishReason}
-                                </h4>
-                                <For each={step().calls} keyed={(c) => c.toolCallId}>
-                                  {(tool) => (
-                                    <details class="native-tool">
-                                      <summary>
-                                        <code>{tool().name}</code> · {tool().result.ok ? "ok" : "error"} ·{" "}
-                                        {secs(tool().ms)} {tool().replayed ? "replayed" : ""}
-                                      </summary>
-                                      <KeyValues
-                                        of={{
-                                          toolCallId: tool().toolCallId,
-                                          input: tool().input,
-                                          result: tool().result,
-                                        }}
-                                      />
-                                    </details>
-                                  )}
-                                </For>
-                                <details>
-                                  <summary>{t("inspector.messages")}</summary>
-                                  <pre>
-                                    {JSON.stringify(
-                                      { request: step().messages, response: step().response, usage: step().usage },
-                                      null,
-                                      2,
-                                    )}
-                                  </pre>
-                                </details>
-                              </section>
-                            )}
-                          </For>
-                        </div>
-                      )}
-                    </Show>
-                  }
-                >
-                  <p class="prose">
-                    <Marked text={c().out as string} q={props.q} />
-                  </p>
+              <Tab v="json">{t("inspector.json")}</Tab>
+              <button class="copy" aria-label={t("inspector.copyJson")} onClick={copy}>
+                <Show when={copied()} fallback={<Copy />}>
+                  <Check />
                 </Show>
-              </div>
+              </button>
+            </div>
+            <div class="wscroll" ref={(el) => (well = el)}>
+              <Switch>
+                <Match when={view() === "prompt"}>
+                  <For each={regions(c().msgs)} keyed={false}>
+                    {(r) => (
+                      <>
+                        <For each={r().msgs} keyed={false}>
+                          {(m) => (
+                            <div class="msg" data-role={m().role}>
+                              <span class="role">{m().role}</span>
+                              <div class="txt">
+                                <Marked text={textOf(m())} q={props.q} />
+                              </div>
+                            </div>
+                          )}
+                        </For>
+                        <Show when={r().breakpoint}>
+                          <div class="bp" title={t("inspector.breakpoint")}>
+                            {r().name} {fmt(r().chars)}c
+                          </div>
+                        </Show>
+                      </>
+                    )}
+                  </For>
+                </Match>
+                <Match when={view() === "json"}>
+                  <pre>{JSON.stringify(c(), null, 2)}</pre>
+                </Match>
+                <Match when={nativeTrace(c().out)}>
+                  <Steps call={c()} facts={props.facts} cache={props.cache} />
+                </Match>
+                <Match when={c().via === "decision"}>
+                  <For each={precheck(c().out).lines} keyed={false}>
+                    {(l) => (
+                      <div class="pline">
+                        <span class="lb">{l().label}</span>
+                        <span
+                          class="bar"
+                          style={{ "--bar-p": l().p ?? 0, "--bar-lo": LO, "--bar-hi": HI }}
+                          data-none={l().p === null || undefined}
+                        />
+                        <span class="pv">{l().p === null ? "" : l().p!.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </For>
+                  <Show when={precheck(c().out).error}>{(e) => <KeyValues of={{ error: e() }} />}</Show>
+                </Match>
+                <Match when={typeof c().out === "string"}>
+                  <For each={pieces(c().out as string)} keyed={false}>
+                    {(p) => (
+                      <div class="piece">
+                        <Show when={p().id}>{(id) => <span class="pill">{id()}</span>}</Show>
+                        <p class="prose">
+                          <Marked text={p().text} q={props.q} />
+                        </p>
+                      </div>
+                    )}
+                  </For>
+                </Match>
+                <Match when={props.row.phase === "polish"}>
+                  <For each={polishPairs(c())} keyed={false}>
+                    {(x) => (
+                      <div class="rewrite">
+                        <Show when={x().before}>
+                          {(b) => (
+                            <>
+                              <span class="was">
+                                <Marked text={b()} q={props.q} />
+                              </span>
+                              <Change aria-hidden="true" />
+                            </>
+                          )}
+                        </Show>
+                        <span>
+                          <Marked text={x().after} q={props.q} />
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                </Match>
+                <Match when={true}>
+                  <KeyValues of={(c().out ?? {}) as Record<string, unknown>} />
+                </Match>
+              </Switch>
             </div>
           </div>
         </div>
@@ -440,6 +443,8 @@ const InspectBody = (props: { id: Id }) => {
   const trows = createMemo(() => (node() ? rows(mine(), node()!) : []))
   const grouped = createMemo(() => groups(trows()))
   const sums = createMemo(() => totals(mine()))
+  const ords = createMemo(() => ordinals(trows()))
+  const cache = createMemo(() => cached(mine()))
   const nth = (r: Row) =>
     trows()
       .slice(0, trows().indexOf(r))
@@ -478,12 +483,31 @@ const InspectBody = (props: { id: Id }) => {
     return r && x ? fields(r, x, whens(view())) : []
   })
   const shapeOf = (id: string) => view()?.layer?.products.find((p) => p.id === id)?.shape
+  const facts = createMemo((): Facts => ({
+    beats: node()?.beats ?? [],
+    checks: node()?.checks ?? [],
+    must: node()?.brief.must ?? [],
+    label: (id) => view()?.layer?.products.find((p) => p.id === id)?.label ?? id,
+    fields: (answers) => {
+      const r = view()?.rules
+      const paths = Object.entries(answers).flatMap(
+        ([q, o]) =>
+          r?.readouts
+            ?.find((x) => x.id === q)
+            ?.options.find((x) => x.id === o)
+            ?.do.flatMap((e) => ("path" in e ? [e.path] : [])) ?? [],
+      )
+      return [...new Set(paths)].map((p) => r?.fields.find((f) => f.path === p)?.label ?? p)
+    },
+  }))
   const One = (p: { row: Row }) => (
     <Step
       row={p.row}
-      node={node()!}
+      facts={facts()}
       nth={nth(p.row)}
+      ord={ords()[trows().indexOf(p.row)]}
       dev={dev()}
+      cache={cache()}
       q={q()}
       open={trows().indexOf(p.row) === openAt()}
       onToggle={() => toggle(trows().indexOf(p.row))}
@@ -503,7 +527,7 @@ const InspectBody = (props: { id: Id }) => {
     return () => removeEventListener("keydown", onKey)
   })
   return (
-    <div class="inspect" data-pane={pane()}>
+    <div class={{ inspect: true, cache: cache() }} data-pane={pane()}>
       <header class="top">
         <button class="icon" aria-label={t("common.backToStory")} onClick={close}>
           <Back />
@@ -532,8 +556,8 @@ const InspectBody = (props: { id: Id }) => {
         </span>
         <span class="spacer" />
         <Show when={sums().calls}>
-          <span class="sums" title={t("inspector.tokenLegend")}>
-            {sums().calls}× · {secs(sums().ms)} · {tokens(sums(), (n) => compact.format(n))}
+          <span class="sums">
+            <Metrics ms={sums().ms} usage={sums()} cache={cache()} />
           </span>
         </Show>
         <span class="seg" role="tablist" aria-label={t("common.view")}>
@@ -586,17 +610,14 @@ const InspectBody = (props: { id: Id }) => {
                         {(tray) => (
                           <div class={{ knot: true, tray: true, bad: tray().failed, discarded: tray().failed }}>
                             <div class="thead">
-                              <span>
-                                {t("common.draft")} {tray().draft} ·{" "}
-                                {tray().failed ? t("inspector.discarded") : t("inspector.final")}
+                              <span class="tl">
+                                {t("common.draft")} {tray().draft}
+                                <Show when={tray().failed}>
+                                  <span class="pill">{t("inspector.discarded")}</span>
+                                </Show>
                               </span>
-                              <span class="meta">
-                                {secs(tray().rows.reduce((n, r) => n + r.call.ms, 0))} ·{" "}
-                                {tray().rows.some((r) => r.status === "stopped")
-                                  ? t("common.stopped")
-                                  : tray().failed
-                                    ? t("inspector.checkFailed")
-                                    : t("inspector.checkPassed")}
+                              <span class="metrics">
+                                <span class="mt">{secs(tray().rows.reduce((n, r) => n + r.call.ms, 0))}</span>
                               </span>
                             </div>
                             <For each={tray().rows} keyed={false}>

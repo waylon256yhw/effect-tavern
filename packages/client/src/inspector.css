@@ -16,14 +16,15 @@
   line-height: var(--leading-body);
   font-variant-numeric: tabular-nums;
 }
+/* a row's number slots gain the cache slot when any call of the turn read or wrote the cache */
+.inspect.cache {
+  --inspect-metrics: 3.25rem 4.5rem 4.5rem 4.5rem;
+}
 .inspect .dim,
-.inspect .meta,
-.inspect .chars {
+.inspect .meta {
   color: var(--ink-3);
 }
 .inspect .meta,
-.inspect .chars,
-.inspect .sums,
 .inspect .metrics,
 .inspect .pill,
 .inspect .role,
@@ -56,6 +57,16 @@
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
   font-weight: 600;
+}
+.inspect .pill.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 600;
+}
+.inspect .pill.soft {
+  background: none;
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  color: var(--ink-3);
 }
 
 /* top: back, title, the node stepper, the turn's sums; on the phone the Pipeline | Node switch instead */
@@ -115,8 +126,6 @@
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   background: var(--alpha-1);
-  color: var(--ink-2);
-  white-space: nowrap;
 }
 .inspect .seg {
   display: inline-flex;
@@ -285,14 +294,24 @@
 .inspect .tray.discarded {
   background: transparent;
 }
+/* inside a tray a row's text sits where it would outside: the tray's padding comes off the row's own */
+.inspect .tray .thead,
+.inspect .tray .step > summary {
+  padding-inline: calc(12px - 8px);
+}
 .inspect .tray .thead {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: 0 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-3);
   font-size: var(--text-caption);
   font-weight: 600;
   color: var(--ink-2);
+}
+.inspect .tray .tl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .inspect .tray.discarded .thead {
   color: var(--ink-3);
@@ -322,7 +341,7 @@
   cursor: pointer;
   padding: 8px 12px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: var(--inspect-stage) minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-3);
   row-gap: 3px;
@@ -353,9 +372,16 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--text-body);
   font-weight: 600;
   white-space: nowrap;
+}
+.inspect .ord {
+  margin-inline-start: 4px;
+  color: var(--ink-3);
+  font-weight: 400;
 }
 .inspect .chev {
   width: 11px;
@@ -392,17 +418,30 @@
 .inspect .dprose {
   color: var(--ink-3);
 }
+/* the number slots: fixed widths, so separate rows (and a tray's) line up; each number right-aligned, its glyph left */
 .inspect .metrics {
   grid-column: 2;
+  justify-self: end;
+  display: grid;
+  grid-template-columns: var(--inspect-metrics);
+  column-gap: 6px;
   font-size: var(--text-caption);
   color: var(--ink-3);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.inspect .metrics .ms {
+.inspect .mt {
+  display: flex;
+  justify-content: end;
+  gap: 2px;
+}
+.inspect .mt:first-child {
+  justify-content: end;
   color: var(--ink-2);
   font-weight: 500;
+}
+.inspect .mt i {
+  font-style: normal;
+  opacity: 0.7;
 }
 
 /* the body: the well */
@@ -422,7 +461,7 @@
     inset 0 0 0 var(--hairline) var(--line);
   overflow: clip; /* not a scroll container: its minimum stays its content's, so the scroller's floor holds */
 }
-.inspect .rtabs {
+.inspect .wbar {
   flex: none;
   display: flex;
   align-items: center;
@@ -433,7 +472,7 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
-.inspect .rtabs button {
+.inspect .wbar button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -443,30 +482,18 @@
   font-size: var(--text-caption);
   white-space: nowrap;
 }
-.inspect .rtabs button:hover {
+.inspect .wbar button:hover {
   background: var(--ghost-hover);
   color: var(--ink);
 }
-.inspect .rtabs button[aria-selected="true"] {
+.inspect .wbar button[aria-selected="true"] {
   background: var(--surface-2);
   color: var(--ink);
   font-weight: 600;
   box-shadow: var(--shadow-1);
 }
-.inspect .rtabs button[aria-selected="true"] .chars {
-  font-weight: 400;
-}
-.inspect .rtabs .copy {
+.inspect .wbar .copy {
   margin-inline-start: auto;
-}
-.inspect .bp {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ink-3);
-}
-.inspect .rtabs button[aria-selected="true"] .bp {
-  background: var(--ink);
 }
 /* the one scroller, in the one open step, fills the card to its bottom (a panel: switching steps never moves the rows).
    contain: size reports only its 8lh floor upward, so every layer above keeps min-height: auto and the floors sum:
@@ -502,20 +529,32 @@
   font-size: var(--text-caption);
   color: var(--ink-3);
 }
-.inspect .bptag {
-  padding: 0 5px;
-  border-radius: 3px;
-  background: var(--alpha-2);
-  color: var(--ink-2);
-  font-size: 10px;
+/* a cache breakpoint: a hairline between messages, the region it closes and its size on it */
+.inspect .bp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+.inspect .bp::before,
+.inspect .bp::after {
+  content: "";
+  flex: 1;
+  height: var(--hairline);
+  background: var(--line-strong);
+}
+.inspect .bp::before {
+  flex: 0 0 12px;
 }
 .inspect .txt {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.6;
 }
-/* a step's raw request and response as JSON: one string value can be a whole reasoning text, so it wraps inside the
-   well like the messages above it, never a line wider than the well */
+/* the stored call as JSON: one string value can be a whole reasoning text, so it wraps inside the well, never a line
+   wider than the well */
 .inspect pre {
   margin: 0;
   min-width: 0;
@@ -528,23 +567,106 @@
   background: light-dark(#fde047, #a16207);
   color: var(--ink);
 }
-.inspect .answer {
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background: var(--alpha-1);
-  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+/* the result: narrate's prose and its blocks, polish's sentences before and after, a tool stage's steps, the pre-check's
+   readings against its two thresholds */
+.inspect .piece {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 4px;
 }
-.inspect .answer .role {
-  justify-content: space-between;
-}
-.inspect .answer .prose {
+.inspect .prose {
   margin: 0;
   font-size: var(--text-body);
   line-height: var(--leading-prose);
   white-space: pre-wrap;
+}
+.inspect .rewrite {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  line-height: 1.6;
+}
+.inspect .rewrite .was {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.inspect .rewrite svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+  align-self: center;
+}
+.inspect .sline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  min-height: 22px;
+}
+.inspect .sline .metrics {
+  grid-column: auto;
+}
+.inspect .ops,
+.inspect .op {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.inspect .ops {
+  gap: var(--space-3);
+}
+.inspect .op svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--ink-3);
+}
+.inspect .op .q {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect .op .n {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}
+.inspect .pline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem 3ch;
+  align-items: center;
+  column-gap: var(--space-3);
+}
+.inspect .pline .lb {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.inspect .pline .pv {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  text-align: end;
+  color: var(--ink-2);
+}
+/* a thin track filled to the probability, the two thresholds as ticks */
+.inspect .bar {
+  height: 4px;
+  border-radius: 2px;
+  background:
+    linear-gradient(var(--ink-3), var(--ink-3)) calc(var(--bar-lo) * 100%) 0 / 1px 100% no-repeat,
+    linear-gradient(var(--ink-3), var(--ink-3)) calc(var(--bar-hi) * 100%) 0 / 1px 100% no-repeat,
+    linear-gradient(var(--ink-2), var(--ink-2)) 0 0 / calc(var(--bar-p) * 100%) 100% no-repeat,
+    var(--alpha-2);
+}
+.inspect .bar[data-none] {
+  opacity: 0.4;
 }
 .inspect .kv {
   margin: 0;
@@ -711,7 +833,7 @@
     display: flex;
   }
   .inspect .step > summary {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: var(--inspect-stage) minmax(0, 1fr) auto;
   }
   .inspect .metrics {
     grid-column: auto;

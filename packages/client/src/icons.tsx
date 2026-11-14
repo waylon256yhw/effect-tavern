@@ -24,6 +24,7 @@ export { default as Reword } from "~icons/ph/magic-wand"
 export { default as Edit } from "~icons/ph/note-pencil"
 export { default as Write } from "~icons/ph/feather" // the Writing workbench (side.tsx, shell.tsx), distinct from Edit
 export { default as Clue } from "~icons/ph/magnifying-glass"
+export { default as Read } from "~icons/ph/book-open-text" // lookup's read of entries (inspector.tsx), distinct from Notes
 export { default as Record } from "~icons/ph/notepad"
 export { default as Snippets } from "~icons/ph/plus"
 export { default as Stop } from "~icons/ph/stop"
