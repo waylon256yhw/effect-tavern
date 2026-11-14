@@ -200,7 +200,6 @@ const en: Dict = {
     cacheTtl: "Cache lifetime",
     cannotProbe: "Cannot probe",
     confirmDelete: "Delete provider “{name}”?",
-    confirmRemoveGroup: "Remove the {n} models of group “{group}”?",
     connected: "Connected · {what}",
     connectedHttp: "Connected · HTTP {status}",
     copyError: "Copy the error",

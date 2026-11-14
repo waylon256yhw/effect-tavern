@@ -725,11 +725,7 @@ const ProviderDetail = (props: { id: string; onBack: () => void; onVault: () => 
                             type="button"
                             class="icon sm"
                             aria-label={t("providers.removeGroup")}
-                            onClick={quiet(() =>
-                              ask(t("providers.confirmRemoveGroup", { group: g()[0], n: g()[1].length }), () =>
-                                removeModels(x(), g()[1]),
-                              ),
-                            )}
+                            onClick={quiet(() => removeModels(x(), g()[1]))}
                           >
                             <Trash />
                           </button>

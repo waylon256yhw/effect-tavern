@@ -515,7 +515,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
           is over the section, a touch screen always (reader.css) */}
       <footer class="actions">
         <RecordSheet node={props.node} n={props.n} />
-        <Demand node={props.node} />
+        <Demand node={props.node} n={props.n} />
         <Show when={siblings().length > 1}>
           <span class="siblings">
             <button

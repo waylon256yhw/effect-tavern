@@ -5,8 +5,16 @@
 import { lookup } from "@effect-tavern/provider/src/names.ts"
 import { normalize, plan, type Format } from "@effect-tavern/provider/src/url.ts"
 import type { JSX } from "@solidjs/web"
-import { createSignal, For, onSettled, Show } from "solid-js"
+import { For, onSettled, Show } from "solid-js"
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogTitle,
+  createConfirm,
+} from "@ui-sdk/solid/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectItemIndicator, SelectTrigger } from "@ui-sdk/solid/select"
+import { Switch as Toggle, SwitchThumb } from "@ui-sdk/solid/switch"
 import { Family } from "./family.tsx"
 import { Back, Caret, Check, Close } from "./icons.tsx"
 import { names } from "./store.ts"
@@ -108,17 +116,15 @@ export const Menu = <T extends string>(props: {
   )
 }
 export const Switch = (props: { on: boolean; label: string; onFlip: () => void; disabled?: boolean }) => (
-  <button
-    type="button"
+  <Toggle
     class="switch"
+    checked={props.on}
     disabled={props.disabled}
-    role="switch"
-    aria-checked={props.on ? "true" : "false"}
     aria-label={props.label}
-    onClick={() => props.onFlip()}
+    onCheckedChange={() => props.onFlip()}
   >
-    <span class="thumb" />
-  </button>
+    <SwitchThumb class="thumb" />
+  </Toggle>
 )
 export const Avatar = (props: { name: string }) => <span class="avatar">{props.name.slice(0, 1).toUpperCase()}</span>
 /** A record's name edited in place in the detail header; an empty edit is not written. */
@@ -205,30 +211,24 @@ export const Modal = (props: {
   )
 }
 
-// The one delete confirm on the page: `ask` opens it with the question and what Delete then does.
-let asker: (text: string, run: () => void) => void = () => {}
-export const ask = (text: string, run: () => void) => asker(text, run)
-export const Confirm = () => {
-  let el!: HTMLDialogElement
-  const [asking, setAsking] = createSignal<{ text: string; run: () => void } | null>(null)
-  return (
-    <dialog
-      class="confirm"
-      ref={(d) => {
-        el = d
-        asker = (text, run) => (setAsking({ text, run }), d.showModal())
-      }}
-      closedby="any"
-    >
-      <p>{asking()?.text}</p>
-      <div class="row">
-        <button type="button" class="chip state" onClick={() => el.close()}>
-          {t("common.cancel")}
-        </button>
-        <button type="button" class="chip danger" onClick={() => (el.close(), asking()?.run())}>
-          {t("common.delete")}
-        </button>
-      </div>
-    </dialog>
-  )
-}
+// The one delete confirm on the page: `ask` opens it with the question and what Delete then does. Escape and Cancel
+// keep the record; a press outside leaves the question open (an alert dialog wants an answer).
+const confirm = createConfirm<string>()
+export const ask = (text: string, run: () => void) => void confirm(text).then((yes) => yes && run())
+export const Confirm = () => (
+  <AlertDialog controller={confirm.controller}>
+    <AlertDialogContent<string> class="confirm">
+      {(state) => (
+        <>
+          <AlertDialogTitle render={(part) => <p {...part} />}>{state.payload}</AlertDialogTitle>
+          <div class="row">
+            <AlertDialogClose class="chip state">{t("common.cancel")}</AlertDialogClose>
+            <AlertDialogClose class="chip danger" value="confirm" data-agent-confirm={state.payload}>
+              {t("common.delete")}
+            </AlertDialogClose>
+          </div>
+        </>
+      )}
+    </AlertDialogContent>
+  </AlertDialog>
+)

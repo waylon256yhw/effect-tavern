@@ -199,7 +199,6 @@ const zh = {
     cacheTtl: "缓存有效期",
     cannotProbe: "无法检测",
     confirmDelete: "删除服务商「{name}」？",
-    confirmRemoveGroup: "移除「{group}」分组的 {n} 个模型？",
     connected: "已连通 · {what}",
     connectedHttp: "已连通 · HTTP {status}",
     copyError: "复制报错",

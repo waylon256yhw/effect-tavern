@@ -19,7 +19,12 @@ await build({
     }),
   ],
   build: {
-    lib: { entry: "test/browser.tsx", name: "Fixture", formats: ["iife"], fileName: () => "fixture.js" },
+    lib: {
+      entry: process.argv[2] ?? "test/browser.tsx",
+      name: "Fixture",
+      formats: ["iife"],
+      fileName: () => "fixture.js",
+    },
     outDir,
     minify: false,
   },

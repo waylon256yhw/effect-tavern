@@ -508,7 +508,7 @@ export const Rewrite = (props: {
  *  nothing to ask for, no button. Not a sibling action (the demand runs no narrate). A failed demand has no draft to
  *  carry its ghost: the reason shows after the menu in the row of the node that asked (store.ts `demanded`, set by the
  *  menu and by a theater block's dice alike), until the next action clears it. */
-export const Demand = (props: { node: Node }) => {
+export const Demand = (props: { node: Node; n: number }) => {
   const view = read(card)
   const busy = read(working)
   const failed = read(error)
@@ -525,7 +525,11 @@ export const Demand = (props: { node: Node }) => {
             turn.demand(props.node.id, id)
           }}
         >
-          <MenuTrigger class="btn" disabled={busy() || unresolved()}>
+          <MenuTrigger
+            class="btn"
+            disabled={busy() || unresolved()}
+            aria-label={`${t("readings.aside")} · ${t("common.turnN", { n: props.n })}`}
+          >
             {t("readings.aside")}
           </MenuTrigger>
           <MenuContent class="popup-list" side="top" align="start" sideOffset={4}>

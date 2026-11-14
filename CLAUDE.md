@@ -84,6 +84,10 @@ A card's own text (labels, group names, openings) and the model's words are neve
 ## Dev
 
 Tests are `vp run verify` (bun assert scripts per package, `test/*.ts`); the `vp test` built-in finds no vitest files and exits 1.
+`vp run verify:ui` in packages/client is the browser check (#181), kept out of `verify` because it needs Chrome: it
+builds `test/controls.tsx` (the shared controls, no server), opens it headless and drives them through `@ui-sdk`'s
+agent bridge (`snapshot` / `act`), failing on an unnamed control, a step that does not reach the app, or a Solid
+diagnostic. A control an agent should reach is an `@ui-sdk` part with a name; add it to that fixture.
 
 `bun --bun vp run dev` at the root (`bun --bun vp dev` in packages/client; `--bun` makes the `node` Vite+ launches resolve to Bun) is the whole stack: the session (packages/server/src/dev.ts) runs
 inside the Vite process through its module runner, mounted at `/api`; client edits are HMR, runtime/server edits take

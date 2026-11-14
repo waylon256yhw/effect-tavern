@@ -639,6 +639,10 @@
 }
 /* the confirm: a small centred dialog on the scrim, the sheet's surface and radius; the deed sits last, in red */
 .confirm {
+  /* a native dialog has these from the browser; @ui-sdk's alert dialog (the settings' delete confirm) resets them */
+  position: fixed;
+  inset: 0;
+  height: fit-content;
   width: min(22rem, calc(100% - 2 * var(--space-4)));
   margin: auto;
   padding: var(--space-4);
