@@ -100,6 +100,7 @@
 .inspect .nodenav .icon {
   width: var(--control-sm);
   height: var(--control-sm);
+  border-radius: calc(var(--radius) - var(--space-half));
 }
 .inspect .nodenav .icon svg {
   width: 14px;
@@ -658,7 +659,7 @@
 /* a thin track filled to the probability, the two thresholds as ticks */
 .inspect .bar {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background:
     linear-gradient(var(--ink-3), var(--ink-3)) calc(var(--bar-lo) * 100%) 0 / 1px 100% no-repeat,
     linear-gradient(var(--ink-3), var(--ink-3)) calc(var(--bar-hi) * 100%) 0 / 1px 100% no-repeat,

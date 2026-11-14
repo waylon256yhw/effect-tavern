@@ -387,9 +387,9 @@ main > section:is(:hover, :focus-within) > :is(.actions, .theater) .acts {
    ink on hover with a subtle press scale. The line's row sits close under its bubble and ends on the bubble's own text
    axis (14px in) */
 :is(.spoke .acts, .actions, .theater, .editkeys) .icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: var(--control-key);
+  height: var(--control-key);
+  border-radius: var(--radius-sm);
   color: var(--ink-2);
   transition:
     background var(--dur-2) var(--ease),
@@ -637,7 +637,7 @@ button:focus-visible {
   max-width: var(--measure);
   margin: 0 auto;
   background: var(--surface-3);
-  border-radius: var(--radius-composer);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-composer);
   padding: var(--space-1);
   display: flex;

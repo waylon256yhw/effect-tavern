@@ -156,7 +156,7 @@
 .record .track {
   position: relative;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   background: var(--alpha-2);
 }
 .steps .track {
@@ -167,7 +167,7 @@
   background: none;
 }
 .steps .track i {
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background: var(--alpha-2);
 }
 .steps .track i[data-reached] {
@@ -203,7 +203,7 @@
 }
 .meter.gauge .fill {
   left: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   transition: width var(--dur-4) var(--ease);
 }
@@ -228,7 +228,7 @@
 }
 .meter.scale .cell {
   position: relative;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   background: var(--alpha-2);
 }
 .meter.scale .cell[data-here] {
@@ -237,7 +237,7 @@
 .meter.scale .stroke {
   position: absolute;
   inset-block: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
 }
 .meter.scale .stroke[data-gain] {
   background: var(--ok);
@@ -279,7 +279,7 @@
 .check .zone {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   background: var(--ok-soft);
 }
 .check .dot {
@@ -780,7 +780,7 @@
   display: none;
   width: 16px;
   height: 16px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: var(--surface-3);
   box-shadow: inset 0 0 0 1.5px var(--line-strong);
   color: var(--primary-ink);

@@ -70,7 +70,6 @@
   --radius-sm: 4px; /* kbd, checkbox */
   --radius: 8px; /* buttons, inputs, menu rows */
   --radius-card: calc(var(--radius) + 4px);
-  --radius-composer: 14px;
   /* the composer's slot: the box's side gutters and its foot (the room under it); chrome.css widens both on a wide screen */
   --composer-side: var(--space-3);
   --composer-foot: calc(var(--space-4) + var(--safe-bottom));
@@ -80,6 +79,8 @@
   /* controls */
   --control: 32px;
   --control-sm: 24px;
+  --control-key: 26px; /* a ghost action key: the turn's row, a bubble's keys, the stage keys */
+  --tag: 18px; /* a tag inside a line of text: the note's tag, a lookup row's where */
   --control-lg: 38px; /* a field with its icons inside, and the square button beside it: one height or the row is ragged */
   --icon: 20px;
   --icon-sm: 16px;
@@ -101,6 +102,7 @@
   --leading-prose: 1.75;
 
   /* spacing: a 4px grid; the reading rhythm derives from the prose line */
+  --space-half: 2px; /* the one sub-step, inside a control: icon to label, a badge's vertical padding, a segmented control's inset */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

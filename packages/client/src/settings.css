@@ -1031,12 +1031,12 @@
   left: 9px;
   right: 9px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background: var(--alpha-2);
 }
 .effort .fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   transition: width var(--dur-2) var(--ease);
 }
