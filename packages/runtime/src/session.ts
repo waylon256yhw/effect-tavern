@@ -48,6 +48,8 @@ import {
   type DeliverySnapshot,
 } from "./context.ts"
 import {
+  blocked,
+  decide,
   object,
   runStageTools,
   ModelError,
@@ -60,6 +62,7 @@ import {
   type StageEvent,
   type StageOptions,
   type DecisionModel,
+  type Question,
 } from "@effect-tavern/provider"
 import { Deferred, Effect, Queue, Schema, Stream } from "effect"
 import { tokens } from "./tokens.ts"
@@ -75,7 +78,7 @@ import { makeLore, namedLore, type Disclosure, type Lore } from "./lore.ts"
 import { lines, expand, fill, unfilled } from "./names.ts"
 import { marked, scan, splice } from "./polish.ts"
 import { request, worldBlock, type Ask, type Told } from "./request.ts"
-import { checkQuestions, checkVerdict, decisionPass, lookupQuestions, lookupSelect } from "./decision.ts"
+import { checkQuestions, checkVerdict, lookupQuestions, lookupSelect, type Line } from "./decision.ts"
 import { cap, withCatalogs, askedAt, productAsks, type Product } from "./product.ts"
 import { recordTransaction, worldValue, type RecordResult } from "./world.ts"
 
@@ -96,7 +99,7 @@ export type { Node } from "./derived.ts" // internal complete projection; client
 export type Event =
   | { kind: "stage"; phase: Phase }
   | { kind: "delta"; part: Part | ProductDelta }
-  // `via: "decision"`: lookup's or check's pass on the decision model (decision.ts `decisionPass`), not a language model call
+  // `via: "decision"`: lookup's or check's pass on the decision model (`decisionPass`), not a language model call
   | { kind: "call"; phase: Phase; msgs: readonly Message[]; out: unknown; usage: Usage; ms: number; via?: "decision" }
   | ({ kind: "change" } & Change) // the log moved: a node landed or was amended, nodes dropped, and where head is now
 /** A narrate block's text as it streams, beside the provider's `text-delta`: the block `<<aside>> <id>` opened. */
@@ -326,6 +329,54 @@ export const makeSession = ({
       })
       yield* emit({ kind: "call", phase, msgs, out: r.value, usage: r.usage, ms: Date.now() - t0 })
       return r.value
+    })
+
+  /** The decision pass of one stage (decision.ts builds the questions): none (`undefined`, no row) when there is no
+   *  decision model; otherwise the stage event, the call, and one trace row `{lines, verdict, error?, delivered?}`.
+   *  `read` turns the answers into the lines and, when they settle the stage, its value; `undefined` back (a failed
+   *  or blocked call, a config that threw, an answer that does not settle) hands the stage to its language model. */
+  const decisionPass = <V>(
+    emit: Emit,
+    phase: "lookup" | "check",
+    state: string,
+    questions: Record<string, Question>,
+    read: (answers: Readonly<Record<string, unknown>>) => { lines: Line[]; value?: V; delivered?: string[] },
+  ) =>
+    Effect.gen(function* () {
+      let M: DecisionModel | undefined
+      let error: string | undefined
+      try {
+        M = decisionFor?.()
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e)
+      }
+      if (!M && error === undefined) return undefined
+      yield* emit({ kind: "stage", phase })
+      const t0 = Date.now()
+      const r = M
+        ? yield* decide(M, state, questions, { maxRetries: 0 }).pipe(
+            Effect.match({
+              onSuccess: (ok) => ({ ok }),
+              onFailure: (e) => ({ error: blocked(e) ? `blocked:${blocked(e)}` : e.message }),
+            }),
+          )
+        : { error: error ?? "" }
+      const v = "ok" in r ? read(r.ok.answers) : undefined
+      yield* emit({
+        kind: "call",
+        phase,
+        via: "decision",
+        msgs: [{ role: "user", content: state }],
+        out: {
+          lines: v?.lines ?? [],
+          verdict: v?.value !== undefined ? "pass" : "escalate",
+          ...("error" in r && { error: r.error }),
+          ...(v?.delivered && { delivered: v.delivered }),
+        },
+        usage: "ok" in r ? r.ok.usage : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        ms: Date.now() - t0,
+      })
+      return v?.value
     })
 
   /** Both native stages report the full SDK tool trace, including cancellation. */
@@ -562,19 +613,12 @@ export const makeSession = ({
             units && lookupQuestions({ scene: path.length ? proseOf(path.at(-1)!.reply) : "", input, units, wording })
           const settled =
             units && q
-              ? yield* decisionPass({
-                  emit,
-                  phase: "lookup",
-                  model: decisionFor,
-                  state: q.state,
-                  questions: q.questions,
-                  read: (answers) => {
-                    const s = lookupSelect(answers, units)
-                    const r = s.ids && lookup.read(s.ids) // read_context's own delivery: freeze, held, disclosures
-                    if (!r || !r.ok) return { lines: s.lines.map(({ label, p }) => ({ label, p })) } // nothing was delivered
-                    const delivered = r.value.flatMap((x) => ("title" in x ? [x.title] : []))
-                    return { lines: s.lines, value: delivered, delivered }
-                  },
+              ? yield* decisionPass(emit, "lookup", q.state, q.questions, (answers) => {
+                  const s = lookupSelect(answers, units)
+                  const r = s.ids && lookup.read(s.ids) // read_context's own delivery: freeze, held, disclosures
+                  if (!r || !r.ok) return { lines: s.lines.map(({ label, p }) => ({ label, p })) } // nothing was delivered
+                  const delivered = r.value.flatMap((x) => ("title" in x ? [x.title] : []))
+                  return { lines: s.lines, value: delivered, delivered }
                 })
               : undefined
           if (settled === undefined)
@@ -784,19 +828,12 @@ export const makeSession = ({
             open,
             wording,
           })
-          return decisionPass({
-            emit,
-            phase: "check",
-            model: decisionFor,
-            state,
-            questions,
-            read: (answers) => {
-              const v = checkVerdict(answers, guard, openIds, brief.must)
-              return {
-                lines: [...Object.entries(v.p.rules), ...Object.entries(v.p.open)].map(([label, p]) => ({ label, p })),
-                ...(v.pass && { value: { fired: v.fired, violated: [] as string[] } }),
-              }
-            },
+          return decisionPass(emit, "check", state, questions, (answers) => {
+            const v = checkVerdict(answers, guard, openIds, brief.must)
+            return {
+              lines: [...Object.entries(v.p.rules), ...Object.entries(v.p.open)].map(([label, p]) => ({ label, p })),
+              ...(v.pass && { value: { fired: v.fired, violated: [] as string[] } }),
+            }
           })
         }
         const llm = (text: string) =>

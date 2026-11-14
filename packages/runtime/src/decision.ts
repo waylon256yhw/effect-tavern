@@ -3,9 +3,12 @@
 // every answer is clear, and never triggers a rewrite by itself (session.ts `check`). For lookup it selects from a
 // complete catalog (context.ts `catalog`) and settles the stage alone. One builder per stage for the turn and the
 // instruments (server bin/decision-replay.ts, decision-probe.ts, decision-lookup.ts), so what they measure is what the
-// turn sends; one runner (`decisionPass`) for the stage event, the call, the fallback and the trace row.
-import { blocked, decide, type DecisionModel, type Question, type Usage } from "@effect-tavern/provider"
-import { Effect } from "effect"
+// turn sends; one runner (session.ts `decisionPass`) for the stage event, the call, the fallback and the trace row.
+//
+// This module is pure and the client reads its thresholds (inspector.tsx): it imports TYPES ONLY from the provider.
+// A value import here pulls the whole provider package, Node-only code included, into the browser (a white page,
+// #180); client test/imports.ts holds the line.
+import type { Question } from "@effect-tavern/provider"
 import type { Unit } from "./context.ts"
 import { tag } from "./request.ts"
 
@@ -25,67 +28,6 @@ export interface Line {
   p: number | null
   read?: true
 }
-type Emit = (
-  e:
-    | { kind: "stage"; phase: "lookup" | "check" }
-    | {
-        kind: "call"
-        phase: "lookup" | "check"
-        via: "decision"
-        msgs: { role: "user"; content: string }[]
-        out: { lines: Line[]; verdict: "pass" | "escalate"; error?: string; delivered?: string[] }
-        usage: Usage
-        ms: number
-      },
-) => Effect.Effect<void>
-/** The decision pass of one stage: none (`undefined`, no row) when there is no decision model; otherwise the stage
- *  event, the call, and one trace row `{lines, verdict, error?, delivered?}`. `read` turns the answers into the lines and,
- *  when they settle the stage, its value; `undefined` back (a failed or blocked call, a config that threw, an answer
- *  that does not settle) hands the stage to its language model. */
-export const decisionPass = <V>(o: {
-  emit: Emit
-  phase: "lookup" | "check"
-  model: (() => DecisionModel | undefined) | undefined
-  state: string
-  questions: Record<string, Question>
-  read: (answers: Readonly<Record<string, unknown>>) => { lines: Line[]; value?: V; delivered?: string[] }
-}) =>
-  Effect.gen(function* () {
-    let M: DecisionModel | undefined
-    let error: string | undefined
-    try {
-      M = o.model?.()
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e)
-    }
-    if (!M && error === undefined) return undefined
-    yield* o.emit({ kind: "stage", phase: o.phase })
-    const t0 = Date.now()
-    const r = M
-      ? yield* decide(M, o.state, o.questions, { maxRetries: 0 }).pipe(
-          Effect.match({
-            onSuccess: (ok) => ({ ok }),
-            onFailure: (e) => ({ error: blocked(e) ? `blocked:${blocked(e)}` : e.message }),
-          }),
-        )
-      : { error: error ?? "" }
-    const v = "ok" in r ? o.read(r.ok.answers) : undefined
-    yield* o.emit({
-      kind: "call",
-      phase: o.phase,
-      via: "decision",
-      msgs: [{ role: "user", content: o.state }],
-      out: {
-        lines: v?.lines ?? [],
-        verdict: v?.value !== undefined ? "pass" : "escalate",
-        ...("error" in r && { error: r.error }),
-        ...(v?.delivered && { delivered: v.delivered }),
-      },
-      usage: "ok" in r ? r.ok.usage : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      ms: Date.now() - t0,
-    })
-    return v?.value
-  })
 
 /** Lookup's state (the scene's tail, then `<input>`: the line and the note) and one boolean question per catalog unit
  *  (`u<i>`): an unread entry's face, or an unread section of a held one. The ask is layer.ts `lookup.decision`,
