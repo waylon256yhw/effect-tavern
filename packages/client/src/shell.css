@@ -993,7 +993,7 @@
   .shell-tab:not([aria-current="page"]) + .shell-tab:not([aria-current="page"])::before {
     content: "";
     position: absolute;
-    left: -3.5px;
+    left: calc(-1 * (var(--space-1) + var(--hairline) / 2)); /* the middle of the tabs' gap */
     top: 5px;
     bottom: 5px;
     width: var(--hairline);
