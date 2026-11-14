@@ -36,7 +36,7 @@ body {
      the composer's box (`--lift`), so wide prose and the action row's outer keys never show beside a raised box */
   mask-image: linear-gradient(
     to bottom,
-    transparent calc(var(--head) - var(--gap-turn)),
+    transparent max(0px, var(--head) - var(--gap-turn)),
     #000 var(--head),
     #000 calc(100% - max(min(var(--fade), var(--foot)), var(--lift) + var(--space-2))),
     transparent calc(100% - var(--lift))

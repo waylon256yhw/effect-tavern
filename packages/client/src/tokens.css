@@ -110,8 +110,10 @@
   --space-5: 24px;
   --space-6: 32px;
   --line-prose: calc(var(--text-prose) * var(--leading-prose));
-  --gap-turn: calc(var(--line-prose) * 0.75); /* between a reader's line and the card, and between turns */
-  --gap-item: calc(var(--line-prose) * 0.5); /* inside a turn */
+  /* the flow reads by turns: what one turn holds (the line, the paragraphs, its row) sits close, and a clear blank,
+     three times that, parts one turn from the next */
+  --gap-turn: calc(var(--line-prose) * 1.5);
+  --gap-item: calc(var(--line-prose) * 0.5);
   --measure: 42rem; /* the prose column at its narrowest; on the canvas it widens with the stage card (shell.css) */
   --measure-max: 54rem; /* and no wider than this */
   --topbar: 48px; /* a page's own head on a phone (inspector.css), under the safe area */
