@@ -290,15 +290,26 @@ const run = async () => {
     `and the hand is in the note's box (it is in ${holder?.tagName}.${holder?.className} "${holder?.getAttribute("aria-label")}", strip inert: ${!!noteBox.closest("[inert]")})`,
   )
   // a press on the button opens it and keeps the hand where it was; a press on a row runs it
+  // (a whole press, as the browser sends it: the pointer goes down before the click)
+  const plus = document.querySelector<HTMLElement>(".composer .row > .icon")!
+  const tap = (el: HTMLElement) => {
+    const at = { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0 }
+    el.dispatchEvent(new PointerEvent("pointerdown", at))
+    el.dispatchEvent(new PointerEvent("pointerup", at))
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }))
+  }
   line.focus()
-  document
-    .querySelector<HTMLElement>('.composer button[aria-haspopup="dialog"]')!
-    .dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+  tap(plus)
   await wait(500)
   check(
     !!document.querySelector("#snippets") && document.activeElement === line,
     "a press opens the menu and leaves the hand in the line",
   )
+  tap(plus)
+  await wait(500)
+  check(!document.querySelector("#snippets"), "a second press on the button closes the menu, and it stays closed")
+  tap(plus)
+  await wait(500)
   ;[...document.querySelectorAll<HTMLElement>('#snippets [data-slot="command-item"]')][0]!.click()
   await wait(500)
   check(

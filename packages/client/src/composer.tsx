@@ -7,7 +7,7 @@ import { addInvocation, backspaceInvocation, removeInvocation } from "./composit
 // being revised, a strip naming its turn; entry chips carry this turn's invocations.
 import type { Snippet } from "@effect-tavern/runtime/src/fragment.ts"
 import { CommandItem, CommandSeparator } from "@ui-sdk/solid/command"
-import { createPopoverController, Popover, PopoverContent } from "@ui-sdk/solid/popover"
+import { createPopoverController, Popover, PopoverContent, PopoverTrigger } from "@ui-sdk/solid/popover"
 import { createSignal, flush, onSettled, For, Show } from "solid-js"
 import { read } from "./bridge.ts"
 import { Check, Close, Edit, Insert, Send, Snippets, Stop } from "./icons.tsx"
@@ -53,7 +53,6 @@ export const Composer = () => {
   // Revising a landed line: the chip names the turn (a tap scrolls to it) and cancels; Keep sits beside Send.
   const revise = read(revising)
   const selected = () => model().invocations
-  const [menuOpen, setMenuOpen] = createSignal(false)
   const line = read(path)
   const blocked = () =>
     !revise() && line().some((n) => n.settlementStatus === "pending" || n.settlementStatus === "failed")
@@ -79,7 +78,7 @@ export const Composer = () => {
     void menu.open()
   }
   const menuChanged = (open: boolean) => {
-    setMenuOpen(open)
+    if (open) picked = false
     if (!open && !picked && document.activeElement?.closest("#snippets")) box?.focus()
   }
   /** What a send carries: the main box, and the note box when it is there. */
@@ -251,19 +250,22 @@ export const Composer = () => {
           </div>
         </Show>
         <div class="row">
-          <button
-            type="button"
-            class="icon"
-            aria-label={t("composer.snippets")}
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen() ? "true" : "false"}
-            onPointerDown={keep}
-            // a click the keyboard made (Enter or Space on the button) carries no pointer detail
-            onClick={(e) => (menuOpen() ? menu.close() : openMenu(e.detail === 0))}
-          >
-            <Snippets />
-          </button>
           <Popover controller={menu} onOpenChange={menuChanged}>
+            {/* the popover's own trigger: a press on it while the menu is open closes it, where a plain button's
+                press would count as one outside the menu and its click would open it again */}
+            <PopoverTrigger
+              class="icon"
+              aria-label={t("composer.snippets")}
+              onPointerDown={(e) => {
+                setMenuKeyboard(false)
+                keep(e)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") setMenuKeyboard(true)
+              }}
+            >
+              <Snippets />
+            </PopoverTrigger>
             <PopoverContent
               id="snippets"
               class="snippets"

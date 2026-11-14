@@ -9,8 +9,8 @@ import type { TimelineNode as Node, InvocationToken } from "@effect-tavern/runti
 // phone's drawer and sheets. The pages (home, card, Timeline, Settings, Writing, 读数: Status, the world products;
 // Inspect) fill the stage card over the reader, which stays mounted under them so
 // a turn in flight keeps streaming. Shapes follow docs/client-design-brief-3.md, docs/sidebar-brief-1.md and the
-// canvas in docs/client-canvas/. The sheets are native <dialog>s, the snippet menu a popover anchored to its button:
-// the platform is the component library. This file is the reader: the flow and the column; readings.tsx draws the
+// canvas in docs/client-canvas/. The sheets are dialogs and the snippet menu a popover over the box, both
+// @ui-sdk's (#181): it holds the behaviour, the styles are ours. This file is the reader: the flow and the column; readings.tsx draws the
 // Record's pieces, composer.tsx the box, inspector.tsx the Inspect page, bridge.ts the atom → accessor read they all use.
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import type { Phase } from "@effect-tavern/runtime/src/session.ts"

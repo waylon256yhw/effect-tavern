@@ -454,7 +454,7 @@
 
 /* the snippets menu: above the composer box, left edges aligned (@ui-sdk's popover places it against the box); a
    pick inserts into the box and never sends */
-.composer .icon[aria-expanded="true"] {
+.composer .icon[data-open] {
   background: var(--ghost-hover);
   color: var(--ink);
 }

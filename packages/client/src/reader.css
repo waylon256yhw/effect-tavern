@@ -894,9 +894,6 @@ button:focus-visible {
 }
 #snippets {
   box-sizing: border-box;
-  max-width: min(26rem, calc(100vw - 24px));
-}
-#snippets {
   width: min(22rem, calc(100vw - 24px));
 }
 .invocation-menu {
