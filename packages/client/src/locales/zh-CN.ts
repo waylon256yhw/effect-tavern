@@ -293,6 +293,8 @@ const zh = {
     messageLabel: "消息内容",
     messagePlaceholder: "输入消息内容...",
     newHat: "新建提示词模板",
+    precheck: "预检",
+    setUpDecision: "设置 Decision 模型",
     newHatShort: "新建模板",
     newPersona: "新建人设",
     noHats: "尚未创建模板",
@@ -578,7 +580,6 @@ const zh = {
   },
   decision: {
     title: "Decision 模型",
-    enable: "启用 Decision 模型",
     service: "服务类型",
     model: "模型 ID",
     noKey: "未选择密钥",

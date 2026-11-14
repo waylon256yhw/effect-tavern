@@ -229,7 +229,7 @@ export const Providers = (props: Pane) => {
 }
 
 /** The list's fixed entry: a `picked` no provider id can be (`newId` makes none with an "@"). */
-const DECISION = "@decision"
+export const DECISION = "@decision"
 const BLANK: DecisionConfig = { enabled: false, driver: "google", model: DRIVERS.google.model }
 const DRIVER_OPTIONS = (Object.keys(DRIVERS) as Driver[]).map((d) => ({ value: d, label: DRIVERS[d].name }))
 const without = (c: DecisionConfig, k: "url" | "secret" | "proxy"): DecisionConfig => {
@@ -261,12 +261,6 @@ const DecisionDetail = (props: { onBack: () => void; onVault: () => void }) => {
       <header class="detail-header">
         <ToList onBack={props.onBack} />
         <h2>{t("decision.title")}</h2>
-        <span class="spacer" />
-        <Switch
-          on={c().enabled}
-          label={t("decision.enable")}
-          onFlip={() => void save((x) => ({ ...x, enabled: !x.enabled }))}
-        />
       </header>
       <div class="detail-scroll scroller">
         <div class="block">

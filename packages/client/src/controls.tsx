@@ -134,10 +134,11 @@ export const Menu = <T extends string>(props: {
     </>
   )
 }
-export const Switch = (props: { on: boolean; label: string; onFlip: () => void }) => (
+export const Switch = (props: { on: boolean; label: string; onFlip: () => void; disabled?: boolean }) => (
   <button
     type="button"
     class="switch"
+    disabled={props.disabled}
     role="switch"
     aria-checked={props.on ? "true" : "false"}
     aria-label={props.label}
