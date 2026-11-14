@@ -68,7 +68,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-1);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -162,7 +162,7 @@
 .side-top-end {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .side-top-end .icon {
   color: var(--ink-2);
@@ -175,15 +175,15 @@
   font-weight: 600;
   color: var(--ink-3);
   letter-spacing: 0.02em;
-  padding-left: 2px;
+  padding-left: var(--space-half);
 }
 .back-shelf {
   height: 24px;
-  padding: 0 8px 0 4px;
-  border-radius: 6px;
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   font-size: var(--text-footnote);
   font-weight: 500;
   color: var(--ink-2);
@@ -225,7 +225,7 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 2px var(--space-3) var(--space-5);
+  padding: var(--space-half) var(--space-3) var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -246,15 +246,15 @@
   flex: 1;
   min-height: 0;
   list-style: none;
-  margin: 0 -4px;
-  padding: 2px 4px;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: var(--space-half) var(--space-1);
   scrollbar-gutter: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .story-list {
-  padding: 0 4px;
+  padding: 0 var(--space-1);
   max-height: calc(7 * 32px + 6 * 2px);
   scroll-snap-type: y proximity;
 }
@@ -270,8 +270,8 @@
   font-size: var(--text-footnote);
 }
 .sidebar mark {
-  padding: 0 2px;
-  border-radius: 2px;
+  padding: 0 var(--space-half);
+  border-radius: var(--radius-sm);
   background: var(--warn-soft);
   color: var(--ink);
 }
@@ -280,11 +280,11 @@
   box-sizing: border-box;
   width: 100%;
   text-align: left;
-  padding: 6px 8px;
+  padding: var(--space-2);
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
   transition:
     background var(--dur-2) var(--ease),
     box-shadow var(--dur-2) var(--ease);
@@ -327,9 +327,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: var(--space-2);
   max-width: 100%;
-  padding: 4px 6px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius);
   text-align: left;
   flex: none;
@@ -385,14 +385,14 @@
   box-sizing: border-box;
   min-width: 0;
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-2);
   border-radius: var(--radius);
   background: var(--surface-2);
   box-shadow: inset 0 0 0 var(--hairline) var(--line);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-half);
   text-align: left;
   transition:
     background var(--dur-2) var(--ease),
@@ -405,7 +405,7 @@
 .workspace .lbl {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   font-size: var(--text-caption);
   font-weight: 600;
   color: var(--ink-3);
@@ -432,7 +432,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   max-height: 5.25rem;
   overflow-y: auto;
   flex: none;
@@ -442,8 +442,8 @@
 }
 .workspace-tags > .chip {
   height: 24px;
-  padding: 0 5px 0 9px;
-  gap: 3px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  gap: var(--space-half);
 }
 .workspace-tags .chip .word {
   color: var(--ink-2);
@@ -454,7 +454,7 @@
 }
 .workspace-tags .chip .del {
   display: inline-flex;
-  padding: 2px;
+  padding: var(--space-half);
   border-radius: var(--radius-pill);
   color: var(--ink-3);
 }
@@ -463,12 +463,12 @@
   color: var(--ink);
 }
 .workspace-tags > button.chip.add {
-  padding: 0 7px;
+  padding: 0 var(--space-2);
   color: var(--ink-3);
 }
 .workspace-tags > button.chip.add.empty {
-  padding: 0 9px;
-  gap: 5px;
+  padding: 0 var(--space-2);
+  gap: var(--space-1);
 }
 .workspace-tags > button.chip.add:hover:not(:disabled) {
   background: var(--alpha-2);
@@ -503,13 +503,13 @@
 .tag-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
   max-height: 8rem;
   overflow-y: auto;
 }
 .tag-chips button.chip {
   height: 24px;
-  padding: 0 10px;
+  padding: 0 var(--space-2);
 }
 .tag-chips button.chip:hover {
   background: var(--alpha-2);
@@ -525,7 +525,7 @@
 .shelf-filter {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   anchor-name: --facets-side;
 }
 .shelf-filter:has(#facets-drawer) {
@@ -534,12 +534,12 @@
 .shelf-picked {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .shelf-picked .chip {
   height: 22px;
-  padding: 0 6px 0 9px;
-  gap: 4px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  gap: var(--space-1);
   background: var(--fill);
   color: var(--ink);
   font-weight: 500;
@@ -591,7 +591,7 @@
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .facet-group + .facet-group {
   padding-top: var(--space-2);
@@ -599,8 +599,8 @@
 }
 .facet-pop .chip {
   height: 24px;
-  padding: 0 8px 0 10px;
-  gap: 5px;
+  padding: 0 var(--space-2);
+  gap: var(--space-1);
 }
 /* system facets: a squircle spec badge with a hairline frame; player tags keep the round capsule on `--fill` */
 .facet-pop .chip.facet {
@@ -629,13 +629,13 @@
   box-sizing: border-box;
   width: 100%;
   min-height: 32px;
-  padding: 6px 8px;
+  padding: var(--space-2);
   border-radius: var(--radius);
   color: var(--ink-2);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: var(--space-half);
   text-align: left;
   transition:
     background var(--dur-2) var(--ease),
@@ -697,7 +697,7 @@
 .story-row .where {
   color: var(--warn);
   font-weight: 600;
-  margin-right: 4px;
+  margin-right: var(--space-1);
 }
 /* the foot of the workspace: the primary action under the story list, opening the card's page where Begin makes a story */
 .new-story {
@@ -715,7 +715,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-1);
   transition: opacity var(--dur-2) var(--ease);
 }
 .new-story:hover:not(:disabled) {
@@ -739,7 +739,7 @@
 .side-foot .left {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-half);
 }
 :is(.shell-top, .side-foot) .icon[aria-pressed="true"] {
   background: var(--alpha-1);
@@ -835,7 +835,7 @@
   gap: var(--space-1);
 }
 .home-Direction-picker .chip {
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   transition:
@@ -957,10 +957,10 @@
   .shell-top {
     box-sizing: border-box;
     height: calc(var(--shell-top) + var(--safe-top));
-    padding: var(--safe-top) calc(8px + var(--space-3)) 0 10px;
+    padding: var(--safe-top) calc(var(--space-2) + var(--space-3)) 0 var(--space-2);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     flex: none;
     background: var(--surface-0);
     user-select: none;
@@ -975,12 +975,12 @@
     width: 10.5rem;
     flex: 0 1 10.5rem;
     min-width: 4.5rem;
-    padding: 0 4px 0 8px;
-    border-radius: 6px;
+    padding: 0 var(--space-1) 0 var(--space-2);
+    border-radius: var(--radius-sm);
     font-size: var(--text-footnote);
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     transition: background var(--dur-2) var(--ease);
   }
   .shell-tab[aria-current="page"] {
@@ -1008,7 +1008,7 @@
     flex: 1;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-1);
     min-width: 0;
     height: 100%;
     cursor: pointer;
@@ -1051,11 +1051,11 @@
   }
   .shell-back {
     height: 24px;
-    padding: 0 8px 0 6px;
-    border-radius: 6px;
+    padding: 0 var(--space-2) 0 var(--space-1);
+    border-radius: var(--radius-sm);
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-1);
     font-size: var(--text-footnote);
     font-weight: 500;
     color: var(--ink-2);
@@ -1082,7 +1082,7 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 4px; /* the stage keys' pitch: the two rows match key for key */
+    gap: var(--space-1); /* the stage keys' pitch: the two rows match key for key */
   }
   /* two rows of keys, two layers: the strip's are the ground's (the install's, touched rarely), in ink-3 and a step
      up when pressed or under the pointer; the stage keys stand on the card (this story's, touched in play) in the
@@ -1105,10 +1105,10 @@
     right: var(--space-3);
     z-index: 4;
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
   }
   .canvas {
-    padding: 0 8px 8px 0;
+    padding: 0 var(--space-2) var(--space-2) 0;
   }
   /* the screen's left edge, live only while the sidebar is folded and not yet floating */
   .edge {
@@ -1161,7 +1161,7 @@
     transition: none;
   }
   .canvas[data-folded="true"] > .stage {
-    margin-left: 8px;
+    margin-left: var(--space-2);
   }
   .resizer {
     position: absolute;
