@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 const read = (f: string) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8")
-const shared = "bad cols dim icon inspect lbl meta node ok pane pill pipeline sechead seg spacer sums top v".split(" ")
+const shared = "bad cols dim icon inspect meta node ok pane pill pipeline seg spacer sums top v".split(" ")
 const attrs = read("timeline.tsx").match(/class=(?:"[^"]*"|\{\{[^}]*\}\})/g) ?? []
 const used = new Set(attrs.flatMap((a) => a.match(/(?<=["{,\s])[a-z][a-z0-9-]*(?=["\s:])/g) ?? []))
 const css = read("inspector.css").replace(/\/\*[\s\S]*?\*\//g, "")

@@ -4,6 +4,7 @@ import type { TurnDetail } from "@effect-tavern/runtime/src/projection.ts"
 import * as L from "@effect-tavern/runtime/src/log.ts"
 import { timelineNode, token } from "./fixtures.ts"
 import {
+  apart,
   channelOf,
   demandable,
   fieldChanged,
@@ -149,3 +150,11 @@ const declaredTheaters = [
 ]
 assert.deepEqual(demandable(declaredTheaters, { theater: {} }), [{ value: "diary", label: "日记" }])
 assert.deepEqual(demandable(declaredTheaters, { theater: { diary: "written" } }), [])
+// versions are told apart from the sentence where they differ, not from the opening they share
+assert.deepEqual(apart(["她笑了。“好啊。”她点头。", "她笑了。“好啊。”她摇头。", "她笑了。“不行。”"]), [
+  "…“好啊。”她点头。",
+  "…“好啊。”她摇头。",
+  "…“不行。”",
+])
+assert.deepEqual(apart(["她笑了。", "他走了。"]), ["她笑了。", "他走了。"])
+assert.deepEqual(apart(["only"]), ["only"])

@@ -423,7 +423,6 @@ const zh = {
     root: "根 {id}",
     stopBadge: "停",
     sums: "{nodes} 个节点 · head {head}",
-    versionsUnder: "#{id} 下的版本",
     writing: "写作中…",
   },
   vault: {

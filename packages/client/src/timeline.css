@@ -154,10 +154,13 @@ button.cell:hover {
   color: var(--ink-3);
 }
 .timeline .how svg,
-.timeline .vpill svg,
 .timeline .vrow svg {
   width: 11px;
   height: 11px;
+}
+.timeline .of {
+  flex: none;
+  color: var(--ink-3);
 }
 .timeline .where {
   flex: 1;
@@ -198,45 +201,7 @@ button.cell:hover {
 .timeline .row2 .pill {
   margin-right: var(--space-1);
 }
-.timeline .vpills {
-  gap: var(--space-half);
-  overflow: hidden;
-}
-.timeline .tag {
-  flex: none;
-  color: var(--ink-3);
-}
-.timeline .vpill {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-half);
-  height: 18px;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--alpha-1);
-  color: var(--ink-2);
-  font: inherit;
-}
-.timeline .vpill:hover {
-  background: var(--alpha-2);
-  color: var(--ink);
-}
-.timeline .vpill.head {
-  box-shadow: inset 0 0 0 var(--hairline) var(--ink);
-}
-.timeline .vpill.selected {
-  background: var(--ink);
-  color: var(--surface-1);
-}
-.timeline .stopdot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
-/* the node pane: the title row with the actions, the facts line, the quote, the prose, the versions */
+/* the node pane: the title row with the actions, the facts line, the versions, the quote, the prose */
 .timeline .nodehead {
   display: flex;
   flex-direction: column;
@@ -329,19 +294,20 @@ button.cell:hover {
   flex-direction: column;
   gap: var(--gap-item);
 }
+/* the versions: a list over the reply, the one switch between them; it scrolls past eight or so rows, so a turn rolled
+   many times still leaves the reply on the screen */
 .timeline .vlist {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-half);
-  padding-top: var(--space-2);
-  border-top: var(--hairline) solid var(--line);
-}
-.timeline .vlist .sechead:not(:first-child) {
-  margin-top: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .timeline .vrow {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  flex: none;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
@@ -349,6 +315,10 @@ button.cell:hover {
   color: var(--ink-2);
   text-align: left;
   font: inherit;
+}
+.timeline .vrow > :is(svg, span:empty) {
+  flex: none;
+  width: 11px;
 }
 .timeline .vrow:hover {
   background: var(--alpha-1);
@@ -359,11 +329,19 @@ button.cell:hover {
   color: var(--ink);
 }
 .timeline .vrow .text {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: var(--text-body);
+}
+.timeline .vrow .text b {
+  margin-right: var(--space-2);
+  font-weight: 600;
+}
+.timeline .vrow .badge {
+  margin-left: 0;
 }
 .timeline .vrow .meta {
   font-family: var(--font-mono);

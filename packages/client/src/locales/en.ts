@@ -425,7 +425,6 @@ const en: Dict = {
     root: "Root {id}",
     stopBadge: "stop",
     sums: "{nodes} nodes · head {head}",
-    versionsUnder: "Versions under #{id}",
     writing: "Writing…",
   },
   vault: {

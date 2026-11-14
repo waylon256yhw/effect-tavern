@@ -174,6 +174,17 @@ export const versions = (log: L.Log<Node>, node: Node): { list: Node[]; index: n
   }
 }
 
+/** What tells versions apart: each text from the sentence where they stop being the same (rolls of one line often
+ *  open alike), marked with an ellipsis when that is not its start. */
+export const apart = (texts: readonly string[]): string[] => {
+  const a = texts[0]
+  if (a === undefined || texts.length < 2) return [...texts]
+  let k = 0
+  while (k < a.length && texts.every((t) => t[k] === a[k])) k++
+  const cut = k && Math.max(...["。", "！", "？", "!", "?", ".", "\n"].map((c) => a.lastIndexOf(c, k - 1))) + 1
+  return texts.map((t) => (cut ? "…" : "") + t.slice(cut).replace(/^[\s”’」』）)"']+/, ""))
+}
+
 /** A turn's scene: its heading where it differs from its parent's (the first turn under a new title); else none. */
 export const sceneOf = (ref: string | undefined, log: L.Log<Node>, node: Node): string | undefined => {
   const h = heading(ref, node, log)

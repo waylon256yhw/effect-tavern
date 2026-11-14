@@ -16,7 +16,7 @@ import { Back, Checkout, Clue, Notes, Trash } from "./icons.tsx"
 import { type Cell, DRAFT, layout } from "./lanes.ts"
 import { plain, Prose } from "./prose.tsx"
 import { SiblingKind } from "./readings.tsx"
-import { heading, lineOf, sceneOf, versions } from "./record.ts"
+import { apart, heading, lineOf, sceneOf, versions } from "./record.ts"
 import { close, open } from "./pages.ts"
 import { card, draft, type Id, log, path, prose, registry, working } from "./store.ts"
 import { turn } from "./turn.ts"
@@ -69,6 +69,7 @@ export const Timeline = () => {
   const target = createMemo(() => (sel() ? L.leaf(all(), sel()!.id) : null)) // read by every station: once per change
   const depth = (id: Id) => L.chain(all(), id).length
   const vs = createMemo(() => (sel() ? versions(all(), sel()!) : { list: [], index: -1, varied: false }))
+  const told = createMemo(() => apart(vs().list.map((s) => plain(prose(s)))))
   const isHead = (id: Id) => all().head === id
   const isTarget = (id: Id) => target() === id && selected() !== id && !isHead(id)
   const lit = (c: Cell) => c.ids[0] !== DRAFT && c.ids.some((i) => onLine().has(i))
@@ -143,38 +144,35 @@ export const Timeline = () => {
       </button>
     )
   }
+  // a turn's versions no one read on from, as one station: which of them is shown and how many there are. The pane's
+  // list is where one is picked; a station is too narrow to hold a key per version
   const Cluster = (p: { c: Cell }) => {
-    const shown = () =>
-      node(p.c.ids.find((i) => i === selected()) ?? p.c.ids.find((i) => i === all().head) ?? p.c.ids[0]!)!
+    const at = () => {
+      const i = p.c.ids.indexOf(selected()!)
+      return Math.max(0, i < 0 ? p.c.ids.indexOf(all().head!) : i)
+    }
+    const shown = () => node(p.c.ids[at()]!)!
     return (
-      <div
-        class={{ cell: true, cluster: true, lit: lit(p.c), selected: p.c.ids.includes(selected()!) }}
+      <button
+        type="button"
+        class={{ cell: true, lit: lit(p.c), selected: p.c.ids.includes(selected()!) }}
         style={{ left: `${xy(p.c).x}px`, top: `${xy(p.c).y}px`, width: `${LANE}px` }}
-        role="group"
+        aria-current={p.c.ids.some(isHead) ? "true" : undefined}
         aria-label={t("timeline.clusterLabel", { n: p.c.row + 1, k: p.c.ids.length })}
+        onClick={() => setSelected(shown().id)}
       >
-        <div class="row1 vpills">
-          <span class="tag">{p.c.ids.length}v</span>
-          <For each={p.c.ids} keyed={false}>
-            {(id) => (
-              <button
-                type="button"
-                class={{ vpill: true, selected: selected() === id(), head: isHead(id()) }}
-                aria-current={isHead(id()) ? "true" : undefined}
-                aria-label={`Node ${id()}`}
-                onClick={() => setSelected(id())}
-              >
-                <SiblingKind of={node(id())!.sibling} />#{id()}
-                <Show when={node(id())!.input.note}>✦</Show>
-                <Show when={node(id())!.end === "stopped"}>
-                  <i class="stopdot" />
-                </Show>
-              </button>
-            )}
-          </For>
+        <div class="row1">
+          <span class="nid">#{shown().id}</span>
+          <span class="of">
+            {at() + 1}/{p.c.ids.length}
+          </span>
+          <span class="where" />
+          <Show when={p.c.ids.some(isHead)}>
+            <span class="badge head">HEAD</span>
+          </Show>
         </div>
         <div class="row2">{textOf(shown())}</div>
-      </div>
+      </button>
     )
   }
   const DraftCell = (p: { c: Cell }) => (
@@ -377,6 +375,38 @@ export const Timeline = () => {
                     </span>
                   </div>
                 </div>
+                {/* the turn's versions, over what is read: picking one changes everything under it. A row is told from
+                    the others by its reply, from the sentence where they part; by its line too where the lines differ */}
+                <Show when={vs().list.length > 1}>
+                  <div class="vlist">
+                    <For each={vs().list} keyed={(s) => s.id}>
+                      {(s, i) => (
+                        <button
+                          type="button"
+                          class="vrow"
+                          aria-current={s().id === n().id ? "true" : undefined}
+                          onClick={() => setSelected(s().id)}
+                        >
+                          <span class="v">#{s().id}</span>
+                          <SiblingKind of={s().sibling} fallback={<span />} />
+                          <span class="text">
+                            <Show when={vs().varied}>
+                              <b>{lineOf(s())}</b>
+                            </Show>
+                            {told()[i()]}
+                          </span>
+                          <Show when={s().end === "stopped"}>
+                            <span class="pill bad">{t("common.stopped")}</span>
+                          </Show>
+                          <Show when={isHead(s().id)}>
+                            <span class="badge head">HEAD</span>
+                          </Show>
+                          <Show when={L.below(all(), s().id)}>{(k) => <span class="meta">+{k()}</span>}</Show>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
                 {/* the reader's line block (App.tsx Said), without its actions: this page is a view */}
                 <Show when={lineOf(n())} fallback={<span class="dim">{t("timeline.openingOnly")}</span>}>
                   <div class="spoke">
@@ -395,33 +425,6 @@ export const Timeline = () => {
                 <div class="prose">
                   <Prose text={prose(n())} />
                 </div>
-                <Show when={vs().list.length > 1}>
-                  <div class="vlist">
-                    <div class="sechead">
-                      <span class="lbl">{t("timeline.versionsUnder", { id: n().parent ?? "" })}</span>
-                      <span class="meta">
-                        {vs().index + 1}/{vs().list.length}
-                      </span>
-                    </div>
-                    <For each={vs().list} keyed={(s) => s.id}>
-                      {(s, i) => (
-                        <button
-                          type="button"
-                          class="vrow"
-                          aria-current={s().id === n().id ? "true" : undefined}
-                          onClick={() => setSelected(s().id)}
-                        >
-                          <span class="v">
-                            {i() + 1}/{vs().list.length} · #{s().id}
-                          </span>
-                          <SiblingKind of={s().sibling} />
-                          <span class="text">{textOf(s())}</span>
-                          <span class="meta">{L.below(all(), s().id) ? `+${L.below(all(), s().id)}` : "leaf"}</span>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </Show>
               </>
             )}
           </Show>

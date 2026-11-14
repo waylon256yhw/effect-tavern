@@ -29,7 +29,7 @@ import { openSettings, Settings } from "./settings.tsx"
 import { Timeline } from "./timeline.tsx"
 import { WritingPage } from "./writing.tsx"
 import { Demand, RecordSheet, Settlement, Rewrite, SiblingKind, StatusPage, Theater } from "./readings.tsx"
-import { lineOf, versions } from "./record.ts"
+import { apart, lineOf, versions } from "./record.ts"
 import { Shell } from "./shell.tsx"
 import { shrinkwrap } from "./shrinkwrap.ts"
 import {
@@ -479,6 +479,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
   // versions that differ in the player's line are told apart by it; otherwise by the prose
   const vs = createMemo(() => versions(all(), props.node))
   const siblings = () => vs().list
+  const told = createMemo(() => apart(siblings().map((s) => plain(prose(s)))))
   let list: HTMLDivElement | undefined
   const at = () => vs().index
   // the version's whole follow-up comes back: the server moves head to its newest leaf; the turn's top stays put when
@@ -548,9 +549,7 @@ const Section = (props: { node: Node; n: number; last: boolean }) => {
                     onClick={() => (list?.hidePopover(), go(i()))}
                   >
                     <SiblingKind of={s().sibling} class="kind" fallback={<span class="kind" />} />
-                    <span class="first">
-                      {vs().varied ? `${lineOf(s())} · ${plain(prose(s()))}` : plain(prose(s()))}
-                    </span>
+                    <span class="first">{vs().varied ? `${lineOf(s())} · ${told()[i()]}` : told()[i()]}</span>
                     <Show when={L.below(all(), s().id)}>{(n) => <span class="below">{n()}</span>}</Show>
                   </button>
                 )}
